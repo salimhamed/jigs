@@ -8,7 +8,8 @@ const { createHook, getConflict, dispose } = vi.hoisted(() => ({
 
 vi.mock("workflow", () => ({ createHook }));
 
-const { claimTicket, ticketToken, tokenFromLinearPayload } = await import("./claim.ts");
+const { claimTicket, tokenFromLinearPayload } = await import("./claim.ts");
+const { ticketToken } = await import("./ticket-token.ts");
 
 beforeEach(() => {
   createHook.mockReset();
@@ -37,7 +38,7 @@ test("a conflicting claim names the owning run and mints nothing further", async
   getConflict.mockResolvedValueOnce({ runId: "wrun_OWNER" });
 
   await expect(claimTicket(issueId, "AGE-365")).rejects.toThrow(
-    `linear:ticket:${issueId} is already claimed by run wrun_OWNER`,
+    `Linear issue ${issueId} is already claimed by run wrun_OWNER`,
   );
   expect(createHook).toHaveBeenCalledTimes(1);
 });

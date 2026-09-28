@@ -7,6 +7,7 @@
 import { Cron } from "croner";
 import type { z } from "zod";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
+import { plainHint } from "../errors.ts";
 import { finished } from "../steps/runtime/run-state.ts";
 import type { Factory, Schedule } from "../workflow/factory.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
@@ -46,7 +47,7 @@ export function startSchedules(factory: Factory, deps: ScheduleDeps = {}): Cron[
     const problem = scheduleProblem(factory, name, schedule);
     if (problem !== null) {
       log(`[schedule] ${name} not scheduled: ${problem.reason}`);
-      log(`  → ${problem.repair}`);
+      log(plainHint(problem.repair));
       continue;
     }
     const job = new Cron(schedule.cron, { name, mode: CRON_MODE }, () =>

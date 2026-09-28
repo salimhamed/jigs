@@ -2,7 +2,7 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { ticketToken } from "../../workflow/linear/claim.ts";
+import { ticketToken } from "../../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../../workflow/pull-requests/pull-request.ts";
 import {
   connectRegistry,

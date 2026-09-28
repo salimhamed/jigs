@@ -108,7 +108,7 @@ test("without a recorded ticket or pull request, the labels still avoid the toke
   await cancelRun(RUN, deps());
   expect(lines).toEqual([
     `${RUN}  cancelled`,
-    "  stopped claiming the Linear ticket",
+    "  stopped claiming the Linear ticket (0643cabe)",
     "  stopped watching pull request acme/api#41",
   ]);
 });

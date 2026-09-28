@@ -258,14 +258,19 @@ test("a JigsError's repair reaches the log beside the reason", async () => {
   await gateOnBindingClones({
     bindings: () => [forge],
     ensure: () =>
-      Promise.reject(new JigsError("could not fetch acme/forge", "give git credentials")),
+      Promise.reject(
+        new JigsError(
+          "could not fetch acme/forge",
+          "give git credentials\nthen restart the service",
+        ),
+      ),
     exit: () => {},
     error: (line) => errors.push(line),
     log: () => {},
   });
 
   expect(errors).toEqual([
-    "[service] binding forge: could not fetch acme/forge — give git credentials",
+    "[service] binding forge: could not fetch acme/forge\n  → give git credentials\n    then restart the service",
   ]);
 });
 
@@ -367,7 +372,8 @@ const failing = (harness: "claude" | "codex", line: string): HarnessRuntime => (
   minimum: null,
   ok: false,
   line,
-  repair: "the service may not have the same PATH as your shell",
+  repair:
+    "the service may not have your shell's PATH\nstart it from a shell where each required harness runs",
 });
 
 const USERS = new Map<HarnessKind, string[]>([
@@ -390,8 +396,13 @@ test("a harness CLI the shared check rejects exits the boot before anything cost
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
   expect(errors).toHaveLength(1);
-  expect(errors[0]).toContain("claude not found on PATH (needed by workflows review, ship)");
-  expect(errors[0]).toContain("same PATH as your shell");
+  expect(errors[0]).toBe(
+    [
+      "[service] cannot run agents: claude not found on PATH (needed by workflows review, ship)",
+      "  → the service may not have your shell's PATH",
+      "    start it from a shell where each required harness runs",
+    ].join("\n"),
+  );
 });
 
 test("harnesses the shared check accepts are logged and let the boot continue", async () => {

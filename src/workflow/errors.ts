@@ -16,3 +16,16 @@ export class JigsError extends Error {
     this.hint = hint;
   }
 }
+
+/**
+ * A hint or repair as plain text for logs, error messages and API bodies: every line indented
+ * under what failed, the first marked with an arrow. Backticks stay, so a command reads as code.
+ *
+ * @internal
+ */
+export function plainHint(text: string, indent = "  "): string {
+  return text
+    .split("\n")
+    .map((line, i) => `${indent}${i === 0 ? "→ " : "  "}${line}`)
+    .join("\n");
+}

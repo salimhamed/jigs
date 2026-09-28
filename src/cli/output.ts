@@ -2,7 +2,7 @@
  * The styling and layout every command's human output shares.
  *
  * @remarks
- * The layout rules, which `expectLayout` in the command tests enforces:
+ * The layout rules, which `layoutProblems` in `output-layout.ts` checks in the command tests:
  *
  * - Output is sections separated by one blank line, with no blank line at the start or end
  *   and never two in a row. {@link layout} joins sections this way.
@@ -103,26 +103,37 @@ export const hint = (label: string, commands: string | readonly string[]): strin
 
 /**
  * Hint or repair text as lines: prose stays dim, and each backtick-quoted command moves to its
- * own line, one step deeper, without the backticks.
+ * own line, one step deeper, without the backticks. A parenthetical right after a command stays
+ * beside it, dim. A line with an unpaired backtick prints as plain prose.
  *
  * @example
  * ```text
- * "stop the service first: `pnpm exec jigs service stop`" prints as
+ * "stop the service first: `pnpm exec jigs service stop` (in ~/factory)" prints as
  * stop the service first:
- *   pnpm exec jigs service stop
+ *   pnpm exec jigs service stop (in ~/factory)
  * ```
  */
 export function hintLines(text: string, stream: Stream = process.stdout): string[] {
   const lines: string[] = [];
   for (const line of text.split("\n")) {
     const parts = line.split("`");
+    if (parts.length % 2 === 0) {
+      if (line.trim() !== "") lines.push(note(line.trim(), stream));
+      continue;
+    }
     parts.forEach((part, i) => {
       if (i % 2 === 1) {
         lines.push(`${INDENT}${command(part, stream)}`);
         return;
       }
+      let rest = part;
+      const aside = i === 0 ? null : /^\s*(\([^)]*\))/.exec(rest);
+      if (aside?.[1] !== undefined) {
+        lines[lines.length - 1] += ` ${note(aside[1], stream)}`;
+        rest = rest.slice(aside[0].length);
+      }
       // Prose after a command reads on without the punctuation that tied it on.
-      const prose = (i === 0 ? part : part.replace(/^[\s,;.]+/, "")).trim();
+      const prose = (i === 0 ? rest : rest.replace(/^[\s,;.]+/, "")).trim();
       if (prose !== "") lines.push(note(prose, stream));
     });
   }

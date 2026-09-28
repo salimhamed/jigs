@@ -2,7 +2,7 @@ import { JigsError } from "../../errors.ts";
 import { TICKET_TOKEN_PREFIX } from "../../workflow/linear/ticket-token.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../../workflow/pull-requests/pull-request.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
-import { displayPath, hint, indent, runHeading } from "../output.ts";
+import { detail, displayPath, hint, indent, runHeading } from "../output.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // The escape hatch for a zombie claim owner: cancelling releases every
@@ -104,7 +104,11 @@ export function hookSubject(
   run: Pick<CancelledRun, "ticket" | "resources"> = {},
 ): { kind: keyof typeof HOLDING; label: string } {
   if (token.startsWith(TICKET_TOKEN_PREFIX)) {
-    const label = run.ticket == null ? "the Linear ticket" : `Linear ticket ${run.ticket}`;
+    // Without the identifier the run was launched with, the issue ID is all the token has.
+    const label =
+      run.ticket == null
+        ? `the Linear ticket ${detail(token.slice(TICKET_TOKEN_PREFIX.length))}`
+        : `Linear ticket ${run.ticket}`;
     return { kind: "claim", label };
   }
   if (!token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) return { kind: "other", label: token };

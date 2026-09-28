@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { describeSuspension } from "./run-suspension.ts";
-import { ticketToken } from "./workflow/linear/claim.ts";
 import { needsHumanToken } from "./workflow/linear/halt-for-human.ts";
+import { ticketToken } from "./workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "./workflow/pull-requests/pull-request.ts";
 
 // Read through the minters, never through a token spelled out here: a reason

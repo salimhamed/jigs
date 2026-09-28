@@ -68,7 +68,11 @@ test("a hint's backtick commands move to their own line, deeper and without the 
     "  pnpm exec jigs service stop",
     "then retry",
   ]);
-  expect(hintLines("run `pi`, then choose /login")).toEqual(["run", "  pi", "then choose /login"]);
+  expect(hintLines("its log says why: `pnpm exec jigs service logs` (log at ~/s.log)")).toEqual([
+    "its log says why:",
+    "  pnpm exec jigs service logs (log at ~/s.log)",
+  ]);
+  expect(hintLines("an unpaired ` stays prose")).toEqual(["an unpaired ` stays prose"]);
 });
 
 test("an error prints red, with its hint's prose dim and its command cyan beneath it", () => {

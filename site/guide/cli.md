@@ -264,7 +264,6 @@ failed attempt with its last error.
 ```
 $ jigs resources prune
 wrun_01M3MQ36G0RVZ23RRJCA19RHYT  cancelled
-
   KIND        ACTION  PATH
   worktree    remove  ~/.local/share/jigs/clones/my-factory-e75b510f/api/worktrees/jigs-ai-703-tidy-setup-19rhyt
   codex-home  remove  ~/.local/share/jigs/codex-homes/wrun_01M3MQ36G0RVZ23RRJCA19RHYT

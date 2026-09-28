@@ -214,7 +214,7 @@ function factoryName(factoryRoot: string): string {
   if (name === "") {
     throw new JigsError(
       `${factoryRoot} has no usable name for a docker project`,
-      "run `pnpm exec jigs init` from a directory named in [a-z0-9-]",
+      "from a directory whose name uses only [a-z0-9-], run: `pnpm exec jigs init`",
     );
   }
   return name;

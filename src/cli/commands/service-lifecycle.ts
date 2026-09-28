@@ -410,7 +410,7 @@ export async function startService(
     if (!existsSync(entry)) {
       throw new JigsError(
         `no built service at ${entry}`,
-        "build this factory's service first: `pnpm exec jigs build`",
+        `build this factory's service first: \`pnpm exec jigs build\` (in ${displayPath(factoryRoot)})`,
       );
     }
 
@@ -426,7 +426,7 @@ export async function startService(
     if (pid === undefined) {
       throw new JigsError(
         `the service process for ${slug} did not start`,
-        "its log may say why: `pnpm exec jigs service logs`",
+        `its log may say why: \`pnpm exec jigs service logs\` (in ${displayPath(factoryRoot)}, log at ${displayPath(logFile)})`,
       );
     }
 
@@ -511,7 +511,7 @@ async function awaitReady(
     if (Date.now() >= deadline) {
       throw new JigsError(
         `the ${slug} service is still booting after ${startTimeoutMs / 1000}s (pid ${pid}${phase === undefined ? "" : `, ${phase}`})`,
-        "it clones every binding before the World starts\nwatch its log: `pnpm exec jigs service logs`\nstop it: `pnpm exec jigs service stop`",
+        `it clones every binding before the World starts\nwatch its log: \`pnpm exec jigs service logs\` (log at ${displayPath(serviceLogPath(slug))})\nstop it: \`pnpm exec jigs service stop\``,
       );
     }
     await sleep(startPollMs);
@@ -527,7 +527,7 @@ function failedBoot(slug: string, pid: number, out: (line: string) => void): Jig
   rmSync(servicePidfilePath(slug), { force: true });
   return new JigsError(
     `the ${slug} service exited during boot (pid ${pid})`,
-    "its log says why: `pnpm exec jigs service logs`",
+    `its log says why: \`pnpm exec jigs service logs\` (log at ${displayPath(logFile)})`,
   );
 }
 

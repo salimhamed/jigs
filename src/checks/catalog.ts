@@ -2,6 +2,7 @@
 // its repair instruction, so preflight, JIT checks and `jigs doctor` render
 // the same text at launch and mid-run.
 
+import { plainHint } from "../errors.ts";
 import type { WorkflowRequires } from "./index.ts";
 
 /**
@@ -80,7 +81,7 @@ export function failedChecks(report: CheckReport): FailedCheck[] {
 // The one shared renderer — the reason every caller reads the same repair.
 export function formatFailures(report: CheckReport): string {
   return failedChecks(report)
-    .map((failure) => `${failure.label}: ${failure.reason}\n  → ${failure.repair}`)
+    .map((failure) => `${failure.label}: ${failure.reason}\n${plainHint(failure.repair)}`)
     .join("\n");
 }
 

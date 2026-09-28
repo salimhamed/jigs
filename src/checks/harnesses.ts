@@ -169,14 +169,14 @@ export function piOpenaiCodexAuthCheck(authPath = realPiAuthPath()): Check {
         return {
           ok: false,
           reason: `no readable Pi login found at ${authPath}`,
-          repair: "run `pi`, then choose /login and OpenAI Codex",
+          repair: "start Pi, then choose /login and OpenAI Codex: `pi`",
         };
       }
       if (typeof auth !== "object" || auth === null || !("openai-codex" in auth)) {
         return {
           ok: false,
           reason: `${authPath} has no OpenAI Codex login`,
-          repair: "run `pi`, then choose /login and OpenAI Codex",
+          repair: "start Pi, then choose /login and OpenAI Codex: `pi`",
         };
       }
       return { ok: true };

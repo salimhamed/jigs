@@ -39,7 +39,7 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
   expect(result.poked).toHaveLength(2);
   expect(lines).toEqual([
     "woke the wait on pull request acme/api#41",
-    "already gone: the Linear ticket",
+    "already gone: the Linear ticket (uuid-1)",
   ]);
 });
 
