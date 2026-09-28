@@ -22,7 +22,6 @@ import {
   pushApprovedChange,
   pushBranch,
   readBranchState,
-  readPullRequestTemplate,
   readWorktreeDiff,
   registerResource,
 } from "#jigs/steps";
@@ -173,12 +172,7 @@ export async function publish(
 
   const described = await describe(
     delivery,
-    prompts.description.fresh(
-      task,
-      worktree,
-      await readWorktreeDiff(worktree),
-      await readPullRequestTemplate(worktree),
-    ),
+    prompts.description.fresh(task, worktree, await readWorktreeDiff(worktree)),
   );
 
   // Appended here rather than asked of the agent: the reviewer's remaining

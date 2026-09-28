@@ -34,7 +34,6 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   pushApprovedChange: vi.fn(),
   pushBranch: vi.fn(),
   readBranchState: vi.fn(),
-  readPullRequestTemplate: vi.fn(async () => undefined),
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   registerResource: vi.fn(),
 }));
@@ -218,29 +217,6 @@ test("publish pushes the reviewed commit and appends the reviewer's notes", asyn
   expect(steps.registerResource).toHaveBeenCalledWith(
     expect.objectContaining({ kind: "pull-request", identity: "acme/app#7" }),
   );
-});
-
-test("the repository's pull request template reaches the description prompt", async () => {
-  vi.mocked(steps.readPullRequestTemplate).mockResolvedValueOnce("## Summary\n\n## Testing");
-  answer(pullRequestDescription, { title: "Add a flag", body: "## Summary\nAdds it." });
-  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
-
-  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
-
-  expect(steps.readPullRequestTemplate).toHaveBeenCalledWith(worktree);
-  expect(calls[0]?.prompt).toContain(
-    "The repository's pull request template:\n## Summary\n\n## Testing",
-  );
-  expect(calls[0]?.prompt).toContain("filling in this template");
-});
-
-test("without a template the description prompt mentions none", async () => {
-  answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
-  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
-
-  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
-
-  expect(calls[0]?.prompt).not.toContain("template");
 });
 
 test.each([
