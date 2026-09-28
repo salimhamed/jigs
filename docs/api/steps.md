@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.77.2
+# @jigs-ai/jigs v0.78.0
 
 APIs for implementing a factory-owned custom agent step. Most workflows use
 `runAgent` and other generated routines instead.
@@ -113,6 +113,10 @@ allowed; pass it through the AI SDK call.
 It throws `JitCheckError` when a just-in-time check fails, and [AgentSessionError](#agentsessionerror) when
 `resume` names a session this harness cannot resume. Pi has no provider model, so a Pi
 descriptor throws: run Pi with `runAgent`.
+
+It reads the run's status before opening the harness and watches it until `close`. It throws
+a fatal error instead of opening on a cancelled run, and once the run is cancelled every
+provider call through `model` is aborted and fails with that fatal error.
 
 #### Example
 
@@ -411,8 +415,9 @@ Names the driver sets in the harness environment itself, such as a private home.
 ### DriverContext
 
 What a driver receives for one call: the run it belongs to, the harness
-environment jigs built for it, and, for a structured call, the output spec a
-provider model consumes. `deps` is jigs' own wiring, not part of the contract.
+environment jigs built for it, for a structured call the output spec a
+provider model consumes, and for a harness call a signal that aborts once the
+run is cancelled. `deps` is jigs' own wiring, not part of the contract.
 
 #### Properties
 
@@ -428,11 +433,19 @@ provider model consumes. `deps` is jigs' own wiring, not part of the contract.
 
 > `optional` **output**: `Output`\<`unknown`, `unknown`, `never`\>
 
+##### signal?
+
+> `optional` **signal**: `AbortSignal`
+
+Aborts once the run is cancelled. jigs sets it for every harness call; a model-source call,
+which starts no process, has none.
+
 ***
 
 ### OpenContext
 
-What a driver's `open` receives: the run and the harness environment jigs built.
+What a driver's `open` receives: the run, the harness environment jigs built, and a signal
+that aborts once the run is cancelled.
 
 #### Properties
 
@@ -443,6 +456,12 @@ What a driver's `open` receives: the run and the harness environment jigs built.
 ##### metadata
 
 > **metadata**: [`RunMetadata`](#runmetadata)
+
+##### signal
+
+> **signal**: `AbortSignal`
+
+Aborts once the run is cancelled, until the opened model is closed. Stop what `open` started.
 
 ***
 
