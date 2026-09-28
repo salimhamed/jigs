@@ -32,7 +32,10 @@ const TONES: Record<string, InspectColor> = {
   cancelled: "magenta",
 };
 
-/** A state word, colored by what it means: green done, yellow in progress or held, red failed. */
+/**
+ * A state word, colored by what it means: green done, yellow in progress or held, red failed or
+ * unreachable, magenta cancelled, dim skipped. Other words stay plain.
+ */
 export const tone = (word: string): string => {
   const color = TONES[word];
   return color === undefined ? word : paint(color, word);
@@ -66,7 +69,16 @@ export function formatTable(headers: string[], rows: string[][]): string[] {
 
 /** A `file:` URL or absolute path as the reader would type it, with `~` for the home directory. */
 export function displayPath(target: string, home = homedir()): string {
-  const local = target.startsWith("file:") ? fileURLToPath(target) : target;
+  const local = target.startsWith("file:") ? localPath(target) : target;
   if (local === home) return "~";
   return local.startsWith(`${home}/`) ? `~${local.slice(home.length)}` : local;
+}
+
+// A file URL naming another host has no local path, so it prints as given.
+function localPath(url: string): string {
+  try {
+    return fileURLToPath(url);
+  } catch {
+    return url;
+  }
 }

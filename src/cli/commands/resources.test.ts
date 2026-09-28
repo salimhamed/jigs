@@ -152,6 +152,35 @@ test("prune overrides the policy: live, kept and failed records of finished runs
   ]);
 });
 
+test("kept decisions that differ within a run are named on each resource", async () => {
+  seed("worktree", {
+    identity: "/w/age-1",
+    url: "file:///w/age-1",
+    state: "kept",
+    reason: "onFailure policy keeps run resources",
+    repoDir: "/w",
+    branch: "age-1",
+  });
+  seed("codex-home", {
+    state: "kept",
+    reason: "release failed: EBUSY (gave up after 5 attempts)",
+  });
+
+  await listResources(deps(), {});
+
+  expect(lines).toEqual([
+    `${RUN}  completed`,
+    "",
+    "  KIND        DECISION  PATH",
+    "  worktree    release   /w/age-1",
+    "                        overrides the kept decision: onFailure policy keeps run resources",
+    "  codex-home  release   /scratch",
+    "                        overrides the kept decision: release failed: EBUSY (gave up after 5 attempts)",
+    "",
+    "2 proposed removals, 0 retained; preview only",
+  ]);
+});
+
 const pruneAll = (statuses: Record<string, string> = { [RUN]: "cancelled" }) =>
   runResourcesPrune({ ...deps(statuses), processes: machine() }, { apply: true });
 

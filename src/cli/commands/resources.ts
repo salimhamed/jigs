@@ -261,9 +261,11 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
   for (const [runId, entries] of Map.groupBy(result.entries, (entry) => entry.runId)) {
     deps.out(`${heading(runId)}  ${tone(entries[0]?.status ?? "unknown")}`);
     deps.out("");
+    const overridden = new Set(entries.flatMap((entry) => overriddenReason(entry, apply) ?? []));
+    const shared = overridden.size === 1 ? [...overridden][0] : undefined;
     const rows = entries.flatMap((entry) => {
       const outcome = apply ? appliedResult(entry) : entry.eligible ? "release" : "keep";
-      const detail = entryDetail(entry, apply);
+      const detail = entryDetail(entry, apply, shared);
       return [
         [entry.kind, tone(outcome), displayPath(entry.url)],
         ...(detail === undefined ? [] : [["", "", note(detail)]]),
@@ -272,7 +274,7 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
     for (const line of formatTable(["KIND", apply ? "RESULT" : "DECISION", "PATH"], rows)) {
       deps.out(`  ${line}`);
     }
-    for (const shared of runNotes(entries, apply)) deps.out(`  ${note(shared)}`);
+    for (const line of runNotes(entries, shared)) deps.out(`  ${note(line)}`);
     deps.out("");
   }
   if (result.leftOnGitHub.length > 0) showLeftBranches(result.leftOnGitHub, deps);
@@ -292,26 +294,38 @@ function appliedResult(entry: ResourceEntry): string {
   return entry.state === "live" ? "waiting" : entry.state;
 }
 
-// What one resource adds beyond its outcome; the reasons every resource of a
-// run shares are printed once below its table instead.
-function entryDetail(entry: ResourceEntry, apply: boolean): string | undefined {
+/** The kept decision a preview would override, if it would override one. */
+function overriddenReason(entry: ResourceEntry, apply: boolean): string | undefined {
+  if (apply || !entry.eligible || entry.state !== "kept") return undefined;
+  return entry.reason ?? undefined;
+}
+
+// What one resource adds beyond its outcome; a kept decision every overridden
+// resource of the run shares is printed once below its table instead.
+function entryDetail(
+  entry: ResourceEntry,
+  apply: boolean,
+  shared: string | undefined,
+): string | undefined {
   if (entry.decision === NOT_FINISHED) return undefined;
   if (apply) return entry.decision === "removed" ? undefined : entry.decision;
   if (!entry.eligible) return entry.decision;
+  const overridden = overriddenReason(entry, apply);
+  if (overridden !== undefined) {
+    return overridden === shared ? undefined : `overrides the kept decision: ${overridden}`;
+  }
   return entry.state === "failed" && entry.reason !== null
     ? `previous attempt: ${entry.reason}`
     : undefined;
 }
 
-function runNotes(entries: readonly ResourceEntry[], apply: boolean): string[] {
-  const notes = new Set<string>();
-  for (const entry of entries) {
-    if (entry.decision === NOT_FINISHED) notes.add(`${NOT_FINISHED}, so nothing is released`);
-    if (!apply && entry.eligible && entry.state === "kept" && entry.reason !== null) {
-      notes.add(`prune overrides the kept decision: ${entry.reason}`);
-    }
-  }
-  return [...notes];
+function runNotes(entries: readonly ResourceEntry[], shared: string | undefined): string[] {
+  return [
+    ...(entries.some((entry) => entry.decision === NOT_FINISHED)
+      ? [`${NOT_FINISHED}, so nothing is released`]
+      : []),
+    ...(shared === undefined ? [] : [`prune overrides the kept decision: ${shared}`]),
+  ];
 }
 
 function showLeftBranches(branches: readonly LeftBranch[], deps: ResourcesDeps): void {
