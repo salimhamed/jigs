@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.78.0](https://github.com/salimhamed/jigs/compare/jigs-v0.77.2...jigs-v0.78.0) (2026-09-28)
+
+
+### ⚠ BREAKING CHANGES
+
+* stop a running agent when its run is cancelled ([#441](https://github.com/salimhamed/jigs/issues/441))
+
+### Features
+
+* stop a running agent when its run is cancelled ([#441](https://github.com/salimhamed/jigs/issues/441)) ([b56f0ce](https://github.com/salimhamed/jigs/commit/b56f0ce1afcd685ea39540a6c8a3976b6c6692ba))
+
 ## [0.77.2](https://github.com/salimhamed/jigs/compare/jigs-v0.77.1...jigs-v0.77.2) (2026-09-27)
 
 
