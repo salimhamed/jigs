@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.78.2](https://github.com/salimhamed/jigs/compare/jigs-v0.78.1...jigs-v0.78.2) (2026-09-28)
+
+
+### Features
+
+* **cli:** group resources output by run in aligned, styled tables ([#446](https://github.com/salimhamed/jigs/issues/446)) ([e491c15](https://github.com/salimhamed/jigs/commit/e491c15ffa2c66654939d8897389ce81ed02405a))
+* **cli:** move every command's human output onto the shared output module ([#447](https://github.com/salimhamed/jigs/issues/447)) ([99ecaa1](https://github.com/salimhamed/jigs/commit/99ecaa1e71bbf85c426f347b84ba8686e0ededdc))
+
+
+### Bug Fixes
+
+* **recipes:** make the pull request title and body contract explicit ([#445](https://github.com/salimhamed/jigs/issues/445)) ([27efb20](https://github.com/salimhamed/jigs/commit/27efb20334a2ce2a5df0381fbbe6590c81801dd5))
+
 ## [0.78.1](https://github.com/salimhamed/jigs/compare/jigs-v0.78.0...jigs-v0.78.1) (2026-09-28)
 
 
