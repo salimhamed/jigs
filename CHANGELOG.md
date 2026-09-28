@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.3](https://github.com/salimhamed/jigs/compare/jigs-v0.78.2...jigs-v0.78.3) (2026-09-28)
+
+
+### Bug Fixes
+
+* **cli:** put commands on their own line and give every command one layout ([#449](https://github.com/salimhamed/jigs/issues/449)) ([bc8344b](https://github.com/salimhamed/jigs/commit/bc8344b4d7d005ec4f47693df426c38a2e0a2fdf))
+
 ## [0.78.2](https://github.com/salimhamed/jigs/compare/jigs-v0.78.1...jigs-v0.78.2) (2026-09-28)
 
 
