@@ -1,7 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
 import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
-import { formatTable } from "../table.ts";
+import { formatTable } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export type RunListSuspension = RunSuspension;

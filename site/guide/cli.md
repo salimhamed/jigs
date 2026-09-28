@@ -252,19 +252,39 @@ you add `--apply`. To apply:
 
 Prune is your override of the release policy: it releases what the policy
 kept, what failed to release, and what the service never got to. The preview
-marks each resource the policy kept, with the reason, so you see what
-`--apply` overrides. It never overrides the safety checks: only resources of
+groups resources by run and notes once per run the policy decision `--apply`
+overrides. It never overrides the safety checks: only resources of
 finished runs recorded by this factory are removed, and a worktree with
 uncommitted changes, an unmerged local branch and a waiting run's resources
 are always kept. A release that fails is retried
 by the service with a growing wait between tries, and kept after the fifth
 failed attempt with its last error.
 
+```
+$ jigs resources prune
+wrun_01M3MQ36G0RVZ23RRJCA19RHYT  cancelled
+
+  KIND        DECISION  PATH
+  worktree    release   ~/.local/share/jigs/clones/my-factory-e75b510f/api/worktrees/jigs-ai-703-tidy-setup-19rhyt
+  codex-home  release   ~/.local/share/jigs/codex-homes/wrun_01M3MQ36G0RVZ23RRJCA19RHYT
+  prune overrides the kept decision: onFailure policy keeps run resources
+
+Left on GitHub (jigs never deletes remote branches)
+  acme/api  jigs/ai-703-tidy-setup-19rhyt
+  delete after the PR is merged or closed:
+    git push origin --delete jigs/ai-703-tidy-setup-19rhyt
+
+2 proposed removals, 0 retained; preview only
+```
+
+With `--apply`, a RESULT column replaces DECISION and says what happened to
+each resource, such as `removed`, `kept` or `failed`, with the reason below it
+when there is one (`branch kept locally: 1 unmerged commit`). The last line
+counts what was removed, failed and retained.
+
 jigs never deletes remote branches. The preview (and `--apply`) lists each
 branch a finished run created and left on GitHub, with the command that deletes
-it: `left on GitHub: owner/repo:branch — jigs doesn't delete remote branches;
-if its pull request is merged or closed, remove it with: git push origin
---delete <branch>`. A branch the run only pushed to, such as the default
+it, as above. A branch the run only pushed to, such as the default
 branch or a person's branch, is never listed. Turn on GitHub's "automatically
 delete head branches" setting and merged pull requests take their branches
 with them; `--apply` notes the ones that are gone. Pull requests and resources
