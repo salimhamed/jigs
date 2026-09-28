@@ -69,7 +69,7 @@ export async function provisionWorktree(
     if (!hasBindingClone(repoDir)) {
       throw new JigsError(
         `binding ${binding.name} has no clone at ${repoDir}`,
-        "restart the service: pnpm exec jigs service restart (it clones every binding on start)",
+        "the service clones every binding when it starts, so restart it: `pnpm exec jigs service restart`",
       );
     }
 

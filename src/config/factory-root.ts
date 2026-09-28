@@ -11,7 +11,7 @@ export function locateFactoryRoot(cwd: string): string {
     if (parent === dir) {
       throw new JigsError(
         `not inside a factory repo (no ${FACTORY_CONFIG_FILE} found from ${cwd} upward)`,
-        `cd into your factory repo, or create one: git init && pnpm exec jigs init`,
+        "cd into your factory repo, or create one: `git init && pnpm exec jigs init`",
       );
     }
     dir = parent;

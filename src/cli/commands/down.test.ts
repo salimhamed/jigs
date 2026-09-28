@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveService } from "../../config/factory-config.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { downFactory } from "./down.ts";
 import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
 import {
@@ -63,9 +64,11 @@ test("stops the service process, then Postgres without removing its volume", asy
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(lines).toEqual([
     `stopped service ${slug} (pid 53812)`,
-    "stopped postgres container acme-factory-postgres-1  (data kept in volume acme-factory_postgres-data)",
+    "stopped postgres container acme-factory-postgres-1 (data kept in volume acme-factory_postgres-data)",
     "",
-    "acme-factory is down — start again with pnpm exec jigs up",
+    "acme-factory is down",
+    "  start it again:",
+    "    pnpm exec jigs up",
   ]);
 });
 
@@ -78,7 +81,11 @@ test("a service that is not running is said so, and Postgres still stops", async
   const { slug } = resolveService(root);
   expect(lines[0]).toBe(`service ${slug} was not running`);
   expect(io.exec.calls.map((call) => call.args).at(-1)).toEqual(["compose", "down"]);
-  expect(lines.at(-1)).toBe("acme-factory is down — start again with pnpm exec jigs up");
+  expect(lines.slice(-3)).toEqual([
+    "acme-factory is down",
+    "  start it again:",
+    "    pnpm exec jigs up",
+  ]);
 });
 
 test("names compose cannot give are left out, not guessed", async () => {
@@ -128,4 +135,9 @@ test("docker missing from PATH is named", async () => {
   const io = { exec: fakeExec(() => execError("ENOENT")), procs: fakeProcesses() };
 
   await expect(down(root, io)).rejects.toMatchObject({ message: "docker is not on PATH" });
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

@@ -40,7 +40,7 @@ test("a dirty tree fails with a hint to inspect the worktree", async () => {
 
   expect(error.message).toBe("the agent left uncommitted changes in /tmp/wt");
   expect(error.hint).toBe(
-    "inspect the worktree, then commit or discard them: git -C /tmp/wt status",
+    "inspect the worktree, then commit or discard them: `git -C /tmp/wt status`",
   );
 });
 

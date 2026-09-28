@@ -3,7 +3,7 @@ import { removeBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { bindingFilesDir, cloneDir } from "../../steps/workspaces/layout.ts";
-import { command, displayPath, note } from "../output.ts";
+import { detail, displayPath, hint } from "../output.ts";
 
 export interface UnbindDeps {
   cwd: string;
@@ -17,13 +17,17 @@ export function unbindRepo(name: string, deps: UnbindDeps): void {
   deps.out(`unbound ${name}`);
   // Offline command, no view of live runs: deleting hundreds of megabytes here
   // would be a guess about whether a worktree still holds them.
-  deps.out(
-    `the clone stays at ${displayPath(cloneDir({ factoryRoot, bindingName: name }))} ${note("—")} ${command("rm -rf")} ${note("it to reclaim the disk")}`,
-  );
+  const clone = displayPath(cloneDir({ factoryRoot, bindingName: name }));
   const bindingFiles = bindingFilesDir(factoryRoot, name);
-  if (existsSync(bindingFiles)) {
-    deps.out(
-      `kept ${displayPath(bindingFiles)} ${note("— it may hold secrets, so delete it yourself")}`,
-    );
+  for (const line of [
+    `the clone stays at ${clone}`,
+    ...(existsSync(bindingFiles)
+      ? [
+          `kept ${displayPath(bindingFiles)} ${detail("it may hold secrets, so delete it yourself")}`,
+        ]
+      : []),
+    ...hint("to reclaim the clone's disk space:", `rm -rf ${clone}`),
+  ]) {
+    deps.out(line);
   }
 }

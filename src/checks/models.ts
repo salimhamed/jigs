@@ -14,7 +14,7 @@ export function modelApiKeyCheck(variable: string, env: NodeJS.ProcessEnv = proc
         ? {
             ok: false,
             reason: `${variable} is not set in the service's environment`,
-            repair: `set ${variable} in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+            repair: `set ${variable} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
           }
         : { ok: true },
   };

@@ -99,7 +99,7 @@ test("a logged-out CLI fails with claude auth login", async () => {
   const result = await claudeResult(JSON.stringify({ loggedIn: false }));
   expect(result).toMatchObject({
     ok: false,
-    repair: "run: claude auth login",
+    repair: "run: `claude auth login`",
   });
 });
 
@@ -158,7 +158,7 @@ test("a missing auth.json fails with codex login", async () => {
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("no Codex login found"),
-    repair: "run: codex login",
+    repair: "run: `codex login`",
   });
 });
 
@@ -202,7 +202,7 @@ test("the CLI check fails with the same line as the reason, and the PATH caveat 
   expect(result).toMatchObject({ ok: false });
   const failure = result as { reason: string; repair: string };
   expect(failure.reason).toContain("below the minimum");
-  expect(failure.repair).toContain("same PATH as your shell");
+  expect(failure.repair).toContain("may not have your shell's PATH");
 });
 
 test("harness users are derived from each workflow's agents", () => {

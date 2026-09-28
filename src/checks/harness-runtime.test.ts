@@ -36,7 +36,7 @@ test("a codex below the floor fails, naming both versions and the path", async (
   expect(runtime.line).toBe(
     `codex 0.144.6 at /usr/local/bin/codex is below the minimum ${DEFAULT_MIN_CODEX_VERSION}`,
   );
-  expect(runtime.ok === false && runtime.repair).toContain("same PATH as your shell");
+  expect(runtime.ok === false && runtime.repair).toContain("may not have your shell's PATH");
 });
 
 test("the minimum is a semver comparison, prereleases included", async () => {

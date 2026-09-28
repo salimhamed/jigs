@@ -62,7 +62,7 @@ test("a declared binding with no clone yet names the restart that makes one", as
     ok: false,
     reason: "binding api has no clone yet",
     repair:
-      "restart the service: pnpm exec jigs service restart (it clones every binding on start)",
+      "the service clones every binding when it starts, so restart it: `pnpm exec jigs service restart`",
   });
 });
 

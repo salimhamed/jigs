@@ -8,7 +8,19 @@ import {
   type ResourceRecord,
   UNRELEASED_STATES,
 } from "../../workflow/runtime/resources.ts";
-import { columns, command, displayPath, formatTable, heading, note, tone } from "../output.ts";
+import {
+  columns,
+  detail,
+  displayPath,
+  formatTable,
+  hint,
+  indent,
+  layout,
+  note,
+  runHeading,
+  section,
+  tone,
+} from "../output.ts";
 import { runNotFound } from "./service-client.ts";
 import {
   acquireServiceExclusion,
@@ -189,11 +201,11 @@ async function visitRun(
           ({ state: "failed", reason: `could not check: ${String(error)}` }) as const,
       );
     const removes = typeof decided === "function" || decided.state === "released";
-    const overrides = row.state === "kept" ? `; overrides the kept decision (${row.reason})` : "";
+    const overrides = row.state === "kept" ? ` (previously kept: ${row.reason})` : "";
     entries.push({
       ...entry,
       eligible: removes,
-      decision: removes ? `would be released${overrides}` : decided.reason,
+      decision: removes ? `would be removed${overrides}` : decided.reason,
     });
     if (removes) row.state = "released";
   }
@@ -216,7 +228,7 @@ async function visit(
     .catch((error) => {
       throw new JigsError(
         `could not read the jigs registry: ${String(error)}`,
-        "check WORKFLOW_POSTGRES_URL and database availability; no resources were changed",
+        "no resources were changed\ncheck WORKFLOW_POSTGRES_URL and that the database is up",
       );
     });
   if (options.run !== undefined && rows.length === 0) {
@@ -258,34 +270,46 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
     return;
   }
   const apply = options.apply === true;
-  for (const [runId, entries] of Map.groupBy(result.entries, (entry) => entry.runId)) {
-    deps.out(`${heading(runId)}  ${tone(entries[0]?.status ?? "unknown")}`);
-    deps.out("");
-    const overridden = new Set(entries.flatMap((entry) => overriddenReason(entry, apply) ?? []));
-    const shared = overridden.size === 1 ? [...overridden][0] : undefined;
-    const rows = entries.flatMap((entry) => {
-      const outcome = apply ? appliedResult(entry) : entry.eligible ? "release" : "keep";
-      const detail = entryDetail(entry, apply, shared);
-      return [
-        [entry.kind, tone(outcome), displayPath(entry.url)],
-        ...(detail === undefined ? [] : [["", "", note(detail)]]),
-      ];
-    });
-    for (const line of formatTable(["KIND", apply ? "RESULT" : "DECISION", "PATH"], rows)) {
-      deps.out(`  ${line}`);
-    }
-    for (const line of runNotes(entries, shared)) deps.out(`  ${note(line)}`);
-    deps.out("");
-  }
-  if (result.leftOnGitHub.length > 0) showLeftBranches(result.leftOnGitHub, deps);
-  const { entries } = result;
-  const removable = entries.filter((entry) => entry.eligible).length;
-  const removed = entries.filter((entry) => entry.action === "remove").length;
-  deps.out(
-    apply
-      ? `${removed} removed, ${result.errors.length} failed, ${entries.length - removed} retained`
-      : `${removable} proposed removal${removable === 1 ? "" : "s"}, ${entries.length - removable} retained; preview only`,
+  const runs = [...Map.groupBy(result.entries, (entry) => entry.runId)].map(([runId, entries]) =>
+    runSection(runId, entries, apply),
   );
+  const lines = layout(...runs, leftBranchesSection(result.leftOnGitHub), summary(result, options));
+  for (const line of lines) deps.out(line);
+}
+
+function runSection(runId: string, entries: readonly ResourceEntry[], apply: boolean): string[] {
+  const overridden = new Set(entries.flatMap((entry) => overriddenReason(entry, apply) ?? []));
+  const shared = overridden.size === 1 ? [...overridden][0] : undefined;
+  const rows = entries.flatMap((entry) => {
+    const outcome = apply ? appliedResult(entry) : entry.eligible ? "remove" : "keep";
+    const extra = entryDetail(entry, apply, shared);
+    return [
+      [entry.kind, tone(outcome), displayPath(entry.url)],
+      ...(extra === undefined ? [] : [["", "", note(extra)]]),
+    ];
+  });
+  return [
+    runHeading(runId, entries[0]?.status ?? "unknown"),
+    ...indent([
+      ...formatTable(["KIND", apply ? "RESULT" : "ACTION", "PATH"], rows),
+      ...runNotes(entries, shared).map((line) => note(line)),
+    ]),
+  ];
+}
+
+function summary(result: ResourceInventory, options: ResourcesOptions): string[] {
+  const { entries } = result;
+  if (options.apply === true) {
+    const removed = entries.filter((entry) => entry.action === "remove").length;
+    const failed = result.errors.length;
+    return [`${removed} removed, ${entries.length - removed - failed} kept, ${failed} failed`];
+  }
+  const removable = entries.filter((entry) => entry.eligible).length;
+  const apply = `pnpm exec jigs resources prune${options.run === undefined ? "" : ` --run ${options.run}`} --apply`;
+  return [
+    `${removable} to remove, ${entries.length - removable} to keep ${detail("preview only")}`,
+    ...(removable === 0 ? [] : hint("to remove them, run:", apply)),
+  ];
 }
 
 function appliedResult(entry: ResourceEntry): string {
@@ -312,7 +336,7 @@ function entryDetail(
   if (!entry.eligible) return entry.decision;
   const overridden = overriddenReason(entry, apply);
   if (overridden !== undefined) {
-    return overridden === shared ? undefined : `overrides the kept decision: ${overridden}`;
+    return overridden === shared ? undefined : `previously kept: ${overridden}`;
   }
   return entry.state === "failed" && entry.reason !== null
     ? `previous attempt: ${entry.reason}`
@@ -322,33 +346,32 @@ function entryDetail(
 function runNotes(entries: readonly ResourceEntry[], shared: string | undefined): string[] {
   return [
     ...(entries.some((entry) => entry.decision === NOT_FINISHED)
-      ? [`${NOT_FINISHED}, so nothing is released`]
+      ? [`${NOT_FINISHED}, so nothing is removed`]
       : []),
-    ...(shared === undefined ? [] : [`prune overrides the kept decision: ${shared}`]),
+    ...(shared === undefined ? [] : [`each one to remove was previously kept: ${shared}`]),
   ];
 }
 
-function showLeftBranches(branches: readonly LeftBranch[], deps: ResourcesDeps): void {
-  deps.out(heading("Left on GitHub (jigs never deletes remote branches)"));
+function leftBranchesSection(branches: readonly LeftBranch[]): string[] {
+  if (branches.length === 0) return [];
   const rows = branches.map((branch) => {
     const split = branch.identity.indexOf(":");
     const repo = branch.identity.slice(0, split);
     const name = branch.identity.slice(split + 1);
     return [
       repo,
-      branch.checked ? name : `${name}  ${note("(could not check the remote; it may be gone)")}`,
+      branch.checked ? name : `${name} ${detail("could not check the remote, so it may be gone")}`,
     ];
   });
-  for (const line of columns(rows)) deps.out(`  ${line}`);
-  deps.out(
-    note(
+  return section("Left on GitHub", [
+    ...columns(rows),
+    ...hint(
       branches.length === 1
-        ? "  delete after the PR is merged or closed:"
-        : "  delete each after its PR is merged or closed:",
+        ? "delete it yourself once its PR is merged or closed:"
+        : "delete each yourself once its PR is merged or closed:",
+      branches.map((branch) => branch.command),
     ),
-  );
-  for (const branch of branches) deps.out(`    ${command(branch.command)}`);
-  deps.out("");
+  ]);
 }
 
 async function withDatabase<T>(
@@ -360,7 +383,7 @@ async function withDatabase<T>(
   if (url === undefined) {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set for this factory",
-      "set it in the factory's .env; resource inspection reads the database without starting the service",
+      "set it in the factory's .env\nresource commands read the database directly, without the service",
     );
   }
   const { connectRegistry, factorySlug } = await modules();

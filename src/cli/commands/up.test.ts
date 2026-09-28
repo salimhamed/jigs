@@ -2,6 +2,7 @@ import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import {
   closedPort,
   closeFakeServices,
@@ -103,14 +104,14 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
   expect(lines.slice(-8)).toEqual([
-    "acme-factory is up",
     "",
-    "  postgres   localhost:5555  (Docker container acme-factory-postgres-1)",
-    `  service    http://localhost:${port}  (pid ${pid})`,
+    "acme-factory is up",
+    "  postgres   localhost:5555 (Docker container acme-factory-postgres-1)",
+    `  service    http://localhost:${port} (pid ${pid})`,
     "  dashboard  http://localhost:9200",
     `  logs       ${log}`,
-    "",
-    "  stop:  pnpm exec jigs down",
+    "  stop everything:",
+    "    pnpm exec jigs down",
   ]);
 });
 
@@ -158,7 +159,9 @@ test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () =>
   });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   expect((await up(root, io)).ok).toBe(true);
-  expect(lines.join("\n")).toContain("     GITHUB_TOKEN empty in .env");
+  expect(lines).toContain(
+    "  GITHUB_TOKEN empty in .env (fill them in before a workflow needs them)",
+  );
 });
 
 test("bootstrap is handed the World URL from .env explicitly", async () => {
@@ -192,7 +195,7 @@ test("a second up on an unchanged factory leaves the running service alone", asy
   expect(again.service).toBe("unchanged");
   expect(io.procs.spawns).toHaveLength(1);
   expect(io.procs.signals.map((s) => s.sig)).not.toContain("SIGTERM");
-  expect(lines.join("\n")).toMatch(/^ok {3}service .* — unchanged, not restarted$/m);
+  expect(lines.join("\n")).toMatch(/^ok {3}service: unchanged, not restarted \(\d+ms\)$/m);
 });
 
 test("a changed bundle restarts the service; --restart-service forces one", async () => {
@@ -282,7 +285,7 @@ test("--no-doctor skips the last step and says so", async () => {
 
   expect(result.ok).toBe(true);
   expect(statuses(result).at(-1)).toBe("doctor:skipped");
-  expect(lines).toContain("skip doctor — --no-doctor");
+  expect(lines).toContain("skip doctor: --no-doctor");
 });
 
 test("a red doctor is the final failing line, with its checks indented above", async () => {
@@ -388,8 +391,10 @@ test("a missing .env fails env with the copy as its repair, and copies nothing",
   const result = await up(root, io);
 
   expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.detail).toContain("fill in what your workflows need");
-  expect(result.steps[1]?.repair).toBe("cp .env.example .env");
+  expect(result.steps[1]?.detail).toContain("no .env in");
+  expect(result.steps[1]?.repair).toBe(
+    "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
+  );
   expect(existsSync(path.join(root, ".env"))).toBe(false);
   expect(io.exec.calls).toHaveLength(0);
 });
@@ -537,4 +542,9 @@ test("a jigs migration failure stops bootstrap before the build or service start
   expect(statuses(result).at(-1)).toBe("bootstrap:failed");
   expect(result.steps.some((step) => step.name === "build")).toBe(false);
   expect(lines.join("\n")).toContain("migration failed");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

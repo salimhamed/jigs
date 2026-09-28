@@ -303,7 +303,7 @@ test("a factory config that cannot be read fails the Linear check as itself", as
       id: "linear.identity",
       ok: false,
       reason: expect.stringContaining("jigs.config.ts"),
-      repair: "repair jigs.config.ts, then: pnpm exec jigs service restart",
+      repair: "repair jigs.config.ts, then: `pnpm exec jigs service restart`",
     }),
   ]);
   expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });

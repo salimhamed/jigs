@@ -56,7 +56,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: err instanceof Error ? err.message : String(err),
-          repair: `install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+          repair: `install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
         };
       }
 
@@ -71,7 +71,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `\`${executable} auth status --json\` failed: ${err}`,
-          repair: "run: claude auth login",
+          repair: "run: `claude auth login`",
         };
       }
 
@@ -83,7 +83,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `\`claude auth status --json\` did not answer JSON: ${stdout.slice(0, 200)}`,
-          repair: "check the Claude Code CLI version — jigs reads `claude auth status --json`",
+          repair: "update the Claude Code CLI, since jigs could not read its auth status JSON",
         };
       }
 
@@ -91,7 +91,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: "the Claude Code CLI is not logged in",
-          repair: "run: claude auth login",
+          repair: "run: `claude auth login`",
         };
       }
       // Exit code is not a signal: the CLI reports an API-key override at
@@ -101,14 +101,14 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `the Claude Code CLI is using an API key from ${String(status.apiKeySource)} instead of the subscription login`,
-          repair: `remove ${String(status.apiKeySource)} from ${SERVICE_ENV_FILE} (and from the shell you start the service from), then: ${RESTART_SERVICE}`,
+          repair: `remove ${String(status.apiKeySource)} from ${SERVICE_ENV_FILE} (and from the shell you start the service from), then: \`${RESTART_SERVICE}\``,
         };
       }
       if (status.authMethod !== "claude.ai") {
         return {
           ok: false,
           reason: `the Claude Code CLI reports authMethod ${JSON.stringify(status.authMethod)}, not "claude.ai"`,
-          repair: "log in with the subscription account: claude auth login",
+          repair: "log in with the subscription account: `claude auth login`",
         };
       }
       return { ok: true };
@@ -129,7 +129,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
         return {
           ok: false,
           reason: `no Codex login found at ${authPath}`,
-          repair: "run: codex login",
+          repair: "run: `codex login`",
         };
       }
       let auth: { auth_mode?: unknown };
@@ -139,7 +139,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
         return {
           ok: false,
           reason: `${authPath} is not readable JSON`,
-          repair: `remove ${authPath} and run: codex login`,
+          repair: `remove ${authPath}, then run: \`codex login\``,
         };
       }
       // Deliberately no expiry gating: codex refreshes its JWT lazily, so a
@@ -148,7 +148,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
         return {
           ok: false,
           reason: `${authPath} reports auth_mode ${JSON.stringify(auth.auth_mode)}, not "chatgpt"`,
-          repair: `log in with the ChatGPT subscription: codex logout && codex login (and unset OPENAI_API_KEY in ${SERVICE_ENV_FILE})`,
+          repair: `unset OPENAI_API_KEY in ${SERVICE_ENV_FILE}, then log in with the ChatGPT subscription: \`codex logout && codex login\``,
         };
       }
       return { ok: true };
@@ -169,14 +169,14 @@ export function piOpenaiCodexAuthCheck(authPath = realPiAuthPath()): Check {
         return {
           ok: false,
           reason: `no readable Pi login found at ${authPath}`,
-          repair: "run: pi, then choose /login and OpenAI Codex",
+          repair: "run `pi`, then choose /login and OpenAI Codex",
         };
       }
       if (typeof auth !== "object" || auth === null || !("openai-codex" in auth)) {
         return {
           ok: false,
           reason: `${authPath} has no OpenAI Codex login`,
-          repair: "run: pi, then choose /login and OpenAI Codex",
+          repair: "run `pi`, then choose /login and OpenAI Codex",
         };
       }
       return { ok: true };

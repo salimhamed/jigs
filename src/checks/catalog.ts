@@ -5,7 +5,8 @@
 import type { WorkflowRequires } from "./index.ts";
 
 /**
- * A check's outcome: a pass with an optional `detail`, or a failure with its repair.
+ * A check's outcome: a pass with an optional `detail`, or a failure with its repair. A repair
+ * quotes each command to run in backticks.
  *
  * @group Advanced driver contracts
  */
@@ -55,7 +56,7 @@ export async function runChecks(
           resolve({
             ok: false,
             reason: `the check did not answer within ${timeoutMs}ms`,
-            repair: `the ${check.id} check did not answer within ${timeoutMs}ms — retry, and report this if it repeats`,
+            repair: `the ${check.id} check did not answer within ${timeoutMs}ms\nretry, and report this if it repeats`,
           }),
         );
       });
@@ -63,7 +64,7 @@ export async function runChecks(
         (err: unknown): CheckResult => ({
           ok: false,
           reason: String(err),
-          repair: `the ${check.id} check itself failed — report this`,
+          repair: `the ${check.id} check itself failed, so report this`,
         }),
       );
       return { id: check.id, label: check.label, ...result };

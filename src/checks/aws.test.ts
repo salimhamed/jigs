@@ -26,7 +26,7 @@ test("an unset AWS_PROFILE fails naming the env file and the restart", async () 
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("AWS_PROFILE is not set"),
-    repair: "set AWS_PROFILE in the factory repo's .env, then: pnpm exec jigs service restart",
+    repair: "set AWS_PROFILE in the factory repo's .env, then: `pnpm exec jigs service restart`",
   });
 });
 
@@ -61,7 +61,7 @@ test("an expired SSO session fails with the login for that profile", async () =>
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("prod"),
-    repair: "run: aws sso login --profile prod",
+    repair: "run: `aws sso login --profile prod`",
   });
   // The last non-empty stderr line, not the whole blank-padded blob.
   expect(result.ok === false && result.reason).toContain("Token for prod does not exist");
@@ -94,7 +94,7 @@ test("a probe killed by the timeout blames the network, not the config file", as
   expect(result).toMatchObject({
     ok: false,
     reason: expect.stringContaining("did not answer within 12s"),
-    repair: "check network access to AWS SSO, or run: aws sso login --profile prod",
+    repair: "check network access to AWS SSO, or log in again: `aws sso login --profile prod`",
   });
   expect(result.ok === false && result.reason).toContain("prod");
 });

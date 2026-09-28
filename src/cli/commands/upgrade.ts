@@ -59,7 +59,7 @@ export async function upgradeFactory(
   if (options.to !== undefined && !VERSION.test(options.to)) {
     throw new JigsError(
       `--to-version takes an exact version, got ${options.to}`,
-      "e.g. --to-version 0.3.0",
+      "for example: `pnpm exec jigs upgrade --to-version 0.3.0`",
     );
   }
   const execFile = deps.execFile ?? nodeExecFile;
@@ -71,7 +71,7 @@ export async function upgradeFactory(
       const factoryRoot = locateFactoryRoot(deps.cwd);
       const before = publishedVersion(factoryRoot);
       const normalized = normalizeReleaseAgeExclude(factoryRoot);
-      note(normalized ? `jigs ${before}; normalized minimumReleaseAgeExclude` : `jigs ${before}`);
+      note(normalized ? `jigs ${before}, normalized minimumReleaseAgeExclude` : `jigs ${before}`);
       return { factoryRoot, before };
     });
     result.factoryRoot = factoryRoot;
@@ -94,6 +94,7 @@ export async function upgradeFactory(
       await runner.run("typecheck", () => typecheck(execFile, factoryRoot, deps.out));
     }
 
+    deps.out("");
     deps.out(`${path.basename(factoryRoot)} runs jigs ${after}`);
     result.ok = true;
     return result;
@@ -110,13 +111,13 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   if (document.errors.length > 0) {
     throw new JigsError(
       `could not parse ${file}: ${document.errors[0]?.message}`,
-      "fix pnpm-workspace.yaml, then run pnpm exec jigs upgrade again",
+      "fix pnpm-workspace.yaml, then run again: `pnpm exec jigs upgrade`",
     );
   }
   if (document.contents !== null && !isMap(document.contents)) {
     throw new JigsError(
       `${file} must contain a YAML mapping`,
-      "make pnpm-workspace.yaml a top-level mapping, then run pnpm exec jigs upgrade again",
+      "make pnpm-workspace.yaml a top-level mapping, then run again: `pnpm exec jigs upgrade`",
     );
   }
   const workspace = document.toJS() as { minimumReleaseAgeExclude?: unknown } | null;
@@ -124,7 +125,7 @@ function normalizeReleaseAgeExclude(factoryRoot: string): boolean {
   if (existing != null && !Array.isArray(existing)) {
     throw new JigsError(
       `minimumReleaseAgeExclude in ${file} is not a list`,
-      "make minimumReleaseAgeExclude a YAML list, then run pnpm exec jigs upgrade again",
+      "make minimumReleaseAgeExclude a YAML list, then run again: `pnpm exec jigs upgrade`",
     );
   }
   const jigsEntries = Array.isArray(existing)
@@ -174,7 +175,7 @@ function quotedJigsPackage(): Scalar<string> {
 function readManifest(factoryRoot: string): Manifest {
   const file = path.join(factoryRoot, "package.json");
   if (!existsSync(file)) {
-    throw new JigsError(`no package.json in ${factoryRoot}`, "scaffold one: pnpm exec jigs init");
+    throw new JigsError(`no package.json in ${factoryRoot}`, "scaffold one: `pnpm exec jigs init`");
   }
   return JSON.parse(readFileSync(file, "utf8")) as Manifest;
 }
@@ -196,21 +197,21 @@ function publishedVersion(factoryRoot: string): string {
   if (fromCheckout.length > 0) {
     throw new JigsError(
       `this factory installs jigs from a checkout (${fromCheckout.join(", ")})`,
-      `switch it to the published package first — ${JIGS_PACKAGE} from npm, pinned to a version — then pnpm exec jigs upgrade`,
+      `switch it to ${JIGS_PACKAGE} from npm, pinned to a version, then: \`pnpm exec jigs upgrade\``,
     );
   }
   const retired = RETIRED_PACKAGES.find((name) => declared[name] !== undefined);
   if (retired !== undefined) {
     throw new JigsError(
       `this factory still depends on ${retired}, which no longer releases`,
-      `the move is a one-time edit no upgrade can make for you: replace the ${retired} line in package.json with ${JIGS_PACKAGE} at a version, rewrite every import of ${retired}/X to ${JIGS_PACKAGE}/X, drop any @salimhamed:registry line from .npmrc, then pnpm exec jigs upgrade`,
+      `make this one-time move by hand:\nreplace the ${retired} line in package.json with ${JIGS_PACKAGE} at a version\nrewrite every import of ${retired}/X to ${JIGS_PACKAGE}/X\ndrop any @salimhamed:registry line from .npmrc\nthen: \`pnpm exec jigs upgrade\``,
     );
   }
   const version = declared[JIGS_PACKAGE];
   if (version === undefined) {
     throw new JigsError(
       `${JIGS_PACKAGE} not in this factory's package.json`,
-      "a factory depends on it by version — scaffold one with pnpm exec jigs init to see the shape",
+      "a factory depends on it by version\nto see the shape, scaffold one elsewhere: `pnpm exec jigs init`",
     );
   }
   return version;
@@ -235,7 +236,7 @@ async function bump(
       if (/ERR_PNPM_PEER_DEP_ISSUES/.test(output)) {
         return new JigsError(
           "the new jigs peers on a runtime version this factory does not install",
-          "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod — move each to the version pnpm names above, then pnpm exec jigs upgrade again",
+          "the factory supplies @workflow/web, @workflow/world-postgres, workflow and zod\nmove each to the version pnpm names above, then run again: `pnpm exec jigs upgrade`",
         );
       }
       if (/ERR_PNPM_NO_MATCHING_VERSION/.test(output)) {
@@ -264,9 +265,9 @@ async function generate(
     { cwd: factoryRoot, onLine },
     out,
     {
-      missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+      missing: new JigsError("pnpm is not on PATH", "install pnpm: https://pnpm.io/installation"),
       failed: () =>
-        new JigsError("could not refresh jigs/", "run pnpm exec jigs generate in this factory"),
+        new JigsError("could not refresh jigs/", "in this factory, run: `pnpm exec jigs generate`"),
     },
   );
 }
@@ -283,11 +284,11 @@ async function up(
   if (options.force === true) args.push("--force");
   if (options.doctor === false) args.push("--no-doctor");
   await execOrExplain(execFile, "pnpm", args, { cwd: factoryRoot, stdio: "inherit" }, out, {
-    missing: new JigsError("pnpm is not on PATH", "install pnpm"),
+    missing: new JigsError("pnpm is not on PATH", "install pnpm: https://pnpm.io/installation"),
     failed: () =>
       new JigsError(
         `jigs up failed in ${factoryRoot}`,
-        `fix what jigs up reported above, then run pnpm ${args.join(" ")} and pnpm run typecheck in this factory`,
+        `fix what jigs up reported above, then run: \`pnpm ${args.join(" ")}\`\nthen typecheck: \`pnpm run typecheck\``,
       ),
   });
 }
@@ -302,7 +303,7 @@ async function typecheck(
     failed: () =>
       new JigsError(
         `typecheck failed in ${factoryRoot}`,
-        "update custom factory code to match the installed jigs API; jigs/ has already been regenerated",
+        "jigs/ is already regenerated\nupdate custom factory code to match the installed jigs API",
       ),
   });
 }

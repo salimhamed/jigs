@@ -1,5 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import { note, tone } from "../output.ts";
+import { hintLines, indent, note, tone } from "../output.ts";
 
 // One line per step, stopping at the first that fails: what `init` bought by
 // printing the commands instead of running them — a failure the human can
@@ -37,7 +37,7 @@ export function stepRunner<Name extends string>(out: (line: string) => void): Ru
         const durationMs = Date.now() - started;
         steps.push({ name, status: "ok", durationMs, detail });
         out(
-          `${tone("ok")}   ${name} ${note(`(${formatDuration(durationMs)})`)}${detail === undefined ? "" : ` — ${detail}`}`,
+          `${tone("ok")}   ${name}${detail === undefined ? "" : `: ${detail}`} ${note(`(${formatDuration(durationMs)})`)}`,
         );
         return value;
       } catch (err) {
@@ -52,13 +52,13 @@ export function stepRunner<Name extends string>(out: (line: string) => void): Ru
           repair,
         });
         out(`${tone("FAIL")} ${name}: ${message.split("\n")[0]}`);
-        if (repair !== undefined) out(`  → ${repair}`);
+        for (const line of indent(repair === undefined ? [] : hintLines(repair))) out(line);
         throw new StepFailed(message);
       }
     },
     skip(name, detail) {
       steps.push({ name, status: "skipped", durationMs: 0, detail });
-      out(`${tone("skip")} ${name} — ${note(detail)}`);
+      out(`${tone("skip")} ${name}: ${note(detail)}`);
     },
   };
 }
@@ -67,7 +67,7 @@ function formatDuration(ms: number): string {
   return ms < 1000 ? `${ms}ms` : `${(ms / 1000).toFixed(1)}s`;
 }
 
-export const indent =
+export const nested =
   (out: (line: string) => void) =>
   (line: string): void =>
-    out(`  ${line}`);
+    out(line === "" ? "" : `  ${line}`);

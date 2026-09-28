@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { layoutProblems } from "../output-layout.ts";
 import { listWorkflows } from "./workflows.ts";
 
 const fetchMock = vi.fn();
@@ -43,7 +44,7 @@ test("lists registered launch names with existing schema guidance", async () => 
   expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/workflows", undefined);
   expect(lines).toEqual([
     "WORKFLOW  INPUTS",
-    "ship      ticket (string, required) — Linear ticket to deliver",
+    "ship      ticket (string, required): Linear ticket to deliver",
     "          attempts (number, optional, default 3)",
   ]);
 });
@@ -59,4 +60,9 @@ test("a service error is actionable", async () => {
   await expect(listWorkflows(deps())).rejects.toThrow(
     "workflows failed: HTTP 503 bundle unavailable",
   );
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

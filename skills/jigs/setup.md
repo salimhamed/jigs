@@ -79,13 +79,12 @@ what runs and the one command that stops it all:
 
 ```
 my-factory is up
-
-  postgres   localhost:5440  (Docker container my-factory-postgres-1)
-  service    http://localhost:8990  (pid 53812)
+  postgres   localhost:5440 (Docker container my-factory-postgres-1)
+  service    http://localhost:8990 (pid 53812)
   dashboard  http://localhost:9090
   logs       ~/.local/share/jigs/services/my-factory-2286ac2a.log
-
-  stop:  pnpm exec jigs down
+  stop everything:
+    pnpm exec jigs down
 ```
 
 Give the human the dashboard URL and have them open it. `jigs down` stops the

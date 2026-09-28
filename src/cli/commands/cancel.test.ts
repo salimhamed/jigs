@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { cancelRun } from "./cancel.ts";
 
 const fetchMock = vi.fn();
@@ -80,26 +81,47 @@ test("a parked run cancels with no confirmation prompt", async () => {
   expect(fetchMock.mock.calls[1]?.[0]).toBe(`http://svc.test:8990/api/runs/${RUN}/cancel`);
 });
 
-test("the released claim tokens are printed without promising queue cleanup", async () => {
-  respondLookup(parked);
-  respondCancel(["linear:ticket:AGE-317", "github:pr:acme/api#41"]);
+test("released hooks are named by the ticket and pull request they held", async () => {
+  respondLookup({
+    ...parked,
+    ticket: "AGE-317",
+    resources: [
+      {
+        kind: "pull-request",
+        identity: "Acme/API#41",
+        url: "https://github.com/Acme/API/pull/41",
+      },
+    ],
+  });
+  respondCancel(["linear:ticket:0643cabe-d6c1-4e93-9e12-f57e9e01369b", "github:pr:acme/api#41"]);
   await cancelRun("AGE-317", deps());
   expect(lines).toEqual([
-    `cancelled ${RUN}`,
-    "released linear:ticket:AGE-317",
-    "released github:pr:acme/api#41",
+    `${RUN}  cancelled`,
+    "  stopped claiming Linear ticket AGE-317",
+    "  stopped watching pull request Acme/API#41",
   ]);
 });
 
-test("a minimum-retention hook is reported as retained", async () => {
-  respondLookup(parked);
+test("without a recorded ticket or pull request, the labels still avoid the tokens", async () => {
+  respondLookup({ ...parked, ticket: null });
+  respondCancel(["linear:ticket:0643cabe", "github:pr:acme/api#41"]);
+  await cancelRun(RUN, deps());
+  expect(lines).toEqual([
+    `${RUN}  cancelled`,
+    "  stopped claiming the Linear ticket",
+    "  stopped watching pull request acme/api#41",
+  ]);
+});
+
+test("a minimum-retention hook is reported as still held", async () => {
+  respondLookup({ ...parked, ticket: "AGE-317" });
   fetchMock.mockResolvedValueOnce(
     new Response(
       JSON.stringify({
         runId: RUN,
         cancelled: true,
         releasedTokens: [],
-        retainedTokens: ["linear:ticket:AGE-317"],
+        retainedTokens: ["linear:ticket:uuid-1"],
         worktrees: [],
       }),
     ),
@@ -107,7 +129,7 @@ test("a minimum-retention hook is reported as retained", async () => {
 
   await cancelRun("AGE-317", deps());
 
-  expect(lines).toEqual([`cancelled ${RUN}`, "retained linear:ticket:AGE-317"]);
+  expect(lines).toEqual([`${RUN}  cancelled`, "  still claiming Linear ticket AGE-317"]);
 });
 
 test("cancel keeps and points each worktree at offline resource pruning", async () => {
@@ -117,9 +139,12 @@ test("cancel keeps and points each worktree at offline resource pruning", async 
   await cancelRun("AGE-317", deps());
 
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(lines.at(-1)).toBe(
-    `worktree kept at /data/wt/one — pnpm exec jigs resources prune --run ${RUN} to review`,
-  );
+  expect(lines).toEqual([
+    `${RUN}  cancelled`,
+    "  kept the worktree at /data/wt/one",
+    "  to see what can be removed, run:",
+    `    pnpm exec jigs resources prune --run ${RUN}`,
+  ]);
 });
 
 test("an in-flight run asks before cancelling", async () => {
@@ -135,7 +160,7 @@ test("declining leaves the run alone", async () => {
   const confirm = vi.fn().mockResolvedValue(false);
   expect(await cancelRun(RUN, deps({ confirm }))).toBeNull();
   expect(fetchMock).toHaveBeenCalledTimes(1);
-  expect(lines).toEqual(["left alone"]);
+  expect(lines).toEqual([`did not cancel ${RUN}`]);
 });
 
 test("--force skips the prompt", async () => {
@@ -144,14 +169,14 @@ test("--force skips the prompt", async () => {
   const confirm = vi.fn();
   await cancelRun(RUN, deps({ confirm, force: true }));
   expect(confirm).not.toHaveBeenCalled();
-  expect(lines).toEqual([`cancelled ${RUN}`]);
+  expect(lines).toEqual([`${RUN}  cancelled`]);
 });
 
 test("no TTY and no --force refuses with a hint", async () => {
   respondLookup({ runId: RUN, status: "running", suspensions: [] });
   const err = await failure(cancelRun(RUN, deps()));
   expect(err?.message).toBe("refusing to cancel an in-flight run without confirmation");
-  expect(err?.hint).toBe("re-run with --force");
+  expect(err?.hint).toBe(`confirm with --force: \`pnpm exec jigs cancel ${RUN} --force\``);
   expect(fetchMock).toHaveBeenCalledTimes(1);
 });
 
@@ -161,7 +186,7 @@ test("cancelling an already-cancelled run is idempotent", async () => {
 
   await expect(cancelRun(RUN, deps({ force: true }))).resolves.toMatchObject({ cancelled: true });
   expect(fetchMock).toHaveBeenCalledTimes(2);
-  expect(lines).toEqual([`cancelled ${RUN}`]);
+  expect(lines).toEqual([`${RUN}  cancelled`]);
 });
 
 test("a ref that is not a full run ID is a not-found pointing at jigs status", async () => {
@@ -169,7 +194,7 @@ test("a ref that is not a full run ID is a not-found pointing at jigs status", a
   const err = await failure(cancelRun("AGE-999", deps({ force: true })));
   expect(err?.message).toBe("run AGE-999 not found");
   expect(err?.hint).toBe(
-    "commands take a full run ID: pnpm exec jigs status lists each run's ID under RUN and its ticket under TICKET",
+    "commands take a full run ID\nlist each run's ID and ticket: `pnpm exec jigs status`",
   );
 });
 
@@ -177,4 +202,9 @@ test("an unreachable service surfaces the shared unreachable error", async () =>
   fetchMock.mockRejectedValueOnce(new TypeError("fetch failed"));
   const err = await failure(cancelRun(RUN, deps({ force: true })));
   expect(err?.message).toContain("http://svc.test:8990");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

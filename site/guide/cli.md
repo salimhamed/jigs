@@ -76,8 +76,8 @@ jigs keeps each binding's clone and worktrees under
 | Command | What it does |
 | --- | --- |
 | `jigs resources list` | List what finished and running runs still hold, with each item's state and reason. Changes nothing. |
-| `jigs resources prune` | Preview what `--apply` would release, including what the release policy kept. |
-| `jigs resources prune --apply` | Release it. Needs `jigs service stop` first. |
+| `jigs resources prune` | Preview what `--apply` would remove, including what the release policy kept. |
+| `jigs resources prune --apply` | Remove it. Needs `jigs service stop` first. |
 
 ## Service
 
@@ -229,8 +229,9 @@ the middle of a step (`--force` skips the question). It returns once the run is
 recorded as cancelled. An agent the run started through `runAgent`, `askAgent`
 or `createAgentRunner` stops a few seconds later, along with the MCP servers
 it launched; the agent's step then fails and is not retried. Other work a step
-is doing may still finish, but the run does not continue. Cancel lists any
-worktrees it leaves behind.
+is doing may still finish, but the run does not continue. Cancel names the
+Linear ticket it stopped claiming and the pull request it stopped watching,
+then any worktree it leaves behind, with the prune command that reviews it.
 
 Stopping covers Pi, Claude Code and Codex on Linux and macOS. It does not reach
 a process that moved itself out of the agent's process group, or an agent whose
@@ -250,10 +251,10 @@ you add `--apply`. To apply:
 2. Check the preview, optionally for one run with `--run <run>`.
 3. Run `jigs resources prune --apply`.
 
-Prune is your override of the release policy: it releases what the policy
+Prune is your override of the release policy: it removes what the policy
 kept, what failed to release, and what the service never got to. The preview
-groups resources by run and notes once per run the policy decision `--apply`
-overrides. It never overrides the safety checks: only resources of
+groups resources by run, marks each `remove` or `keep` under ACTION, and says
+why the policy kept what `--apply` would remove. It never overrides the safety checks: only resources of
 finished runs recorded by this factory are removed, and a worktree with
 uncommitted changes, an unmerged local branch and a waiting run's resources
 are always kept. A release that fails is retried
@@ -264,23 +265,26 @@ failed attempt with its last error.
 $ jigs resources prune
 wrun_01M3MQ36G0RVZ23RRJCA19RHYT  cancelled
 
-  KIND        DECISION  PATH
-  worktree    release   ~/.local/share/jigs/clones/my-factory-e75b510f/api/worktrees/jigs-ai-703-tidy-setup-19rhyt
-  codex-home  release   ~/.local/share/jigs/codex-homes/wrun_01M3MQ36G0RVZ23RRJCA19RHYT
-  prune overrides the kept decision: onFailure policy keeps run resources
+  KIND        ACTION  PATH
+  worktree    remove  ~/.local/share/jigs/clones/my-factory-e75b510f/api/worktrees/jigs-ai-703-tidy-setup-19rhyt
+  codex-home  remove  ~/.local/share/jigs/codex-homes/wrun_01M3MQ36G0RVZ23RRJCA19RHYT
+  each one to remove was previously kept: onFailure policy keeps run resources
 
-Left on GitHub (jigs never deletes remote branches)
+Left on GitHub
   acme/api  jigs/ai-703-tidy-setup-19rhyt
-  delete after the PR is merged or closed:
+  delete it yourself once its PR is merged or closed:
     git push origin --delete jigs/ai-703-tidy-setup-19rhyt
 
-2 proposed removals, 0 retained; preview only
+2 to remove, 0 to keep (preview only)
+to remove them, run:
+  pnpm exec jigs resources prune --apply
 ```
 
-With `--apply`, a RESULT column replaces DECISION and says what happened to
-each resource, such as `removed`, `kept` or `failed`, with the reason below it
-when there is one (`branch kept locally: 1 unmerged commit`). The last line
-counts what was removed, failed and retained.
+With `--apply`, a RESULT column replaces ACTION and says what happened to
+each resource: `removed`, `kept`, `failed`, `waiting` (an agent home waits for
+its run's worktree) or `skipped` (the run is not finished), with the reason
+below it when there is one (`branch kept locally: 1 unmerged commit`). The last
+line counts what was removed, kept and failed.
 
 jigs never deletes remote branches. The preview (and `--apply`) lists each
 branch a finished run created and left on GitHub, with the command that deletes

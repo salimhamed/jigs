@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import { formatTable, note } from "../output.ts";
+import { detail, formatTable, note } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface WorkflowSummary {
@@ -47,10 +47,8 @@ function inputSummary(schema: z.core.JSONSchema.BaseSchema): string[] {
     const defaultValue =
       property.default === undefined ? "" : `, default ${JSON.stringify(property.default)}`;
     const description =
-      typeof property.description === "string"
-        ? ` ${note(`— ${singleLine(property.description)}`)}`
-        : "";
-    return `${name} (${type}, ${necessity}${defaultValue})${description}`;
+      typeof property.description === "string" ? `: ${note(singleLine(property.description))}` : "";
+    return `${name} ${detail(`${type}, ${necessity}${defaultValue}`)}${description}`;
   });
 }
 

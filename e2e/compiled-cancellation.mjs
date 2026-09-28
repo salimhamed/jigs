@@ -594,7 +594,7 @@ await (await getWorld()).close?.();`,
       runCli(["resources", "list", "--run", activeRunId, "--json"], env).output,
     );
     assertResourceReport(listed, activeRunId, true, undefined);
-    assert.match(listed.entries[0].decision, /overrides the kept decision/);
+    assert.match(listed.entries[0].decision, /previously kept/);
     const preview = JSON.parse(
       runCli(["resources", "prune", "--run", activeRunId, "--json"], env).output,
     );

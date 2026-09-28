@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { JigsError } from "../../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { launchRun, parseInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
@@ -161,14 +162,14 @@ test("a refused launch prints every preflight failure with its repair", async ()
             label: "binding api",
             ok: false,
             reason: "no binding named 'api'",
-            repair: "run: pnpm exec jigs bind <the-api-remote-url> --binding-name api",
+            repair: "bind it: `pnpm exec jigs bind <the-api-remote-url> --binding-name api`",
           },
           {
             id: "harness.codex-auth",
             label: "Codex subscription login",
             ok: false,
             reason: "no Codex login found",
-            repair: "run: codex login",
+            repair: "run: `codex login`",
           },
         ],
       }),
@@ -176,15 +177,15 @@ test("a refused launch prints every preflight failure with its repair", async ()
     ),
   );
   const err = await failure(launchRun("deliver-feature", ["ticket=AGE-346"], deps()));
-  expect(err?.message).toBe("preflight failed — no run created");
-  expect(lines.join("\n")).toBe(
-    [
-      "binding api: no binding named 'api'",
-      "  → run: pnpm exec jigs bind <the-api-remote-url> --binding-name api",
-      "Codex subscription login: no Codex login found",
-      "  → run: codex login",
-    ].join("\n"),
-  );
+  expect(err?.message).toBe("preflight failed, so no run was created");
+  expect(lines).toEqual([
+    "FAIL binding api: no binding named 'api'",
+    "  bind it:",
+    "    pnpm exec jigs bind <the-api-remote-url> --binding-name api",
+    "FAIL Codex subscription login: no Codex login found",
+    "  run:",
+    "    codex login",
+  ]);
 });
 
 test("a started run prints its id, workflow and log pointer", async () => {
@@ -201,10 +202,11 @@ test("a started run prints its id, workflow and log pointer", async () => {
   );
   await launchRun("deliver-feature", ["ticket=AGE-346"], deps());
   expect(lines).toEqual([
-    "run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started",
     "  workflow   deliver-feature",
-    "  inspect    pnpm exec jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
     "  dashboard  http://localhost:9090/run/wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
+    "  inspect it:",
+    "    pnpm exec jigs status wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
   ]);
   const [, trigger] = fetchMock.mock.calls;
   expect(trigger?.[0]).toBe("http://svc.test:8990/api/workflows/deliver-feature/runs");
@@ -276,8 +278,8 @@ test("a run launched over sources newer than the build says so, and still launch
   });
 
   expect(lines[0]).toContain("jigs.config.ts newer than the built service");
-  expect(lines[1]).toContain("pnpm exec jigs up");
-  expect(lines).toContain("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+  expect(lines[2]).toContain("pnpm exec jigs up");
+  expect(lines).toContain("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
 });
 
 test("a build newer than the sources launches without a word about it", async () => {
@@ -289,7 +291,7 @@ test("a build newer than the sources launches without a word about it", async ()
     factoryCwd: factoryBuilt(60_000),
   });
 
-  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+  expect(lines[0]).toBe("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
 });
 
 test("a run aimed at another factory's service is silent about this one's sources", async () => {
@@ -299,7 +301,7 @@ test("a run aimed at another factory's service is silent about this one's source
 
   await launchRun("deliver-feature", ["ticket=AGE-346"], deps());
 
-  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+  expect(lines[0]).toBe("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
 });
 
 test("a workflow the bundle does not have yet hears about the stale build first", async () => {
@@ -324,5 +326,10 @@ test("a freshness check that cannot read the factory costs no run", async () => 
     factoryCwd: tmp,
   });
 
-  expect(lines[0]).toBe("run wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+  expect(lines[0]).toBe("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

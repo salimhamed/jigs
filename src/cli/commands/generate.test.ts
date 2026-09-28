@@ -48,7 +48,7 @@ export function generateFactoryIntegration(root) {
   expect(readFileSync(path.join(root, "jigs-generated.ts"), "utf8")).toBe(
     "// this factory installed me",
   );
-  expect(lines).toEqual(["generated jigs/steps.ts and jigs/routines.ts — review and commit them"]);
+  expect(lines).toEqual(["generated jigs/steps.ts and jigs/routines.ts (review and commit them)"]);
 });
 
 test("generation explains when the factory has not installed jigs", async () => {
@@ -76,7 +76,7 @@ test("a factory from an earlier release loses jigs.ts and its old imports", () =
   expect(manifest.imports).toEqual({ "#jigs/*": "./jigs/*.ts" });
   expect(manifest.scripts).toEqual({ test: "vitest run" });
   expect(lines).toEqual([
-    "deleted jigs.ts; its steps now live in jigs/steps.ts",
+    "deleted jigs.ts (its steps now live in jigs/steps.ts)",
     "removed #jigs from package.json imports",
     "removed #blocks/* from package.json imports",
     "removed #steps/* from package.json imports",

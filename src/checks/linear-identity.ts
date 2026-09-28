@@ -38,7 +38,7 @@ export function linearIdentityChecks(
           return {
             ok: false,
             reason: `linear.identity uses ${mode} but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set`,
-            repair: `set ${variables} (${SOURCE[mode]}) in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+            repair: `set ${variables} (${SOURCE[mode]}) in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
           };
         }
         let viewer: LinearUser;
@@ -50,8 +50,8 @@ export function linearIdentityChecks(
             reason: `${variables} ${mode === "key" ? "is" : "are"} set but Linear rejected ${mode === "key" ? "it" : "them"}: ${err}`,
             repair:
               mode === "key"
-                ? `re-issue the key and update LINEAR_API_KEY in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`
-                : `check ${variables} in ${SERVICE_ENV_FILE} against the Linear OAuth application and that client credentials are enabled on it, then: ${RESTART_SERVICE}`,
+                ? `re-issue the key and update LINEAR_API_KEY in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``
+                : `check ${variables} in ${SERVICE_ENV_FILE} against the Linear OAuth application and that client credentials are enabled on it, then: \`${RESTART_SERVICE}\``,
           };
         }
         return {
@@ -89,14 +89,14 @@ export function linearOperatorChecks(
           return {
             ok: false,
             reason: `could not look up ${email} in Linear: ${err}`,
-            repair: "repair the Linear identity check, then: pnpm exec jigs doctor",
+            repair: "repair the Linear identity check, then: `pnpm exec jigs doctor`",
           };
         }
         if (user === null) {
           return {
             ok: false,
             reason: `no active Linear user has the email ${email}`,
-            repair: `set linear.operator in ${FACTORY_CONFIG_FILE} to the email of an active user in this Linear workspace, or remove it to mention the ticket's creator, then: pnpm exec jigs up`,
+            repair: `set linear.operator in ${FACTORY_CONFIG_FILE} to the email of an active user in this Linear workspace, or remove it to mention the ticket's creator, then: \`pnpm exec jigs up\``,
           };
         }
         if (identity.mode === "key") {
@@ -104,7 +104,7 @@ export function linearOperatorChecks(
           if (viewer?.id === user.id) {
             return {
               ok: true,
-              detail: `${user.name} — warning: LINEAR_API_KEY belongs to ${user.name}, so jigs posts as them and Linear will not notify them of their own comments. Set linear.identity to { mode: "app" } in ${FACTORY_CONFIG_FILE} so jigs posts as itself`,
+              detail: `mentions ${user.name}\nwarning: LINEAR_API_KEY belongs to ${user.name}, so jigs posts as them and Linear will not notify them of their own comments\nset linear.identity to { mode: "app" } in ${FACTORY_CONFIG_FILE} so jigs posts as itself`,
             };
           }
         }

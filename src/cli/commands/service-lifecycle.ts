@@ -22,7 +22,7 @@ import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
-import { columns, command, displayPath, note } from "../output.ts";
+import { columns, detail, displayPath, hint, indent, layout, note } from "../output.ts";
 import {
   judgeRecord,
   type ProcessControl,
@@ -124,7 +124,7 @@ function readRecord(slug: string): ServiceRecord | undefined {
   if (record === undefined) {
     throw new JigsError(
       `the service record at ${file} is unreadable`,
-      `check with ps that nothing this factory's service started is still running, then delete ${file}`,
+      `check that nothing this factory's service started is still running, then delete the record: \`rm ${file}\``,
     );
   }
   return record;
@@ -175,7 +175,7 @@ function inspectService(
   const unverified = (entry: ProcessEntry, why: string) =>
     new JigsError(
       `pid ${entry.pid} in ${pidfile} cannot be verified as the ${slug} service: ${entry.command}`,
-      `${why}; if that process is not this factory's service, delete ${pidfile} and ${recordFile}, otherwise stop it yourself`,
+      `${why}\nif that process is this factory's service, stop it yourself\nif it is not, delete both files: \`rm ${pidfile} ${recordFile}\``,
     );
 
   if (record === undefined) {
@@ -188,7 +188,7 @@ function inspectService(
   if (pid !== undefined && pid !== record.processGroup) {
     throw new JigsError(
       `${pidfile} names pid ${pid} but ${recordFile} names pid ${record.processGroup}`,
-      `check with ps that neither is this factory's service, then delete both files`,
+      `check that neither is this factory's service, then delete both files: \`rm ${pidfile} ${recordFile}\``,
     );
   }
 
@@ -245,7 +245,7 @@ export function acquireServiceExclusion(
     if ((error as NodeJS.ErrnoException).code === "EEXIST") {
       throw new JigsError(
         `factory maintenance exclusion is already held at ${lock}`,
-        "wait for the other command to finish; if it crashed, inspect that directory before removing it",
+        "wait for the other command to finish\nif it crashed, inspect that directory before removing it",
       );
     }
     throw error;
@@ -394,7 +394,7 @@ export async function startService(
   try {
     const state = inspectService(slug, processes, { cleanUp: true });
     if (state.kind === "running") {
-      out(`already running: pid ${state.pid} at ${serviceUrl}`);
+      out(`${slug} is already running at ${serviceUrl} ${detail(`pid ${state.pid}`)}`);
       return;
     }
     // A service that died without a stop can leave what it started running,
@@ -410,7 +410,7 @@ export async function startService(
     if (!existsSync(entry)) {
       throw new JigsError(
         `no built service at ${entry}`,
-        `build this factory's service first: pnpm exec jigs build in ${factoryRoot}`,
+        "build this factory's service first: `pnpm exec jigs build`",
       );
     }
 
@@ -424,7 +424,10 @@ export async function startService(
       logPath: logFile,
     });
     if (pid === undefined) {
-      throw new JigsError(`the service process for ${slug} did not start`, `check ${logFile}`);
+      throw new JigsError(
+        `the service process for ${slug} did not start`,
+        "its log may say why: `pnpm exec jigs service logs`",
+      );
     }
 
     const startTime = processes.startTime(pid);
@@ -432,7 +435,7 @@ export async function startService(
       processes.signal(pid, "SIGKILL");
       throw new JigsError(
         `could not read the start time of the new service process (pid ${pid}), so it was killed`,
-        "jigs needs it to recognise the service later; rerun the command, and report it if it keeps failing",
+        "jigs needs it to recognise the service later\nrerun the command, and report it if it keeps failing",
       );
     }
     // A process already gone has no start time; the readiness wait below
@@ -450,11 +453,13 @@ export async function startService(
     writeFileSync(serviceRunStatePath(slug), `${JSON.stringify({ logOffset })}\n`);
     writeFileSync(serviceBundlePath(slug), `${builtBundleHash(factoryRoot)}\n`);
     if (options.awaitReady !== false) await awaitReady(deps, slug, serviceUrl, pid);
-    out(`started ${slug}: pid ${pid} at ${serviceUrl}`);
-    for (const line of columns([
-      ["dashboard:", dashboardUrl],
-      ["logs:", displayPath(logFile)],
-    ])) {
+    out(`started ${slug} at ${serviceUrl} ${detail(`pid ${pid}`)}`);
+    for (const line of indent(
+      columns([
+        ["dashboard", dashboardUrl],
+        ["logs", displayPath(logFile)],
+      ]),
+    )) {
       out(line);
     }
   } finally {
@@ -471,7 +476,7 @@ export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<voi
   const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
   const pid = readPid(slug);
   if (pid === undefined) {
-    throw new JigsError(`not running: ${slug}`, "start it: pnpm exec jigs service start");
+    throw new JigsError(`not running: ${slug}`, "start it: `pnpm exec jigs service start`");
   }
   if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
   await awaitReady(deps, slug, serviceUrl, pid);
@@ -505,8 +510,8 @@ async function awaitReady(
     if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
     if (Date.now() >= deadline) {
       throw new JigsError(
-        `the ${slug} service is still booting after ${startTimeoutMs / 1000}s — pid ${pid} is still running${phase === undefined ? "" : ` (${phase})`}`,
-        `it clones every binding before the World starts — watch pnpm exec jigs service logs (${serviceLogPath(slug)}); pnpm exec jigs service stop ends it`,
+        `the ${slug} service is still booting after ${startTimeoutMs / 1000}s (pid ${pid}${phase === undefined ? "" : `, ${phase}`})`,
+        "it clones every binding before the World starts\nwatch its log: `pnpm exec jigs service logs`\nstop it: `pnpm exec jigs service stop`",
       );
     }
     await sleep(startPollMs);
@@ -522,7 +527,7 @@ function failedBoot(slug: string, pid: number, out: (line: string) => void): Jig
   rmSync(servicePidfilePath(slug), { force: true });
   return new JigsError(
     `the ${slug} service exited during boot (pid ${pid})`,
-    `its log says why: pnpm exec jigs service logs (${logFile})`,
+    "its log says why: `pnpm exec jigs service logs`",
   );
 }
 
@@ -565,11 +570,8 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
         : {};
   const stopped = await stopRecorded(deps, slug, target);
   if (state.kind !== "running") {
-    out(
-      stopped.length === 0
-        ? `service ${slug} was not running`
-        : `service ${slug} was not running; stopped ${stopped.length} process(es) it had started`,
-    );
+    out(`service ${slug} was not running`);
+    if (stopped.length > 0) out(`stopped ${stopped.length} process(es) it had started`);
     return;
   }
   const others = stopped.filter((entry) => entry.pid !== state.pid).length;
@@ -597,7 +599,9 @@ async function stopRecorded(
           pollMs: POLL_MS,
           killWaitMs,
         });
-  for (const entry of killed) out(`pid ${entry.pid} ignored SIGTERM — killed: ${entry.command}`);
+  for (const entry of killed) {
+    out(`pid ${entry.pid} ignored SIGTERM, so it was killed: ${entry.command}`);
+  }
   // The group is empty now, so the record has nothing left to find. Kept, it
   // would claim whatever group later reuses that ID.
   removeRecords(slug);
@@ -613,7 +617,8 @@ async function stopRecorded(
 export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   const { processes = nodeProcesses } = deps;
   const { slug } = resolveService(locateFactoryRoot(deps.cwd));
-  const stop = "run pnpm exec jigs service stop first; prune never stops or kills processes";
+  const stop =
+    "prune never stops or kills processes, so stop the service first: `pnpm exec jigs service stop`";
   const state = inspectService(slug, processes, { cleanUp: true });
   if (state.kind === "running") {
     throw new JigsError(`factory service is still running as pid ${state.pid}`, stop);
@@ -653,22 +658,25 @@ export function serviceStatus(deps: ServiceLifecycleDeps): void {
   const pid = livePid(slug, processes);
   out(
     pid === undefined
-      ? deadServiceStatus(slug, serviceUrl, now)
-      : `${slug}: running pid ${pid} at ${serviceUrl}`,
+      ? deadServiceStatus(slug, now)
+      : `${slug} is running at ${serviceUrl} ${detail(`pid ${pid}`)}`,
   );
-  for (const line of columns([
-    ["dashboard:", dashboardUrl],
-    ["factory:", displayPath(factoryRoot)],
-  ])) {
+  for (const line of indent(
+    columns([
+      ...(pid === undefined ? [["service", serviceUrl]] : []),
+      ["dashboard", dashboardUrl],
+      ["factory", displayPath(factoryRoot)],
+    ]),
+  )) {
     out(line);
   }
 }
 
-function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): string {
+function deadServiceStatus(slug: string, now: () => Date): string {
   const stateFile = serviceRunStatePath(slug);
   const log = serviceLogPath(slug);
   const state = readRunState(stateFile);
-  if (state === undefined) return `${slug}: not running (${serviceUrl})`;
+  if (state === undefined) return `${slug} is not running`;
   if (state.deathDetectedAt === undefined) {
     const logStat = existsSync(log) ? statSync(log) : undefined;
     state.deathDetectedAt = (
@@ -677,7 +685,8 @@ function deadServiceStatus(slug: string, serviceUrl: string, now: () => Date): s
     state.signal = signalSince(log, state.logOffset);
     writeFileSync(stateFile, `${JSON.stringify(state)}\n`);
   }
-  return `${slug}: not running as of ${state.deathDetectedAt}${state.signal === undefined ? "" : `, last signal ${state.signal}`} (${serviceUrl})`;
+  const signal = state.signal === undefined ? "" : ` ${detail(`last signal ${state.signal}`)}`;
+  return `${slug} is not running as of ${state.deathDetectedAt}${signal}`;
 }
 
 function readRunState(file: string): ServiceRunState | undefined {
@@ -717,11 +726,13 @@ export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: numbe
   if (!existsSync(file)) {
     throw new JigsError(
       `no service log at ${file}`,
-      `this factory's service has not run yet: pnpm exec jigs service start`,
+      "this factory's service has not run yet, so start it: `pnpm exec jigs service start`",
     );
   }
-  for (const line of tailLines(file, options.lines ?? LOG_LINES)) out(line);
-  out(note(`(follow: ${command(`tail -f ${displayPath(file)}`)})`));
+  const tail = tailLines(file, options.lines ?? LOG_LINES);
+  for (const line of layout(tail, hint("follow the log:", `tail -f ${displayPath(file)}`))) {
+    out(line);
+  }
 }
 
 function tailLines(file: string, count: number): string[] {

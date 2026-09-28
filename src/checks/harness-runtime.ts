@@ -48,7 +48,7 @@ const execFileAsync = promisify(execFile);
 // Said on every failure: a working `codex --version` in a terminal is what
 // makes this easy to misread.
 const PATH_CAVEAT =
-  "service may not have the same PATH as your shell — start it from a shell where each required harness runs";
+  "the service may not have your shell's PATH\nstart it from a shell where each required harness runs";
 
 const resolveDefault = (harness: HarnessKind, env: NodeJS.ProcessEnv): string => {
   const driver = driverFor(harness);
