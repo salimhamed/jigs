@@ -1,6 +1,6 @@
 import type { WakeNote } from "./service/wake-note.ts";
-import { TICKET_TOKEN_PREFIX } from "./workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "./workflow/linear/halt-for-human.ts";
+import { TICKET_TOKEN_PREFIX } from "./workflow/linear/ticket-token.ts";
 import {
   PULL_REQUEST_TOKEN_PREFIX,
   type PullRequestRef,

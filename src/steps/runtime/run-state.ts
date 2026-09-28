@@ -1,6 +1,6 @@
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { describeSuspension, type RunSuspension } from "../../run-suspension.ts";
-import { TICKET_TOKEN_PREFIX } from "../../workflow/linear/claim.ts";
+import { TICKET_TOKEN_PREFIX } from "../../workflow/linear/ticket-token.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import { listResources, type RegistrySql, toRecord } from "./registry.ts";
 
