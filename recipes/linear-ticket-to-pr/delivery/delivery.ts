@@ -170,32 +170,47 @@ export async function publish(
   const { task, worktree } = delivery;
   await pushApprovedChange(worktree, approved.reviewedCommit);
 
-  const described = await runAgent({
-    harness: delivery.builder,
-    cwd: worktree.path,
-    prompt: prompts.description(task, worktree, await readWorktreeDiff(worktree)),
-    output: pullRequestDescription,
-  });
+  const described = await describe(
+    delivery,
+    prompts.description.fresh(task, worktree, await readWorktreeDiff(worktree)),
+  );
 
   // Appended here rather than asked of the agent: the reviewer's remaining
   // observations are the one part of the body a model must not leave out.
   const notes = reviewerNotes(approved.ledger);
   const body =
     notes.length === 0
-      ? described.output.body
-      : `${described.output.body}\n\n## Reviewer notes\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
+      ? described.body
+      : `${described.body}\n\n## Reviewer notes\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
 
-  const pr = await openPullRequest({
-    worktree,
-    title: described.output.title,
-    body,
-  });
+  const pr = await openPullRequest({ worktree, title: described.title, body });
   await registerResource({
     kind: "pull-request",
     identity: `${pr.owner}/${pr.repo}#${pr.number}`,
     url: pr.url,
   });
   return pr;
+}
+
+// runAgent rejects an answer that fails the schema without asking again, and
+// the approved commit is already pushed, so one malformed title gets one retry
+// with the reasons rather than failing the run.
+async function describe(delivery: Delivery, prompt: string) {
+  const ask = async (text: string) =>
+    (
+      await runAgent({
+        harness: delivery.builder,
+        cwd: delivery.worktree.path,
+        prompt: text,
+        output: pullRequestDescription,
+      })
+    ).output;
+  try {
+    return await ask(prompt);
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) throw error;
+    return ask(prompts.description.retry(prompt, z.prettifyError(error)));
+  }
 }
 
 // ---- phase 3: follow the pull request until it merges -------------------------

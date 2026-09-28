@@ -173,6 +173,9 @@ export async function deliverTicket(
   committed, until the reviewer raises no blocking finding. Non-blocking
   findings go into the pull request description.
 - **`publish`** pushes exactly the approved commit and opens the pull request.
+  The builder writes the title and body. A title that is not one plain line of
+  at most 100 characters, or a body with a "Title:" or "Description:" label
+  line, is sent back once with the reasons; a second bad answer fails the run.
 - **`followPullRequest`** uses `watchPullRequest` to read the initial GitHub
   snapshot and changed facts. Each open snapshot gets its own attempt allowance. Its
   own comments can cause another turn; the agent should post nothing when no
