@@ -30,7 +30,10 @@ export const implementationReport = z.strictObject({
 
 // The schema the model sees carries none of these checks, only the
 // descriptions, so each description states its rules; the parse enforces them.
-const labelled = /^\s*(\*\*|__)?\s*title\s*:/i;
+// Case matters: a lowercase `title: ...` is a conventional-commit title, not a label.
+const titleLabel = /^\s*(\*\*|__)?\s*Title\s*:/;
+const markdownStart = /^\s*(#{1,6}\s|\*\*|__)/;
+const bodyLabel = /^\s*(\*\*|__)?\s*(title|description)\s*:/im;
 
 export const pullRequestDescription = z.strictObject({
   title: z
@@ -38,15 +41,18 @@ export const pullRequestDescription = z.strictObject({
     .min(1)
     .max(100, "The title must be 100 characters or fewer; aim for 72.")
     .regex(/^[^\r\n]*$/, "The title must be a single line.")
-    .refine((title) => !/^\s*[#*]/.test(title), "The title must be plain text, not markdown.")
-    .refine((title) => !labelled.test(title), 'The title must not start with a "Title:" label.')
+    .refine((title) => !markdownStart.test(title), "The title must be plain text, not markdown.")
+    .refine((title) => !titleLabel.test(title), 'The title must not start with a "Title:" label.')
     .describe(
       'The pull request title itself: one line of plain text, 72 characters or fewer, with no markdown and no "Title:" label.',
     ),
   body: z
     .string()
     .min(1)
-    .refine((body) => !labelled.test(body), 'The body must not start with a "Title:" label.')
+    .refine(
+      (body) => !bodyLabel.test(body),
+      'The body must not contain a "Title:" or "Description:" label line.',
+    )
     .describe(
       'The pull request body in markdown. It does not repeat the title or label itself "Title:" or "Description:".',
     ),

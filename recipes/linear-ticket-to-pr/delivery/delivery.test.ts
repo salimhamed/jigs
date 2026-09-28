@@ -224,16 +224,30 @@ test.each([
   ["a markdown heading", "# Tidy local setup files"],
   ["bold markdown", "**Tidy local setup files**"],
   ["a Title: label", "Title: Tidy local setup files"],
+  ["a bold Title: label", "**Title:** Tidy local setup files"],
   ["an overly long title", "Tidy ".repeat(21)],
 ])("the description schema rejects %s", (_, title) => {
   expect(pullRequestDescription.safeParse({ title, body: "Adds it." }).success).toBe(false);
 });
 
-test("the description schema rejects a body that carries its own title label", () => {
-  const body = "**Title:**\nTidy local setup files\n\n**Description:**\n## Summary";
-  expect(pullRequestDescription.safeParse({ title: "PR title and body", body }).success).toBe(
-    false,
-  );
+test.each(["#123 follow-up", "*.env files are ignored", "title: truncate long titles"])(
+  "the description schema accepts the title %s",
+  (title) => {
+    expect(pullRequestDescription.safeParse({ title, body: "Adds it." }).success).toBe(true);
+  },
+);
+
+test.each([
+  "**Title:**\nTidy local setup files\n\n**Description:**\n## Summary",
+  "# PR title and body\n\n**Title:** x",
+  "**Description:**\n## Summary",
+])("the description schema rejects a body with a label line: %j", (body) => {
+  expect(pullRequestDescription.safeParse({ title: "Tidy setup", body }).success).toBe(false);
+});
+
+test("the description schema accepts a body line that only starts with Description", () => {
+  const body = "## Summary\nDescription of the fix follows.";
+  expect(pullRequestDescription.safeParse({ title: "Tidy setup", body }).success).toBe(true);
 });
 
 test("a rejected description is asked for once more, with the reasons", async () => {
@@ -269,6 +283,17 @@ test("a description rejected twice fails before any pull request opens", async (
   );
   expect(calls).toHaveLength(2);
   expect(steps.openPullRequest).not.toHaveBeenCalled();
+});
+
+test("an error other than a rejected answer is rethrown without a retry", async () => {
+  answer(pullRequestDescription, () => {
+    throw new Error("harness crashed");
+  });
+
+  await expect(publish(delivery, { reviewedCommit: "h1", ledger: [] })).rejects.toThrow(
+    "harness crashed",
+  );
+  expect(calls).toHaveLength(1);
 });
 
 const snapshot: PullRequestSnapshot = {
