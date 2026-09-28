@@ -74,6 +74,8 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(workspace).toContain("@swc/core");
   // A second copy of the SDK or the World fails the install, not the run.
   expect(workspace).toContain("strictPeerDependencies: true");
+  // A node older than jigs's engines.node fails the install, not the service boot.
+  expect(workspace).toContain("engineStrict: true");
   // Keeps a factory from installing a Codex CLI it will never run.
   expect(workspace).toContain("ignoredOptionalDependencies");
   expect(workspace).toContain("'@openai/codex'");

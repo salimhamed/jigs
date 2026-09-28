@@ -5,6 +5,9 @@ allowBuilds:
   esbuild: true
 # Reject incompatible runtime and schema-library versions.
 strictPeerDependencies: true
+# Fail the install on a node older than jigs's engines.node. The service runs
+# on the same node as the CLI, and an older one cannot import workflow files.
+engineStrict: true
 # jigs runs the `codex` on PATH, so the provider's optional copy is 320 MB
 # that would never run.
 ignoredOptionalDependencies:
