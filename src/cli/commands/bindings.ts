@@ -4,7 +4,7 @@ import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { formatTable } from "../output.ts";
+import { displayPath, formatTable } from "../output.ts";
 
 export interface BindingsDeps {
   cwd: string;
@@ -19,7 +19,12 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
   const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
     const clone = cloneRepoDir({ factoryRoot, bindingName: name });
-    rows.push([name, binding.remote, clone, await resolveState(clone, binding.remote)]);
+    rows.push([
+      name,
+      binding.remote,
+      displayPath(clone),
+      await resolveState(clone, binding.remote),
+    ]);
   }
   if (rows.length === 0) {
     deps.out("no bindings");

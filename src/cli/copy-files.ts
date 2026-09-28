@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { note } from "./output.ts";
 
 /** Copy shipped source into a factory while preserving its existing files. */
 export function copyFiles(
@@ -36,5 +37,5 @@ export function reportCopied(
   out: (line: string) => void,
 ): void {
   for (const file of result.created) out(`created ${file}`);
-  for (const file of result.skipped) out(`kept    ${file}`);
+  for (const file of result.skipped) out(note(`kept    ${file}`));
 }

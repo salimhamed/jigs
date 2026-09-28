@@ -1,5 +1,4 @@
 import { existsSync, readFileSync } from "node:fs";
-import { homedir } from "node:os";
 import path from "node:path";
 import {
   type GithubIdentity,
@@ -15,6 +14,7 @@ import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
+import { columns, command, displayPath, heading, note, tone } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
@@ -235,7 +235,9 @@ function reportEmptyCredentials(
 ): void {
   const empty = slots.filter((key) => (env[key] ?? "") === "");
   if (empty.length === 0) return;
-  out(`     ${empty.join(", ")} empty in .env — fill them in before a workflow needs them`);
+  out(
+    `     ${empty.join(", ")} empty in .env ${note("— fill them in before a workflow needs them")}`,
+  );
 }
 
 // The World URL travels in the child's environment explicitly, never left to
@@ -299,23 +301,17 @@ async function printSummary(
   const rows: Array<[string, string]> = [
     [
       "postgres",
-      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : `  (Docker container ${container})`}`,
+      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : `  ${note(`(Docker container ${container})`)}`}`,
     ],
-    ["service", `${service.serviceUrl}  (pid ${pid ?? "unknown"})`],
+    ["service", `${service.serviceUrl}  ${note(`(pid ${pid ?? "unknown"})`)}`],
     ["dashboard", service.dashboardUrl],
-    ["logs", homeRelative(serviceLogPath(service.slug))],
+    ["logs", displayPath(serviceLogPath(service.slug))],
   ];
-  const width = Math.max(...rows.map(([label]) => label.length)) + 3;
-  out(`${factoryName(factoryRoot)} is up`);
+  out(heading(`${factoryName(factoryRoot)} is up`));
   out("");
-  for (const [label, what] of rows) out(`  ${label.padEnd(width)}${what}`);
+  for (const line of columns(rows)) out(`  ${line}`);
   out("");
-  out("  stop:  pnpm exec jigs down");
-}
-
-function homeRelative(file: string): string {
-  const home = homedir();
-  return file.startsWith(`${home}${path.sep}`) ? `~${file.slice(home.length)}` : file;
+  out(`  stop:  ${command("pnpm exec jigs down")}`);
 }
 
 function redactPassword(url: string): string {
@@ -344,8 +340,8 @@ async function confirmRestart(
   const inFlight = await listRunsInFlight(factoryRoot);
   if (inFlight.length === 0) return;
   deps.out(`  ${inFlight.length} run(s) in flight — a restart cuts each off:`);
-  for (const run of inFlight) {
-    deps.out(`    ${run.runId}  ${run.workflow}  ${run.status}`);
+  for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
+    deps.out(`    ${line}`);
   }
   if (deps.confirm === undefined) {
     throw new JigsError(

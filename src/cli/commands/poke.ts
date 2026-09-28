@@ -1,4 +1,5 @@
 import { JigsError } from "../../errors.ts";
+import { note } from "../output.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface PokeResult {
@@ -22,7 +23,7 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
   }
   const result = (await res.json()) as PokeResult;
   for (const wake of result.poked) {
-    deps.out(wake.resumed ? `poked ${wake.token}` : `gone (not poked): ${wake.token}`);
+    deps.out(wake.resumed ? `poked ${wake.token}` : `${note("gone (not poked):")} ${wake.token}`);
   }
   return result;
 }

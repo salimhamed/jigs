@@ -25,11 +25,15 @@ const TONES: Record<string, InspectColor> = {
   running: "yellow",
   pending: "yellow",
   waiting: "yellow",
+  suspended: "yellow",
   kept: "yellow",
   keep: "yellow",
   failed: "red",
   FAIL: "red",
+  unreachable: "red",
   cancelled: "magenta",
+  skip: "dim",
+  skipped: "dim",
 };
 
 /**
@@ -43,8 +47,8 @@ export const tone = (word: string): string => {
 
 /**
  * Rows with each column padded to its widest cell, two spaces apart. Cells may already be styled;
- * alignment counts only the visible characters. The last column is not padded, since trailing
- * spaces would only be invisible.
+ * alignment counts only the visible characters. Lines carry no trailing spaces, which would only
+ * be invisible.
  */
 export function columns(rows: string[][]): string[] {
   const width = (cell: string | undefined) => stripVTControlCharacters(cell ?? "").length;
@@ -57,7 +61,8 @@ export function columns(rows: string[][]): string[] {
       .map((cell, column) =>
         column === row.length - 1 ? cell : cell + " ".repeat((widths[column] ?? 0) - width(cell)),
       )
-      .join("  "),
+      .join("  ")
+      .trimEnd(),
   );
 }
 

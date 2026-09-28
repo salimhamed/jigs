@@ -1,5 +1,6 @@
 import type { CheckReport } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
+import { note, tone } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // An HTTP client of the service, deliberately not a local run of the catalog:
@@ -16,11 +17,13 @@ export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
   let failures = 0;
   for (const check of report.checks) {
     if (check.ok) {
-      deps.out(`ok   ${check.label}${check.detail === undefined ? "" : `: ${check.detail}`}`);
+      deps.out(
+        `${tone("ok")}   ${check.label}${check.detail === undefined ? "" : note(`: ${check.detail}`)}`,
+      );
       continue;
     }
     failures += 1;
-    deps.out(`FAIL ${check.label}: ${check.reason}`);
+    deps.out(`${tone("FAIL")} ${check.label}: ${check.reason}`);
     deps.out(`  → ${check.repair}`);
   }
   if (failures > 0) {

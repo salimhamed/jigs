@@ -5,6 +5,7 @@ import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, type ExecOutput, execOutput, nodeExecFile } from "../exec.ts";
+import { displayPath } from "../output.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 // Compiles a factory repo's own workflows into its own service bundle. Both
@@ -45,7 +46,7 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
     echo(err as Partial<ExecOutput>, deps.out);
     throw new JigsError(`nitro build failed in ${factoryRoot}`, "the output above is nitro's");
   }
-  deps.out(`built ${path.join(factoryRoot, SERVICE_ENTRY)}`);
+  deps.out(`built ${displayPath(path.join(factoryRoot, SERVICE_ENTRY))}`);
 }
 
 function echo(result: Partial<ExecOutput>, out: (line: string) => void): void {

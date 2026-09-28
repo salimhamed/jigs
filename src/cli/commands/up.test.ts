@@ -105,10 +105,10 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(lines.slice(-8)).toEqual([
     "acme-factory is up",
     "",
-    "  postgres    localhost:5555  (Docker container acme-factory-postgres-1)",
-    `  service     http://localhost:${port}  (pid ${pid})`,
-    "  dashboard   http://localhost:9200",
-    `  logs        ${log}`,
+    "  postgres   localhost:5555  (Docker container acme-factory-postgres-1)",
+    `  service    http://localhost:${port}  (pid ${pid})`,
+    "  dashboard  http://localhost:9200",
+    `  logs       ${log}`,
     "",
     "  stop:  pnpm exec jigs down",
   ]);
@@ -123,7 +123,7 @@ test("a container compose cannot name is left out of the summary, not guessed", 
   };
 
   expect((await up(root, io)).ok).toBe(true);
-  expect(lines).toContain("  postgres    localhost:5555");
+  expect(lines).toContain("  postgres   localhost:5555");
 });
 
 test("an app Linear identity names its client variables as the empty slots", async () => {

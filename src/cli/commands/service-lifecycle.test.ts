@@ -195,7 +195,7 @@ test("the child is told where to host its dashboard and where its queue delivers
   // the service's own workflow routes rather than a guessed port.
   expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
   expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
-  expect(lines).toContain("dashboard: http://localhost:9200");
+  expect(lines).toContain("dashboard:  http://localhost:9200");
 });
 
 test("the factory's own .env owns the world the service writes", async () => {
@@ -392,8 +392,8 @@ test("start says started only once /health reports ready, printing the phases on
     "booting: cloning forge",
     "booting: world",
     expect.stringContaining("started"),
-    "dashboard: http://localhost:9200",
-    expect.stringContaining("logs: "),
+    "dashboard:  http://localhost:9200",
+    expect.stringContaining("logs:       "),
   ]);
 });
 
@@ -719,8 +719,8 @@ test("status reports the pid, the url and the factory root", async () => {
   serviceStatus(deps(root, io));
 
   expect(lines[0]).toBe(`${factorySlug(root)}: running pid 4242 at http://localhost:9100`);
-  expect(lines).toContain("dashboard: http://localhost:9200");
-  expect(lines).toContain(`factory ${root}`);
+  expect(lines).toContain("dashboard:  http://localhost:9200");
+  expect(lines).toContain(`factory:    ${root}`);
 });
 
 test("status reports a dead pidfile as not running", async () => {

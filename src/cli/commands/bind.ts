@@ -26,6 +26,7 @@ import {
 import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
+import { command, displayPath, note, tone } from "../output.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -110,7 +111,7 @@ export async function bindRepo(
   );
   if (createBindingFilesDir(factoryRoot, name)) {
     deps.out(
-      `created bindings/${name}/ — files listed in the binding's copy are copied into each worktree`,
+      `created bindings/${name}/ ${note("— files listed in the binding's copy are copied into each worktree")}`,
     );
   }
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
@@ -120,7 +121,7 @@ export async function bindRepo(
     existing === undefined ||
     !hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }))
   ) {
-    deps.out(`run pnpm exec jigs up to apply the config and clone ${name}`);
+    deps.out(`run ${command("pnpm exec jigs up")} to apply the config and clone ${name}`);
   }
 
   // Last, so furniture that cannot be ensured leaves the binding recorded and
@@ -154,7 +155,7 @@ async function ensureJigsLabels(
 ): Promise<void> {
   const repoRef = parseGithubRemote(remoteUrl);
   if (repoRef === null) {
-    deps.out(`note: skipping jigs labels (${remoteUrl} is not a github.com remote)`);
+    deps.out(note(`note: skipping jigs labels (${remoteUrl} is not a github.com remote)`));
     return;
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
@@ -182,7 +183,7 @@ async function ensureJigsLabels(
         );
       },
     );
-    deps.out(`label ${outcome}: ${slug}#${label.name}`);
+    deps.out(`label ${tone(outcome)}: ${slug}#${label.name}`);
   }
 }
 
@@ -242,13 +243,15 @@ async function ensureWebhook({
 }): Promise<BindResult["webhook"]> {
   if (webhooks === undefined || !webhooks.github.enabled) {
     deps.out(
-      `note: skipping webhook (GitHub webhooks are off); pull request waits poll every ${pollSeconds} seconds`,
+      note(
+        `note: skipping webhook (GitHub webhooks are off); pull request waits poll every ${pollSeconds} seconds`,
+      ),
     );
     return "skipped";
   }
   const repoRef = parseGithubRemote(remoteUrl);
   if (repoRef === null) {
-    deps.out(`note: skipping webhook (${remoteUrl} is not a github.com remote)`);
+    deps.out(note(`note: skipping webhook (${remoteUrl} is not a github.com remote)`));
     return "skipped";
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
@@ -296,24 +299,28 @@ async function ensureWebhook({
   });
   deps.out(
     ensured.outcome === "created"
-      ? `webhook created: ${slug}`
-      : `webhook ${ensured.outcome}: ${slug} (signing secret re-sent)`,
+      ? `webhook ${tone("created")}: ${slug}`
+      : `webhook ${tone(ensured.outcome)}: ${slug} ${note("(signing secret re-sent)")}`,
   );
   if (ensured.outcome === "updated") {
     deps.out(
-      "note: the existing webhook's events, content type or active flag had drifted and were reset",
+      note(
+        "note: the existing webhook's events, content type or active flag had drifted and were reset",
+      ),
     );
   }
   if (ensured.otherHosts.length > 0) {
     deps.out(
-      `other jigs hooks on this repo: ${ensured.otherHosts.join(", ")} — delete one by hand if it was this factory's before a hostname change`,
+      `other jigs hooks on this repo: ${ensured.otherHosts.join(", ")} ${note("— delete one by hand if it was this factory's before a hostname change")}`,
     );
   }
   if (identity.mode === "pat" && (readFactoryEnv(factoryRoot).GITHUB_TOKEN ?? "") === "") {
     // The webhook now posts to a service that reads the file alone, so a token
     // living in this shell only leaves the gate it wakes without one.
     deps.out(
-      `note: that GITHUB_TOKEN is this shell's — the service reads ${path.join(factoryRoot, ".env")}, so set it there too`,
+      note(
+        `note: that GITHUB_TOKEN is this shell's — the service reads ${displayPath(path.join(factoryRoot, ".env"))}, so set it there too`,
+      ),
     );
   }
   return ensured.outcome;

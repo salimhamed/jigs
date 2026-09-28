@@ -1,7 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
-import { formatTable } from "../output.ts";
-import { age, type RunListRun, suspensionLine } from "./run-list.ts";
+import { columns, command, displayPath, formatTable, heading, note, tone } from "../output.ts";
+import { age, type RunListRun, type RunListSuspension, suspensionLine } from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
@@ -63,75 +63,101 @@ export async function showRunStatus(
   }
 
   const now = options.now ?? new Date();
-  deps.out(`run ${result.runId}`);
-  deps.out(`status ${result.status}`);
-  deps.out(`trigger ${result.trigger}`);
-  if (result.ticket !== null) deps.out(`ticket ${result.ticket}`);
-  deps.out(`last activity ${age(result.lastActivityAt, now)} ago (${result.lastActivityAt})`);
+  const facts: string[][] = [
+    ["trigger", result.trigger],
+    ...(result.ticket === null ? [] : [["ticket", result.ticket]]),
+    [
+      "last activity",
+      `${age(result.lastActivityAt, now)} ago ${note(`(${result.lastActivityAt})`)}`,
+    ],
+    ...(result.error === undefined ? [] : [["error", result.error]]),
+    ...(result.resources.length === 0 ? [["resources", "none"]] : []),
+    ...scalarResult(result),
+    ...(result.dashboard === "" ? [] : [["dashboard", result.dashboard]]),
+  ];
+  deps.out(`${heading(result.runId)}  ${tone(result.status)}`);
+  for (const line of columns(facts)) deps.out(`  ${line}`);
+  showSuspensions(result.suspensions, now, deps);
+  if (result.status === "completed") showObjectResult(result.returnValue, deps);
   showResources(result.resources, deps);
-  if (result.error !== undefined) deps.out(`error ${result.error}`);
-  if (result.status === "completed") {
-    showResult(result.returnValue, deps);
-  }
-  // What the run is waiting for, and where to go and act on it — the token
-  // itself is an implementation detail of the hook it parked on.
-  for (const suspension of result.suspensions) {
-    deps.out(suspensionLine(suspension));
-    // Only the single-run route reads the providers, so these are absent
-    // whenever GitHub could not be asked.
-    if (suspension.headSha !== undefined) {
-      deps.out(`  head sha: ${suspension.headSha}`);
-      deps.out(`  CI: ${suspension.ci}`);
-      deps.out(`  approval: ${suspension.approval}`);
-      deps.out(`  draft: ${suspension.draft === true ? "yes" : "no"}`);
-      deps.out(`  mergeable state: ${suspension.mergeState}`);
-      deps.out(`  blocker: ${suspension.blocker}`);
-    }
-    const wake = suspension.lastWake;
-    if (wake !== undefined) {
-      deps.out(`  last wake: ${wake.kind}, ${age(wake.at, now)} ago (${wake.at})`);
-    }
-    if (suspension.question !== undefined) {
-      deps.out("asked:");
-      for (const line of suspension.question.split("\n")) deps.out(`  ${line}`);
-    }
-  }
-  deps.out(result.dashboard);
   showTimeline(timeline, deps);
   return result;
 }
 
+// What the run is waiting for, and where to go and act on it — the token
+// itself is an implementation detail of the hook it parked on.
+function showSuspensions(
+  suspensions: readonly RunListSuspension[],
+  now: Date,
+  deps: ServiceDeps,
+): void {
+  if (suspensions.length === 0) return;
+  deps.out("");
+  deps.out(heading("Waiting"));
+  for (const suspension of suspensions) {
+    deps.out(`  ${suspensionLine(suspension)}`);
+    // Only the single-run route reads the providers, so these are absent
+    // whenever GitHub could not be asked.
+    const gate =
+      suspension.headSha === undefined
+        ? []
+        : [
+            ["head sha", suspension.headSha],
+            ["CI", `${suspension.ci}`],
+            ["approval", `${suspension.approval}`],
+            ["draft", suspension.draft === true ? "yes" : "no"],
+            ["mergeable state", `${suspension.mergeState}`],
+            ["blocker", `${suspension.blocker}`],
+          ];
+    const wake = suspension.lastWake;
+    const wakeRow =
+      wake === undefined
+        ? []
+        : [["last wake", `${wake.kind}, ${age(wake.at, now)} ago ${note(`(${wake.at})`)}`]];
+    for (const line of columns([...gate, ...wakeRow])) deps.out(`    ${line}`);
+    if (suspension.question !== undefined) {
+      deps.out("  asked:");
+      for (const line of suspension.question.split("\n")) deps.out(`    ${line}`);
+    }
+  }
+}
+
 const RESULT_KEY_LIMIT = 12;
 
-function showResult(value: unknown, deps: ServiceDeps): void {
-  if (value === undefined || value === null) return;
-  if (typeof value !== "object" || Array.isArray(value)) {
-    deps.out(`result: ${formatResultValue(value)}`);
-    return;
-  }
+function scalarResult(result: StatusResult): string[][] {
+  const value = result.returnValue;
+  if (result.status !== "completed" || value === undefined || value === null) return [];
+  if (typeof value === "object" && !Array.isArray(value)) return [];
+  return [["result", formatResultValue(value)]];
+}
 
+function showObjectResult(value: unknown, deps: ServiceDeps): void {
+  if (value === null || typeof value !== "object" || Array.isArray(value)) return;
   const entries = Object.entries(value);
-  deps.out("result:");
-  for (const [key, entryValue] of entries.slice(0, RESULT_KEY_LIMIT)) {
-    deps.out(`  ${singleLine(key)}: ${formatResultValue(entryValue)}`);
-  }
+  deps.out("");
+  deps.out(heading("Result"));
+  const rows = entries
+    .slice(0, RESULT_KEY_LIMIT)
+    .map(([key, entryValue]) => [singleLine(key), formatResultValue(entryValue)]);
+  for (const line of columns(rows)) deps.out(`  ${line}`);
   const omitted = entries.length - RESULT_KEY_LIMIT;
-  if (omitted > 0) deps.out(`  … ${omitted} more ${omitted === 1 ? "key" : "keys"}`);
+  if (omitted > 0) deps.out(`  ${note(`… ${omitted} more ${omitted === 1 ? "key" : "keys"}`)}`);
 }
 
 function showResources(resources: readonly ResourceRecord[], deps: ServiceDeps): void {
-  if (resources.length === 0) {
-    deps.out("resources none");
-    return;
-  }
-  deps.out("resources:");
-  for (const resource of resources) {
-    const reason = resource.reason === null ? "" : ` (${singleLine(resource.reason)})`;
-    deps.out(
-      `  ${singleLine(resource.kind)} ${singleLine(resource.identity)} → ${singleLine(resource.url)}`,
-    );
-    deps.out(`    ${resource.state}${reason}`);
-  }
+  if (resources.length === 0) return;
+  deps.out("");
+  deps.out(heading("Resources"));
+  const rows = resources.flatMap((resource) => {
+    const identity = displayPath(singleLine(resource.identity));
+    const where = displayPath(singleLine(resource.url));
+    return [
+      [singleLine(resource.kind), tone(resource.state), identity],
+      ...(where === identity ? [] : [["", "", where]]),
+      ...(resource.reason === null ? [] : [["", "", note(singleLine(resource.reason))]]),
+    ];
+  });
+  for (const line of formatTable(["KIND", "STATE", "RESOURCE"], rows)) deps.out(`  ${line}`);
 }
 
 function formatResultValue(value: unknown): string {
@@ -160,36 +186,41 @@ async function fetchTimeline(runId: string, deps: ServiceDeps): Promise<Timeline
 
 function showTimeline(timeline: Timeline, deps: ServiceDeps): void {
   if (timeline.error !== undefined) {
+    deps.out("");
     deps.out(`timeline unavailable: ${timeline.error}`);
     return;
   }
   const steps = timeline.steps ?? [];
   if (steps.length > 0) {
     deps.out("");
+    deps.out(heading("Steps"));
     for (const line of formatTable(
       ["STEP", "STATUS", "ATTEMPT", "STARTED", "TOOK", "ERROR"],
       steps.map((step) => [
         step.name,
-        step.status,
+        tone(step.status),
         String(step.attempt),
         step.startedAt ?? "-",
         took(step),
         firstLine(step.error),
       ]),
     )) {
-      deps.out(line);
+      deps.out(`  ${line}`);
     }
   }
   // The queue gave up on these, so nothing is coming to move the run. jigs
   // prints the requeue rather than running it: what to do about a job that
   // failed three times is the operator's call.
-  for (const job of timeline.deadJobs ?? []) {
-    deps.out("");
+  const deadJobs = timeline.deadJobs ?? [];
+  if (deadJobs.length === 0) return;
+  deps.out("");
+  deps.out(heading("Dead jobs"));
+  for (const job of deadJobs) {
     deps.out(
-      `dead job ${job.id} (${job.task}) after ${job.attempts} attempts: ${firstLine(job.lastError)}`,
+      `  dead job ${job.id} (${job.task}) after ${job.attempts} attempts: ${firstLine(job.lastError)}`,
     );
     deps.out(
-      `  requeue: select graphile_worker.reschedule_jobs(array[${job.id}]::bigint[], run_at := now(), attempts := 0)`,
+      `    requeue: ${command(`select graphile_worker.reschedule_jobs(array[${job.id}]::bigint[], run_at := now(), attempts := 0)`)}`,
     );
   }
 }
