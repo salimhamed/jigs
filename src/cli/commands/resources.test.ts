@@ -138,6 +138,47 @@ test("prune overrides the policy: live, kept and failed records of finished runs
     ["codex-home", true],
     ["pi-home", true],
   ]);
+  expect(lines).toEqual([
+    `${RUN}  completed`,
+    "",
+    "  KIND           DECISION  PATH",
+    "  run-directory  release   /scratch",
+    "  codex-home     release   /scratch",
+    "  pi-home        release   /scratch",
+    "                           previous attempt: release failed: EBUSY",
+    "  prune overrides the kept decision: onFailure policy keeps run resources",
+    "",
+    "3 proposed removals, 0 retained; preview only",
+  ]);
+});
+
+test("kept decisions that differ within a run are named on each resource", async () => {
+  seed("worktree", {
+    identity: "/w/age-1",
+    url: "file:///w/age-1",
+    state: "kept",
+    reason: "onFailure policy keeps run resources",
+    repoDir: "/w",
+    branch: "age-1",
+  });
+  seed("codex-home", {
+    state: "kept",
+    reason: "release failed: EBUSY (gave up after 5 attempts)",
+  });
+
+  await listResources(deps(), {});
+
+  expect(lines).toEqual([
+    `${RUN}  completed`,
+    "",
+    "  KIND        DECISION  PATH",
+    "  worktree    release   /w/age-1",
+    "                        overrides the kept decision: onFailure policy keeps run resources",
+    "  codex-home  release   /scratch",
+    "                        overrides the kept decision: release failed: EBUSY (gave up after 5 attempts)",
+    "",
+    "2 proposed removals, 0 retained; preview only",
+  ]);
 });
 
 const pruneAll = (statuses: Record<string, string> = { [RUN]: "cancelled" }) =>
@@ -165,7 +206,21 @@ test("apply releases finished runs' records and never a running run's", async ()
   expect(existsSync(done)).toBe(false);
   expect(existsSync(codex)).toBe(false);
   expect(existsSync(live)).toBe(true);
-  expect(lines.at(-1)).toBe("2 removed, 0 failed, 1 retained");
+  expect(lines).toEqual([
+    `${RUN}  cancelled`,
+    "",
+    "  KIND           RESULT   PATH",
+    "  run-directory  removed  /scratch",
+    "  codex-home     removed  /scratch",
+    "",
+    `${LIVE}  running`,
+    "",
+    "  KIND           RESULT   PATH",
+    "  run-directory  skipped  /scratch",
+    "  the run is not finished, so nothing is released",
+    "",
+    "2 removed, 0 failed, 1 retained",
+  ]);
   // A recorded-only pull request is history, never visited.
   expect(memoryRows.find((row) => row.kind === "pull-request")?.state).toBe("live");
 });
@@ -325,9 +380,14 @@ test("the preview lists branches finished runs left on GitHub, with how to delet
       command: "git push origin --delete still-there",
     },
   ]);
-  expect(lines).toContain(
-    "left on GitHub: acme/api:still-there — jigs doesn't delete remote branches; if its pull request is merged or closed, remove it with: git push origin --delete still-there",
-  );
+  expect(lines).toEqual([
+    "Left on GitHub (jigs never deletes remote branches)",
+    "  acme/api  still-there",
+    "  delete after the PR is merged or closed:",
+    "    git push origin --delete still-there",
+    "",
+    "0 proposed removals, 0 retained; preview only",
+  ]);
   // A preview writes nothing, not even for the branch that is gone.
   expect(memoryRows.every((row) => row.state === "live")).toBe(true);
   expect(fetchSpy).not.toHaveBeenCalled();
@@ -369,9 +429,7 @@ test("a remote that cannot be asked still lists its branches, saying so", async 
 
   expect(report.leftOnGitHub).toMatchObject([{ identity: "acme/api:unknown", checked: false }]);
   expect(memoryRows[0]?.state).toBe("live");
-  expect(lines.some((line) => line.startsWith("left on GitHub (could not check the remote"))).toBe(
-    true,
-  );
+  expect(lines).toContain("  acme/api  unknown  (could not check the remote; it may be gone)");
 });
 
 test("the offline read has the run's status and nothing it cannot see", async () => {

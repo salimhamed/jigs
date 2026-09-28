@@ -8,6 +8,7 @@ import {
   type ResourceRecord,
   UNRELEASED_STATES,
 } from "../../workflow/runtime/resources.ts";
+import { columns, command, displayPath, formatTable, heading, note, tone } from "../output.ts";
 import { runNotFound } from "./service-client.ts";
 import {
   acquireServiceExclusion,
@@ -75,6 +76,8 @@ export const offlineFacts =
           : { status, workflowName: null, trigger: null, ticket: null, createdAt: null },
     };
   };
+
+const NOT_FINISHED = "the run is not finished";
 
 const modules = async () => ({
   ...(await import("../../config/factory-config.ts")),
@@ -162,7 +165,7 @@ async function visitRun(
     if (!m.finished(state)) {
       entries.push({
         ...entry,
-        decision: "the run is not finished",
+        decision: NOT_FINISHED,
         ...(options.apply ? { action: "skip" } : {}),
       });
       continue;
@@ -254,25 +257,98 @@ function output(result: ResourceInventory, deps: ResourcesDeps, options: Resourc
     deps.out(JSON.stringify(result, null, 2));
     return;
   }
-  for (const entry of result.entries) {
-    deps.out(
-      `${entry.runId}  ${entry.status ?? "unknown"}  ${entry.kind}  ${entry.state}  ${entry.eligible ? "release" : "keep"}  ${entry.url}  ${entry.decision}`,
-    );
+  const apply = options.apply === true;
+  for (const [runId, entries] of Map.groupBy(result.entries, (entry) => entry.runId)) {
+    deps.out(`${heading(runId)}  ${tone(entries[0]?.status ?? "unknown")}`);
+    deps.out("");
+    const overridden = new Set(entries.flatMap((entry) => overriddenReason(entry, apply) ?? []));
+    const shared = overridden.size === 1 ? [...overridden][0] : undefined;
+    const rows = entries.flatMap((entry) => {
+      const outcome = apply ? appliedResult(entry) : entry.eligible ? "release" : "keep";
+      const detail = entryDetail(entry, apply, shared);
+      return [
+        [entry.kind, tone(outcome), displayPath(entry.url)],
+        ...(detail === undefined ? [] : [["", "", note(detail)]]),
+      ];
+    });
+    for (const line of formatTable(["KIND", apply ? "RESULT" : "DECISION", "PATH"], rows)) {
+      deps.out(`  ${line}`);
+    }
+    for (const line of runNotes(entries, shared)) deps.out(`  ${note(line)}`);
+    deps.out("");
   }
-  for (const error of result.errors) deps.out(`failed: ${error}`);
-  for (const branch of result.leftOnGitHub) {
-    deps.out(
-      `left on GitHub${branch.checked ? "" : " (could not check the remote; it may be gone)"}: ${branch.identity} — jigs doesn't delete remote branches; if its pull request is merged or closed, remove it with: ${branch.command}`,
-    );
-  }
+  if (result.leftOnGitHub.length > 0) showLeftBranches(result.leftOnGitHub, deps);
   const { entries } = result;
   const removable = entries.filter((entry) => entry.eligible).length;
   const removed = entries.filter((entry) => entry.action === "remove").length;
   deps.out(
-    options.apply === true
+    apply
       ? `${removed} removed, ${result.errors.length} failed, ${entries.length - removed} retained`
       : `${removable} proposed removal${removable === 1 ? "" : "s"}, ${entries.length - removable} retained; preview only`,
   );
+}
+
+function appliedResult(entry: ResourceEntry): string {
+  if (entry.action === "remove") return "removed";
+  if (entry.decision === NOT_FINISHED) return "skipped";
+  return entry.state === "live" ? "waiting" : entry.state;
+}
+
+/** The kept decision a preview would override, if it would override one. */
+function overriddenReason(entry: ResourceEntry, apply: boolean): string | undefined {
+  if (apply || !entry.eligible || entry.state !== "kept") return undefined;
+  return entry.reason ?? undefined;
+}
+
+// What one resource adds beyond its outcome; a kept decision every overridden
+// resource of the run shares is printed once below its table instead.
+function entryDetail(
+  entry: ResourceEntry,
+  apply: boolean,
+  shared: string | undefined,
+): string | undefined {
+  if (entry.decision === NOT_FINISHED) return undefined;
+  if (apply) return entry.decision === "removed" ? undefined : entry.decision;
+  if (!entry.eligible) return entry.decision;
+  const overridden = overriddenReason(entry, apply);
+  if (overridden !== undefined) {
+    return overridden === shared ? undefined : `overrides the kept decision: ${overridden}`;
+  }
+  return entry.state === "failed" && entry.reason !== null
+    ? `previous attempt: ${entry.reason}`
+    : undefined;
+}
+
+function runNotes(entries: readonly ResourceEntry[], shared: string | undefined): string[] {
+  return [
+    ...(entries.some((entry) => entry.decision === NOT_FINISHED)
+      ? [`${NOT_FINISHED}, so nothing is released`]
+      : []),
+    ...(shared === undefined ? [] : [`prune overrides the kept decision: ${shared}`]),
+  ];
+}
+
+function showLeftBranches(branches: readonly LeftBranch[], deps: ResourcesDeps): void {
+  deps.out(heading("Left on GitHub (jigs never deletes remote branches)"));
+  const rows = branches.map((branch) => {
+    const split = branch.identity.indexOf(":");
+    const repo = branch.identity.slice(0, split);
+    const name = branch.identity.slice(split + 1);
+    return [
+      repo,
+      branch.checked ? name : `${name}  ${note("(could not check the remote; it may be gone)")}`,
+    ];
+  });
+  for (const line of columns(rows)) deps.out(`  ${line}`);
+  deps.out(
+    note(
+      branches.length === 1
+        ? "  delete after the PR is merged or closed:"
+        : "  delete each after its PR is merged or closed:",
+    ),
+  );
+  for (const branch of branches) deps.out(`    ${command(branch.command)}`);
+  deps.out("");
 }
 
 async function withDatabase<T>(

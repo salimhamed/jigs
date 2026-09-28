@@ -1,6 +1,6 @@
 import type { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import { formatTable } from "../table.ts";
+import { formatTable } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface WorkflowSummary {

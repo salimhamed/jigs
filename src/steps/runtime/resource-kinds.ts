@@ -73,8 +73,8 @@ const worktree: ResourceKind = async (row) => {
     if (unmerged !== 0) {
       return released(
         unmerged === null
-          ? "worktree removed; branch kept because its ancestry could not be verified"
-          : `worktree removed; branch kept with ${unmerged} unmerged commit(s)`,
+          ? "branch kept locally: its ancestry could not be verified"
+          : `branch kept locally: ${unmerged} unmerged commit${unmerged === 1 ? "" : "s"}`,
       );
     }
     // Pin and recheck the ref so an independently advanced branch stays.

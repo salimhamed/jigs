@@ -1,6 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
-import { formatTable } from "../table.ts";
+import { formatTable } from "../output.ts";
 import { age, type RunListRun, suspensionLine } from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 

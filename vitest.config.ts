@@ -5,5 +5,7 @@ import { configDefaults, defineConfig } from "vitest/config";
 export default defineConfig({
   test: {
     exclude: [...configDefaults.exclude, "**/*.live.test.ts", "recipes/**"],
+    // Output assertions are plain text whatever the developer's shell forces.
+    env: { FORCE_COLOR: "0" },
   },
 });

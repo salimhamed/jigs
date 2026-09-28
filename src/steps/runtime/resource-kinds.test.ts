@@ -100,7 +100,7 @@ test("an unmerged clean worktree is removed but its branch keeps the commits", a
 
   expect(await releaseResource(tree, [])).toEqual({
     state: "released",
-    reason: "worktree removed; branch kept with 1 unmerged commit(s)",
+    reason: "branch kept locally: 1 unmerged commit",
   });
   expect(existsSync(tree.identity)).toBe(false);
   expect(localBranches()).toContain("feat");
@@ -127,7 +127,7 @@ test("a failed fetch cannot authorize branch deletion from a stale merged ref", 
 
   expect(await releaseResource(tree, [])).toEqual({
     state: "released",
-    reason: "worktree removed; branch kept because its ancestry could not be verified",
+    reason: "branch kept locally: its ancestry could not be verified",
   });
   expect(localBranches()).toContain("feat");
 });

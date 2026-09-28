@@ -4,7 +4,7 @@ import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { formatTable } from "../table.ts";
+import { formatTable } from "../output.ts";
 
 export interface BindingsDeps {
   cwd: string;
