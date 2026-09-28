@@ -18,7 +18,7 @@ async function resolveDefaultBranch(repoDir: string): Promise<string> {
   if (branch === null) {
     throw new JigsError(
       `cannot determine the default branch of ${repoDir}`,
-      "set it: git remote set-head origin --auto",
+      "set it: `git remote set-head origin --auto`",
     );
   }
   return branch;

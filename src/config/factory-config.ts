@@ -187,7 +187,7 @@ export function installationFor(
   }
   throw new JigsError(
     `no GitHub App installation configured for account ${account}`,
-    `add "${account}": <installation-id> to the App's installations in github.identities in jigs.config.ts, then: pnpm exec jigs up`,
+    `add "${account}": <installation-id> to the App's installations in github.identities in jigs.config.ts, then: \`pnpm exec jigs up\``,
   );
 }
 

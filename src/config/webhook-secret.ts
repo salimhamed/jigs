@@ -30,7 +30,7 @@ export function missingWebhookSecret(provider: WebhookProvider, factoryRoot: str
 export function webhookSecretRepair(provider: WebhookProvider, factoryRoot: string): string {
   const source =
     provider === "github"
-      ? "generate one with `openssl rand -hex 32`"
+      ? "generate a secret: `openssl rand -hex 32`"
       : "copy the signing secret from the Linear webhook's settings page";
-  return `${source}, set it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")} and restart the service (pnpm exec jigs service restart)`;
+  return `${source}\nset it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")}\nrestart the service: \`pnpm exec jigs service restart\``;
 }

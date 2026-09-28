@@ -1,5 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import { note } from "../output.ts";
+import { hookSubject } from "./cancel.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export interface PokeResult {
@@ -15,7 +15,7 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
   if (res.status === 409) {
     throw new JigsError(
       "run has no suspensions to poke",
-      `inspect it: pnpm exec jigs status ${runId}`,
+      `inspect it: \`pnpm exec jigs status ${runId}\``,
     );
   }
   if (!res.ok) {
@@ -23,7 +23,8 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
   }
   const result = (await res.json()) as PokeResult;
   for (const wake of result.poked) {
-    deps.out(wake.resumed ? `poked ${wake.token}` : `${note("gone (not poked):")} ${wake.token}`);
+    const { label } = hookSubject(wake.token);
+    deps.out(wake.resumed ? `woke the wait on ${label}` : `already gone: ${label}`);
   }
   return result;
 }

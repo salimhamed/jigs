@@ -49,7 +49,7 @@ async function checkMcpServer(
     return {
       ok: false,
       reason: `MCP server '${name}' declares no probe tool, so its availability cannot be proven`,
-      repair: `declare a probe on '${name}': probe: { tool: "<a tool the server exposes>" } — ${DECLARED_PER_STEP}`,
+      repair: `declare a probe on '${name}': probe: { tool: "<a tool the server exposes>" }\n${DECLARED_PER_STEP}`,
     };
   }
 
@@ -62,7 +62,7 @@ async function checkMcpServer(
     return {
       ok: false,
       reason: `MCP server '${name}' did not start or connect: ${err}`,
-      repair: `fix the '${name}' server's command, url or credentials — ${DECLARED_PER_STEP}`,
+      repair: `fix the '${name}' server's command, url or credentials\n${DECLARED_PER_STEP}`,
     };
   }
 
@@ -75,7 +75,7 @@ async function checkMcpServer(
       return {
         ok: false,
         reason: `MCP server '${name}' connected but exposes no tool '${probe.tool}' (it exposes: ${names.join(", ") || "nothing"})`,
-        repair: `point '${name}''s probe at a tool it actually exposes — ${DECLARED_PER_STEP}`,
+        repair: `point '${name}''s probe at a tool it actually exposes\n${DECLARED_PER_STEP}`,
       };
     }
     const result = await client.callTool(
@@ -87,7 +87,7 @@ async function checkMcpServer(
       return {
         ok: false,
         reason: `MCP server '${name}' answered its probe tool '${probe.tool}' with an error: ${JSON.stringify(result.content)}`,
-        repair: `check the '${name}' server's credentials and probe arguments — ${DECLARED_PER_STEP}`,
+        repair: `check the '${name}' server's credentials and probe arguments\n${DECLARED_PER_STEP}`,
       };
     }
     return { ok: true };
@@ -95,7 +95,7 @@ async function checkMcpServer(
     return {
       ok: false,
       reason: `MCP server '${name}' failed its probe tool call: ${err}`,
-      repair: `check the '${name}' server's credentials and probe arguments — ${DECLARED_PER_STEP}`,
+      repair: `check the '${name}' server's credentials and probe arguments\n${DECLARED_PER_STEP}`,
     };
   } finally {
     await client.close().catch(() => {});

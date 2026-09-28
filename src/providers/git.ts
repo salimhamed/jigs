@@ -56,7 +56,7 @@ export async function resolveRemoteUrl(dir: string): Promise<ResolvedRemote> {
   } else if (names.length === 1 && names[0] !== undefined) {
     name = names[0];
   } else if (names.length === 0) {
-    throw new JigsError(`${dir} has no git remote`, "add one: git remote add origin <url>");
+    throw new JigsError(`${dir} has no git remote`, "add one: `git remote add origin <url>`");
   } else {
     throw new JigsError(
       `${dir} has ${names.length} remotes and none is origin (${names.join(", ")})`,

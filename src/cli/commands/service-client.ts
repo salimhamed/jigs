@@ -37,7 +37,7 @@ export async function serviceFetch(
   } catch {
     throw new JigsError(
       `could not reach the jigs service at ${base}`,
-      "pnpm exec jigs service status says whether it is running; pnpm exec jigs service start starts it",
+      "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs service start`",
     );
   }
 }
@@ -46,6 +46,6 @@ export async function serviceFetch(
 export function runNotFound(ref: string): JigsError {
   return new JigsError(
     `run ${ref} not found`,
-    "commands take a full run ID: pnpm exec jigs status lists each run's ID under RUN and its ticket under TICKET",
+    "commands take a full run ID\nlist each run's ID and ticket: `pnpm exec jigs status`",
   );
 }

@@ -60,7 +60,7 @@ export function resolveIdentityOptions(
   if (missing.length > 0) {
     throw new JigsError(
       `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'pnpm exec jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]',
+      'for example: `pnpm exec jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]`',
     );
   }
   const installations: Record<string, number> = {};
@@ -133,7 +133,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   reportCopied({ created, skipped }, deps.out);
 
   deps.out("");
-  deps.out(heading("next, in this directory:"));
+  deps.out(heading("Next, in this directory"));
   // Outside the aligned block, so a long key path doesn't push every comment right.
   if (identity.mode === "app") {
     deps.out(
@@ -143,7 +143,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const next: Array<[string, string?]> = [
     ["pnpm install"],
     ["cp .env.example .env", "then fill in what your workflows need"],
-    ["pnpm exec jigs up", "start Postgres and the service; ends by running doctor"],
+    ["pnpm exec jigs up", "start Postgres and the service, then run doctor"],
     ["pnpm exec jigs run hello"],
     ["pnpm exec jigs doctor", "re-check what your workflows need, any time"],
   ];
@@ -214,7 +214,7 @@ function factoryName(factoryRoot: string): string {
   if (name === "") {
     throw new JigsError(
       `${factoryRoot} has no usable name for a docker project`,
-      `run pnpm exec jigs init from a directory named in [a-z0-9-]`,
+      "from a directory whose name uses only [a-z0-9-], run: `pnpm exec jigs init`",
     );
   }
   return name;

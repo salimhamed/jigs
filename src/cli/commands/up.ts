@@ -14,7 +14,7 @@ import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
-import { columns, command, displayPath, heading, note, tone } from "../output.ts";
+import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
@@ -31,7 +31,7 @@ import {
   serviceLogPath,
   startService,
 } from "./service-lifecycle.ts";
-import { indent, type Step, StepFailed, stepRunner } from "./step-runner.ts";
+import { nested, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
@@ -104,7 +104,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     result.dashboardUrl = service.dashboardUrl;
     const lifecycle: ServiceLifecycleDeps = {
       cwd: factoryRoot,
-      out: indent(deps.out),
+      out: nested(deps.out),
       processes: deps.processes,
       startTimeoutMs: deps.readyTimeoutMs,
     };
@@ -138,7 +138,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     await runner.run("build", () =>
       buildFactoryService({
         cwd: factoryRoot,
-        out: indent(deps.out),
+        out: nested(deps.out),
         execFile,
         prepare: deps.prepare,
       }),
@@ -173,7 +173,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
         try {
           await runDoctor({
             serviceUrl: service.serviceUrl,
-            out: indent(deps.out),
+            out: nested(deps.out),
           });
         } catch (err) {
           if (err instanceof JigsError && err.hint === undefined) {
@@ -217,12 +217,12 @@ function ensureEnv(factoryRoot: string): Record<string, string> {
     if (!existsSync(path.join(factoryRoot, ".env.example"))) {
       throw new JigsError(
         `no .env or .env.example in ${factoryRoot}`,
-        "scaffold one: pnpm exec jigs init",
+        "scaffold one: `pnpm exec jigs init`",
       );
     }
     throw new JigsError(
-      `no .env in ${factoryRoot} — copy .env.example, then fill in what your workflows need`,
-      "cp .env.example .env",
+      `no .env in ${factoryRoot}`,
+      "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
     );
   }
   return readFactoryEnv(factoryRoot);
@@ -235,9 +235,7 @@ function reportEmptyCredentials(
 ): void {
   const empty = slots.filter((key) => (env[key] ?? "") === "");
   if (empty.length === 0) return;
-  out(
-    `     ${empty.join(", ")} empty in .env ${note("— fill them in before a workflow needs them")}`,
-  );
+  out(`  ${empty.join(", ")} empty in .env ${detail("fill them in before a workflow needs them")}`);
 }
 
 // The World URL travels in the child's environment explicitly, never left to
@@ -253,14 +251,14 @@ async function bootstrapWorld(
   if (url === undefined || url === "") {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set in .env",
-      "set it to this factory's World — .env.example carries the shape",
+      "set it to this factory's World, in the shape .env.example shows",
     );
   }
   const bin = path.join(factoryRoot, "node_modules", ".bin", "bootstrap");
   if (!existsSync(bin)) {
     throw new JigsError(
       `no bootstrap in ${path.dirname(bin)}`,
-      "pnpm install did not install @workflow/world-postgres — add it to this factory's package.json",
+      "pnpm install did not install @workflow/world-postgres\nadd it to this factory's package.json",
     );
   }
   await execOrExplain(
@@ -273,12 +271,12 @@ async function bootstrapWorld(
     },
     out,
     {
-      missing: new JigsError(`${bin} is not executable`, "pnpm install again"),
+      missing: new JigsError(`${bin} is not executable`, "install again: `pnpm install`"),
       failed: (err) =>
         /ECONNREFUSED/.test(execOutput(err))
           ? new JigsError(
               `bootstrap could not reach the World at ${redactPassword(url)}`,
-              `docker-compose.yml publishes ${publishedPostgresPorts(factoryRoot)} — the two have to agree`,
+              `docker-compose.yml publishes ${publishedPostgresPorts(factoryRoot)}, and the two have to agree`,
             )
           : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
     },
@@ -301,17 +299,17 @@ async function printSummary(
   const rows: Array<[string, string]> = [
     [
       "postgres",
-      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : `  ${note(`(Docker container ${container})`)}`}`,
+      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : ` ${detail(`Docker container ${container}`)}`}`,
     ],
-    ["service", `${service.serviceUrl}  ${note(`(pid ${pid ?? "unknown"})`)}`],
+    ["service", `${service.serviceUrl} ${detail(`pid ${pid ?? "unknown"}`)}`],
     ["dashboard", service.dashboardUrl],
     ["logs", displayPath(serviceLogPath(service.slug))],
   ];
-  out(heading(`${factoryName(factoryRoot)} is up`));
-  out("");
-  for (const line of columns(rows)) out(`  ${line}`);
-  out("");
-  out(`  stop:  ${command("pnpm exec jigs down")}`);
+  const summary = section(`${factoryName(factoryRoot)} is up`, [
+    ...columns(rows),
+    ...hint("stop everything:", "pnpm exec jigs down"),
+  ]);
+  for (const line of ["", ...summary]) out(line);
 }
 
 function redactPassword(url: string): string {
@@ -339,21 +337,21 @@ async function confirmRestart(
   if (options.force === true) return;
   const inFlight = await listRunsInFlight(factoryRoot);
   if (inFlight.length === 0) return;
-  deps.out(`  ${inFlight.length} run(s) in flight — a restart cuts each off:`);
+  deps.out(`  a restart cuts off ${inFlight.length} run(s) in flight:`);
   for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
     deps.out(`    ${line}`);
   }
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,
-      "re-run with --force, or pnpm exec jigs cancel <run-id> first",
+      "restart anyway: `pnpm exec jigs up --force`\nor cancel each run first: `pnpm exec jigs cancel <run-id>`",
     );
   }
   const question = `restart ${service.slug} over ${inFlight.length} in-flight run(s)?`;
   if (!(await deps.confirm(question))) {
     throw new JigsError(
-      "restart declined — the service still runs the previous bundle",
-      "re-run pnpm exec jigs up when the runs finish",
+      "restart declined, so the service still runs the previous bundle",
+      "when the runs finish, run: `pnpm exec jigs up`",
     );
   }
 }

@@ -4,6 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import { detail } from "../output.ts";
 
 // What releases before the generated jigs/ directory wrote into a factory.
 // `jigs upgrade` runs this command under the new release, so the move happens
@@ -22,11 +23,14 @@ export async function generateIntegration(deps: {
   try {
     entry = resolve.resolve("@jigs-ai/jigs/build");
   } catch {
-    throw new JigsError(`@jigs-ai/jigs is not installed in ${root}`, "run pnpm install first");
+    throw new JigsError(
+      `@jigs-ai/jigs is not installed in ${root}`,
+      "install this factory's dependencies first: `pnpm install`",
+    );
   }
   const { generateFactoryIntegration } = await import(pathToFileURL(entry).href);
   generateFactoryIntegration(root);
-  deps.out("generated jigs/steps.ts and jigs/routines.ts — review and commit them");
+  deps.out(`generated jigs/steps.ts and jigs/routines.ts ${detail("review and commit them")}`);
   migrateRetiredLayout(root, deps.out);
 }
 
@@ -35,7 +39,7 @@ export function migrateRetiredLayout(root: string, out: (line: string) => void):
   const retired = path.join(root, RETIRED_FILE);
   if (existsSync(retired)) {
     rmSync(retired);
-    out(`deleted ${RETIRED_FILE}; its steps now live in jigs/steps.ts`);
+    out(`deleted ${RETIRED_FILE} ${detail("its steps now live in jigs/steps.ts")}`);
   }
 
   const manifestFile = path.join(root, "package.json");

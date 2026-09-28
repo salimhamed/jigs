@@ -57,7 +57,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
         return {
           ok: false,
           reason: "AWS_PROFILE is not set in the service's environment",
-          repair: `set AWS_PROFILE in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+          repair: `set AWS_PROFILE in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
         };
       }
 
@@ -81,7 +81,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
           return {
             ok: false,
             reason: `\`aws sts get-caller-identity\` did not answer within ${PROBE_TIMEOUT_MS / 1000}s under profile ${profile}`,
-            repair: `check network access to AWS SSO, or run: aws sso login --profile ${profile}`,
+            repair: `check network access to AWS SSO, or log in again: \`aws sso login --profile ${profile}\``,
           };
         }
         const detail = lastStderrLine(err);
@@ -90,7 +90,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
           ok: false,
           reason: `AWS_PROFILE is ${profile} but \`aws sts get-caller-identity\` failed: ${detail}`,
           repair: expired
-            ? `run: aws sso login --profile ${profile}`
+            ? `run: \`aws sso login --profile ${profile}\``
             : `check the ${profile} profile's credentials in ~/.aws/config`,
         };
       }

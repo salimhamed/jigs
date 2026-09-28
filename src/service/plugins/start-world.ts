@@ -8,6 +8,7 @@ import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { WebhooksConfig } from "../../config/factory-config.ts";
+import { plainHint } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopProcessGroups } from "../../steps/agents/harnesses/process-group.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
@@ -78,7 +79,7 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
     error(
       `[service] cannot run agents: ${failures
         .map((runtime) => `${runtime.line} (${neededBy(users.get(runtime.harness) ?? [])})`)
-        .join("; ")}. The ${first.repair}`,
+        .join("; ")}\n${plainHint(first.repair)}`,
     );
     (deps.exit ?? process.exit)(1);
     return false;
@@ -177,7 +178,7 @@ export interface BindingCloneGateDeps {
 function describe(err: unknown): string {
   if (err instanceof Error) {
     const hint = (err as { hint?: string }).hint;
-    return hint === undefined ? err.message : `${err.message} — ${hint}`;
+    return hint === undefined ? err.message : `${err.message}\n${plainHint(hint)}`;
   }
   return String(err);
 }

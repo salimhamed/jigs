@@ -80,7 +80,7 @@ test("a timeout repair names the check that timed out, not a doctor run that can
   expect(outcome?.ok === false && outcome.repair).not.toContain("pnpm exec jigs doctor");
 });
 
-test("formatFailures renders one repair line per failure and skips the passes", () => {
+test("formatFailures indents every repair line under its failure and skips the passes", () => {
   const text = formatFailures({
     ok: false,
     checks: [
@@ -97,11 +97,19 @@ test("formatFailures renders one repair line per failure and skips the passes", 
         label: "check C",
         ok: false,
         reason: "worse",
-        repair: "fix C",
+        repair: "set C in .env\nthen: `pnpm exec jigs service restart`",
       },
     ],
   });
-  expect(text).toBe("check A: broken\n  → fix A\ncheck C: worse\n  → fix C");
+  expect(text).toBe(
+    [
+      "check A: broken",
+      "  → fix A",
+      "check C: worse",
+      "  → set C in .env",
+      "    then: `pnpm exec jigs service restart`",
+    ].join("\n"),
+  );
 });
 
 const preflightIds = (requires: WorkflowRequires): string[] =>
@@ -303,7 +311,7 @@ test("a factory config that cannot be read fails the Linear check as itself", as
       id: "linear.identity",
       ok: false,
       reason: expect.stringContaining("jigs.config.ts"),
-      repair: "repair jigs.config.ts, then: pnpm exec jigs service restart",
+      repair: "repair jigs.config.ts, then: `pnpm exec jigs service restart`",
     }),
   ]);
   expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });

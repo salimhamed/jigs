@@ -2,6 +2,7 @@ import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "no
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test } from "vitest";
+import { layoutProblems } from "../output-layout.ts";
 import { initFactory } from "./init.ts";
 import { addRecipe, recipeNames } from "./recipe.ts";
 
@@ -33,9 +34,10 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
   expect(deps.lines.slice(-4)).toEqual([
     'registered linear-ticket-to-pr in jigs.config.ts by adding "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts")',
     "",
-    "next:",
-    "  pnpm exec jigs up       # build and restart with linear-ticket-to-pr; doctor lists what it still needs",
+    "Next",
+    "  pnpm exec jigs up  # build and restart with linear-ticket-to-pr, then doctor lists what it still needs",
   ]);
+  expect(layoutProblems(deps.lines)).toEqual([]);
   expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toContain(
     '  workflows: {\n    hello: () => import("./workflows/hello/hello.ts"),\n    "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),\n  },',
   );

@@ -89,7 +89,7 @@ test("a key anyone on the machine can read is a key anyone can act as the App wi
   ).toMatchObject({
     ok: false,
     reason: expect.stringContaining("mode 0644"),
-    repair: "chmod 600 /factory/github-app.private-key.pem",
+    repair: "make it readable only by you: `chmod 600 /factory/github-app.private-key.pem`",
   });
 });
 

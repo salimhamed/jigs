@@ -33,7 +33,7 @@ export function checkWorktreeCodexMcpConfig(worktreeDir: string): CheckResult {
       return {
         ok: false,
         reason: `${configPath} declares mcp_servers: ${servers.join(", ")}`,
-        repair: `remove the mcp_servers table (${servers.join(", ")}) from ${configPath} — MCP servers are declared per step, never repo-owned`,
+        repair: `remove the mcp_servers table (${servers.join(", ")}) from ${configPath}\nMCP servers are declared per step, never repo-owned`,
       };
     }
   }

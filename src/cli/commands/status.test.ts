@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { type StatusResult, showRunStatus } from "./status.ts";
 
 const fetchMock = vi.fn();
@@ -427,8 +428,9 @@ test("a dead job is printed with its error's first line and a copy-pasteable req
   expect(lines.slice(4)).toEqual([
     "",
     "Dead jobs",
-    "  dead job 4128 (jigs:workflow) after 3 attempts: Queue execution failed (404): Not Found",
-    "    requeue: select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)",
+    "  job 4128 (jigs:workflow) gave up after 3 attempts: Queue execution failed (404): Not Found",
+    "  to requeue it, run in the World database:",
+    "    select graphile_worker.reschedule_jobs(array[4128]::bigint[], run_at := now(), attempts := 0)",
   ]);
 });
 
@@ -455,6 +457,11 @@ test("a ref that is not a full run ID fails before the pointer is printed", asyn
     (thrown: unknown) => thrown as JigsError,
   );
   expect(err?.message).toBe("run AGE-999 not found");
-  expect(err?.hint).toContain("pnpm exec jigs status lists each run's ID under RUN");
+  expect(err?.hint).toContain("list each run's ID and ticket: `pnpm exec jigs status`");
   expect(lines).toEqual([]);
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

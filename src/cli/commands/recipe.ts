@@ -18,14 +18,17 @@ export function recipeNames(): string[] {
 
 export function addRecipe(name: string, deps: { cwd: string; out: (line: string) => void }) {
   if (!recipeNames().includes(name)) {
-    throw new JigsError(`unknown recipe: ${name}`, "pnpm exec jigs recipe list");
+    throw new JigsError(
+      `unknown recipe: ${name}`,
+      "list the recipes: `pnpm exec jigs recipe list`",
+    );
   }
   const root = path.resolve(deps.cwd);
   const configFile = path.join(root, FACTORY_CONFIG_FILE);
   if (!existsSync(configFile)) {
     throw new JigsError(
       "no jigs.config.ts in this directory",
-      "run from a factory root, or pnpm exec jigs init first",
+      "run it from a factory root, or scaffold one first: `pnpm exec jigs init`",
     );
   }
   // Parse before copying, so a config jigs cannot edit leaves the factory untouched.
@@ -49,9 +52,9 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
     deps.out(`registered ${name} in ${FACTORY_CONFIG_FILE} by adding ${entry}`);
   }
   deps.out("");
-  deps.out(heading("next:"));
+  deps.out(heading("Next"));
   deps.out(
-    `  ${command("pnpm exec jigs up")}       ${note(`# build and restart with ${name}; doctor lists what it still needs`)}`,
+    `  ${command("pnpm exec jigs up")}  ${note(`# build and restart with ${name}, then doctor lists what it still needs`)}`,
   );
   return result;
 }

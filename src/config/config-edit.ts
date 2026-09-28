@@ -119,7 +119,7 @@ function editableBindings(text: string, manualEdit?: string) {
   const fail = (reason: string): never => {
     throw new JigsError(
       `Cannot edit bindings in ${FACTORY_CONFIG_FILE}: ${reason}.`,
-      `Declare bindings directly as an object in export default defineFactory({ bindings: { ... } }) to use jigs bind or jigs unbind, or edit the binding manually. No files were changed.${manualEdit ? `\n${manualEdit}` : ""}`,
+      `no files were changed\njigs bind and jigs unbind need bindings declared as an object in export default defineFactory({ bindings: { ... } })\notherwise edit the binding by hand${manualEdit ? `\n${manualEdit}` : ""}`,
     );
   };
   const { source, root, validate } = editableConfig(text, fail);
@@ -164,7 +164,7 @@ export function upsertBinding(text: string, name: string, remote: string): strin
     fail,
   } = editableBindings(
     text,
-    `Binding to add: ${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }`,
+    `the binding to add: \`${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }\``,
   );
   const property = namedProperty(object, name) as PropertyAssignment | undefined;
   if (!property) {
@@ -217,7 +217,7 @@ export function addWorkflow(text: string, name: string): string | undefined {
   const fail = (reason: string): never => {
     throw new JigsError(
       `Cannot register ${name} in ${FACTORY_CONFIG_FILE}: ${reason}.`,
-      `Add this line to workflows in ${FACTORY_CONFIG_FILE} by hand:\n  ${workflowEntry(name)}`,
+      `add this line to workflows in ${FACTORY_CONFIG_FILE} by hand: \`${workflowEntry(name)}\``,
     );
   };
   const { root, validate } = editableConfig(text, fail);

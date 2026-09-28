@@ -9,6 +9,7 @@ import {
   makeTmpDir,
   removeTmpDir,
 } from "../../test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { listBindings } from "./bindings.ts";
 
 let tmp: string;
@@ -30,6 +31,7 @@ afterEach(() => {
 const printed = async (cwd = factory) => {
   const lines: string[] = [];
   await listBindings({ cwd, out: (line) => lines.push(line) });
+  expect(layoutProblems(lines)).toEqual([]);
   return lines;
 };
 

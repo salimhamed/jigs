@@ -42,7 +42,7 @@ export async function committedWork(
   if (state.dirty) {
     throw new JigsError(
       `the agent left uncommitted changes in ${worktree.path}`,
-      `inspect the worktree, then commit or discard them: git -C ${worktree.path} status`,
+      `inspect the worktree, then commit or discard them: \`git -C ${worktree.path} status\``,
     );
   }
   if (state.commits === 0) {

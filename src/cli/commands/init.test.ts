@@ -3,6 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 import { parseFactoryConfig } from "../../config/factory-config.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { packageRoot } from "../templates.ts";
 import { initFactory, resolveIdentityOptions } from "./init.ts";
 
@@ -25,6 +26,7 @@ async function init(dir: string) {
     cwd: dir,
     out: (line) => lines.push(line),
   });
+  expect(layoutProblems(lines)).toEqual([]);
   return { ...result, lines };
 }
 
@@ -253,7 +255,7 @@ test("the next steps are printed, not run", async () => {
   const { lines } = await init(dir);
 
   const printed = lines.join("\n");
-  const next = lines.indexOf("next, in this directory:");
+  const next = lines.indexOf("Next, in this directory");
   // Only the file list and one blank line come before the next steps.
   expect(lines.slice(0, next - 1).every((l) => l.startsWith("created "))).toBe(true);
   expect(lines[next - 1]).toBe("");

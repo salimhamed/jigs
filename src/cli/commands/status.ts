@@ -1,6 +1,17 @@
 import { JigsError } from "../../errors.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
-import { columns, command, displayPath, formatTable, heading, note, tone } from "../output.ts";
+import {
+  columns,
+  detail,
+  displayPath,
+  formatTable,
+  heading,
+  hint,
+  indent,
+  note,
+  runHeading,
+  tone,
+} from "../output.ts";
 import { age, type RunListRun, type RunListSuspension, suspensionLine } from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
@@ -66,16 +77,13 @@ export async function showRunStatus(
   const facts: string[][] = [
     ["trigger", result.trigger],
     ...(result.ticket === null ? [] : [["ticket", result.ticket]]),
-    [
-      "last activity",
-      `${age(result.lastActivityAt, now)} ago ${note(`(${result.lastActivityAt})`)}`,
-    ],
+    ["last activity", `${age(result.lastActivityAt, now)} ago ${detail(result.lastActivityAt)}`],
     ...(result.error === undefined ? [] : [["error", singleLine(result.error)]]),
     ...(result.resources.length === 0 ? [["resources", "none"]] : []),
     ...scalarResult(result),
     ...(result.dashboard === "" ? [] : [["dashboard", result.dashboard]]),
   ];
-  deps.out(`${heading(result.runId)}  ${tone(result.status)}`);
+  deps.out(runHeading(result.runId, result.status));
   for (const line of columns(facts)) deps.out(`  ${line}`);
   showSuspensions(result.suspensions, now, deps);
   if (result.status === "completed") showObjectResult(result.returnValue, deps);
@@ -113,7 +121,7 @@ function showSuspensions(
     const wakeRow =
       wake === undefined
         ? []
-        : [["last wake", `${wake.kind}, ${age(wake.at, now)} ago ${note(`(${wake.at})`)}`]];
+        : [["last wake", `${wake.kind}, ${age(wake.at, now)} ago ${detail(wake.at)}`]];
     for (const line of columns([...gate, ...wakeRow])) deps.out(`    ${line}`);
     if (suspension.question !== undefined) {
       deps.out("  asked:");
@@ -216,12 +224,13 @@ function showTimeline(timeline: Timeline, deps: ServiceDeps): void {
   deps.out("");
   deps.out(heading("Dead jobs"));
   for (const job of deadJobs) {
-    deps.out(
-      `  dead job ${job.id} (${job.task}) after ${job.attempts} attempts: ${firstLine(job.lastError)}`,
-    );
-    deps.out(
-      `    requeue: ${command(`select graphile_worker.reschedule_jobs(array[${job.id}]::bigint[], run_at := now(), attempts := 0)`)}`,
-    );
+    const requeue = `select graphile_worker.reschedule_jobs(array[${job.id}]::bigint[], run_at := now(), attempts := 0)`;
+    for (const line of indent([
+      `job ${job.id} (${job.task}) gave up after ${job.attempts} attempts: ${firstLine(job.lastError)}`,
+      ...hint("to requeue it, run in the World database:", requeue),
+    ])) {
+      deps.out(line);
+    }
   }
 }
 

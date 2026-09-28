@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { JigsError } from "../../errors.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { pokeRun } from "./poke.ts";
 
 const fetchMock = vi.fn();
@@ -36,7 +37,10 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
     method: "POST",
   });
   expect(result.poked).toHaveLength(2);
-  expect(lines).toEqual(["poked github:pr:acme/api#41", "gone (not poked): linear:ticket:uuid-1"]);
+  expect(lines).toEqual([
+    "woke the wait on pull request acme/api#41",
+    "already gone: the Linear ticket (uuid-1)",
+  ]);
 });
 
 test("a 404 becomes a JigsError naming the run", async () => {
@@ -78,4 +82,9 @@ test("a trailing slash on the service URL does not break the poke route", async 
   expect(fetchMock).toHaveBeenCalledWith("http://svc.test:8990/api/runs/wr_abc/poke", {
     method: "POST",
   });
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

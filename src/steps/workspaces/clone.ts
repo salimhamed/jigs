@@ -75,7 +75,7 @@ async function fetchOrigin(repoDir: string, remote: string): Promise<void> {
   } catch (err) {
     throw new JigsError(
       `could not fetch ${remote}: ${reason(err)}`,
-      `give git credentials for ${remote} — an ssh key the service can read, or GITHUB_TOKEN for an https remote`,
+      `give git credentials for ${remote}: an ssh key the service can read, or GITHUB_TOKEN for an https remote`,
     );
   }
 }

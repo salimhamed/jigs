@@ -1,7 +1,8 @@
 import { z } from "zod";
-import { type CheckReport, formatFailures } from "../../checks/catalog.ts";
+import { type CheckReport, failedChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
-import { columns, command, heading, note } from "../output.ts";
+import { columns, hint, indent, runHeading } from "../output.ts";
+import { checkLines } from "./doctor.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 import { serviceBehindSources } from "./service-lifecycle.ts";
 
@@ -26,7 +27,7 @@ export function parseInputs(pairs: string[]): Record<string, unknown> {
   for (const pair of pairs) {
     const split = pair.indexOf("=");
     if (split <= 0) {
-      throw new JigsError("--input must be key=value", "example: --input ticket=AGE-123");
+      throw new JigsError("--input must be key=value", "for example: --input ticket=AGE-123");
     }
     const key = pair.slice(0, split);
     const raw = pair.slice(split + 1);
@@ -108,7 +109,7 @@ export async function launchRun(
   // Ahead of the schema fetch: a workflow the bundle does not have and an
   // input its schema does not have are the loudest symptoms of a stale build,
   // and both are fatal below.
-  reportStaleBundle(deps);
+  const out = afterSection(reportStaleBundle(deps), deps.out);
 
   // Client-side first: a schema violation must cost no run. The factory owns
   // the schema, so the CLI fetches it rather than keeping a second copy.
@@ -146,8 +147,9 @@ export async function launchRun(
   );
   if (res.status === 424) {
     const body = (await res.json()) as { failures: CheckReport["checks"] };
-    deps.out(formatFailures({ ok: false, checks: body.failures }));
-    throw new JigsError("preflight failed — no run created");
+    const report = { ok: false, checks: body.failures };
+    for (const line of failedChecks(report).flatMap(checkLines)) out(line);
+    throw new JigsError("preflight failed, so no run was created");
   }
   if (!res.ok) {
     const raw = await res.text();
@@ -161,30 +163,49 @@ export async function launchRun(
     throw new JigsError(`launch failed: HTTP ${res.status} ${raw}`);
   }
   const result = (await res.json()) as LaunchResult;
-  deps.out(heading(`run ${result.runId}`));
-  for (const line of columns([
-    ["workflow", result.workflow],
-    ["inspect", command(`pnpm exec jigs status ${result.runId}`)],
-    ["dashboard", result.dashboard],
-  ])) {
-    deps.out(`  ${line}`);
+  for (const line of [
+    runHeading(result.runId, "started"),
+    ...indent([
+      ...columns([
+        ["workflow", result.workflow],
+        ["dashboard", result.dashboard],
+      ]),
+      ...hint("inspect it:", `pnpm exec jigs status ${result.runId}`),
+    ]),
+  ]) {
+    out(line);
   }
   return result;
 }
 
 // A warning, not a refusal: the previous bundle is still a workflow, and the
 // operator may well mean to run it.
-function reportStaleBundle(deps: LaunchDeps): void {
-  if (deps.factoryCwd === undefined) return;
+function reportStaleBundle(deps: LaunchDeps): boolean {
+  if (deps.factoryCwd === undefined) return false;
   let behind: string | undefined;
   try {
     behind = serviceBehindSources({ cwd: deps.factoryCwd });
   } catch {
     // A file that moved while the sources were being read is no reason to
     // lose the launch.
-    return;
+    return false;
   }
-  if (behind === undefined) return;
-  deps.out(`warning: ${behind} — this run executes the previous bundle`);
-  deps.out(note("bring the service up to the sources first: ") + command("pnpm exec jigs up"));
+  if (behind === undefined) return false;
+  for (const line of [
+    `warning: ${behind}, so this run uses the previous bundle`,
+    ...hint("to run the current sources, first run:", "pnpm exec jigs up"),
+  ]) {
+    deps.out(line);
+  }
+  return true;
+}
+
+// A printed warning is a section of its own, so whatever follows it starts after a blank line.
+function afterSection(printed: boolean, out: (line: string) => void): (line: string) => void {
+  let pending = printed;
+  return (line) => {
+    if (pending) out("");
+    pending = false;
+    out(line);
+  };
 }

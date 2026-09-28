@@ -43,9 +43,9 @@ the port. A service that is down comes back with `jigs up`, which also
 rebuilds if the factory's code changed since the running bundle was built.
 
 ```
-my-factory-2286ac2a: running pid 3343834 at http://localhost:8990
-dashboard:  http://localhost:9090
-factory:    ~/my-factory
+my-factory-2286ac2a is running at http://localhost:8990 (pid 3343834)
+  dashboard  http://localhost:9090
+  factory    ~/my-factory
 ```
 
 ## Naming a run
@@ -239,9 +239,10 @@ see the never list.
 
 Confirm these actions when the current request has not already authorized them:
 
-- `jigs cancel` — it makes the run terminal and releases ordinary jigs hooks.
-  Minimum-retention hooks can remain claimed and are printed as `retained`;
-  local resources remain for automatic release or offline maintenance.
+- `jigs cancel` — it makes the run terminal, stops claiming its Linear ticket
+  and stops watching its pull request. A minimum-retention hook can stay held
+  and is printed as `still claiming` or `still watching`; local resources
+  remain for automatic release or offline maintenance.
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and everything it started are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or

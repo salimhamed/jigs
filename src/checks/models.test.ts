@@ -9,7 +9,7 @@ test("an API model credential check requires the named environment variable with
   expect(missing).toEqual({
     ok: false,
     reason: "OPENROUTER_API_KEY is not set in the service's environment",
-    repair: `set OPENROUTER_API_KEY in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+    repair: `set OPENROUTER_API_KEY in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
   });
 
   await expect(

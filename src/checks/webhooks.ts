@@ -36,7 +36,7 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
         : {
             ok: false,
             reason: `webhooks.github is enabled but ${missingWebhookSecret("github", root)}`,
-            repair: `${webhookSecretRepair("github", root)}, then run pnpm exec jigs bind for each bound repo`,
+            repair: `${webhookSecretRepair("github", root)}\nthen bind each repo again: \`pnpm exec jigs bind <remote-url>\``,
           };
     },
   };
@@ -85,7 +85,7 @@ async function checkWebhook(
   repo: { owner: string; repo: string },
   resolveIdentity: () => ResolvedGithubIdentity,
 ): Promise<CheckResult> {
-  const bindRepair = `run: pnpm exec jigs bind ${remote}`;
+  const bindRepair = `bind it again: \`pnpm exec jigs bind ${remote}\``;
   try {
     const hook = await inspectRepoWebhook({ ...repo, webhooksUrl });
     if (hook.state === "ok") return { ok: true };

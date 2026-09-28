@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { layoutProblems } from "../output-layout.ts";
 import type { RunListRun } from "./run-list.ts";
 import { runEvents, watchRuns } from "./watch.ts";
 
@@ -168,4 +169,9 @@ test("a service that goes away is one line, not the end of the watch", async () 
   await watchRuns(deps(), { polls: 2 });
   expect(lines[0]).toContain("unreachable");
   expect(lines[1]).toContain("watching");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

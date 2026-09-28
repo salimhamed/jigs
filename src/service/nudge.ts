@@ -8,8 +8,8 @@
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import type { WebhookProvider } from "../config/factory-config.ts";
-import { TICKET_TOKEN_PREFIX } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
+import { TICKET_TOKEN_PREFIX } from "../workflow/linear/ticket-token.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
 import { recordWake } from "./wake-note.ts";

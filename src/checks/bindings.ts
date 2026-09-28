@@ -32,8 +32,8 @@ function factoryConfigFailure(err: unknown, factoryRoot?: string): Check {
     FACTORY_CONFIG_FILE,
     `the factory config could not be read: ${err instanceof Error ? err.message : String(err)}`,
     factoryRoot === undefined
-      ? `start the service from a factory repo — the directory holding ${FACTORY_CONFIG_FILE}`
-      : `create or repair ${path.join(factoryRoot, FACTORY_CONFIG_FILE)}, then: ${RESTART_SERVICE}`,
+      ? `start the service from a factory repo, the directory holding ${FACTORY_CONFIG_FILE}`
+      : `create or repair ${path.join(factoryRoot, FACTORY_CONFIG_FILE)}, then: \`${RESTART_SERVICE}\``,
   );
 }
 
@@ -67,7 +67,7 @@ async function checkBinding(
       reason: `no binding named '${name}' in ${FACTORY_CONFIG_FILE}`,
       // The remote is genuinely not knowable from the manifest; the name is,
       // so the invocation is as exact as it can be.
-      repair: `run: pnpm exec jigs bind <the-${name}-remote-url> --binding-name ${name}`,
+      repair: `bind it: \`pnpm exec jigs bind <the-${name}-remote-url> --binding-name ${name}\``,
     };
   }
 
@@ -92,7 +92,7 @@ async function checkBinding(
     return {
       ok: false,
       reason: `binding ${name} has no clone yet`,
-      repair: `restart the service: ${RESTART_SERVICE} (it clones every binding on start)`,
+      repair: `the service clones every binding when it starts, so restart it: \`${RESTART_SERVICE}\``,
     };
   }
 
@@ -103,7 +103,7 @@ async function checkBinding(
     return {
       ok: false,
       reason: `git could not reach ${binding.remote}: ${stderr}`,
-      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or GITHUB_TOKEN in ${SERVICE_ENV_FILE}), then: ${RESTART_SERVICE}`,
+      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or GITHUB_TOKEN in ${SERVICE_ENV_FILE}), then: \`${RESTART_SERVICE}\``,
     };
   }
   return { ok: true };

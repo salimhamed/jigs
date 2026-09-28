@@ -594,7 +594,7 @@ await (await getWorld()).close?.();`,
       runCli(["resources", "list", "--run", activeRunId, "--json"], env).output,
     );
     assertResourceReport(listed, activeRunId, true, undefined);
-    assert.match(listed.entries[0].decision, /overrides the kept decision/);
+    assert.match(listed.entries[0].decision, /previously kept/);
     const preview = JSON.parse(
       runCli(["resources", "prune", "--run", activeRunId, "--json"], env).output,
     );
@@ -1009,7 +1009,7 @@ await (await getWorld()).close?.();`,
       ["cancel", runId, "--force", "--service-url", `http://127.0.0.1:${ports.service}`],
       env,
     );
-    assert.match(result.output, new RegExp(`cancelled ${runId}`));
+    assert.match(result.output, new RegExp(`${runId}  cancelled`));
   }
 
   function runCli(args, commandEnv, options = {}) {

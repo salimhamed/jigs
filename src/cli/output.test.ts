@@ -1,5 +1,17 @@
 import { afterEach, expect, test, vi } from "vitest";
-import { columns, displayPath, formatTable, note, tone } from "./output.ts";
+import {
+  columns,
+  displayPath,
+  formatError,
+  formatTable,
+  hint,
+  hintLines,
+  layout,
+  note,
+  section,
+  tone,
+} from "./output.ts";
+import { layoutProblems } from "./output-layout.ts";
 
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -44,4 +56,64 @@ test("paths under home show as ~ and other URLs are left alone", () => {
   expect(displayPath("https://github.com/acme/api", "/home/me")).toBe(
     "https://github.com/acme/api",
   );
+});
+
+test("a hint's backtick commands move to their own line, deeper and without the backticks", () => {
+  expect(
+    hintLines(
+      "prune never stops or kills processes, so stop the service first: `pnpm exec jigs service stop`\nthen retry",
+    ),
+  ).toEqual([
+    "prune never stops or kills processes, so stop the service first:",
+    "  pnpm exec jigs service stop",
+    "then retry",
+  ]);
+  expect(hintLines("its log says why: `pnpm exec jigs service logs` (log at ~/s.log)")).toEqual([
+    "its log says why:",
+    "  pnpm exec jigs service logs (log at ~/s.log)",
+  ]);
+  expect(hintLines("an unpaired ` stays prose")).toEqual(["an unpaired ` stays prose"]);
+});
+
+test("an error prints red, with its hint's prose dim and its command cyan beneath it", () => {
+  vi.stubEnv("FORCE_COLOR", "1");
+  vi.stubEnv("NO_COLOR", undefined);
+  const lines = formatError(
+    { message: "factory service is still running as pid 25223", hint: "stop it: `jigs stop`" },
+    process.stdout,
+  );
+  expect(lines).toEqual([
+    "\u001b[31mjigs: factory service is still running as pid 25223\u001b[39m",
+    "  \u001b[2mstop it:\u001b[22m",
+    "    \u001b[36mjigs stop\u001b[39m",
+  ]);
+});
+
+test("sections are one blank line apart, with each body indented under its heading", () => {
+  expect(
+    layout(
+      section("Resources", ["a", "b"]),
+      [],
+      section(undefined, ["2 removed"]),
+      hint("run:", "x"),
+    ),
+  ).toEqual(["Resources", "  a", "  b", "", "2 removed", "", "run:", "  x"]);
+});
+
+test("the layout check names blank-line, indent and dash problems, and allows table columns", () => {
+  expect(
+    layoutProblems([
+      "KIND      ACTION  PATH",
+      "worktree  remove  /w",
+      "                  previously kept: policy",
+    ]),
+  ).toEqual([]);
+  expect(layoutProblems(["", "a", "", "", "     b — c", ""])).toEqual([
+    "starts with a blank line",
+    "ends with a blank line",
+    'line 4 "": a second blank line',
+    'line 5 "     b — c": joined with a dash',
+    'line 5 "     b — c": indented by an odd 5',
+    'line 5 "     b — c": indented more than a step',
+  ]);
 });

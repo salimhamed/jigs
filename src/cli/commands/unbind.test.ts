@@ -4,6 +4,7 @@ import { afterEach, beforeEach, expect, test } from "vitest";
 import { cloneDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { displayPath } from "../output.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { unbindRepo } from "./unbind.ts";
 
 let tmp: string;
@@ -56,7 +57,8 @@ test("unbind keeps the binding's files folder and names it", () => {
   unbindRepo("web", { cwd: factory, out: (line) => lines.push(line) });
 
   expect(readFileSync(path.join(bindingFiles, ".env"), "utf8")).toBe("SECRET=1\n");
-  expect(lines).toContain(`kept ${bindingFiles} — it may hold secrets, so delete it yourself`);
+  expect(lines).toContain(`kept ${bindingFiles} (it may hold secrets, so delete it yourself)`);
+  expect(layoutProblems(lines)).toEqual([]);
 });
 
 test("unbind without a binding files folder says nothing about one", () => {

@@ -47,7 +47,7 @@ export const systemProcesses: ProcessControl = {
     if (result.error !== undefined || result.status !== 0) {
       throw new JigsError(
         `could not list processes with ps ${PS_ARGS.join(" ")}: ${result.error?.message ?? result.stderr.trim()}`,
-        "jigs needs ps to find what the service started; check that ps is on PATH",
+        "jigs needs ps to find what the service started\ncheck that ps is on PATH",
       );
     }
     return result.stdout;
@@ -342,7 +342,7 @@ export async function stopProcessTree(
             `  pid ${entry.pid}${denied.has(entry.pid) ? " (not permitted to signal)" : ""}: ${entry.command}`,
         ),
       ].join("\n"),
-      `end them yourself (kill -9 ${survivors.map((entry) => entry.pid).join(" ")}), then rerun the command`,
+      `end them yourself, then rerun the command: \`kill -9 ${survivors.map((entry) => entry.pid).join(" ")}\``,
     );
   }
   return { stopped: [...stopped.values()], killed };

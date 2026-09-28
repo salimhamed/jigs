@@ -28,8 +28,8 @@ export function generateFactoryIntegration(factoryRoot: string): string[] {
 export function checkFactoryIntegration(factoryRoot: string): void {
   if (existsSync(path.join(factoryRoot, RETIRED_FILE))) {
     throw new JigsError(
-      `${RETIRED_FILE} is no longer generated; its steps now live in jigs/steps.ts`,
-      `run pnpm exec jigs upgrade: it deletes ${RETIRED_FILE}, writes jigs/, and replaces the older package.json imports entries with #jigs/*; then import from #jigs/steps and #jigs/routines`,
+      `${RETIRED_FILE} is no longer generated, and its steps now live in jigs/steps.ts`,
+      `move to the jigs/ layout: \`pnpm exec jigs upgrade\`\nit deletes ${RETIRED_FILE}, writes jigs/, and points package.json imports at #jigs/*\nthen import from #jigs/steps and #jigs/routines`,
     );
   }
   const stale = GENERATED_FILES.filter((file) => {
@@ -39,7 +39,7 @@ export function checkFactoryIntegration(factoryRoot: string): void {
   if (stale.length > 0) {
     throw new JigsError(
       `jigs/ is missing or differs from the installed jigs: ${stale.join(", ")}`,
-      "run pnpm exec jigs generate, then review and commit jigs/; keep custom steps beside the workflow that uses them",
+      "regenerate it, then review and commit jigs/: `pnpm exec jigs generate`\nkeep custom steps beside the workflow that uses them",
     );
   }
 }

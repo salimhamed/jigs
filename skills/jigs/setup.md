@@ -79,13 +79,12 @@ what runs and the one command that stops it all:
 
 ```
 my-factory is up
-
-  postgres   localhost:5440  (Docker container my-factory-postgres-1)
-  service    http://localhost:8990  (pid 53812)
+  postgres   localhost:5440 (Docker container my-factory-postgres-1)
+  service    http://localhost:8990 (pid 53812)
   dashboard  http://localhost:9090
   logs       ~/.local/share/jigs/services/my-factory-2286ac2a.log
-
-  stop:  pnpm exec jigs down
+  stop everything:
+    pnpm exec jigs down
 ```
 
 Give the human the dashboard URL and have them open it. `jigs down` stops the
@@ -97,12 +96,13 @@ machine restarts. To start it at login,
 LaunchAgent and a Linux systemd user unit that run `jigs up` once. Never set up launchd `KeepAlive` or systemd `Restart=` for the
 service itself.
 
-The first failing step prints `FAIL <step>: <why>` with its repair on the next
-line, and `up` stops there. Show both lines, follow the repair, then run
-`jigs up` again; an unchanged factory installs, migrates and restarts nothing.
-A `FAIL ready` names the service log when the service exited during boot; one
-after five minutes leaves the process running, so run `jigs service status`
-before repairing anything. `jigs doctor` reruns the checks any time the service
+The first failing step prints `FAIL <step>: <why>` with its repair indented on
+the lines below, each command on a line of its own, and `up` stops there. Show
+the whole block, follow the repair, then run `jigs up` again; an unchanged
+factory installs, migrates and restarts nothing. A `FAIL ready` after the
+service exited during boot prints the end of its log and points at
+`jigs service logs` and the log file; one after five minutes leaves the process
+running, so run `jigs service status` before repairing anything. `jigs doctor` reruns the checks any time the service
 is up.
 
 `jigs up` is also the command after every change to the factory's code.

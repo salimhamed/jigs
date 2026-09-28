@@ -11,6 +11,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import type { ServiceHealth, ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
 import {
   acquireServiceExclusion,
@@ -195,7 +196,7 @@ test("the child is told where to host its dashboard and where its queue delivers
   // the service's own workflow routes rather than a guessed port.
   expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
   expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
-  expect(lines).toContain("dashboard:  http://localhost:9200");
+  expect(lines).toContain("  dashboard  http://localhost:9200");
 });
 
 test("the factory's own .env owns the world the service writes", async () => {
@@ -392,8 +393,8 @@ test("start says started only once /health reports ready, printing the phases on
     "booting: cloning forge",
     "booting: world",
     expect.stringContaining("started"),
-    "dashboard:  http://localhost:9200",
-    expect.stringContaining("logs:       "),
+    "  dashboard  http://localhost:9200",
+    expect.stringContaining("  logs       "),
   ]);
 });
 
@@ -412,7 +413,7 @@ test("a process that dies while booting fails the start at once, printing its lo
   const err = await failure(startService(deps(root, io)));
 
   expect(err?.message).toContain("exited during boot");
-  expect(err?.hint).toContain(serviceLogPath(factorySlug(root)));
+  expect(err?.hint).toContain("jigs service logs");
   expect(lines).toEqual(["booting: cloning forge", "cloning binding forge", "fatal: repo gone"]);
   expect(io.probes).toHaveLength(1);
   // Nothing is left to supervise.
@@ -427,7 +428,7 @@ test("a start that outlives its timeout fails, names the log and the phase, and 
 
   expect(err?.message).toContain("still booting");
   expect(err?.message).toContain("cloning forge");
-  expect(err?.hint).toContain(serviceLogPath(factorySlug(root)));
+  expect(err?.hint).toContain("jigs service logs");
   expect(err?.hint).toContain("jigs service stop");
   expect(readFileSync(servicePidfilePath(factorySlug(root)), "utf8").trim()).toBe("4242");
 });
@@ -718,9 +719,9 @@ test("status reports the pid, the url and the factory root", async () => {
 
   serviceStatus(deps(root, io));
 
-  expect(lines[0]).toBe(`${factorySlug(root)}: running pid 4242 at http://localhost:9100`);
-  expect(lines).toContain("dashboard:  http://localhost:9200");
-  expect(lines).toContain(`factory:    ${root}`);
+  expect(lines[0]).toBe(`${factorySlug(root)} is running at http://localhost:9100 (pid 4242)`);
+  expect(lines).toContain("  dashboard  http://localhost:9200");
+  expect(lines).toContain(`  factory    ${root}`);
 });
 
 test("status reports a dead pidfile as not running", async () => {
@@ -750,7 +751,7 @@ test("status records when death was detected and the current run's last signal",
     now: () => new Date("2026-09-16T12:00:00Z"),
   });
 
-  expect(lines[0]).toContain("not running as of 2026-09-14T04:04:19.000Z, last signal SIGHUP");
+  expect(lines[0]).toContain("not running as of 2026-09-14T04:04:19.000Z (last signal SIGHUP)");
 });
 
 test("status does not attribute an earlier run's signal to a later silent death", async () => {
@@ -796,4 +797,9 @@ test("service logs before a first start point at jigs service start", () => {
   })();
   expect(err?.message).toMatch(/no service log at/);
   expect(err?.hint).toContain("jigs service start");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

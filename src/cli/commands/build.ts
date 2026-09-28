@@ -35,7 +35,7 @@ export async function buildFactoryService(deps: BuildDeps): Promise<void> {
   if (!existsSync(nitro)) {
     throw new JigsError(
       `no nitro in ${factoryRoot}`,
-      `install this factory's dependencies first: pnpm install in ${factoryRoot}`,
+      "install this factory's dependencies first: `pnpm install`",
     );
   }
 
@@ -72,7 +72,7 @@ async function loadPrepare(factoryRoot: string): Promise<Prepare> {
   } catch {
     throw new JigsError(
       `@jigs-ai/jigs is not installed in ${factoryRoot}`,
-      `run pnpm install in ${factoryRoot}`,
+      "install this factory's dependencies: `pnpm install`",
     );
   }
   const module = (await import(pathToFileURL(entry).href)) as {

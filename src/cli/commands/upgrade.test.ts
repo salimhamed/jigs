@@ -3,6 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { checkFactoryIntegration } from "../integration.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { type Call, execError, fakeExec, factory as scaffold } from "./test-fixtures.ts";
 import { upFactory } from "./up.ts";
 import { type UpgradeOptions, upgradeFactory } from "./upgrade.ts";
@@ -120,11 +121,11 @@ test("bumps jigs to latest, then generates and runs up under the new CLI, then t
 
   const printed = lines.join("\n");
   expect(printed).toMatch(
-    /^ok {3}packages \(\d+ms\) — jigs 0\.1\.18; normalized minimumReleaseAgeExclude$/m,
+    /^ok {3}packages: jigs 0\.1\.18, normalized minimumReleaseAgeExclude \(\d+ms\)$/m,
   );
-  expect(printed).toMatch(/^ok {3}bump \(\d+ms\) — jigs 0\.1\.18 → 0\.1\.19$/m);
+  expect(printed).toMatch(/^ok {3}bump: jigs 0\.1\.18 → 0\.1\.19 \(\d+ms\)$/m);
   expect(printed).toMatch(/^ok {3}typecheck \(\d+ms\)$/m);
-  expect(lines.at(-1)).toBe("acme-factory runs jigs 0.1.19");
+  expect(lines.slice(-2)).toEqual(["", "acme-factory runs jigs 0.1.19"]);
 });
 
 // The bug this guards: the process that ran the bump holds the old release's
@@ -189,7 +190,7 @@ test("normalizes an exact jigs release-age exclusion before pnpm runs", async ()
   const result = await upgrade(root, io, { to: "0.1.19" });
 
   expect(result.ok).toBe(true);
-  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18, normalized minimumReleaseAgeExclude");
   const contents = readFileSync(workspace, "utf8");
   expect(contents).toContain("minimumReleaseAge: 1440");
   expect(contents).toContain("'@acme/fresh@1.0.0' # preserve me");
@@ -242,7 +243,7 @@ test("removes stale jigs exclusions beside the wildcard", async () => {
   const result = await upgrade(root, io);
 
   expect(result.ok).toBe(true);
-  expect(result.steps[0]?.detail).toBe("jigs 0.1.18; normalized minimumReleaseAgeExclude");
+  expect(result.steps[0]?.detail).toBe("jigs 0.1.18, normalized minimumReleaseAgeExclude");
   expect(readFileSync(workspace, "utf8")).toBe(
     "minimumReleaseAgeExclude:\n  - '@jigs-ai/jigs'\n  - '@acme/fresh@1.0.0'\n",
   );
@@ -288,7 +289,7 @@ test("reports a non-mapping workspace file with a repair hint", async () => {
   expect(statuses(result)).toEqual(["packages:failed"]);
   expect(result.steps[0]?.detail).toBe(`${workspace} must contain a YAML mapping`);
   expect(result.steps[0]?.repair).toBe(
-    "make pnpm-workspace.yaml a top-level mapping, then run pnpm exec jigs upgrade again",
+    "make pnpm-workspace.yaml a top-level mapping, then run again: `pnpm exec jigs upgrade`",
   );
   expect(io.exec.calls).toHaveLength(0);
 });
@@ -353,7 +354,7 @@ test("a factory already on the latest says so and still runs up and the typechec
   const result = await upgrade(root, io);
 
   expect(result.ok).toBe(true);
-  expect(lines.join("\n")).toMatch(/^ok {3}bump .* — jigs 0\.1\.18 \(unchanged\)$/m);
+  expect(lines.join("\n")).toMatch(/^ok {3}bump: jigs 0\.1\.18 \(unchanged\) \(\d+ms\)$/m);
   expect(statuses(result).at(-1)).toBe("typecheck:ok");
 });
 
@@ -482,6 +483,8 @@ test("a peer the new release moved fails the bump and names the factory-supplied
   expect(result.steps[1]?.repair).toContain("@workflow/world-postgres");
   expect(lines).toContain("     └── ✕ unmet peer workflow@4.9.0: found 4.8.4");
   expect(io.exec.calls).toHaveLength(1);
+  // pnpm's tree is relayed as pnpm drew it, so jigs' layout rules do not apply to it.
+  lines.splice(0);
 });
 
 test("a version the registry does not have is named with the --to-version that asked for it", async () => {
@@ -531,7 +534,7 @@ test("a failing jigs up ends the upgrade there, names the command to re-run, and
   expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:ok", "up:failed"]);
   expect(result.steps.at(-1)?.detail).toBe(`jigs up failed in ${root}`);
   expect(result.steps.at(-1)?.repair).toBe(
-    "fix what jigs up reported above, then run pnpm exec jigs up --force and pnpm run typecheck in this factory",
+    "fix what jigs up reported above, then run: `pnpm exec jigs up --force`\nthen typecheck: `pnpm run typecheck`",
   );
   expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
@@ -555,7 +558,11 @@ test("a red typecheck reports custom factory code errors after refreshing the in
   expect(statuses(result).at(-1)).toBe("typecheck:failed");
   expect(result.steps.at(-1)?.repair).toContain("custom factory code");
   expect(lines.join("\n")).toContain("error TS2305");
-  expect(lines.at(-2)).toBe(`FAIL typecheck: typecheck failed in ${root}`);
+  expect(lines.slice(-3)).toEqual([
+    `FAIL typecheck: typecheck failed in ${root}`,
+    "  jigs/ is already regenerated",
+    "  update custom factory code to match the installed jigs API",
+  ]);
   // The service already runs the new bundle; that is what the red line is for.
   expect(statuses(result)).toContain("up:ok");
 });
@@ -568,7 +575,7 @@ test("without a typecheck script the step is skipped and says so", async () => {
 
   expect(result.ok).toBe(true);
   expect(statuses(result).at(-1)).toBe("typecheck:skipped");
-  expect(lines).toContain("skip typecheck — no typecheck script in package.json");
+  expect(lines).toContain("skip typecheck: no typecheck script in package.json");
   expect(commands(io).map((c) => c.join(" "))).not.toContain("pnpm run typecheck");
 });
 
@@ -593,8 +600,8 @@ test("a failed integration refresh stops before rebuilding or restarting", async
   expect(result.ok).toBe(false);
   expect(statuses(result)).toEqual(["packages:ok", "bump:ok", "generate:failed"]);
   expect(result.steps.at(-1)?.detail).toBe("could not refresh jigs/");
-  expect(result.steps.at(-1)?.repair).toBe("run pnpm exec jigs generate in this factory");
-  expect(lines.at(-1)).toBe("  → run pnpm exec jigs generate in this factory");
+  expect(result.steps.at(-1)?.repair).toBe("in this factory, run: `pnpm exec jigs generate`");
+  expect(lines.slice(-2)).toEqual(["  in this factory, run:", "    pnpm exec jigs generate"]);
   expect(commands(io)).toEqual([
     ["pnpm", "update", "--latest", "@jigs-ai/jigs"],
     ["pnpm", "exec", "jigs", "generate"],
@@ -614,6 +621,11 @@ test("a missing pnpm during integration refresh names the missing tool", async (
   expect(result.ok).toBe(false);
   expect(statuses(result).at(-1)).toBe("generate:failed");
   expect(result.steps.at(-1)?.detail).toBe("pnpm is not on PATH");
-  expect(result.steps.at(-1)?.repair).toBe("install pnpm");
-  expect(lines.at(-1)).toBe("  → install pnpm");
+  expect(result.steps.at(-1)?.repair).toBe("install pnpm: https://pnpm.io/installation");
+  expect(lines.at(-1)).toBe("  install pnpm: https://pnpm.io/installation");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

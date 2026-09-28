@@ -7,6 +7,7 @@
 import { Cron } from "croner";
 import type { z } from "zod";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
+import { plainHint } from "../errors.ts";
 import { finished } from "../steps/runtime/run-state.ts";
 import type { Factory, Schedule } from "../workflow/factory.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
@@ -46,7 +47,7 @@ export function startSchedules(factory: Factory, deps: ScheduleDeps = {}): Cron[
     const problem = scheduleProblem(factory, name, schedule);
     if (problem !== null) {
       log(`[schedule] ${name} not scheduled: ${problem.reason}`);
-      log(`  → ${problem.repair}`);
+      log(plainHint(problem.repair));
       continue;
     }
     const job = new Cron(schedule.cron, { name, mode: CRON_MODE }, () =>
@@ -149,7 +150,7 @@ function scheduleProblem(
   if (name.includes(":")) {
     return {
       reason: `schedule name "${name}" contains ":"`,
-      repair: `rename the "${name}" schedule in jigs.config.ts to a name without ":" — it is what a run's trigger id is read back out of`,
+      repair: `rename the "${name}" schedule in jigs.config.ts to a name without ":"\na run's trigger id is read back out of the name`,
     };
   }
   const entry = factory.workflows[schedule.workflow];
@@ -164,7 +165,7 @@ function scheduleProblem(
   } catch (err) {
     return {
       reason: `cron "${schedule.cron}" is not a five-field cron expression: ${String(err)}`,
-      repair: `fix schedules.${name}.cron in jigs.config.ts — five fields, minute hour day-of-month month day-of-week`,
+      repair: `fix schedules.${name}.cron in jigs.config.ts\nit takes five fields: minute hour day-of-month month day-of-week`,
     };
   }
   const parsed = entry.inputs.safeParse(schedule.inputs);

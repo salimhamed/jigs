@@ -1,17 +1,12 @@
 import { createHook, type Hook } from "workflow";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../pull-requests/pull-request.ts";
+import { TICKET_TOKEN_PREFIX, ticketToken } from "./ticket-token.ts";
 
 // The claim's hook token names the ticket, never the run: owning it is the
 // exclusivity lock. The Linear ingress, when on, has only a webhook payload to
-// go on, so it reconstructs the token through ticketToken below — build and
-// parse cannot drift while they share the one constructor. Linear Comment
-// payloads carry issueId as a UUID, so the token does too.
-/** Prefix for the durable hook that gives one run exclusive ownership of a ticket. */
-export const TICKET_TOKEN_PREFIX = "linear:ticket:";
-
-/** Build the durable hook token for a Linear issue ID. */
-export function ticketToken(issueId: string): string {
-  return `${TICKET_TOKEN_PREFIX}${issueId}`;
-}
+// go on, so it reconstructs the token through ticketToken — build and parse
+// cannot drift while they share the one constructor. Linear Comment payloads
+// carry issueId as a UUID, so the token does too.
 
 /** Derive a claimed ticket's hook token from a Linear comment webhook. */
 export function tokenFromLinearPayload(payload: unknown): string | null {
@@ -26,6 +21,17 @@ export function tokenFromLinearPayload(payload: unknown): string | null {
   return ticketToken(issueId);
 }
 
+// The message is read in `jigs status`, where a hook token is an internal address.
+function claimedThing(token: string): string {
+  if (token.startsWith(TICKET_TOKEN_PREFIX)) {
+    return `Linear issue ${token.slice(TICKET_TOKEN_PREFIX.length)}`;
+  }
+  if (token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) {
+    return `pull request ${token.slice(PULL_REQUEST_TOKEN_PREFIX.length)}`;
+  }
+  return token;
+}
+
 /**
  * A ticket-claim failure that identifies the run already holding the ticket.
  *
@@ -37,7 +43,7 @@ export class ClaimConflictError extends Error {
 
   constructor(resource: string, owningRunId: string) {
     super(
-      `${resource} is already claimed by run ${owningRunId} — release it with: pnpm exec jigs cancel ${owningRunId}`,
+      `${claimedThing(resource)} is already claimed by run ${owningRunId}, so cancel that run to release it with pnpm exec jigs cancel ${owningRunId}`,
     );
     this.name = "ClaimConflictError";
     this.resource = resource;

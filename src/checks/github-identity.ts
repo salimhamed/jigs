@@ -104,7 +104,7 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
           ok: false,
           reason:
             "github.identities uses pat but GITHUB_TOKEN is not set in the service's environment",
-          repair: `set GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+          repair: `set GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
         };
       }
       try {
@@ -114,7 +114,7 @@ function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
         return {
           ok: false,
           reason: `GITHUB_TOKEN is set but GitHub rejected it: ${err}`,
-          repair: `re-issue the token and update GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: ${RESTART_SERVICE}`,
+          repair: `re-issue the token and update GITHUB_TOKEN in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
         };
       }
     },
@@ -134,7 +134,7 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
         return {
           ok: false,
           reason: String(err),
-          repair: `download App ${identity.appId}’s private key, set privateKeyPath in that App’s entry in jigs.config.ts, and: chmod 600 ${identity.privateKeyPath}`,
+          repair: `download App ${identity.appId}’s private key, set privateKeyPath in that App’s entry in jigs.config.ts, then: \`chmod 600 ${identity.privateKeyPath}\``,
         };
       }
       // Before any network call: a key anyone can read is a credential to
@@ -142,8 +142,8 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
       if (looseMode !== undefined) {
         return {
           ok: false,
-          reason: `${identity.privateKeyPath} is mode ${looseMode} — anyone on this machine can act as the App`,
-          repair: `chmod 600 ${identity.privateKeyPath}`,
+          reason: `${identity.privateKeyPath} is mode ${looseMode}, so anyone on this machine can act as the App`,
+          repair: `make it readable only by you: \`chmod 600 ${identity.privateKeyPath}\``,
         };
       }
       const { installations: accountInstallations, ...app } = identity;
@@ -195,7 +195,7 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
         return {
           ok: false,
           reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why}; installation ${p.installationId})`).join(", ")}`,
-          repair: `grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions${missing.some((p) => p.name === "repository_hooks") ? " — “Repository webhooks” is Read & write" : ""}), then accept the updated permissions on the installation`,
+          repair: `grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions${missing.some((p) => p.name === "repository_hooks") ? ", where “Repository webhooks” is Read & write" : ""}), then accept the updated permissions on the installation`,
         };
       }
       return {

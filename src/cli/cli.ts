@@ -1,6 +1,5 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
-import { styleText } from "node:util";
 import { Command, Option } from "commander";
 import type { LinearIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
@@ -36,6 +35,7 @@ import { upFactory } from "./commands/up.ts";
 import { upgradeFactory } from "./commands/upgrade.ts";
 import { watchRuns } from "./commands/watch.ts";
 import { listWorkflows } from "./commands/workflows.ts";
+import { formatError } from "./output.ts";
 
 // No `.default()`: commander evaluates defaults eagerly, so resolving the
 // factory's service URL here would walk the filesystem on `jigs --help`.
@@ -107,8 +107,8 @@ Recipes:
 
 Resources:
   resources list            Show run resources and working folders
-  resources prune           Preview what --apply would release, policy-kept included
-  resources prune --apply   Release it after the Git safety checks
+  resources prune           Preview what --apply would remove, policy-kept included
+  resources prune --apply   Remove it after the Git safety checks
 
 Generated code:
   build                     Compile workflows into the service bundle
@@ -398,10 +398,10 @@ resources
 resources
   .command("prune")
   .description(
-    "preview releasing finished runs' resources, overriding the release policy; --apply does it offline",
+    "preview removing finished runs' resources, including ones the release policy kept; --apply removes them offline",
   )
   .option("--run <run-id>", `limit the inventory to one run: ${RUN_ID_HELP}`)
-  .option("--apply", "release after proving the service and children stopped")
+  .option("--apply", "remove them once the service and everything it started have stopped")
   .option("--json", "print one JSON document")
   .action(async (options: { run?: string; apply?: boolean; json?: boolean }) => {
     await runResourcesPrune({ cwd: process.cwd(), out }, options);
@@ -467,10 +467,7 @@ if (process.argv.length === 2) {
   // action-handler failures (parseAsync wraps even synchronous throws).
   program.parseAsync().catch((err: unknown) => {
     if (err instanceof JigsError) {
-      // Errors go to stderr, so stderr decides whether they get color.
-      const style = { stream: process.stderr, validateStream: true };
-      console.error(styleText("red", `jigs: ${err.message}`, style));
-      if (err.hint !== undefined) console.error(styleText("dim", `  ${err.hint}`, style));
+      for (const line of formatError(err)) console.error(line);
     } else {
       console.error(err);
     }

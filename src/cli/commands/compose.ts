@@ -16,7 +16,7 @@ export async function dockerCompose(
   if (!existsSync(path.join(factoryRoot, "docker-compose.yml"))) {
     throw new JigsError(
       `no docker-compose.yml in ${factoryRoot}`,
-      "scaffold one: pnpm exec jigs init",
+      "scaffold one: `pnpm exec jigs init`",
     );
   }
   await execOrExplain(

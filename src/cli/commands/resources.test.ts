@@ -7,6 +7,7 @@ import { readRunState } from "../../steps/runtime/run-state.ts";
 import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { factorySlug } from "../../steps/workspaces/layout.ts";
 import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
 import {
   type ServiceProcesses,
@@ -113,13 +114,13 @@ test("list shows this factory's unreleased records with what prune would do", as
       entry.decision,
     ]),
   ).toEqual([
-    [RUN, "run-directory", "live", true, "would be released"],
+    [RUN, "run-directory", "live", true, "would be removed"],
     [
       RUN,
       "codex-home",
       "kept",
       true,
-      "would be released; overrides the kept decision (onFailure policy keeps run resources)",
+      "would be removed (previously kept: onFailure policy keeps run resources)",
     ],
     [LIVE, "run-directory", "live", false, "the run is not finished"],
   ]);
@@ -140,15 +141,16 @@ test("prune overrides the policy: live, kept and failed records of finished runs
   ]);
   expect(lines).toEqual([
     `${RUN}  completed`,
+    "  KIND           ACTION  PATH",
+    "  run-directory  remove  /scratch",
+    "  codex-home     remove  /scratch",
+    "  pi-home        remove  /scratch",
+    "                         previous attempt: release failed: EBUSY",
+    "  each one to remove was previously kept: onFailure policy keeps run resources",
     "",
-    "  KIND           DECISION  PATH",
-    "  run-directory  release   /scratch",
-    "  codex-home     release   /scratch",
-    "  pi-home        release   /scratch",
-    "                           previous attempt: release failed: EBUSY",
-    "  prune overrides the kept decision: onFailure policy keeps run resources",
-    "",
-    "3 proposed removals, 0 retained; preview only",
+    "3 to remove, 0 to keep (preview only)",
+    "to remove them, run:",
+    "  pnpm exec jigs resources prune --apply",
   ]);
 });
 
@@ -170,14 +172,15 @@ test("kept decisions that differ within a run are named on each resource", async
 
   expect(lines).toEqual([
     `${RUN}  completed`,
+    "  KIND        ACTION  PATH",
+    "  worktree    remove  /w/age-1",
+    "                      previously kept: onFailure policy keeps run resources",
+    "  codex-home  remove  /scratch",
+    "                      previously kept: release failed: EBUSY (gave up after 5 attempts)",
     "",
-    "  KIND        DECISION  PATH",
-    "  worktree    release   /w/age-1",
-    "                        overrides the kept decision: onFailure policy keeps run resources",
-    "  codex-home  release   /scratch",
-    "                        overrides the kept decision: release failed: EBUSY (gave up after 5 attempts)",
-    "",
-    "2 proposed removals, 0 retained; preview only",
+    "2 to remove, 0 to keep (preview only)",
+    "to remove them, run:",
+    "  pnpm exec jigs resources prune --apply",
   ]);
 });
 
@@ -208,18 +211,16 @@ test("apply releases finished runs' records and never a running run's", async ()
   expect(existsSync(live)).toBe(true);
   expect(lines).toEqual([
     `${RUN}  cancelled`,
-    "",
     "  KIND           RESULT   PATH",
     "  run-directory  removed  /scratch",
     "  codex-home     removed  /scratch",
     "",
     `${LIVE}  running`,
-    "",
     "  KIND           RESULT   PATH",
     "  run-directory  skipped  /scratch",
-    "  the run is not finished, so nothing is released",
+    "  the run is not finished, so nothing is removed",
     "",
-    "2 removed, 0 failed, 1 retained",
+    "2 removed, 1 kept, 0 failed",
   ]);
   // A recorded-only pull request is history, never visited.
   expect(memoryRows.find((row) => row.kind === "pull-request")?.state).toBe("live");
@@ -233,7 +234,20 @@ test("a preview never changes anything", async () => {
 
   expect(existsSync(done)).toBe(true);
   expect(memoryRows[0]?.state).toBe("live");
-  expect(lines.at(-1)).toBe("1 proposed removal, 0 retained; preview only");
+  expect(lines.slice(-3)).toEqual([
+    "1 to remove, 0 to keep (preview only)",
+    "to remove them, run:",
+    "  pnpm exec jigs resources prune --apply",
+  ]);
+});
+
+test("a preview of one run names the command that applies it to that run", async () => {
+  scratch();
+  seed("run-directory");
+
+  await runResourcesPrune(deps(), { run: RUN });
+
+  expect(lines.at(-1)).toBe(`  pnpm exec jigs resources prune --run ${RUN} --apply`);
 });
 
 test("apply never touches another factory's records", async () => {
@@ -381,12 +395,12 @@ test("the preview lists branches finished runs left on GitHub, with how to delet
     },
   ]);
   expect(lines).toEqual([
-    "Left on GitHub (jigs never deletes remote branches)",
+    "Left on GitHub",
     "  acme/api  still-there",
-    "  delete after the PR is merged or closed:",
+    "  delete it yourself once its PR is merged or closed:",
     "    git push origin --delete still-there",
     "",
-    "0 proposed removals, 0 retained; preview only",
+    "0 to remove, 0 to keep (preview only)",
   ]);
   // A preview writes nothing, not even for the branch that is gone.
   expect(memoryRows.every((row) => row.state === "live")).toBe(true);
@@ -429,7 +443,7 @@ test("a remote that cannot be asked still lists its branches, saying so", async 
 
   expect(report.leftOnGitHub).toMatchObject([{ identity: "acme/api:unknown", checked: false }]);
   expect(memoryRows[0]?.state).toBe("live");
-  expect(lines).toContain("  acme/api  unknown  (could not check the remote; it may be gone)");
+  expect(lines).toContain("  acme/api  unknown (could not check the remote, so it may be gone)");
 });
 
 test("the offline read has the run's status and nothing it cannot see", async () => {
@@ -572,4 +586,9 @@ test("apply proceeds when another program took the group after a clean stop", as
   await prune(machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"]), connect);
 
   expect(connect).toHaveBeenCalled();
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

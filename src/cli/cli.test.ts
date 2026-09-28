@@ -166,7 +166,7 @@ test("resource maintenance help exposes preview, apply, run, JSON and kept-resou
   expect(list.stdout).toContain("--json");
 
   const prune = run(cwd, "resources", "prune", "--help");
-  expect(prune.stdout).toContain("overriding the release policy");
+  expect(prune.stdout).toContain("preview removing finished runs' resources");
   expect(prune.stdout).toContain("--apply");
   expect(prune.stdout).not.toContain("--include-kept");
   expect(prune.stdout).toContain("--run <run-id>");

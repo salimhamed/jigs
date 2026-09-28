@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { JigsError } from "../../errors.ts";
+import { layoutProblems } from "../output-layout.ts";
 import { runDoctor } from "./doctor.ts";
 
 const fetchMock = vi.fn();
@@ -46,14 +47,14 @@ test("a red report prints the reason and repair for each failure and throws a Ji
         label: "binding api",
         ok: false,
         reason: "no binding named 'api'",
-        repair: "run: jigs bind <the-api-remote-url> --binding-name api",
+        repair: "bind it: `pnpm exec jigs bind <the-api-remote-url> --binding-name api`",
       },
       {
         id: "harness.codex-auth",
         label: "Codex subscription login",
         ok: false,
         reason: "no Codex login found",
-        repair: "run: codex login",
+        repair: "run: `codex login`",
       },
     ],
   });
@@ -66,9 +67,11 @@ test("a red report prints the reason and repair for each failure and throws a Ji
   expect(lines).toEqual([
     "ok   Linear identity",
     "FAIL binding api: no binding named 'api'",
-    "  → run: jigs bind <the-api-remote-url> --binding-name api",
+    "  bind it:",
+    "    pnpm exec jigs bind <the-api-remote-url> --binding-name api",
     "FAIL Codex subscription login: no Codex login found",
-    "  → run: codex login",
+    "  run:",
+    "    codex login",
   ]);
 });
 
@@ -107,4 +110,9 @@ test("a passing check that found something prints what it found", async () => {
   expect(lines).toEqual([
     "ok   Codex CLI: codex 0.153.4 at /usr/local/bin/codex (minimum 0.153.0)",
   ]);
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });

@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { layoutProblems } from "../output-layout.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
 
 const fetchMock = vi.fn();
@@ -177,4 +178,9 @@ test("a resource release kept is shown with its reason", async () => {
   expect(lines.some((line) => line.includes("released-history"))).toBe(false);
   // A blank line separates the two tables.
   expect(lines[2]).toBe("");
+});
+
+// Every test's output, passing or failing, keeps to the shared layout.
+afterEach(() => {
+  expect(layoutProblems(lines)).toEqual([]);
 });
