@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.3
+# @jigs-ai/jigs v0.78.4
 
 Durable steps generated into your factory. Call them from workflow code.
 Each wrapper carries its own "use step" directive and stable factory identity.
