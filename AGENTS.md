@@ -11,8 +11,7 @@ service and requires a clean exit on SIGTERM. CI provides
 Postgres; without the URL the boot is skipped, so say so when you report.
 
 PR titles are conventional commits, enforced by CI: the squashed title is what
-release-please reads to cut a release
-([ADR 0007](docs/adr/0007-release-automation.md)).
+release-please reads to cut a release (see Releases in `docs/contributing.md`).
 
 ## Where code goes
 
