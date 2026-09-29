@@ -160,7 +160,10 @@ own.
 files are part of the factory's durable contract. Committing them keeps their
 identities consistent across machines and code changes. `jigs generate`
 refreshes them; `jigs upgrade` does that for you. Finish or cancel affected runs
-before moving or renaming a workflow or step.
+before moving or renaming a workflow or step. Changing an agent's `output` schema
+while runs are in flight can change which agent calls a replay makes, because an
+answer the old schema accepted may now be asked for again; finish or cancel
+those runs first.
 
 Import jigs-provided steps and routines from the generated modules. Use
 `@jigs-ai/jigs` for types, configuration helpers, harnesses, models and other

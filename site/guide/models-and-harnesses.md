@@ -22,7 +22,9 @@ Import these routines from `#jigs/routines`:
 
 Codex supports `runAgent` only. `askAgent` supports Claude Code and Pi.
 `runAgent`, `askAgent` and `askModel` accept a Zod `output` schema to validate
-the answer; `askJev` returns typed decision answers. See the
+the answer; `askJev` returns typed decision answers. An answer that fails the
+schema is asked for once more with the reasons, in the same harness session when
+there is one; a second invalid answer throws the `ZodError`. See the
 [routine reference](/api/factory/routines) for exact options and results.
 
 ## Requirements and preflight

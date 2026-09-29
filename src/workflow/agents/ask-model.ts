@@ -1,4 +1,9 @@
-import { type AskModelOptions, buildModelRequest, type ModelRequest, parseOutput } from "./plan.ts";
+import {
+  type AskModelOptions,
+  buildModelRequest,
+  type ModelRequest,
+  parseOrAskAgain,
+} from "./plan.ts";
 import type { ModelResult } from "./result.ts";
 
 /**
@@ -8,12 +13,16 @@ import type { ModelResult } from "./result.ts";
  */
 export type ExecuteModelStep = (wire: ModelRequest) => Promise<ModelResult>;
 
-/** Make one API model call and parse its optional structured output. */
+/**
+ * Make an API model call and parse its optional structured output. An invalid answer is asked for
+ * once more, with the reasons.
+ */
 export async function askModel<T = undefined>(
   config: AskModelOptions<T>,
   executeModel: ExecuteModelStep,
 ): Promise<ModelResult<T>> {
-  const wire = buildModelRequest(config);
-  const result = await executeModel(wire);
-  return { ...result, output: parseOutput(config.output, result.output) };
+  const ask = (prompt: string) => executeModel(buildModelRequest({ ...config, prompt }));
+  return parseOrAskAgain(config.output, await ask(config.prompt), (rejection) =>
+    ask(`${config.prompt}\n\n${rejection}`),
+  );
 }

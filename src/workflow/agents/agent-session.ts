@@ -1,8 +1,9 @@
 // What "the saved session is unusable" means, in one place. A step never
 // rejects on it (the workflow runtime retries a rejected step), so the step
 // returns a marker, this module is where the marker becomes a throw, and an
-// agent session is the only thing that catches it. A reference recorded on the
-// other harness arrives as the same marker as a stale one.
+// agent session and runAgent's retry are the only things that catch it. A
+// reference recorded on the other harness arrives as the same marker as a
+// stale one.
 
 import type { z } from "zod";
 import type { Harness } from "./harness-config.ts";
@@ -10,7 +11,7 @@ import type { RunAgentOptions } from "./plan.ts";
 import { type AgentResult, type AgentSessionRef, describeHarness } from "./result.ts";
 
 // Private on purpose: `instanceof` only means something on this side of the
-// step boundary, and only to the fallback below.
+// step boundary, and only to the fallback below and runAgent's retry.
 class ResumeFailedError extends Error {
   constructor(detail: string) {
     super(detail);
@@ -21,6 +22,11 @@ class ResumeFailedError extends Error {
 /** Turns the step's returned marker into the throw the fallback catches. */
 export function resumeFailed(detail: string): never {
   throw new ResumeFailedError(detail);
+}
+
+/** Whether an error is the throw {@link resumeFailed} made. */
+export function isResumeFailed(error: unknown): error is Error {
+  return error instanceof ResumeFailedError;
 }
 
 /** Run an agent through the factory's bound step wrapper. */
@@ -55,7 +61,11 @@ export interface AgentSessionTurn {
  */
 export interface AgentSession {
   readonly harness: Harness;
-  /** With `output`, the answer is validated against it and returned parsed. */
+  /**
+   * With `output`, the answer is validated against it and returned parsed. An invalid answer is
+   * asked for once more with the reasons, as `runAgent` does, and never sends the turn back to
+   * `fresh`; a second invalid answer throws its `ZodError`.
+   */
   run<T>(turn: AgentSessionTurn & { output: z.ZodType<T> }): Promise<T>;
   run(turn: AgentSessionTurn): Promise<void>;
 }

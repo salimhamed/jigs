@@ -1,4 +1,4 @@
-import type { z } from "zod";
+import { z } from "zod";
 import { JigsError } from "../errors.ts";
 import type { AskableHarness, AskableModelSource, Harness } from "./harness-config.ts";
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
@@ -119,4 +119,29 @@ export function buildModelRequest<T>(config: AskModelOptions<T>): ModelRequest {
 /** Validate recorded structured output with the caller's original zod schema. */
 export function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): T {
   return schema === undefined ? (undefined as T) : schema.parse(dropNullOptionals(schema, raw));
+}
+
+/**
+ * Parse a recorded answer; when it fails the schema, ask once more with the reasons and parse
+ * that answer, throwing its `ZodError` if it fails too.
+ *
+ * @remarks
+ * Both answers come from recorded steps and the reasons are rendered from them alone, so a replay
+ * rejects the same answer and sends the same second request.
+ */
+export async function parseOrAskAgain<R extends { output: unknown }, T>(
+  schema: z.ZodType<T> | undefined,
+  result: R,
+  askAgain: (rejection: string, error: z.ZodError) => Promise<R>,
+): Promise<Omit<R, "output"> & { output: T }> {
+  try {
+    return { ...result, output: parseOutput(schema, result.output) };
+  } catch (error) {
+    if (!(error instanceof z.ZodError)) throw error;
+    const again = await askAgain(
+      `Your answer was rejected:\n${z.prettifyError(error)}\n\nAnswer again, fixing that.`,
+      error,
+    );
+    return { ...again, output: parseOutput(schema, again.output) };
+  }
 }
