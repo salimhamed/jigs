@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.3
+# @jigs-ai/jigs v0.78.4
 
 Workflow operations bound to your factory's durable step wrappers.
 Routines compose recorded steps and waits; they have no recorded result of their own.
@@ -155,7 +155,9 @@ recorded on a different harness descriptor, `run` starts fresh with the `fresh` 
 
 > **run**\<`T`\>(`turn`): `Promise`\<`T`\>
 
-With `output`, the answer is validated against it and returned parsed.
+With `output`, the answer is validated against it and returned parsed. An invalid answer is
+asked for once more with the reasons, as `runAgent` does, and never sends the turn back to
+`fresh`; a second invalid answer throws its `ZodError`.
 
 ###### Type Parameters
 
