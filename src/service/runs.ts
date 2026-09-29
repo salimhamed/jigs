@@ -90,6 +90,31 @@ export async function runStatuses(runIds: readonly string[]): Promise<Map<string
 }
 
 /**
+ * Queue a delivery for an existing run: the run's ID and nothing else. The handler loads the
+ * run's event log and replays it, so a second copy is safe.
+ */
+// The same message @workflow/core 5.0.0-beta.57 sends from reenqueueRun
+// (dist/runtime/runs.js:166) and @workflow/world from reenqueueActiveRuns on
+// every World start (dist/recovery.js); neither is exported through
+// `workflow`. With no runInput the runtime never takes turbo's first-delivery
+// path (runtime.js, `const turbo`), which skips the event log.
+export async function enqueueRun(runId: string): Promise<void> {
+  const world = await getWorld();
+  const run = await world.runs.get(runId, { resolveData: "none" });
+  const namespace = process.env.WORKFLOW_QUEUE_NAMESPACE;
+  const prefix = namespace ? `__${namespace}_wkf_workflow_` : "__wkf_workflow_";
+  await world.queue(
+    `${prefix}${run.workflowName}`,
+    { runId },
+    { deploymentId: run.deploymentId, specVersion: run.specVersion ?? LEGACY_SPEC_VERSION },
+  );
+}
+
+// @workflow/world's SPEC_VERSION_LEGACY: what reenqueueRun stamps on a run
+// that recorded none.
+const LEGACY_SPEC_VERSION = 1;
+
+/**
  * What the providers say about one run's suspensions: the pull request the
  * run is watching, and the comment a halt is waiting on. Failures leave
  * a suspension exactly as its token described it — observability must never

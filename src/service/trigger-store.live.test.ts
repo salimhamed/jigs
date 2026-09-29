@@ -109,6 +109,7 @@ test("an attempt is stamped on a pending row, and a started row settles once", a
   // A retry keeps the first attempt's time and run ID: a start whose outcome
   // was lost can only ever be that one run.
   expect(await store.attempt("pages", "P1", "wrun_second", at(2))).toEqual(attempted);
+  expect(await store.summary("pages", 5)).toMatchObject({ pending: 0, attempted: 1 });
 
   await store.started("pages", "P1", "wrun_first");
   expect(await store.unsettled("pages")).toEqual([

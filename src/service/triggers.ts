@@ -14,7 +14,7 @@ import { finished } from "../steps/runtime/run-state.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { nudgeDelay } from "./nudge.ts";
 import { whenReady } from "./readiness.ts";
-import { eventTriggerId, listRuns, runStatuses } from "./runs.ts";
+import { enqueueRun, eventTriggerId, listRuns, runStatuses } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import {
   SOURCES,
@@ -23,7 +23,11 @@ import {
   type SourceProvider,
   type SourceRegistry,
 } from "./sources.ts";
-import { type StartRunResult, startRun } from "./trigger.ts";
+import { type PreparedRun, prepareRun } from "./trigger.ts";
+
+type Ready = Extract<PreparedRun, { kind: "ready" }>;
+type Refusal = Exclude<PreparedRun, { kind: "ready" }>;
+
 import {
   type Occurrence,
   type TriggerMarker,
@@ -42,8 +46,9 @@ const FAILURES_SHOWN = 5;
 export interface TriggerDeps {
   store?: TriggerStore;
   sources?: SourceRegistry;
-  startRun?: typeof startRun;
+  prepareRun?: typeof prepareRun;
   runStatuses?: typeof runStatuses;
+  enqueueRun?: typeof enqueueRun;
   /** The factory slug the rows are recorded under. */
   factorySlug?: () => string;
   now?: () => Date;
@@ -74,15 +79,9 @@ interface Armed {
   marker?: TriggerMarker;
 }
 
-// A resilient start can hand back a run ID before the World writes the run,
-// and a start whose outcome was lost may still be in the queue, so a run the
-// World does not hold yet counts as active for this long. For an attempt that
-// is uncertain, the wait runs from this process's start too: a queued start
-// is delivered only once the World runs again.
-const UNWRITTEN_RUN_GRACE_MS = 10 * 60_000;
-// The World refuses to create a run whose ID was minted more than a day ago,
-// so an attempt older than this can neither be retried under its ID nor be
-// told apart from one that never reached the World.
+// The World refuses to create a run whose ID was minted more than a day ago.
+// An attempt still not visible by then never created its run, and nothing
+// queued can create it, so it is created under a fresh ID.
 const RUN_ID_LIFETIME_MS = 23 * 3_600_000;
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
@@ -105,8 +104,9 @@ function mintRunId(at: Date): string {
 export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): TriggerEngine {
   const log = deps.log ?? console.log;
   const now = deps.now ?? (() => new Date());
-  const start = deps.startRun ?? startRun;
+  const prepare = deps.prepareRun ?? prepareRun;
   const statusesOf = deps.runStatuses ?? runStatuses;
+  const enqueue = deps.enqueueRun ?? enqueueRun;
   const slug = deps.factorySlug ?? currentFactory;
   let opened: TriggerStore | undefined = deps.store;
   const store = () => (opened ??= triggerStore(registrySql(), slug()));
@@ -125,7 +125,6 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   let stopped = false;
   let marking: Promise<void> | undefined;
-  let armedAt: Date | undefined;
   let chain: Promise<void> = Promise.resolve();
 
   // Polls and pushes wait on this alone, never on a drain: a restart with a
@@ -134,7 +133,6 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     (marking ??= (async () => {
       const at = now();
       for (const entry of armed) entry.marker = await store().enable(entry.name, at);
-      armedAt = at;
     })().catch((error: unknown) => {
       marking = undefined;
       throw error;
@@ -169,81 +167,85 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     const statuses = await statusesOf(started.flatMap((row) => (row.runId ? [row.runId] : [])));
     let active = 0;
     for (const row of started) {
+      // A row is marked started only once its run was seen, so a run the
+      // World no longer holds was removed after it ran.
       const status = row.runId === null ? undefined : statuses.get(row.runId);
-      const settled =
-        status === undefined
-          ? now().getTime() - row.startedAt.getTime() > UNWRITTEN_RUN_GRACE_MS
-          : TERMINAL_RUN_STATUSES.has(status);
-      if (settled) await store().settle(entry.name, row.occurrence);
+      if (status === undefined || TERMINAL_RUN_STATUSES.has(status))
+        await store().settle(entry.name, row.occurrence);
       else active += 1;
     }
     return active;
   }
 
-  // Every attempted row first, whatever its age: its run may be live, so it
-  // counts before any fresh occurrence is admitted, or a late older one could
-  // take the slot a recovered run already holds.
+  async function refuse(entry: Armed, row: Occurrence, refusal: Refusal): Promise<void> {
+    const report = failureReport(entry.name, refusal);
+    await store().failed(entry.name, row.occurrence, report);
+    log(
+      `[trigger] ${entry.name} ${row.occurrence} failed: ${failedChecks(report)
+        .map((check) => `${check.label}: ${check.reason}`)
+        .join("; ")}`,
+    );
+  }
+
+  const prepareFor = (entry: Armed, row: Occurrence) =>
+    prepare(factory, entry.trigger.workflow, { ...entry.trigger.inputs, ...row.inputs });
+
+  // An attempted row holds a slot from its attempt until its run is seen
+  // queued or the row fails. Creating a run and queueing it are separate
+  // steps: the run is created under the row's ID with nothing queued, then
+  // queued with a delivery that carries no input, which is safe to repeat.
+  // True while the row still holds its slot.
+  async function resolve(entry: Armed, row: Occurrence, ready?: Ready): Promise<boolean> {
+    let runId = row.runId as string;
+    let status = (await statusesOf([runId])).get(runId);
+    if (status === undefined) {
+      const prepared = ready ?? (await prepareFor(entry, row));
+      if (prepared.kind !== "ready") {
+        await refuse(entry, row, prepared);
+        return false;
+      }
+      if (now().getTime() - (row.attemptedAt as Date).getTime() > RUN_ID_LIFETIME_MS)
+        ({ runId } = await store().attempt(entry.name, row.occurrence, mintRunId(now()), now(), {
+          renew: true,
+        }));
+      await prepared.launch(eventTriggerId(entry.name, row.occurrence), runId);
+      // Its creation can fail retryably and still return: the next drain
+      // creates it again under the same ID.
+      status = (await statusesOf([runId])).get(runId);
+      if (status === undefined) return true;
+    }
+    if (status === "pending") await enqueue(runId);
+    await store().started(entry.name, row.occurrence, runId);
+    log(`[trigger] ${entry.name} ${row.occurrence}: run ${runId} of ${entry.trigger.workflow}`);
+    return !TERMINAL_RUN_STATUSES.has(status);
+  }
+
+  // Attempted rows first, whatever their age, so no fresh occurrence can take
+  // the slot of a run that may be live.
   async function startWaiting(entry: Armed, rows: Occurrence[]) {
     let active = await activeRuns(entry);
-    const attempted = rows.filter((row) => row.attemptedAt !== null && row.runId !== null);
-    const statuses = await statusesOf(attempted.map((row) => row.runId as string));
-    const retry = new Set<Occurrence>();
-    for (const row of attempted) {
-      const runId = row.runId as string;
-      const attemptedAt = row.attemptedAt as Date;
-      if (statuses.has(runId)) {
-        await store().started(entry.name, row.occurrence, runId);
-        active += 1;
-        log(`[trigger] ${entry.name} ${row.occurrence}: run ${runId} was already started`);
-        continue;
-      }
-      if (now().getTime() - attemptedAt.getTime() > RUN_ID_LIFETIME_MS) {
-        await store().failed(
-          entry.name,
-          row.occurrence,
-          uncertainReport(entry.name, entry.trigger.workflow, runId),
-        );
-        log(`[trigger] ${entry.name} ${row.occurrence} failed: run ${runId} never appeared`);
-        continue;
-      }
-      const since = Math.max(attemptedAt.getTime(), (armedAt ?? now()).getTime());
-      if (now().getTime() - since > UNWRITTEN_RUN_GRACE_MS) retry.add(row);
-      else active += 1;
+    for (const row of rows) {
+      if (stopped) return;
+      if (row.attemptedAt !== null && (await resolve(entry, row))) active += 1;
     }
-    const admissible = rows.filter((row) => row.attemptedAt === null || retry.has(row));
-    for (const [index, row] of admissible.entries()) {
+    const fresh = rows.filter((row) => row.attemptedAt === null);
+    for (const [index, row] of fresh.entries()) {
       if (stopped) return;
       if (active >= entry.maxActive) {
         log(
-          `[trigger] ${entry.name}: ${admissible.length - index} waiting, ${active} of ${entry.maxActive} runs active`,
+          `[trigger] ${entry.name}: ${fresh.length - index} waiting, ${active} of ${entry.maxActive} runs active`,
         );
         return;
       }
-      // The ID is written before the start and reused by every retry, so a
-      // start whose outcome was lost can only ever be that one run.
-      const { runId } = await store().attempt(entry.name, row.occurrence, mintRunId(now()), now());
-      const result = await start(
-        factory,
-        entry.trigger.workflow,
-        { ...entry.trigger.inputs, ...row.inputs },
-        eventTriggerId(entry.name, row.occurrence),
-        runId,
-      );
-      if (result.kind === "started") {
-        await store().started(entry.name, row.occurrence, result.runId);
-        active += 1;
-        log(
-          `[trigger] ${entry.name} ${row.occurrence}: run ${result.runId} of ${entry.trigger.workflow}`,
-        );
+      // Recorded only once preflight passed and the World is next: a failure
+      // before it keeps its own report and is retried as a fresh row.
+      const prepared = await prepareFor(entry, row);
+      if (prepared.kind !== "ready") {
+        await refuse(entry, row, prepared);
         continue;
       }
-      const report = failureReport(entry.name, result);
-      await store().failed(entry.name, row.occurrence, report);
-      log(
-        `[trigger] ${entry.name} ${row.occurrence} failed: ${failedChecks(report)
-          .map((check) => `${check.label}: ${check.reason}`)
-          .join("; ")}`,
-      );
+      const attempted = await store().attempt(entry.name, row.occurrence, mintRunId(now()), now());
+      if (await resolve(entry, { ...row, ...attempted }, prepared)) active += 1;
     }
   }
 
@@ -495,7 +497,11 @@ export async function listTriggers(
         source: trigger.source.kind,
         lastEvent: summary.lastEvent?.toISOString() ?? null,
         pending: summary.pending,
-        active: started.filter((row) => row.runId !== null && live.has(row.runId)).length,
+        // What the engine's cap counts: live started runs, and attempts not
+        // yet resolved.
+        active:
+          started.filter((row) => row.runId !== null && live.has(row.runId)).length +
+          summary.attempted,
         failed: summary.failed,
         failures: summary.failures.map((row) => ({
           occurrence: row.occurrence,
@@ -592,25 +598,7 @@ function issues(list: z.core.$ZodIssue[]): string {
   return list.map((issue) => `${issue.path.join(".") || "(root)"} ${issue.message}`).join("; ");
 }
 
-function uncertainReport(name: string, workflow: string, runId: string): CheckReport {
-  return {
-    ok: false,
-    checks: [
-      {
-        id: `trigger.${name}`,
-        label: `trigger ${name}`,
-        ok: false,
-        reason: `its start was attempted more than 23 hours ago as run ${runId}, and that run never appeared`,
-        repair: `check \`pnpm exec jigs status ${runId}\`\nif no such run exists, the occurrence was never started; start it with \`pnpm exec jigs run ${workflow}\` and its inputs`,
-      },
-    ],
-  };
-}
-
-function failureReport(
-  name: string,
-  result: Exclude<StartRunResult, { kind: "started" }>,
-): CheckReport {
+function failureReport(name: string, result: Refusal): CheckReport {
   if (result.kind === "preflight-failed") return result.report;
   const failure =
     result.kind === "unknown-workflow"

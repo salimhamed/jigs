@@ -584,6 +584,7 @@ await (await getWorld()).close?.();`,
     await proveStepErrorAfterCancel("ordinary");
     await proveStepErrorAfterCancel("fatal");
     await proveFirstStepVisibility();
+    await proveQueuedRecovery();
 
     service("stop");
     serviceRunning = false;
@@ -686,6 +687,52 @@ await (await getWorld()).close?.();`,
       seen.push(lines(marker)[0].split(" ")[1]);
     }
     console.log(`cancellation matrix: default-turbo first steps observed ${seen.join(", ")}`);
+  }
+
+  // An event trigger's recovery against the compiled runtime: start() creates
+  // the run but its queue write fails, then the run is queued twice with the
+  // input-free delivery jigs' enqueueRun sends. It must execute once.
+  async function proveQueuedRecovery() {
+    const marker = path.join(fixtureRoot, "recovery.markers");
+    const [{ name: workflowName }] = (
+      await db.query("SELECT name FROM workflow.workflow_runs LIMIT 1")
+    ).rows;
+    const out = runNode(
+      `import { start } from "workflow/api";
+import { getWorld } from "workflow/runtime";
+const world = await getWorld();
+const failing = Object.create(world, {
+  queue: { value: async () => { throw new Error("injected queue failure"); } },
+});
+let runId;
+try {
+  runId = (await start({ workflowId: ${JSON.stringify(workflowName)} }, [
+    { mode: "turbo", marker: ${JSON.stringify(marker)}, gate: "unused", triggerId: "trigger:e2e:recovery" },
+  ], { world: failing })).runId;
+} catch (error) {
+  runId = (await world.runs.list({ resolveData: "none", pagination: { limit: 1, sortOrder: "desc" } })).data[0].runId;
+  console.error(String(error));
+}
+const run = await world.runs.get(runId, { resolveData: "none" });
+const before = run.status;
+for (let i = 0; i < 2; i += 1)
+  await world.queue("__wkf_workflow_" + run.workflowName, { runId }, { deploymentId: run.deploymentId, specVersion: run.specVersion });
+console.log(JSON.stringify({ runId, before }));
+await world.close?.();`,
+      env,
+    );
+    const { runId, before } = JSON.parse(out.trim().split("\n").at(-1));
+    assert.equal(before, "pending", "a failed queue write leaves the created run pending");
+    await until(
+      async () => (await runtimeRun(runId, ports.service)).status === "completed",
+      "recovered run did not complete",
+    );
+    // Let any second execution land before counting.
+    await new Promise((resolve) => setTimeout(resolve, DRAIN_MS));
+    assert.deepEqual(lines(marker), ["turbo-first-effect", "turbo-successor"]);
+    console.log(
+      "cancellation matrix: a created-but-unqueued run queued twice without input ran once",
+    );
   }
 
   function reconcile() {

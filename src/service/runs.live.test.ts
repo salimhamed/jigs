@@ -1,5 +1,7 @@
-// A real start on the Postgres World under a run ID the caller chose: what an
-// event trigger relies on to know its run before the start, and to retry it.
+// The Postgres World under an event trigger's two steps: the run created under
+// an ID the row already holds, with nothing queued, then queued by jigs with a
+// delivery that carries no input. The compiled e2e proves a run so queued
+// twice executes once; this proves what reaches the queue.
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
@@ -9,8 +11,8 @@ import { afterAll, beforeAll, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../workflow/factory.ts";
-import { runStatuses } from "./runs.ts";
-import { startRun } from "./trigger.ts";
+import { enqueueRun, runStatuses } from "./runs.ts";
+import { prepareRun } from "./trigger.ts";
 
 const adminUrl = new URL(
   process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
@@ -19,12 +21,13 @@ const database = `jigs_runs_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = new URL(adminUrl);
 testUrl.pathname = `/${database}`;
 const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
-// Every delivery is counted and acknowledged unread: the run only has to exist.
-const deliveries = new Map<string, number>();
+// Every delivery is kept and acknowledged unread: the run only has to exist.
+const deliveries = new Map<string, Array<Record<string, unknown>>>();
 const server = createServer(async (req, res) => {
   const text = Buffer.concat(await req.toArray()).toString();
-  const runId = text === "" ? undefined : (JSON.parse(text) as { runId?: string }).runId;
-  if (runId !== undefined) deliveries.set(runId, (deliveries.get(runId) ?? 0) + 1);
+  const body = text === "" ? {} : (JSON.parse(text) as Record<string, unknown>);
+  if (typeof body.runId === "string")
+    deliveries.set(body.runId, [...(deliveries.get(body.runId) ?? []), body]);
   res.writeHead(200, { "content-type": "application/json" }).end("{}");
 });
 
@@ -76,21 +79,29 @@ const factory = {
   },
 } satisfies Factory;
 
-test("a start under a chosen run ID creates that run, and a retry of it lands on the same one", async () => {
+const launch = async (runId: string) => {
+  const prepared = await prepareRun(factory, "respond", { page: "P1" });
+  if (prepared.kind !== "ready") throw new Error(prepared.kind);
+  return prepared.launch("trigger:pages:P1", runId);
+};
+
+test("a launch under a chosen ID creates that run and queues nothing, however often it repeats", async () => {
   const runId = runIdNow();
-  expect(await startRun(factory, "respond", { page: "P1" }, "trigger:pages:P1", runId)).toEqual({
-    kind: "started",
-    runId,
-  });
-  expect(await startRun(factory, "respond", { page: "P1" }, "trigger:pages:P1", runId)).toEqual({
-    kind: "started",
-    runId,
-  });
+  expect(await launch(runId)).toBe(runId);
+  expect(await launch(runId)).toBe(runId);
 
   const listed = await world.runs.list({ workflowName, resolveData: "none" });
   expect(listed.data.map((run) => run.runId)).toEqual([runId]);
-  expect((await runStatuses([runId])).has(runId)).toBe(true);
-  // One run, but each start still queued its own delivery: why the engine
-  // never retries an attempt while its first start may still be in flight.
-  await expect.poll(() => deliveries.get(runId) ?? 0, { timeout: 15_000 }).toBe(2);
+  expect(await runStatuses([runId])).toEqual(new Map([[runId, "pending"]]));
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  expect(deliveries.get(runId)).toBeUndefined();
+});
+
+test("a queued run's deliveries name it and carry no input, however often it is queued", async () => {
+  const runId = runIdNow().replace(/.$/, "X");
+  await launch(runId);
+  await enqueueRun(runId);
+  await enqueueRun(runId);
+  await expect.poll(() => deliveries.get(runId)?.length ?? 0, { timeout: 15_000 }).toBe(2);
+  for (const body of deliveries.get(runId) ?? []) expect(body).not.toHaveProperty("runInput");
 });

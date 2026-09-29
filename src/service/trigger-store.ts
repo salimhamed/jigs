@@ -2,7 +2,7 @@
 // trigger's polling has got to. The row, not the provider, is the dedupe
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
-import { and, asc, count, desc, eq, isNull, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../checks/index.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
@@ -24,7 +24,8 @@ export const occurrences = pgTable(
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
     // Set once, just before the first start is attempted, with the run ID
     // that start and every retry of it use: only such a pending row can have
-    // a run the World already holds, and it can only be that one.
+    // a run the World already holds, and it can only be that one. Renewed
+    // only once the World would refuse the ID.
     attemptedAt: timestamp("attempted_at", { withTimezone: true }),
     runId: text("run_id"),
     // When the engine saw the started run finish, so the cap stops asking.
@@ -67,7 +68,10 @@ export interface TriggerMarker {
 
 export interface TriggerSummary {
   lastEvent: Date | null;
+  /** Pending rows not yet attempted. */
   pending: number;
+  /** Pending rows whose start was attempted: each holds a slot. */
+  attempted: number;
   failed: number;
   /** The most recent failed rows, newest first. */
   failures: Occurrence[];
@@ -84,12 +88,14 @@ export interface TriggerStore {
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
-  /** Mark a pending row as about to start as this run, returning the first attempt's time and run. */
+  /** Mark a pending row as about to start as this run, returning the first attempt's time and
+   *  run; `renew` replaces them. */
   attempt(
     trigger: string,
     occurrence: string,
     runId: string,
     at: Date,
+    options?: { renew?: boolean },
   ): Promise<{ attemptedAt: Date; runId: string }>;
   /** Started rows whose run has not been seen to finish. */
   unsettled(
@@ -157,12 +163,16 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .where(and(ofTrigger(trigger), eq(occurrences.state, "pending")))
         .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
     },
-    async attempt(trigger, occurrence, runId, at) {
+    async attempt(trigger, occurrence, runId, at, options = {}) {
       const [updated] = await db
         .update(occurrences)
         .set({
-          attemptedAt: sql`coalesce(${occurrences.attemptedAt}, ${at.toISOString()}::timestamptz)`,
-          runId: sql`coalesce(${occurrences.runId}, ${runId})`,
+          ...(options.renew
+            ? { attemptedAt: at, runId }
+            : {
+                attemptedAt: sql`coalesce(${occurrences.attemptedAt}, ${at.toISOString()}::timestamptz)`,
+                runId: sql`coalesce(${occurrences.runId}, ${runId})`,
+              }),
           updatedAt: sql`now()`,
         })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
@@ -206,6 +216,16 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .from(occurrences)
         .where(ofTrigger(trigger))
         .groupBy(occurrences.state);
+      const [attempted] = await db
+        .select({ rows: count() })
+        .from(occurrences)
+        .where(
+          and(
+            ofTrigger(trigger),
+            eq(occurrences.state, "pending"),
+            isNotNull(occurrences.attemptedAt),
+          ),
+        );
       const recent = await db
         .select()
         .from(occurrences)
@@ -216,7 +236,8 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
       const lasts = counts.flatMap((c) => (c.last === null ? [] : [c.last.getTime()]));
       return {
         lastEvent: lasts.length === 0 ? null : new Date(Math.max(...lasts)),
-        pending: rows("pending"),
+        pending: rows("pending") - (attempted?.rows ?? 0),
+        attempted: attempted?.rows ?? 0,
         failed: rows("failed"),
         failures: recent,
       };
