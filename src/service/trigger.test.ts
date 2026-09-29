@@ -3,13 +3,17 @@ import { z } from "zod";
 import type { Factory, WorkflowInputs } from "../workflow/factory.ts";
 
 const { start, resolveIssueRef, preflightChecks } = vi.hoisted(() => ({
-  start: vi.fn(async (_workflow: unknown, _args: unknown[]) => ({ runId: "wrun_test" })),
+  start: vi.fn(async (_workflow: unknown, _args: unknown[], _options?: unknown) => ({
+    runId: "wrun_test",
+  })),
   preflightChecks: vi.fn(() => []),
   resolveIssueRef: vi.fn(() => {
     throw new Error("Unexpected Linear access");
   }),
 }));
 vi.mock("workflow/api", () => ({ start }));
+const world = vi.hoisted(() => ({ hooks: {}, createRunId: () => "not this one" }));
+vi.mock("workflow/runtime", () => ({ getWorld: async () => world }));
 vi.mock("../checks/index.ts", () => ({
   preflightChecks,
   runChecks: async () => ({ ok: true, results: [] }),
@@ -39,14 +43,14 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
   expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
 });
 
-test("attributes are seeded on the run, where encrypted inputs cannot hide them", async () => {
+test("a run ID chosen by the caller is the one the World is asked to create", async () => {
   start.mockClear();
-  await startRun(factory, "run", { ticket: "abc" }, "trig", { "jigs.occurrence": "x" });
-  expect(start).toHaveBeenCalledExactlyOnceWith(
-    factory.workflows.run.workflow,
-    [{ ticket: "abc", attempts: 3, triggerId: "trig" }],
-    { attributes: { "jigs.occurrence": "x" } },
-  );
+  const runId = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
+  await startRun(factory, "run", { ticket: "abc" }, "trig", runId);
+  const options = start.mock.calls[0]?.[2] as { world: { createRunId(): string; hooks: unknown } };
+  expect(options.world.createRunId()).toBe("01K3ANBZ4TQ8W9YV6H2E5C7DKM");
+  // Everything else is the World the process already runs.
+  expect(options.world.hooks).toBe(world.hooks);
 });
 
 test("invalid inputs cannot start a run", async () => {

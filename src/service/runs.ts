@@ -89,50 +89,6 @@ export async function runStatuses(runIds: readonly string[]): Promise<Map<string
   return new Map(found.flatMap((run) => (run === null ? [] : [[run.runId, run.status]])));
 }
 
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-/** When a run ID was minted: the millisecond time a ULID leads with. */
-export function runIdTime(runId: string): number | null {
-  if (!RUN_ID_SHAPE.test(runId)) return null;
-  let ms = 0;
-  for (const char of runId.slice("wrun_".length, "wrun_".length + 10))
-    ms = ms * 32 + CROCKFORD.indexOf(char);
-  return ms;
-}
-
-/**
- * The run minted at or after `since` that carries this plaintext attribute, newest first.
- * Attributes are stored beside the run, not in its inputs, so this still finds a run
- * whose inputs the World encrypts.
- */
-export async function findRunByAttribute(query: {
-  workflowName?: string;
-  key: string;
-  value: string;
-  since: Date;
-}): Promise<string | null> {
-  const world = await getWorld();
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page = await world.runs.list({
-      ...(query.workflowName === undefined ? {} : { workflowName: query.workflowName }),
-      resolveData: "none",
-      pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
-    });
-    for (const run of page.data) {
-      // The listing is ordered by run ID, and its time is minted by this
-      // process's clock. world-postgres' created_at is a zone-less timestamp
-      // that reads back hours off on a server not set to UTC.
-      const minted = runIdTime(run.runId);
-      if (minted !== null && minted < query.since.getTime()) return null;
-      if (run.attributes?.[query.key] === query.value) return run.runId;
-    }
-    cursor = nextCursor(page, seen, "runs");
-  } while (cursor !== undefined);
-  return null;
-}
-
 /**
  * What the providers say about one run's suspensions: the pull request the
  * run is watching, and the comment a halt is waiting on. Failures leave

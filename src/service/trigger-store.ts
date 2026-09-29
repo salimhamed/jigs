@@ -22,8 +22,9 @@ export const occurrences = pgTable(
     // cap starts with what it was seen with. Fixed inputs are merged at start.
     inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    // Set just before a start is attempted: only such a pending row can have
-    // a run the World already holds.
+    // Set once, just before the first start is attempted, with the run ID
+    // that start and every retry of it use: only such a pending row can have
+    // a run the World already holds, and it can only be that one.
     attemptedAt: timestamp("attempted_at", { withTimezone: true }),
     runId: text("run_id"),
     // When the engine saw the started run finish, so the cap stops asking.
@@ -83,8 +84,13 @@ export interface TriggerStore {
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
-  /** Mark a pending row as about to start, returning its first attempt's time. */
-  attempt(trigger: string, occurrence: string): Promise<Date>;
+  /** Mark a pending row as about to start as this run, returning the first attempt's time and run. */
+  attempt(
+    trigger: string,
+    occurrence: string,
+    runId: string,
+    at: Date,
+  ): Promise<{ attemptedAt: Date; runId: string }>;
   /** Started rows whose run has not been seen to finish. */
   unsettled(
     trigger: string,
@@ -151,18 +157,19 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .where(and(ofTrigger(trigger), eq(occurrences.state, "pending")))
         .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
     },
-    async attempt(trigger, occurrence) {
+    async attempt(trigger, occurrence, runId, at) {
       const [updated] = await db
         .update(occurrences)
         .set({
-          attemptedAt: sql`coalesce(${occurrences.attemptedAt}, now())`,
+          attemptedAt: sql`coalesce(${occurrences.attemptedAt}, ${at.toISOString()}::timestamptz)`,
+          runId: sql`coalesce(${occurrences.runId}, ${runId})`,
           updatedAt: sql`now()`,
         })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
-        .returning({ attemptedAt: occurrences.attemptedAt });
-      if (updated?.attemptedAt == null)
+        .returning({ attemptedAt: occurrences.attemptedAt, runId: occurrences.runId });
+      if (updated?.attemptedAt == null || updated.runId === null)
         throw new Error(`${trigger} ${occurrence} is no longer pending`);
-      return updated.attemptedAt;
+      return { attemptedAt: updated.attemptedAt, runId: updated.runId };
     },
     async unsettled(trigger) {
       return (

@@ -1,4 +1,6 @@
+import type { World } from "@workflow/world";
 import { start } from "workflow/api";
+import { getWorld } from "workflow/runtime";
 import type { z } from "zod";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
 import type { Factory, Injected } from "../workflow/factory.ts";
@@ -14,7 +16,7 @@ export async function startRun(
   workflowName: string,
   inputs: unknown,
   triggerId: string,
-  attributes?: Record<string, string>,
+  runId?: string,
 ): Promise<StartRunResult> {
   const entry = factory.workflows[workflowName];
   if (!entry) {
@@ -38,8 +40,16 @@ export async function startRun(
 
   const injection = { triggerId } satisfies Injected;
   const args: [unknown] = [{ ...parsed.data, ...injection }];
-  const run = await (attributes === undefined
+  const run = await (runId === undefined
     ? start(entry.workflow, args)
-    : start(entry.workflow, args, { attributes }));
+    : start(entry.workflow, args, { world: withRunId(await getWorld(), runId) }));
   return { kind: "started", runId: run.runId };
+}
+
+// start() mints the run ID from its World's createRunId, so a World that
+// answers with this ID, for this call alone, is how a caller that must know
+// the ID before the start, and reuse it on a retry, chooses it.
+function withRunId(world: World, runId: string): World {
+  const bare = runId.slice("wrun_".length);
+  return Object.create(world, { createRunId: { value: () => bare } }) as World;
 }

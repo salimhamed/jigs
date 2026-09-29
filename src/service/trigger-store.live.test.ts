@@ -103,17 +103,20 @@ test("an attempt is stamped on a pending row, and a started row settles once", a
     inputs: {},
     occurredAt: at(0),
   });
-  const attempted = await store.attempt("pages", "P1");
-  expect((await store.pending("pages"))[0]?.attemptedAt).toEqual(attempted);
-  // A retry keeps the first attempt: the crash-window lookup must reach back
-  // to the earliest run this row may have started.
-  expect(await store.attempt("pages", "P1")).toEqual(attempted);
+  const attempted = await store.attempt("pages", "P1", "wrun_first", at(1));
+  expect(attempted).toEqual({ attemptedAt: at(1), runId: "wrun_first" });
+  expect((await store.pending("pages"))[0]).toMatchObject(attempted);
+  // A retry keeps the first attempt's time and run ID: a start whose outcome
+  // was lost can only ever be that one run.
+  expect(await store.attempt("pages", "P1", "wrun_second", at(2))).toEqual(attempted);
 
-  await store.started("pages", "P1", "wrun_1");
+  await store.started("pages", "P1", "wrun_first");
   expect(await store.unsettled("pages")).toEqual([
-    { occurrence: "P1", runId: "wrun_1", startedAt: expect.any(Date) },
+    { occurrence: "P1", runId: "wrun_first", startedAt: expect.any(Date) },
   ]);
   await store.settle("pages", "P1");
   expect(await store.unsettled("pages")).toEqual([]);
-  await expect(store.attempt("pages", "P1")).rejects.toThrow("no longer pending");
+  await expect(store.attempt("pages", "P1", "wrun_third", at(3))).rejects.toThrow(
+    "no longer pending",
+  );
 });

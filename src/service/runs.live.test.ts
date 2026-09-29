@@ -1,14 +1,16 @@
-// A real start on the Postgres World, found again by the attribute an event
-// trigger seeds: the crash-window lookup against the World it runs on.
+// A real start on the Postgres World under a run ID the caller chose: what an
+// event trigger relies on to know its run before the start, and to retry it.
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
-import { start } from "workflow/api";
 import { setWorld } from "workflow/runtime";
-import { findRunByAttribute, runIdTime, runStatuses } from "./runs.ts";
+import { z } from "zod";
+import type { Factory } from "../workflow/factory.ts";
+import { runStatuses } from "./runs.ts";
+import { startRun } from "./trigger.ts";
 
 const adminUrl = new URL(
   process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
@@ -17,8 +19,12 @@ const database = `jigs_runs_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = new URL(adminUrl);
 testUrl.pathname = `/${database}`;
 const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
-// Every delivery is acknowledged unread: the run only has to exist.
-const server = createServer((_req, res) => {
+// Every delivery is counted and acknowledged unread: the run only has to exist.
+const deliveries = new Map<string, number>();
+const server = createServer(async (req, res) => {
+  const text = Buffer.concat(await req.toArray()).toString();
+  const runId = text === "" ? undefined : (JSON.parse(text) as { runId?: string }).runId;
+  if (runId !== undefined) deliveries.set(runId, (deliveries.get(runId) ?? 0) + 1);
   res.writeHead(200, { "content-type": "application/json" }).end("{}");
 });
 
@@ -27,8 +33,6 @@ let oldBaseUrl: string | undefined;
 
 beforeAll(async () => {
   await admin.query(`CREATE DATABASE "${database}"`);
-  // West of UTC, where world-postgres' zone-less created_at reads back early.
-  await admin.query(`ALTER DATABASE "${database}" SET timezone TO 'America/Los_Angeles'`);
   execFileSync("node_modules/.bin/bootstrap", [], {
     env: { ...process.env, WORKFLOW_POSTGRES_URL: testUrl.toString() },
     stdio: "ignore",
@@ -54,27 +58,39 @@ afterAll(async () => {
   await admin.end();
 });
 
-test("a started run is found by its seeded attribute, whatever the server's time zone", async () => {
-  const workflowName = "workflow//./workflows/respond//respond";
-  const since = new Date();
-  const run = await start({ workflowId: workflowName }, [{ page: "P1" }], {
-    attributes: { "jigs.occurrence": "a".repeat(64) },
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+function runIdNow(): string {
+  let time = "";
+  for (let ms = Date.now(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
+    time = CROCKFORD[ms % 32] + time;
+  return `wrun_${time}${"0123456789ABCDEF"}`;
+}
+
+const workflowName = "workflow//./workflows/respond//respond";
+const factory = {
+  workflows: {
+    respond: {
+      workflow: { workflowId: workflowName } as never,
+      inputs: z.object({ page: z.string() }),
+    },
+  },
+} satisfies Factory;
+
+test("a start under a chosen run ID creates that run, and a retry of it lands on the same one", async () => {
+  const runId = runIdNow();
+  expect(await startRun(factory, "respond", { page: "P1" }, "trigger:pages:P1", runId)).toEqual({
+    kind: "started",
+    runId,
   });
-  await start({ workflowId: workflowName }, [{ page: "P2" }], {
-    attributes: { "jigs.occurrence": "b".repeat(64) },
+  expect(await startRun(factory, "respond", { page: "P1" }, "trigger:pages:P1", runId)).toEqual({
+    kind: "started",
+    runId,
   });
 
-  expect(runIdTime(run.runId)).toBeGreaterThanOrEqual(since.getTime());
-  // The skew this lookup must not stop on: created_at reads back hours early.
-  const stored = await world.runs.get(run.runId, { resolveData: "none" });
-  expect(stored.createdAt.getTime()).toBeLessThan(since.getTime() - 3_600_000);
-  expect(
-    await findRunByAttribute({
-      workflowName,
-      key: "jigs.occurrence",
-      value: "a".repeat(64),
-      since: new Date(since.getTime() - 1000),
-    }),
-  ).toBe(run.runId);
-  expect((await runStatuses([run.runId])).has(run.runId)).toBe(true);
+  const listed = await world.runs.list({ workflowName, resolveData: "none" });
+  expect(listed.data.map((run) => run.runId)).toEqual([runId]);
+  expect((await runStatuses([runId])).has(runId)).toBe(true);
+  // One run, but each start still queued its own delivery: why the engine
+  // never retries an attempt while its first start may still be in flight.
+  await expect.poll(() => deliveries.get(runId) ?? 0, { timeout: 15_000 }).toBe(2);
 });

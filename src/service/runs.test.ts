@@ -15,7 +15,6 @@ import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import {
   enrichSuspensions,
   eventTriggerId,
-  findRunByAttribute,
   listRunSteps,
   listRuns,
   runExists,
@@ -403,58 +402,6 @@ test("an event trigger's run names its trigger, without the occurrence", async (
 test("run statuses are read by ID, and a run the World lacks is absent", async () => {
   world({ runs: [worldRun({ status: "completed" })] });
   expect(await runStatuses([RUN_A, RUN_B])).toEqual(new Map([[RUN_A, "completed"]]));
-});
-
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-// A run ID minted at this time, as the SDK mints them: `wrun_` and a ULID.
-function runIdAt(at: Date, tail: string): string {
-  let time = "";
-  for (let ms = at.getTime(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
-    time = CROCKFORD[ms % 32] + time;
-  return `wrun_${time}${tail.padStart(16, "0")}`;
-}
-
-test("a run is found by its plaintext attribute, newest first, not before `since`", async () => {
-  const listed: unknown[] = [];
-  const minute = (m: number) => new Date(Date.UTC(2026, 8, 29, 12, m));
-  // created_at reads back seven hours early, as world-postgres' timestamp
-  // column does on a server west of UTC; only the run ID's time is honest.
-  const run = (m: number, tail: string, value?: string) => ({
-    runId: runIdAt(minute(m), tail),
-    workflowName: STAMPED_WORKFLOW_ID,
-    status: "running",
-    createdAt: new Date(minute(m).getTime() - 7 * 3_600_000),
-    attributes: value === undefined ? {} : { "jigs.occurrence": value },
-  });
-  const [newest, mine, old] = [run(30, "3"), run(20, "2", "mine"), run(5, "1", "old")];
-  const pages = [[newest, mine], [old]];
-  setWorld({
-    specVersion: SPEC_VERSION_CURRENT,
-    runs: {
-      list: async (params: { pagination?: { cursor?: string } }) => {
-        listed.push(params);
-        const index = params.pagination?.cursor === undefined ? 0 : 1;
-        return { data: pages[index], hasMore: index === 0, cursor: index === 0 ? "p1" : null };
-      },
-    },
-  } as unknown as Parameters<typeof setWorld>[0]);
-  const find = (value: string, m: number) =>
-    findRunByAttribute({
-      workflowName: STAMPED_WORKFLOW_ID,
-      key: "jigs.occurrence",
-      value,
-      since: minute(m),
-    });
-
-  expect(await find("mine", 10)).toBe(mine.runId);
-  expect(listed[0]).toMatchObject({
-    workflowName: STAMPED_WORKFLOW_ID,
-    resolveData: "none",
-    pagination: { sortOrder: "desc" },
-  });
-  // Older than `since`: the scan stops rather than reading all history.
-  expect(await find("old", 10)).toBeNull();
-  expect(await find("old", 0)).toBe(old.runId);
 });
 
 test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {
