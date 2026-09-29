@@ -55,7 +55,11 @@ export interface AgentSessionTurn {
  */
 export interface AgentSession {
   readonly harness: Harness;
-  /** With `output`, the answer is validated against it and returned parsed. */
+  /**
+   * With `output`, the answer is validated against it and returned parsed. An invalid answer is
+   * asked for once more by sending only the reasons to the session that gave it, as `runAgent`
+   * does; a second invalid answer throws its `ZodError`.
+   */
   run<T>(turn: AgentSessionTurn & { output: z.ZodType<T> }): Promise<T>;
   run(turn: AgentSessionTurn): Promise<void>;
 }

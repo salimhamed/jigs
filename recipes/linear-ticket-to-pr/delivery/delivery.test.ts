@@ -148,6 +148,25 @@ test("a blocking finding sends the round back, and the resumed builder is told o
   expect(secondReview?.prompt).not.toContain("THE TASK BRIEF");
 });
 
+test("the reviewer is told no pull request or CI exists yet and to stay off GitHub", async () => {
+  answer(implementationReport, { responses: [] }, { responses: [] });
+  answer(
+    reviewVerdict,
+    { verdict: "changes-requested", findings: [{ summary: "Missing test", blocking: true }] },
+    { verdict: "approved", findings: [] },
+  );
+
+  await implementAndReview(delivery, builder());
+
+  const reviews = calls.filter((call) => call.harness === delivery.reviewer);
+  expect(reviews.map((call) => call.resumed)).toEqual([false, true]);
+  for (const { prompt } of reviews) {
+    expect(prompt).toContain("No pull request exists yet and CI has not run");
+    expect(prompt).toContain("do not look up pull requests, branches or CI status on GitHub");
+    expect(prompt).toContain("leave acceptance criteria about CI or the pull request to jigs");
+  }
+});
+
 test("an exhausted review budget pushes the branch and stops with the open findings", async () => {
   answer(implementationReport, { responses: [] }, { responses: [] });
   const blocked = {
@@ -250,50 +269,13 @@ test("the description schema accepts a body line that only starts with Descripti
   expect(pullRequestDescription.safeParse({ title: "Tidy setup", body }).success).toBe(true);
 });
 
-test("a rejected description is asked for once more, with the reasons", async () => {
-  answer(
-    pullRequestDescription,
-    { title: "# Add a flag", body: "Adds it." },
-    { title: "Add a flag", body: "Adds it." },
-  );
-  vi.mocked(steps.openPullRequest).mockResolvedValue(pr);
-
-  await publish(delivery, { reviewedCommit: "h1", ledger: [] });
-
-  expect(calls).toHaveLength(2);
-  expect(calls[1]?.prompt).toContain(calls[0]?.prompt);
-  expect(calls[1]?.prompt).toContain("Your previous answer was rejected:");
-  expect(calls[1]?.prompt).toContain("The title must be plain text, not markdown.");
-  expect(steps.openPullRequest).toHaveBeenCalledWith({
-    worktree,
-    title: "Add a flag",
-    body: "Adds it.",
-  });
-});
-
-test("a description rejected twice fails before any pull request opens", async () => {
-  answer(
-    pullRequestDescription,
-    { title: "Title: Add a flag", body: "Adds it." },
-    { title: "Title: Add a flag", body: "Adds it." },
-  );
+test("a description the schema rejects fails before any pull request opens", async () => {
+  answer(pullRequestDescription, { title: "Title: Add a flag", body: "Adds it." });
 
   await expect(publish(delivery, { reviewedCommit: "h1", ledger: [] })).rejects.toBeInstanceOf(
     z.ZodError,
   );
-  expect(calls).toHaveLength(2);
   expect(steps.openPullRequest).not.toHaveBeenCalled();
-});
-
-test("an error other than a rejected answer is rethrown without a retry", async () => {
-  answer(pullRequestDescription, () => {
-    throw new Error("harness crashed");
-  });
-
-  await expect(publish(delivery, { reviewedCommit: "h1", ledger: [] })).rejects.toThrow(
-    "harness crashed",
-  );
-  expect(calls).toHaveLength(1);
 });
 
 const snapshot: PullRequestSnapshot = {

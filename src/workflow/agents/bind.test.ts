@@ -22,14 +22,14 @@ test("a factory can override a named step and retain typed output parsing", asyn
   expect(result.output.count).toBe(3);
   expect(executeModel).toHaveBeenCalledOnce();
 
-  executeModel.mockResolvedValueOnce({ text: "", output: { count: "invalid" } });
+  executeModel.mockResolvedValue({ text: "", output: { count: "invalid" } });
   await expect(
     bound.askModel({
       model: models.openrouter("anthropic/claude-haiku"),
       prompt: "Count",
       output: z.object({ count: z.number() }),
     }),
-  ).rejects.toThrow();
+  ).rejects.toBeInstanceOf(z.ZodError);
 });
 
 test("generic agents require no ticket or pull-request steps", async () => {
