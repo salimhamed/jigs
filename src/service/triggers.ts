@@ -83,6 +83,9 @@ const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
 // The World stamps a run's creation with its own clock, the row's attempt
 // with the registry's.
 const CLOCK_SKEW_MS = 5 * 60_000;
+// A resilient start can hand back a run ID before the World writes the run,
+// so a run it does not hold yet still counts for this long.
+const UNWRITTEN_RUN_GRACE_MS = 10 * 60_000;
 
 const occurrenceAttribute = (factory: string, triggerId: string): string =>
   createHash("sha256").update(`${factory}\n${triggerId}`).digest("hex");
@@ -131,10 +134,9 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   // Occurrences before the trigger was first enabled are not its business at
   // all; ones older than the lookback are recorded so they are never started.
-  async function observe(entry: Armed, event: SourceEvent): Promise<boolean> {
+  async function observe(entry: Armed, event: SourceEvent, occurrence: string): Promise<boolean> {
     const enabledAt = entry.marker?.enabledAt;
     if (enabledAt === undefined || event.at < enabledAt) return false;
-    const occurrence = entry.source.occurrence(event.inputs);
     const stale = event.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
     const state = stale ? "skipped" : "pending";
     const recorded = await store().record({
@@ -160,8 +162,12 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     let active = 0;
     for (const row of started) {
       const status = row.runId === null ? undefined : statuses.get(row.runId);
-      if (status !== undefined && !TERMINAL_RUN_STATUSES.has(status)) active += 1;
-      else await store().settle(entry.name, row.occurrence);
+      const settled =
+        status === undefined
+          ? now().getTime() - row.startedAt.getTime() > UNWRITTEN_RUN_GRACE_MS
+          : TERMINAL_RUN_STATUSES.has(status);
+      if (settled) await store().settle(entry.name, row.occurrence);
+      else active += 1;
     }
     return active;
   }
@@ -265,15 +271,25 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         let fresh = 0;
         let unrecorded: Date | undefined;
         for (const event of events) {
+          // An event the source cannot key would fail the same way on every
+          // poll, so it is passed over rather than held for.
+          let occurrence: string;
           try {
-            if (await observe(entry, event)) fresh += 1;
+            occurrence = entry.source.occurrence(event.inputs);
+          } catch (error) {
+            log(`[trigger] ${name} passed over an event: ${String(error)}`);
+            continue;
+          }
+          try {
+            if (await observe(entry, event, occurrence)) fresh += 1;
           } catch (error) {
             if (unrecorded === undefined || event.at < unrecorded) unrecorded = event.at;
             log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
           }
         }
-        // An occurrence that could not be recorded keeps the window open
-        // behind it, so the next poll sees it again.
+        // An occurrence the store could not record keeps the window open
+        // behind it, so the next poll sees it again, but never further back
+        // than the lookback: anything older would only be skipped.
         const next =
           unrecorded === undefined
             ? through
@@ -281,6 +297,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
                 Math.max(
                   marker.polledThrough.getTime(),
                   Math.min(through.getTime(), unrecorded.getTime() - 1),
+                  now().getTime() - entry.lookbackMinutes * 60_000,
                 ),
               );
         await store().advance(name, next);
@@ -298,8 +315,10 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       for (const entry of armed) {
         if (entry.source.provider !== provider) continue;
         try {
-          const occurrence = entry.source.fromPush(entry.params, event);
-          if (occurrence !== null && (await observe(entry, occurrence))) taken.push(entry.name);
+          const pushed = entry.source.fromPush(entry.params, event);
+          if (pushed === null) continue;
+          const occurrence = entry.source.occurrence(pushed.inputs);
+          if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
         } catch (error) {
           log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
         }

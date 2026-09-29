@@ -405,16 +405,29 @@ test("run statuses are read by ID, and a run the World lacks is absent", async (
   expect(await runStatuses([RUN_A, RUN_B])).toEqual(new Map([[RUN_A, "completed"]]));
 });
 
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+// A run ID minted at this time, as the SDK mints them: `wrun_` and a ULID.
+function runIdAt(at: Date, tail: string): string {
+  let time = "";
+  for (let ms = at.getTime(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
+    time = CROCKFORD[ms % 32] + time;
+  return `wrun_${time}${tail.padStart(16, "0")}`;
+}
+
 test("a run is found by its plaintext attribute, newest first, not before `since`", async () => {
   const listed: unknown[] = [];
-  const run = (runId: string, minute: number, value?: string) => ({
-    runId,
+  const minute = (m: number) => new Date(Date.UTC(2026, 8, 29, 12, m));
+  // created_at reads back seven hours early, as world-postgres' timestamp
+  // column does on a server west of UTC; only the run ID's time is honest.
+  const run = (m: number, tail: string, value?: string) => ({
+    runId: runIdAt(minute(m), tail),
     workflowName: STAMPED_WORKFLOW_ID,
     status: "running",
-    createdAt: new Date(Date.UTC(2026, 8, 29, 12, minute)),
+    createdAt: new Date(minute(m).getTime() - 7 * 3_600_000),
     attributes: value === undefined ? {} : { "jigs.occurrence": value },
   });
-  const pages = [[run("wrun_3", 30), run("wrun_2", 20, "mine")], [run("wrun_1", 5, "old")]];
+  const [newest, mine, old] = [run(30, "3"), run(20, "2", "mine"), run(5, "1", "old")];
+  const pages = [[newest, mine], [old]];
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     runs: {
@@ -425,15 +438,15 @@ test("a run is found by its plaintext attribute, newest first, not before `since
       },
     },
   } as unknown as Parameters<typeof setWorld>[0]);
-  const find = (value: string, minute: number) =>
+  const find = (value: string, m: number) =>
     findRunByAttribute({
       workflowName: STAMPED_WORKFLOW_ID,
       key: "jigs.occurrence",
       value,
-      since: new Date(Date.UTC(2026, 8, 29, 12, minute)),
+      since: minute(m),
     });
 
-  expect(await find("mine", 10)).toBe("wrun_2");
+  expect(await find("mine", 10)).toBe(mine.runId);
   expect(listed[0]).toMatchObject({
     workflowName: STAMPED_WORKFLOW_ID,
     resolveData: "none",
@@ -441,7 +454,7 @@ test("a run is found by its plaintext attribute, newest first, not before `since
   });
   // Older than `since`: the scan stops rather than reading all history.
   expect(await find("old", 10)).toBeNull();
-  expect(await find("old", 0)).toBe("wrun_1");
+  expect(await find("old", 0)).toBe(old.runId);
 });
 
 test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {

@@ -89,8 +89,19 @@ export async function runStatuses(runIds: readonly string[]): Promise<Map<string
   return new Map(found.flatMap((run) => (run === null ? [] : [[run.runId, run.status]])));
 }
 
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/** When a run ID was minted: the millisecond time a ULID leads with. */
+export function runIdTime(runId: string): number | null {
+  if (!RUN_ID_SHAPE.test(runId)) return null;
+  let ms = 0;
+  for (const char of runId.slice("wrun_".length, "wrun_".length + 10))
+    ms = ms * 32 + CROCKFORD.indexOf(char);
+  return ms;
+}
+
 /**
- * The run created at or after `since` that carries this plaintext attribute, newest first.
+ * The run minted at or after `since` that carries this plaintext attribute, newest first.
  * Attributes are stored beside the run, not in its inputs, so this still finds a run
  * whose inputs the World encrypts.
  */
@@ -110,7 +121,11 @@ export async function findRunByAttribute(query: {
       pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
     });
     for (const run of page.data) {
-      if (run.createdAt < query.since) return null;
+      // The listing is ordered by run ID, and its time is minted by this
+      // process's clock. world-postgres' created_at is a zone-less timestamp
+      // that reads back hours off on a server not set to UTC.
+      const minted = runIdTime(run.runId);
+      if (minted !== null && minted < query.since.getTime()) return null;
       if (run.attributes?.[query.key] === query.value) return run.runId;
     }
     cursor = nextCursor(page, seen, "runs");

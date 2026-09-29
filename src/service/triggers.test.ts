@@ -41,7 +41,10 @@ function fakeSource() {
     provider: "github",
     params: z.object({ service: z.string() }),
     sampleInputs: { page: "P0" },
-    occurrence: (inputs) => String(inputs.page),
+    occurrence: (inputs) => {
+      if (typeof inputs.page !== "string") throw new Error("no page id in the event");
+      return inputs.page;
+    },
     poll: async (_params, since) => {
       polls.push(since);
       return queued.splice(0);
@@ -92,9 +95,11 @@ function memoryStore() {
       return T0;
     },
     unsettled: async (trigger) =>
-      [...rows.values()].filter(
-        (row) => row.trigger === trigger && row.state === "started" && row.settledAt === null,
-      ),
+      [...rows.values()]
+        .filter(
+          (row) => row.trigger === trigger && row.state === "started" && row.settledAt === null,
+        )
+        .map((row) => ({ ...row, startedAt: row.updatedAt })),
     settle: async (trigger, occurrence) => {
       const row = rows.get(key(trigger, occurrence));
       if (row?.state === "started") rows.set(key(trigger, occurrence), { ...row, settledAt: T0 });
@@ -578,6 +583,58 @@ test("an occurrence that could not be recorded is polled again, not skipped past
 
   expect(h.polls[1]?.getTime()).toBeLessThan(minutes(4).getTime());
   expect(memory.state("pages", "P9")?.state).toBe("started");
+});
+
+test("an event whose occurrence cannot be derived is passed over, not held", async () => {
+  const h = harness();
+  await h.engine.arm();
+  h.at(minutes(10));
+  h.queued.push({ inputs: {}, at: minutes(2) }, event("P1", minutes(3)));
+  await h.engine.poll("pages");
+  h.at(minutes(20));
+  await h.engine.poll("pages");
+
+  expect(h.polls[1]).toEqual(minutes(10));
+  expect(h.memory.state("pages", "P1")?.state).toBe("started");
+  expect(h.lines).toContain("[trigger] pages passed over an event: Error: no page id in the event");
+});
+
+test("a window held for an unrecorded occurrence never reaches back past the lookback", async () => {
+  const memory = memoryStore();
+  const failing: TriggerStore = {
+    ...memory.store,
+    record: async () => {
+      throw new Error("connection reset");
+    },
+  };
+  const h = harness({ store: failing });
+  await memory.store.enable("pages", minutes(-600));
+  await h.engine.arm();
+  h.queued.push(event("P1", minutes(-100)));
+  await h.engine.poll("pages");
+  await h.engine.poll("pages");
+  expect(h.polls).toEqual([minutes(-600), minutes(-60)]);
+});
+
+test("a started run the World does not hold yet still counts, until its grace passes", async () => {
+  const h = harness({ trigger: { ...pagesTrigger, maxActive: 1 } });
+  await h.engine.arm();
+  await h.memory.store.record({
+    trigger: "pages",
+    occurrence: "P0",
+    state: "pending",
+    inputs: { page: "P0" },
+    occurredAt: T0,
+  });
+  await h.memory.store.started("pages", "P0", "wrun_not_yet_written");
+  h.at(minutes(2));
+  await h.engine.push("github", { page: "P1" });
+  await h.engine.drain();
+  expect(h.starts).toEqual([]);
+
+  h.at(minutes(12));
+  await h.engine.drain();
+  expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "P1")]);
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {

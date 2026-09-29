@@ -83,10 +83,12 @@ export interface TriggerStore {
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
-  /** Mark a pending row as about to start, returning the time recorded. */
+  /** Mark a pending row as about to start, returning its first attempt's time. */
   attempt(trigger: string, occurrence: string): Promise<Date>;
   /** Started rows whose run has not been seen to finish. */
-  unsettled(trigger: string): Promise<Array<Pick<Occurrence, "occurrence" | "runId">>>;
+  unsettled(
+    trigger: string,
+  ): Promise<Array<Pick<Occurrence, "occurrence" | "runId"> & { startedAt: Date }>>;
   settle(trigger: string, occurrence: string): Promise<void>;
   started(trigger: string, occurrence: string, runId: string): Promise<void>;
   failed(trigger: string, occurrence: string, report: CheckReport): Promise<void>;
@@ -152,7 +154,10 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
     async attempt(trigger, occurrence) {
       const [updated] = await db
         .update(occurrences)
-        .set({ attemptedAt: sql`now()`, updatedAt: sql`now()` })
+        .set({
+          attemptedAt: sql`coalesce(${occurrences.attemptedAt}, now())`,
+          updatedAt: sql`now()`,
+        })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
         .returning({ attemptedAt: occurrences.attemptedAt });
       if (updated?.attemptedAt == null)
@@ -160,12 +165,23 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
       return updated.attemptedAt;
     },
     async unsettled(trigger) {
-      return db
-        .select({ occurrence: occurrences.occurrence, runId: occurrences.runId })
-        .from(occurrences)
-        .where(
-          and(ofTrigger(trigger), eq(occurrences.state, "started"), isNull(occurrences.settledAt)),
-        );
+      return (
+        db
+          // Nothing touches a started row's updated_at but its start.
+          .select({
+            occurrence: occurrences.occurrence,
+            runId: occurrences.runId,
+            startedAt: occurrences.updatedAt,
+          })
+          .from(occurrences)
+          .where(
+            and(
+              ofTrigger(trigger),
+              eq(occurrences.state, "started"),
+              isNull(occurrences.settledAt),
+            ),
+          )
+      );
     },
     async settle(trigger, occurrence) {
       await db
