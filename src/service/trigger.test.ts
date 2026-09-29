@@ -39,6 +39,16 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
   expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
 });
 
+test("attributes are seeded on the run, where encrypted inputs cannot hide them", async () => {
+  start.mockClear();
+  await startRun(factory, "run", { ticket: "abc" }, "trig", { "jigs.occurrence": "x" });
+  expect(start).toHaveBeenCalledExactlyOnceWith(
+    factory.workflows.run.workflow,
+    [{ ticket: "abc", attempts: 3, triggerId: "trig" }],
+    { attributes: { "jigs.occurrence": "x" } },
+  );
+});
+
 test("invalid inputs cannot start a run", async () => {
   start.mockClear();
   expect((await startRun(factory, "run", { ticket: 123 }, "trig")).kind).toBe("invalid-inputs");

@@ -177,9 +177,9 @@ export interface EventTrigger {
 
 /**
  * What a factory repo hands the service: its workflows, keyed by name, and
- * the schedules and event triggers that start them. A schedule is keyed by its own name rather
- * than nested under a workflow. The name is what runs, status and `jigs
- * doctor` refer to, and one workflow can carry several.
+ * the schedules and event triggers that start them. A schedule is keyed by
+ * its own name rather than nested under a workflow. The name is what runs,
+ * status and `jigs doctor` refer to, and one workflow can carry several.
  *
  * @group Factory and workflows
  */

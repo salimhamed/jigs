@@ -14,6 +14,7 @@ export async function startRun(
   workflowName: string,
   inputs: unknown,
   triggerId: string,
+  attributes?: Record<string, string>,
 ): Promise<StartRunResult> {
   const entry = factory.workflows[workflowName];
   if (!entry) {
@@ -36,6 +37,9 @@ export async function startRun(
   if (!report.ok) return { kind: "preflight-failed", report };
 
   const injection = { triggerId } satisfies Injected;
-  const run = await start(entry.workflow, [{ ...parsed.data, ...injection }]);
+  const args: [unknown] = [{ ...parsed.data, ...injection }];
+  const run = await (attributes === undefined
+    ? start(entry.workflow, args)
+    : start(entry.workflow, args, { attributes }));
   return { kind: "started", runId: run.runId };
 }

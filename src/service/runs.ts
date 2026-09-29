@@ -70,20 +70,52 @@ export function triggerLabel(triggerId: string | undefined): string {
   return MANUAL_TRIGGER;
 }
 
-/** A run an event trigger started, as the World lists it. */
-export interface TriggeredRun {
-  runId: string;
-  triggerId: string;
-  status: string;
+/** Each existing run's status by ID; a run the World does not hold is absent. Status is
+ *  never encrypted, so this answers whatever the World does with inputs. */
+export async function runStatuses(runIds: readonly string[]): Promise<Map<string, string>> {
+  if (runIds.length === 0) return new Map();
+  const runs = (await getWorld()).runs;
+  const found =
+    runs.getMany === undefined
+      ? await Promise.all(
+          runIds.map((runId) =>
+            runs.get(runId, { resolveData: "none" }).catch((error: unknown) => {
+              if (WorkflowRunNotFoundError.is(error)) return null;
+              throw error;
+            }),
+          ),
+        )
+      : await runs.getMany(runIds, { resolveData: "none" });
+  return new Map(found.flatMap((run) => (run === null ? [] : [[run.runId, run.status]])));
 }
 
-/** Every run an event trigger started, without the per-run reads `listRuns` pays for. */
-export async function listTriggeredRuns(): Promise<TriggeredRun[]> {
-  return (await worldRuns()).flatMap((run) =>
-    run.triggerId?.startsWith(EVENT_TRIGGER_PREFIX) === true
-      ? [{ runId: run.runId, triggerId: run.triggerId, status: run.status }]
-      : [],
-  );
+/**
+ * The run created at or after `since` that carries this plaintext attribute, newest first.
+ * Attributes are stored beside the run, not in its inputs, so this still finds a run
+ * whose inputs the World encrypts.
+ */
+export async function findRunByAttribute(query: {
+  workflowName?: string;
+  key: string;
+  value: string;
+  since: Date;
+}): Promise<string | null> {
+  const world = await getWorld();
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await world.runs.list({
+      ...(query.workflowName === undefined ? {} : { workflowName: query.workflowName }),
+      resolveData: "none",
+      pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
+    });
+    for (const run of page.data) {
+      if (run.createdAt < query.since) return null;
+      if (run.attributes?.[query.key] === query.value) return run.runId;
+    }
+    cursor = nextCursor(page, seen, "runs");
+  } while (cursor !== undefined);
+  return null;
 }
 
 /**

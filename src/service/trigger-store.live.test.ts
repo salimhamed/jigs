@@ -93,3 +93,22 @@ test("the first enable is kept, and advancing moves only the poll window", async
   await store.advance("pages", at(5));
   expect(await store.enable("pages", at(10))).toEqual({ enabledAt: at(0), polledThrough: at(5) });
 });
+
+test("an attempt is stamped on a pending row, and a started row settles once", async () => {
+  const store = triggerStore(db, "factory-e");
+  await store.record({
+    trigger: "pages",
+    occurrence: "P1",
+    state: "pending",
+    inputs: {},
+    occurredAt: at(0),
+  });
+  const attempted = await store.attempt("pages", "P1");
+  expect((await store.pending("pages"))[0]?.attemptedAt).toEqual(attempted);
+
+  await store.started("pages", "P1", "wrun_1");
+  expect(await store.unsettled("pages")).toEqual([{ occurrence: "P1", runId: "wrun_1" }]);
+  await store.settle("pages", "P1");
+  expect(await store.unsettled("pages")).toEqual([]);
+  await expect(store.attempt("pages", "P1")).rejects.toThrow("no longer pending");
+});

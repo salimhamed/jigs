@@ -4,6 +4,7 @@
  * @packageDocumentation
  */
 
+import { createHash } from "node:crypto";
 import type { z } from "zod";
 import { type Check, type CheckReport, failedCheck, failedChecks } from "../checks/index.ts";
 import { plainHint } from "../errors.ts";
@@ -13,14 +14,7 @@ import { finished } from "../steps/runtime/run-state.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { nudgeDelay } from "./nudge.ts";
 import { whenReady } from "./readiness.ts";
-import {
-  eventTriggerId,
-  eventTriggerLabel,
-  listRuns,
-  listTriggeredRuns,
-  type RunRow,
-  type TriggeredRun,
-} from "./runs.ts";
+import { eventTriggerId, findRunByAttribute, listRuns, runStatuses } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
 import {
   SOURCES,
@@ -49,7 +43,10 @@ export interface TriggerDeps {
   store?: TriggerStore;
   sources?: SourceRegistry;
   startRun?: typeof startRun;
-  triggeredRuns?: () => Promise<TriggeredRun[]>;
+  runStatuses?: typeof runStatuses;
+  findRunByAttribute?: typeof findRunByAttribute;
+  /** The factory slug the rows and run attributes are recorded under. */
+  factorySlug?: () => string;
   now?: () => Date;
   log?: (line: string) => void;
 }
@@ -57,14 +54,15 @@ export interface TriggerDeps {
 /** One factory's valid event triggers, ready to poll, take pushes and start runs. */
 export interface TriggerEngine {
   readonly triggers: ReadonlyArray<{ name: string; provider: SourceProvider }>;
-  /** Write each trigger's first-enabled marker, then start any leftover pending occurrence. */
+  /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
   poll(name: string): Promise<void>;
   /** Record the occurrence a pushed event is for, and return the triggers that took it. */
   push(provider: SourceProvider, event: unknown): Promise<string[]>;
   /** Start waiting occurrences, oldest first, up to each trigger's cap. */
   drain(): Promise<void>;
-  stop(): void;
+  /** Start nothing more, and settle once the drain in flight has. */
+  stop(): Promise<void>;
 }
 
 interface Armed {
@@ -74,8 +72,20 @@ interface Armed {
   params: unknown;
   maxActive: number;
   lookbackMinutes: number;
+  workflowName: string | undefined;
   marker?: TriggerMarker;
 }
+
+// A plaintext run attribute, because a World that encrypts inputs hides the
+// triggerId inside them. Hashed with the factory slug: fixed length whatever
+// the occurrence key, and never equal to another factory's.
+const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
+// The World stamps a run's creation with its own clock, the row's attempt
+// with the registry's.
+const CLOCK_SKEW_MS = 5 * 60_000;
+
+const occurrenceAttribute = (factory: string, triggerId: string): string =>
+  createHash("sha256").update(`${factory}\n${triggerId}`).digest("hex");
 
 /**
  * The engine for a factory's valid triggers. An invalid trigger is logged
@@ -86,9 +96,11 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   const log = deps.log ?? console.log;
   const now = deps.now ?? (() => new Date());
   const start = deps.startRun ?? startRun;
-  const triggeredRuns = deps.triggeredRuns ?? listTriggeredRuns;
+  const statusesOf = deps.runStatuses ?? runStatuses;
+  const findRun = deps.findRunByAttribute ?? findRunByAttribute;
+  const slug = deps.factorySlug ?? currentFactory;
   let opened: TriggerStore | undefined = deps.store;
-  const store = () => (opened ??= triggerStore(registrySql(), currentFactory()));
+  const store = () => (opened ??= triggerStore(registrySql(), slug()));
 
   const armed: Armed[] = [];
   for (const [name, trigger] of Object.entries(factory.triggers ?? {})) {
@@ -103,16 +115,17 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   const byName = new Map(armed.map((entry) => [entry.name, entry]));
 
   let stopped = false;
-  let arming: Promise<void> | undefined;
+  let marking: Promise<void> | undefined;
   let chain: Promise<void> = Promise.resolve();
 
-  const arm = () =>
-    (arming ??= (async () => {
+  // Polls and pushes wait on this alone, never on a drain: a restart with a
+  // backlog of pending rows must not hold a provider's push past its deadline.
+  const markers = () =>
+    (marking ??= (async () => {
       const at = now();
       for (const entry of armed) entry.marker = await store().enable(entry.name, at);
-      await drain();
     })().catch((error: unknown) => {
-      arming = undefined;
+      marking = undefined;
       throw error;
     }));
 
@@ -139,23 +152,42 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     return recorded && !stale;
   }
 
-  async function startWaiting(entry: Armed, rows: Occurrence[], runs: TriggeredRun[]) {
-    const prefix = `${eventTriggerLabel(entry.name)}:`;
-    const byTriggerId = new Map(runs.map((run) => [run.triggerId, run.runId]));
-    let active = runs.filter(
-      (run) => run.triggerId.startsWith(prefix) && !TERMINAL_RUN_STATUSES.has(run.status),
-    ).length;
+  // The trigger's own started rows, not a scan of the World: a run another
+  // factory started, or one whose inputs the World encrypts, cannot miscount.
+  async function activeRuns(entry: Armed): Promise<number> {
+    const started = await store().unsettled(entry.name);
+    const statuses = await statusesOf(started.flatMap((row) => (row.runId ? [row.runId] : [])));
+    let active = 0;
+    for (const row of started) {
+      const status = row.runId === null ? undefined : statuses.get(row.runId);
+      if (status !== undefined && !TERMINAL_RUN_STATUSES.has(status)) active += 1;
+      else await store().settle(entry.name, row.occurrence);
+    }
+    return active;
+  }
+
+  async function startWaiting(entry: Armed, rows: Occurrence[]) {
+    let active = await activeRuns(entry);
     for (const [index, row] of rows.entries()) {
       if (stopped) return;
       const triggerId = eventTriggerId(entry.name, row.occurrence);
-      // A crash between the start and the row's update leaves a run the World
-      // already holds; finding it by its exact triggerId is what keeps the
-      // leftover row from becoming a second run.
-      const existing = byTriggerId.get(triggerId);
-      if (existing !== undefined) {
-        await store().started(entry.name, row.occurrence, existing);
-        log(`[trigger] ${entry.name} ${row.occurrence}: run ${existing} was already started`);
-        continue;
+      const attribute = occurrenceAttribute(slug(), triggerId);
+      // Only a row whose start was attempted can have a run already: a crash
+      // or a throw between the start and the row's update. Finding that run
+      // is what keeps the leftover row from becoming a second one.
+      if (row.attemptedAt !== null) {
+        const existing = await findRun({
+          ...(entry.workflowName === undefined ? {} : { workflowName: entry.workflowName }),
+          key: OCCURRENCE_ATTRIBUTE,
+          value: attribute,
+          since: new Date(row.attemptedAt.getTime() - CLOCK_SKEW_MS),
+        });
+        if (existing !== null) {
+          await store().started(entry.name, row.occurrence, existing);
+          active += 1;
+          log(`[trigger] ${entry.name} ${row.occurrence}: run ${existing} was already started`);
+          continue;
+        }
       }
       if (active >= entry.maxActive) {
         log(
@@ -163,11 +195,13 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         );
         return;
       }
+      await store().attempt(entry.name, row.occurrence);
       const result = await start(
         factory,
         entry.trigger.workflow,
         { ...entry.trigger.inputs, ...row.inputs },
         triggerId,
+        { [OCCURRENCE_ATTRIBUTE]: attribute },
       );
       if (result.kind === "started") {
         await store().started(entry.name, row.occurrence, result.runId);
@@ -189,20 +223,17 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   // One drain at a time, so a push landing mid-drain cannot start the same
   // row twice. Nothing here throws: a rejected timer callback would take the
-  // service down, and a row left pending is retried on the next drain.
+  // service down, and a row left pending is retried on the next drain. Each
+  // trigger on its own, so one trigger's failing start holds up no other.
   async function drainOnce(): Promise<void> {
-    if (stopped) return;
-    try {
-      const waiting = await Promise.all(
-        armed.map(async (entry) => [entry, await store().pending(entry.name)] as const),
-      );
-      if (waiting.every(([, rows]) => rows.length === 0)) return;
-      const runs = await triggeredRuns();
-      for (const [entry, rows] of waiting) {
-        if (rows.length > 0) await startWaiting(entry, rows, runs);
+    for (const entry of armed) {
+      if (stopped) return;
+      try {
+        const rows = await store().pending(entry.name);
+        if (rows.length > 0) await startWaiting(entry, rows);
+      } catch (error) {
+        log(`[trigger] ${entry.name} could not start waiting occurrences: ${String(error)}`);
       }
-    } catch (error) {
-      log(`[trigger] could not start waiting occurrences: ${String(error)}`);
     }
   }
   const drain = (): Promise<void> => {
@@ -212,31 +243,48 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   return {
     triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
-    arm,
+    async arm() {
+      await markers();
+      void drain();
+    },
     drain,
     stop: () => {
       stopped = true;
+      return chain;
     },
     async poll(name) {
       const entry = byName.get(name);
       if (entry === undefined) return;
       try {
-        await arm();
+        await markers();
         const marker = entry.marker as TriggerMarker;
         // Taken before the read, so an occurrence landing during it is in the
         // next window too; the overlap is deduplicated.
         const through = now();
         const events = await entry.source.poll(entry.params, marker.polledThrough);
         let fresh = 0;
+        let unrecorded: Date | undefined;
         for (const event of events) {
           try {
             if (await observe(entry, event)) fresh += 1;
           } catch (error) {
+            if (unrecorded === undefined || event.at < unrecorded) unrecorded = event.at;
             log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
           }
         }
-        await store().advance(name, through);
-        entry.marker = { ...marker, polledThrough: through };
+        // An occurrence that could not be recorded keeps the window open
+        // behind it, so the next poll sees it again.
+        const next =
+          unrecorded === undefined
+            ? through
+            : new Date(
+                Math.max(
+                  marker.polledThrough.getTime(),
+                  Math.min(through.getTime(), unrecorded.getTime() - 1),
+                ),
+              );
+        await store().advance(name, next);
+        entry.marker = { ...marker, polledThrough: next };
         log(`[trigger] ${name}: polled, ${events.length} seen, ${fresh} new`);
       } catch (error) {
         log(`[trigger] ${name} poll failed: ${String(error)}`);
@@ -245,7 +293,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       await drain();
     },
     async push(provider, event) {
-      await arm();
+      await markers();
       const taken: string[] = [];
       for (const entry of armed) {
         if (entry.source.provider !== provider) continue;
@@ -294,12 +342,17 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
     });
   const cancels = new Map<string, () => void>();
   let stopped = false;
-  onShutdown(() => {
-    stopped = true;
-    engine.stop();
-    for (const cancel of cancels.values()) cancel();
-    if (running === engine) running = undefined;
-  });
+  // Quiesce, not close: a start still in flight needs the World and the
+  // registry pool that the close phase ends.
+  onShutdown(
+    async () => {
+      stopped = true;
+      for (const cancel of cancels.values()) cancel();
+      if (running === engine) running = undefined;
+      await engine.stop();
+    },
+    { phase: "quiesce" },
+  );
 
   const repeat = (key: string, delay: () => number, once: () => Promise<void>) => {
     const next = () => {
@@ -316,8 +369,11 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
     try {
       await (deps.ready ?? whenReady)();
       const intervals = await (deps.intervalSeconds ?? configuredIntervals)();
-      await engine.arm();
       if (stopped) return;
+      // A failed arm is retried by every poll; the timers run either way.
+      await engine.arm().catch((error: unknown) => {
+        log(`[trigger] could not enable triggers, retrying on each poll: ${String(error)}`);
+      });
       for (const { name, provider } of engine.triggers) {
         log(`[trigger] ${name} started: polls ${provider} every ${intervals[provider]}s`);
         const poll = () => engine.poll(name);
@@ -387,16 +443,20 @@ export async function listTriggers(
   if (declared.length === 0) return [];
   const store = deps.store ?? triggerStore(registrySql(), currentFactory());
   const rows = await (deps.listRuns ?? listRuns)(factory);
+  const live = new Set(rows.filter((row) => !finished(row)).map((row) => row.runId));
   return Promise.all(
     declared.map(async ([name, trigger]) => {
-      const summary = await store.summary(name, FAILURES_SHOWN);
+      const [summary, started] = await Promise.all([
+        store.summary(name, FAILURES_SHOWN),
+        store.unsettled(name),
+      ]);
       return {
         name,
         workflow: trigger.workflow,
         source: trigger.source.kind,
         lastEvent: summary.lastEvent?.toISOString() ?? null,
         pending: summary.pending,
-        active: activeRuns(rows, name),
+        active: started.filter((row) => row.runId !== null && live.has(row.runId)).length,
         failed: summary.failed,
         failures: summary.failures.map((row) => ({
           occurrence: row.occurrence,
@@ -486,7 +546,8 @@ function resolveTrigger(
       repair: `make the ${trigger.workflow} workflow's inputs accept ${Object.keys(source.sampleInputs).join(", ") || "no fields"} from the ${trigger.source.kind} source, and fix ${at}.inputs in jigs.config.ts to supply the rest`,
     };
   }
-  return { name, trigger, source, params: params.data, maxActive, lookbackMinutes };
+  const workflowName = (entry.workflow as { workflowId?: string }).workflowId;
+  return { name, trigger, source, params: params.data, maxActive, lookbackMinutes, workflowName };
 }
 
 function issues(list: z.core.$ZodIssue[]): string {
@@ -512,9 +573,4 @@ function failureReport(
     ok: false,
     checks: [{ id: `trigger.${name}`, label: `trigger ${name}`, ok: false, ...failure }],
   };
-}
-
-function activeRuns(rows: RunRow[], name: string): number {
-  const trigger = eventTriggerLabel(name);
-  return rows.filter((row) => row.trigger === trigger && !finished(row)).length;
 }

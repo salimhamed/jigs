@@ -2,7 +2,7 @@
 // trigger's polling has got to. The row, not the provider, is the dedupe
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
-import { and, asc, count, desc, eq, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, isNull, max, sql } from "drizzle-orm";
 import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../checks/index.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
@@ -22,7 +22,12 @@ export const occurrences = pgTable(
     // cap starts with what it was seen with. Fixed inputs are merged at start.
     inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    // Set just before a start is attempted: only such a pending row can have
+    // a run the World already holds.
+    attemptedAt: timestamp("attempted_at", { withTimezone: true }),
     runId: text("run_id"),
+    // When the engine saw the started run finish, so the cap stops asking.
+    settledAt: timestamp("settled_at", { withTimezone: true }),
     report: jsonb("report").$type<CheckReport>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -47,7 +52,9 @@ export interface Occurrence {
   state: OccurrenceState;
   inputs: Record<string, unknown>;
   occurredAt: Date;
+  attemptedAt: Date | null;
   runId: string | null;
+  settledAt: Date | null;
   report: CheckReport | null;
   updatedAt: Date;
 }
@@ -76,6 +83,11 @@ export interface TriggerStore {
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
+  /** Mark a pending row as about to start, returning the time recorded. */
+  attempt(trigger: string, occurrence: string): Promise<Date>;
+  /** Started rows whose run has not been seen to finish. */
+  unsettled(trigger: string): Promise<Array<Pick<Occurrence, "occurrence" | "runId">>>;
+  settle(trigger: string, occurrence: string): Promise<void>;
   started(trigger: string, occurrence: string, runId: string): Promise<void>;
   failed(trigger: string, occurrence: string, report: CheckReport): Promise<void>;
   summary(trigger: string, failures: number): Promise<TriggerSummary>;
@@ -136,6 +148,30 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .from(occurrences)
         .where(and(ofTrigger(trigger), eq(occurrences.state, "pending")))
         .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
+    },
+    async attempt(trigger, occurrence) {
+      const [updated] = await db
+        .update(occurrences)
+        .set({ attemptedAt: sql`now()`, updatedAt: sql`now()` })
+        .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
+        .returning({ attemptedAt: occurrences.attemptedAt });
+      if (updated?.attemptedAt == null)
+        throw new Error(`${trigger} ${occurrence} is no longer pending`);
+      return updated.attemptedAt;
+    },
+    async unsettled(trigger) {
+      return db
+        .select({ occurrence: occurrences.occurrence, runId: occurrences.runId })
+        .from(occurrences)
+        .where(
+          and(ofTrigger(trigger), eq(occurrences.state, "started"), isNull(occurrences.settledAt)),
+        );
+    },
+    async settle(trigger, occurrence) {
+      await db
+        .update(occurrences)
+        .set({ settledAt: sql`now()` })
+        .where(and(row(trigger, occurrence), eq(occurrences.state, "started")));
     },
     started: (trigger, occurrence, runId) =>
       settle(trigger, occurrence, { state: "started", runId }),
