@@ -22,8 +22,6 @@ world from the same worktree.
   server has a required named-tool allowlist; the adapter's generic proxy,
   namespace proxies, scripting, resources and host-config discovery are off,
   and Pi runs with its own extension, skill and project discovery disabled.
-  The adapter's temporary cache-miss `mcp` proxy is removed before every model
-  turn and blocked as a backstop.
 
 ## Consequences
 
@@ -41,7 +39,7 @@ world from the same worktree.
   server list.
 - Every harness and its MCP children run in a private process group, stopped
   when the harness exits, when its run is cancelled
-  ([0012](./0012-cancellation-stops-agents.md)), when the service shuts down
+  ([0010](./0010-cancellation-stops-agents.md)), when the service shuts down
   and when the process exits.
 - Rejected: disabling unwanted Codex servers one by one (a blocklist, blind to
   layers it cannot read and racy against hot reload), `codex exec

@@ -10,7 +10,7 @@ workflow's `requires` manifest, never hand-maintained:
   listed;
 - `bindings`: the binding is declared, jigs' clone exists and the remote
   answers (the run's `binding` input narrows this to one);
-- `harnesses` and `models`: each driver's installation and login checks;
+- `agents` and `models`: each driver's installation and login checks;
 - `aws`: `aws sts get-caller-identity` under the service's `AWS_PROFILE`.
 
 Checks run in the service process, the environment steps actually run in, not

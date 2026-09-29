@@ -6,42 +6,36 @@ and issues; the _Avoid_ lists name the words that mean something else here.
 ## Code
 
 **Workflow**: A whole process, one Workflow SDK `"use workflow"` function in a
-factory file, started by `jigs run`, a schedule or a trigger.
+factory file, started by `jigs run`, a schedule or an event trigger.
 _Avoid_: pipeline, flow, DAG
 
 **Step**: A durable operation whose attempts and result the SDK records. jigs
-ships the implementation in `src/steps/`; the factory's step wrapper gives it an
-address.
+ships the implementation; the factory's step wrapper gives it an address.
 _Avoid_: task, node, stage
 
 **Step wrapper**: A factory `"use step"` function that delegates to a library
-step. Its file path and function name are the **step id**, so renaming or moving
-one changes the address, and a jigs version bump never does.
+step. Its file path and function name are the **step id**, so moving or
+renaming one changes the address, and a jigs version bump never does.
 
 **Generated integration**: The factory's committed `jigs/` directory, written by
-`jigs generate` from the installed library. `jigs/steps.ts` holds every step
-wrapper and is the only generated file with a directive; `jigs/routines.ts`
-binds the library's routines to those wrappers. Workflows import them as
-`#jigs/steps` and `#jigs/routines`. Custom code lives outside it.
+`jigs generate`: the step wrappers, and the routines bound to them. Custom code
+lives outside it.
 
 **Routine**: A function a workflow calls that runs steps and may wait on
-something outside the run, such as `runAgent` or `watchPullRequest`. It lives
-in `src/workflow/`, has no directive and no recorded result of its own, and
-reaches a factory through the generated `jigs/routines.ts`, which binds it to
-the factory's step wrappers.
+something outside the run, such as `runAgent` or `watchPullRequest`. It has no
+directive and no recorded result of its own.
 _Avoid_: helper, primitive, sub-workflow
 
-**Workflow code**: Everything in `src/workflow/`: code that runs inside the
-workflow bundle and so must be replay-safe, with no Node built-ins, environment
-or network. Routines, descriptors, schemas and pure renderers live here.
+**Workflow code**: Code that runs inside the workflow bundle and so must be
+replay-safe, with no Node built-ins, environment or network.
 _Avoid_: block, workflow-side
 
-**Recipe**: A workflow jigs ships as source under `recipes/`, which
-`jigs recipe add` copies into a factory. Once copied it is factory code.
+**Recipe**: A workflow jigs ships as source, which `jigs recipe add` copies into
+a factory. Once copied it is factory code.
 _Avoid_: template, built-in workflow
 
-**Scaffold**: What `jigs init` writes from `templates/`: config, generated
-integration and the `hello` workflow. It presumes no process.
+**Scaffold**: What `jigs init` writes: config, the generated integration and a
+trivial workflow. It presumes no process.
 
 ## Runs
 
@@ -51,8 +45,8 @@ _Avoid_: job
 **Activation**: One execution of the workflow body after launch or a wake.
 Recorded step results replay the earlier decisions.
 
-**Snapshot**: The copy of a Linear ticket read once per activation, so every
-step in that activation sees the same ticket.
+**Snapshot**: The copy of a run's subject, such as a Linear ticket, read once
+per activation so every step in it sees the same thing.
 
 **Suspension**: A run waiting on a hook for an outside condition. It stays
 active and keeps its resources.
@@ -68,60 +62,45 @@ _Avoid_: failure, abort
 **Wake**: A signal that makes a suspended run recheck its condition: a webhook,
 the service's poll, `jigs poke` or reconciliation.
 
-**Claim**: A run-long hold on a ticket, keyed by a hook token that names the
-ticket, so a second active run cannot take it.
+**Claim**: A run-long hold on a ticket, keyed by a hook token that names it, so
+a second active run cannot take it.
 _Avoid_: lock, lease
 
 ## Resources
 
-**Binding**: A named target repository in `jigs.config.ts`, with its remote,
-merge overrides and worktree provisioning settings.
+**Binding**: A named target repository in `jigs.config.ts`, with its remote and
+how jigs merges and provisions worktrees there.
 
 **Binding clone**: The copy of a binding's repository jigs keeps and cuts
 worktrees from. Nobody edits it by hand.
 _Avoid_: mirror, bare repo
 
-**Worktree**: An agent's working copy for a run, on the run's own branch (the
-requested name plus a suffix from the run ID), forked fresh from the binding
-clone's `origin/<default>`. No other run ever uses it.
+**Worktree**: An agent's working copy for a run, on the run's own branch, cut
+fresh from the binding clone's default branch. No other run ever uses it.
 _Avoid_: checkout, workspace
 
 **Run directory**: A scratch directory held for a run, with no repository.
 
-**Run resource**: A durable thing a run owns, recorded as one row of the
-`jigs_resources` table (kind, identity, URL, state, reason): worktrees, run
-directories, harness homes, branches, pull requests. Rows stay after release
-as history. Status, release and pruning read these rows; a row is this
-factory's proof of ownership.
+**Run resource**: A durable thing a run owns, such as a worktree, harness home,
+branch or pull request, recorded as a row that stays after release as history.
+A row is this factory's proof of ownership.
 _Avoid_: artifact
 
 **Resource state**: `live`, `kept`, `released` or `failed`, with the reason. A
 run's cleanup status is its resources' states.
 
-**Resource kind**: What a resource is, and whether jigs can release it.
-`pull-request` and factory-registered kinds are recorded only and stay `live`
-as history.
-
-**Run state**: One run's resources plus its hook facts (claim, what it waits
-on), read as plain data by `readRunState`.
-
-**Registry**: The jigs tables in the World's Postgres; today only
-`jigs_resources`.
-
-**Release**: Removing a finished run's eligible resources under the factory's
-or workflow's release policy. The service applies it after a run ends and
-reconciles missed ones on a timer. Dirty or unmerged work is kept, and remote
-branches are never deleted: prune lists the ones runs left on GitHub.
-_Avoid_: teardown (for the request), gc
-
 **Kept resource**: A resource release left in place, by policy or because a
 safety check refused, such as a worktree with uncommitted work.
 _Avoid_: orphan, abandoned
 
-**Resource prune**: `jigs resources prune`: the operator's override of the
-release policy. It previews what release kept, failed or never decided for
-this factory's finished runs, and with `--apply` releases what passes the same
-safety checks as release.
+**Registry**: The jigs tables in the World's Postgres.
+
+**Release**: Removing a finished run's eligible resources under its release
+policy. Dirty or unmerged work is kept, and remote branches are never deleted.
+_Avoid_: teardown (for the request), gc
+
+**Resource prune**: `jigs resources prune`, the operator's override of the
+release policy, still bound by release's safety checks.
 _Avoid_: sweep, cleanup job
 
 ## Agents
@@ -131,23 +110,14 @@ the agent loop, tools and session.
 _Avoid_: model, backend
 
 **Harness descriptor**: The plain data a workflow builds to name a harness,
-`harnesses.claude({ model, ...settings })` and the like. For Claude Code and
-Codex it is the provider's own settings type, kept to the keys whose values are
-data and minus a policy deny list (`ClaudePolicyKey`, `CodexPolicyKey`); Pi's
-is jigs-shaped. The driver spreads the settings first and its policy last.
+such as `harnesses.claude({ model })`. For Claude Code and Codex it is the
+provider's own settings type, minus the keys jigs owns.
 _Avoid_: harness options, harness config
-
-**Agent runner**: What `createAgentRunner` in `@jigs-ai/jigs/steps` returns: a
-Claude Code or Codex harness opened inside a factory's own step, with the same
-checks, environment, lock and private home as the built-in agent step, and the
-live provider model. The built-in step runs on it too.
-_Avoid_: executor, injected dependencies
 
 **Model source**: An API endpoint that answers directly, with no agent program.
 
-**Driver**: The step-side code for one harness or model source, in
-`src/steps/agents/drivers/`: its checks, environment allowlist, how it reads a
-session reference, and supported verbs.
+**Driver**: The step-side code for one harness or model source: its checks,
+environment, session handling and supported verbs.
 _Avoid_: adapter, provider
 
 **The four verbs**: `runAgent` runs a harness in a directory with tools;
@@ -155,16 +125,16 @@ _Avoid_: adapter, provider
 source directly; `askJev` asks a model source typed yes-no, choice or score
 questions about one state.
 
-**Agent session**: One agent across several turns of a workflow, the live
-`AgentSession` from `agentSession()`. It resumes the harness session it holds,
-and starts fresh when the step reports that session unusable or the reference
-was recorded on another harness.
+**Agent runner**: A Claude Code or Codex harness opened inside a factory's own
+step, with the same checks, environment and isolation as jigs' agent step.
+_Avoid_: executor, injected dependencies
+
+**Agent session**: One agent across several turns of a workflow. It resumes the
+harness session it holds, and starts fresh when that session is unusable.
 _Avoid_: role session, resumeOrRebuild
 
-**Session reference**: The small plain data, `AgentSessionRef`, that lets a
-later step resume the same harness session: the harness kind, the provider's
-session id, and the descriptor it was recorded on. `runAgent` returns it as `session` and takes it as
-`resume`; an agent session holds one between turns.
+**Session reference**: The small plain data that lets a later step resume the
+same harness session.
 _Avoid_: session pointer, agent session (for the data)
 
 **Invocation home**: A private config directory made for one Codex or Pi
@@ -181,12 +151,40 @@ _Avoid_: server, daemon
 factory.
 _Avoid_: database, store
 
-**Up**: `jigs up`: bring install, World, migrations, build and the running
-service in line with the factory, then run doctor.
+**Up**: `jigs up`: bring install, World, build and the running service in line
+with the factory, then run doctor.
 _Avoid_: deploy
 
 **Trigger**: A request to create a run: input validation, preflight, then start.
-A wake resumes an existing run instead.
+Schedules and event triggers make one; a wake resumes an existing run instead.
+
+**Schedule**: A named cron trigger with fixed inputs. A tick is skipped while
+the schedule's previous run is still active.
+_Avoid_: cron job
+
+**Event trigger**: A named trigger that starts one run per occurrence from a
+source, with fixed inputs and a cap on its active runs. It only starts runs;
+later events on a run's resources are wakes.
+_Avoid_: webhook trigger, subscription, event router
+
+**Source**: What an event trigger watches, in the provider's own query
+parameters, such as a PagerDuty service's incidents or a Slack channel's
+messages.
+_Avoid_: filter, feed
+
+**Occurrence**: One provider event a source counts as a reason to start a run,
+such as a new incident or a top-level message. An event trigger starts at most
+one run per occurrence, ever.
+_Avoid_: event (for the deduplicated unit), delivery
+
+**Delivery kind**: How a source learns of occurrences: polling, which every
+source has, or a push kind such as a webhook or a socket.
+_Avoid_: transport, mode
+
+**Ingress**: The optional webhook routes that turn provider events into wakes
+and occurrences. The poll does the same either way; ingress only makes it
+sooner.
+_Avoid_: webhook handler
 
 **Preflight**: Checking a workflow's declared `requires` before a run exists.
 
@@ -194,12 +192,4 @@ A wake resumes an existing run instead.
 failure becomes a needs-human halt.
 
 **Check catalog**: The one set of checks and repair hints used by preflight,
-JIT checks and doctor (`src/checks/catalog.ts`).
-
-**Ingress**: The optional webhook routes that turn provider events into wakes.
-The poll wakes parked runs either way; ingress only makes it sooner.
-_Avoid_: webhook handler
-
-**Schedule**: A named cron trigger with fixed inputs. A tick is skipped while
-the schedule's previous run is still active.
-_Avoid_: cron job
+JIT checks and doctor.

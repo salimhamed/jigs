@@ -44,8 +44,7 @@ own. Markers on quoted lines are ignored.
   response is lost ends the wake quietly; the next wake finds the marker or
   posts again. A reply is delayed by at most one poll, never doubled.
 - The gate ends only when the pull request closes. An approval is a wake like
-  any other; whether it means merge now is the consumer's policy
-  (`merge.by` defaults to `"human"`).
+  any other; whether it means merge now is the consumer's policy.
 - A read-only workflow registers no hook and uses its own scope, so it never
   mistakes jigs' delivery comments for its own work.
 - Replay grows while a run is parked: each nudge appends a `hook_received`
