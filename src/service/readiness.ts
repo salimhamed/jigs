@@ -6,10 +6,15 @@
 export const READY_PHASE = "ready";
 
 let phase = "starting";
+const { promise: ready, resolve: markReady } = Promise.withResolvers<void>();
 
 export function setBootPhase(next: string): void {
   phase = next;
+  if (next === READY_PHASE) markReady();
 }
+
+/** Settles once the boot is ready; never, if it fails, because the service exits. */
+export const whenReady = (): Promise<void> => ready;
 
 export function bootPhase(): string {
   return phase;

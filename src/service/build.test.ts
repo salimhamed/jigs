@@ -33,6 +33,18 @@ test("the schedules plugin is generated beside the entry, holding the ticker", (
   expect(source).toContain("startSchedules(factory)");
 });
 
+test("the triggers plugin is generated beside the entry, and the factory carries its triggers", () => {
+  const root = factory();
+  prepare(root);
+
+  const source = readFileSync(path.join(root, GENERATED_DIR, "triggers.ts"), "utf8");
+  expect(source).toContain('from "@jigs-ai/jigs/triggers"');
+  expect(source).toContain("startTriggers(factory)");
+  expect(readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8")).toContain(
+    "triggers: definition.triggers",
+  );
+});
+
 test("preparing twice restores a hand-edited entry", () => {
   const root = factory();
   const entry = prepare(root);

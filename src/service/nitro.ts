@@ -12,6 +12,7 @@ import {
   GENERATED_DIR,
   GENERATED_ENTRY_FILE,
   GENERATED_SCHEDULES_FILE,
+  GENERATED_TRIGGERS_FILE,
 } from "./build.ts";
 
 // Nitro resolves a bare `plugins` entry against the build root, which is the
@@ -46,6 +47,7 @@ export function defineJigsService(): NitroConfig {
       startWorldPlugin,
       startDashboardPlugin,
       `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
+      `./${GENERATED_DIR}/${GENERATED_TRIGGERS_FILE}`,
       `./${GENERATED_DIR}/${GENERATED_CLEANUP_FILE}`,
     ],
     // The workflow builder's scan directory stays at its default (the whole

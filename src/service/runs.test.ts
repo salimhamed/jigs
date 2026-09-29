@@ -14,8 +14,10 @@ import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import {
   enrichSuspensions,
+  eventTriggerId,
   listRunSteps,
   listRuns,
+  listTriggeredRuns,
   runExists,
   runsWithActiveStep,
   type StepView,
@@ -388,6 +390,24 @@ test("a scheduled run names its schedule, without the tick it fired on", async (
   world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
   const rows = await listRuns(factory);
   expect(rows[0]?.trigger).toBe("schedule:nightly-sweep");
+});
+
+test("an event trigger's run names its trigger, without the occurrence", async () => {
+  const triggerId = eventTriggerId("pages", "C123:1727.0001");
+  world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
+  const rows = await listRuns(factory);
+  expect(rows[0]?.trigger).toBe("trigger:pages");
+});
+
+test("the triggered-run listing keeps event triggers' runs with their exact triggerId", async () => {
+  const triggerId = eventTriggerId("pages", "PABC123");
+  world({
+    runs: [
+      worldRun({ input: storedArgs(triggerId), status: "completed" }),
+      worldRun({ runId: RUN_B, input: storedArgs(scheduleTriggerId("n", new Date())) }),
+    ],
+  });
+  expect(await listTriggeredRuns()).toEqual([{ runId: RUN_A, triggerId, status: "completed" }]);
 });
 
 test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {

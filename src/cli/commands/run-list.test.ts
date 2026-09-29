@@ -41,7 +41,7 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
 });
 
 test("an empty service prints no runs", async () => {
-  respond({ runs: [], schedules: [] });
+  respond({ runs: [], schedules: [], triggers: [] });
   await showRuns(deps(), { now: NOW });
   expect(lines).toEqual(["no runs"]);
 });
@@ -62,6 +62,7 @@ test("a parked run names its ticket and what it waits for", async () => {
       }),
     ],
     schedules: [],
+    triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe(
@@ -79,6 +80,7 @@ test("runs are distinguished by SDK status", async () => {
       run({ runId: "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ", status: "completed" }),
     ],
     schedules: [],
+    triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[1]).toContain(" failed ");
@@ -89,6 +91,7 @@ test("--json prints the service's answer verbatim, tables and all", async () => 
   const body = {
     runs: [run({ ticket: "AGE-317" })],
     schedules: [],
+    triggers: [],
   };
   respond(body);
   await showRuns(deps(), { json: true, now: NOW });
@@ -108,6 +111,7 @@ test("a scheduled run names the schedule that fired it", async () => {
         active: RUN,
       },
     ],
+    triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[1]).toContain("schedule:nightly-sweep");
@@ -133,10 +137,49 @@ test("a declared schedule that has never fired shows dashes, not blanks", async 
         active: null,
       },
     ],
+    triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe("no runs");
   expect(lines[3]).toBe("weekly-audit  audit     nonsense  -     -");
+});
+
+test("each trigger shows its counts, and each failed occurrence its repair", async () => {
+  respond({
+    runs: [],
+    schedules: [],
+    triggers: [
+      {
+        name: "pages",
+        workflow: "respond",
+        source: "pagerduty.incidents",
+        lastEvent: "2026-08-26T11:00:00.000Z",
+        pending: 2,
+        active: 3,
+        failed: 1,
+        failures: [
+          {
+            occurrence: "PABC",
+            at: "2026-08-26T11:00:00.000Z",
+            checks: [
+              {
+                label: "GitHub identity",
+                reason: "GITHUB_TOKEN is not set",
+                repair: "set GITHUB_TOKEN in the factory repo's .env",
+              },
+            ],
+          },
+        ],
+      },
+    ],
+  });
+  await showRuns(deps(), { now: NOW });
+  expect(lines.slice(2)).toEqual([
+    "TRIGGER  WORKFLOW  SOURCE               LAST EVENT                PENDING  ACTIVE  FAILED",
+    "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
+    "FAIL pages PABC: GitHub identity: GITHUB_TOKEN is not set",
+    "  set GITHUB_TOKEN in the factory repo's .env",
+  ]);
 });
 
 test("a resource release kept is shown with its reason", async () => {
@@ -167,6 +210,7 @@ test("a resource release kept is shown with its reason", async () => {
       }),
     ],
     schedules: [],
+    triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   const resourceLine = lines.find((line) => line.includes("age-317"));

@@ -15,6 +15,13 @@
       "when": 1790380800000,
       "tag": "0001_resource_table",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1790985600000,
+      "tag": "0002_trigger_tables",
+      "breakpoints": true
     }
   ]
 }

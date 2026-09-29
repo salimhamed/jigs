@@ -39,6 +39,7 @@ export interface WorldRun {
 }
 
 const SCHEDULE_TRIGGER_PREFIX = "schedule:";
+const EVENT_TRIGGER_PREFIX = "trigger:";
 const MANUAL_TRIGGER = "manual";
 
 export const scheduleTriggerLabel = (name: string): string => `${SCHEDULE_TRIGGER_PREFIX}${name}`;
@@ -49,15 +50,40 @@ export function scheduleTriggerId(name: string, at: Date): string {
   return `${scheduleTriggerLabel(name)}:${at.toISOString().slice(0, 19)}Z`;
 }
 
-/** The `trigger` column: which schedule launched a run, or `manual`. A
- *  triggerId nothing can read — an encrypted World's inputs — reads as
- *  manual too, because that is what every other launch is. */
+export const eventTriggerLabel = (name: string): string => `${EVENT_TRIGGER_PREFIX}${name}`;
+
+/** What an event trigger's run records as its triggerId: exact, so a start
+ *  interrupted before its row was marked can be found again. */
+export const eventTriggerId = (name: string, occurrence: string): string =>
+  `${eventTriggerLabel(name)}:${occurrence}`;
+
+/** The `trigger` column: which schedule or event trigger launched a run, or
+ *  `manual`. A triggerId nothing can read — an encrypted World's inputs —
+ *  reads as manual too, because that is what every other launch is. */
 export function triggerLabel(triggerId: string | undefined): string {
-  if (triggerId === undefined || !triggerId.startsWith(SCHEDULE_TRIGGER_PREFIX))
-    return MANUAL_TRIGGER;
-  const rest = triggerId.slice(SCHEDULE_TRIGGER_PREFIX.length);
-  const end = rest.indexOf(":");
-  return scheduleTriggerLabel(end === -1 ? rest : rest.slice(0, end));
+  for (const prefix of [SCHEDULE_TRIGGER_PREFIX, EVENT_TRIGGER_PREFIX]) {
+    if (triggerId?.startsWith(prefix) !== true) continue;
+    const rest = triggerId.slice(prefix.length);
+    const end = rest.indexOf(":");
+    return `${prefix}${end === -1 ? rest : rest.slice(0, end)}`;
+  }
+  return MANUAL_TRIGGER;
+}
+
+/** A run an event trigger started, as the World lists it. */
+export interface TriggeredRun {
+  runId: string;
+  triggerId: string;
+  status: string;
+}
+
+/** Every run an event trigger started, without the per-run reads `listRuns` pays for. */
+export async function listTriggeredRuns(): Promise<TriggeredRun[]> {
+  return (await worldRuns()).flatMap((run) =>
+    run.triggerId?.startsWith(EVENT_TRIGGER_PREFIX) === true
+      ? [{ runId: run.runId, triggerId: run.triggerId, status: run.status }]
+      : [],
+  );
 }
 
 /**

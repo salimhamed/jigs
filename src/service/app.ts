@@ -27,6 +27,7 @@ import { bootPhase, isReady } from "./readiness.ts";
 import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { startRun } from "./trigger.ts";
+import { listTriggers, triggerChecks } from "./triggers.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -117,7 +118,13 @@ export function createApp(factory: Factory): Hono {
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
-    c.json(await runChecks([...doctorChecks(factory.workflows), ...scheduleChecks(factory)])),
+    c.json(
+      await runChecks([
+        ...doctorChecks(factory.workflows),
+        ...scheduleChecks(factory),
+        ...triggerChecks(factory),
+      ]),
+    ),
   );
 
   // The ingress is stateless: verify, reconstruct the token, resume. A
@@ -163,7 +170,8 @@ export function createApp(factory: Factory): Hono {
     const schedules = await listSchedules(factory, {
       listRuns: async () => runs,
     });
-    return c.json({ runs, schedules });
+    const triggers = await listTriggers(factory, { listRuns: async () => runs });
+    return c.json({ runs, schedules, triggers });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum

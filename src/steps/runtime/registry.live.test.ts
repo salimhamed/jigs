@@ -66,13 +66,17 @@ const tables = async (target: RegistrySql) =>
 const migrations = async (target: RegistrySql) =>
   (await target.$client.query("SELECT id FROM jigs_drizzle.jigs_migrations")).rows;
 
-test("a fresh database gets the resource table, twice without change", async () => {
+test("a fresh database gets the resource and trigger tables, twice without change", async () => {
   const fresh = await freshDatabase();
   try {
     await ensureRegistry(fresh.db);
     await ensureRegistry(fresh.db);
-    expect(await tables(fresh.db)).toEqual(["jigs_resources"]);
-    expect(await migrations(fresh.db)).toHaveLength(2);
+    expect(await tables(fresh.db)).toEqual([
+      "jigs_resources",
+      "jigs_trigger_markers",
+      "jigs_triggers",
+    ]);
+    expect(await migrations(fresh.db)).toHaveLength(3);
   } finally {
     await fresh.db.$client.end();
   }
@@ -108,8 +112,12 @@ test("a database with the old worktree table loses it without touching World his
 
     await migrateRegistry(old.url);
 
-    expect(await tables(old.db)).toEqual(["jigs_resources"]);
-    expect(await migrations(old.db)).toHaveLength(2);
+    expect(await tables(old.db)).toEqual([
+      "jigs_resources",
+      "jigs_trigger_markers",
+      "jigs_triggers",
+    ]);
+    expect(await migrations(old.db)).toHaveLength(3);
     expect(
       (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
     ).toEqual([{ id: 42, hash: "world" }]);

@@ -142,8 +142,42 @@ export interface Schedule {
 }
 
 /**
+ * What an event trigger watches: a source kind and the provider's own query
+ * parameters for it. Plain data, so it can sit in `jigs.config.ts`; a source's
+ * constructor builds it.
+ *
+ * @group Factory and workflows
+ */
+export interface SourceDescriptor {
+  kind: string;
+  params: Record<string, unknown>;
+}
+
+/**
+ * A trigger that starts one run per occurrence its source reports, at most
+ * once per occurrence. Each run gets the reference the source hands it,
+ * merged over the fixed `inputs`.
+ *
+ * @remarks
+ * A new trigger starts from the moment the service first runs it, with no
+ * backfill. After the service was down, it starts runs only for occurrences
+ * within `lookbackMinutes` and records older ones as skipped.
+ *
+ * @group Factory and workflows
+ */
+export interface EventTrigger {
+  workflow: string;
+  source: SourceDescriptor;
+  inputs?: Record<string, unknown>;
+  /** Runs of this trigger active at once. Defaults to 3; further occurrences wait, oldest first. */
+  maxActive?: number;
+  /** How far back to catch up after the service was down. Defaults to 60. */
+  lookbackMinutes?: number;
+}
+
+/**
  * What a factory repo hands the service: its workflows, keyed by name, and
- * the schedules that fire them. A schedule is keyed by its own name rather
+ * the schedules and event triggers that start them. A schedule is keyed by its own name rather
  * than nested under a workflow. The name is what runs, status and `jigs
  * doctor` refer to, and one workflow can carry several.
  *
@@ -152,6 +186,7 @@ export interface Schedule {
 export interface Factory {
   workflows: Record<string, AnyWorkflowDefinition>;
   schedules?: Record<string, Schedule>;
+  triggers?: Record<string, EventTrigger>;
   /** Which provider webhook routes the service mounts. Absent, it mounts none. */
   webhooks?: WebhooksDefinition;
 }
@@ -290,6 +325,7 @@ export interface FactoryDefinition {
   bindings?: Record<string, BindingDefinition>;
   workflows: Record<string, () => Promise<{ default: AnyWorkflowDefinition }>>;
   schedules?: Record<string, Schedule>;
+  triggers?: Record<string, EventTrigger>;
 }
 
 /**

@@ -1,0 +1,520 @@
+/**
+ * Start runs from the event triggers a factory declares, and inspect them.
+ *
+ * @packageDocumentation
+ */
+
+import type { z } from "zod";
+import { type Check, type CheckReport, failedCheck, failedChecks } from "../checks/index.ts";
+import { plainHint } from "../errors.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import { currentFactory, registrySql } from "../steps/runtime/registry.ts";
+import { finished } from "../steps/runtime/run-state.ts";
+import type { EventTrigger, Factory } from "../workflow/factory.ts";
+import { nudgeDelay } from "./nudge.ts";
+import { whenReady } from "./readiness.ts";
+import {
+  eventTriggerId,
+  eventTriggerLabel,
+  listRuns,
+  listTriggeredRuns,
+  type RunRow,
+  type TriggeredRun,
+} from "./runs.ts";
+import { onShutdown } from "./shutdown.ts";
+import {
+  SOURCES,
+  type Source,
+  type SourceEvent,
+  type SourceProvider,
+  type SourceRegistry,
+} from "./sources.ts";
+import { type StartRunResult, startRun } from "./trigger.ts";
+import {
+  type Occurrence,
+  type TriggerMarker,
+  type TriggerStore,
+  triggerStore,
+} from "./trigger-store.ts";
+
+const DEFAULT_MAX_ACTIVE = 3;
+const DEFAULT_LOOKBACK_MINUTES = 60;
+// How soon an occurrence waiting on the cap notices a run finishing. While
+// nothing waits, each check is one read of the pending rows.
+const DRAIN_INTERVAL_MS = 30_000;
+const FAILURES_SHOWN = 5;
+
+/** Injectable storage, sources, run operations and logging used by the trigger engine. */
+export interface TriggerDeps {
+  store?: TriggerStore;
+  sources?: SourceRegistry;
+  startRun?: typeof startRun;
+  triggeredRuns?: () => Promise<TriggeredRun[]>;
+  now?: () => Date;
+  log?: (line: string) => void;
+}
+
+/** One factory's valid event triggers, ready to poll, take pushes and start runs. */
+export interface TriggerEngine {
+  readonly triggers: ReadonlyArray<{ name: string; provider: SourceProvider }>;
+  /** Write each trigger's first-enabled marker, then start any leftover pending occurrence. */
+  arm(): Promise<void>;
+  poll(name: string): Promise<void>;
+  /** Record the occurrence a pushed event is for, and return the triggers that took it. */
+  push(provider: SourceProvider, event: unknown): Promise<string[]>;
+  /** Start waiting occurrences, oldest first, up to each trigger's cap. */
+  drain(): Promise<void>;
+  stop(): void;
+}
+
+interface Armed {
+  name: string;
+  trigger: EventTrigger;
+  source: Source;
+  params: unknown;
+  maxActive: number;
+  lookbackMinutes: number;
+  marker?: TriggerMarker;
+}
+
+/**
+ * The engine for a factory's valid triggers. An invalid trigger is logged
+ * with its repair and left out: the service still starts, and `jigs doctor`
+ * reports the same failure on demand.
+ */
+export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): TriggerEngine {
+  const log = deps.log ?? console.log;
+  const now = deps.now ?? (() => new Date());
+  const start = deps.startRun ?? startRun;
+  const triggeredRuns = deps.triggeredRuns ?? listTriggeredRuns;
+  let opened: TriggerStore | undefined = deps.store;
+  const store = () => (opened ??= triggerStore(registrySql(), currentFactory()));
+
+  const armed: Armed[] = [];
+  for (const [name, trigger] of Object.entries(factory.triggers ?? {})) {
+    const resolved = resolveTrigger(factory, name, trigger, deps.sources ?? SOURCES);
+    if ("reason" in resolved) {
+      log(`[trigger] ${name} not started: ${resolved.reason}`);
+      log(plainHint(resolved.repair));
+      continue;
+    }
+    armed.push(resolved);
+  }
+  const byName = new Map(armed.map((entry) => [entry.name, entry]));
+
+  let stopped = false;
+  let arming: Promise<void> | undefined;
+  let chain: Promise<void> = Promise.resolve();
+
+  const arm = () =>
+    (arming ??= (async () => {
+      const at = now();
+      for (const entry of armed) entry.marker = await store().enable(entry.name, at);
+      await drain();
+    })().catch((error: unknown) => {
+      arming = undefined;
+      throw error;
+    }));
+
+  // Occurrences before the trigger was first enabled are not its business at
+  // all; ones older than the lookback are recorded so they are never started.
+  async function observe(entry: Armed, event: SourceEvent): Promise<boolean> {
+    const enabledAt = entry.marker?.enabledAt;
+    if (enabledAt === undefined || event.at < enabledAt) return false;
+    const occurrence = entry.source.occurrence(event.inputs);
+    const stale = event.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
+    const state = stale ? "skipped" : "pending";
+    const recorded = await store().record({
+      trigger: entry.name,
+      occurrence,
+      state,
+      inputs: event.inputs,
+      occurredAt: event.at,
+    });
+    if (recorded && stale) {
+      log(
+        `[trigger] ${entry.name} ${occurrence} skipped: older than its ${entry.lookbackMinutes}-minute lookback`,
+      );
+    }
+    return recorded && !stale;
+  }
+
+  async function startWaiting(entry: Armed, rows: Occurrence[], runs: TriggeredRun[]) {
+    const prefix = `${eventTriggerLabel(entry.name)}:`;
+    const byTriggerId = new Map(runs.map((run) => [run.triggerId, run.runId]));
+    let active = runs.filter(
+      (run) => run.triggerId.startsWith(prefix) && !TERMINAL_RUN_STATUSES.has(run.status),
+    ).length;
+    for (const [index, row] of rows.entries()) {
+      if (stopped) return;
+      const triggerId = eventTriggerId(entry.name, row.occurrence);
+      // A crash between the start and the row's update leaves a run the World
+      // already holds; finding it by its exact triggerId is what keeps the
+      // leftover row from becoming a second run.
+      const existing = byTriggerId.get(triggerId);
+      if (existing !== undefined) {
+        await store().started(entry.name, row.occurrence, existing);
+        log(`[trigger] ${entry.name} ${row.occurrence}: run ${existing} was already started`);
+        continue;
+      }
+      if (active >= entry.maxActive) {
+        log(
+          `[trigger] ${entry.name}: ${rows.length - index} waiting, ${active} of ${entry.maxActive} runs active`,
+        );
+        return;
+      }
+      const result = await start(
+        factory,
+        entry.trigger.workflow,
+        { ...entry.trigger.inputs, ...row.inputs },
+        triggerId,
+      );
+      if (result.kind === "started") {
+        await store().started(entry.name, row.occurrence, result.runId);
+        active += 1;
+        log(
+          `[trigger] ${entry.name} ${row.occurrence}: run ${result.runId} of ${entry.trigger.workflow}`,
+        );
+        continue;
+      }
+      const report = failureReport(entry.name, result);
+      await store().failed(entry.name, row.occurrence, report);
+      log(
+        `[trigger] ${entry.name} ${row.occurrence} failed: ${failedChecks(report)
+          .map((check) => `${check.label}: ${check.reason}`)
+          .join("; ")}`,
+      );
+    }
+  }
+
+  // One drain at a time, so a push landing mid-drain cannot start the same
+  // row twice. Nothing here throws: a rejected timer callback would take the
+  // service down, and a row left pending is retried on the next drain.
+  async function drainOnce(): Promise<void> {
+    if (stopped) return;
+    try {
+      const waiting = await Promise.all(
+        armed.map(async (entry) => [entry, await store().pending(entry.name)] as const),
+      );
+      if (waiting.every(([, rows]) => rows.length === 0)) return;
+      const runs = await triggeredRuns();
+      for (const [entry, rows] of waiting) {
+        if (rows.length > 0) await startWaiting(entry, rows, runs);
+      }
+    } catch (error) {
+      log(`[trigger] could not start waiting occurrences: ${String(error)}`);
+    }
+  }
+  const drain = (): Promise<void> => {
+    chain = chain.then(drainOnce);
+    return chain;
+  };
+
+  return {
+    triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
+    arm,
+    drain,
+    stop: () => {
+      stopped = true;
+    },
+    async poll(name) {
+      const entry = byName.get(name);
+      if (entry === undefined) return;
+      try {
+        await arm();
+        const marker = entry.marker as TriggerMarker;
+        // Taken before the read, so an occurrence landing during it is in the
+        // next window too; the overlap is deduplicated.
+        const through = now();
+        const events = await entry.source.poll(entry.params, marker.polledThrough);
+        let fresh = 0;
+        for (const event of events) {
+          try {
+            if (await observe(entry, event)) fresh += 1;
+          } catch (error) {
+            log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
+          }
+        }
+        await store().advance(name, through);
+        entry.marker = { ...marker, polledThrough: through };
+        log(`[trigger] ${name}: polled, ${events.length} seen, ${fresh} new`);
+      } catch (error) {
+        log(`[trigger] ${name} poll failed: ${String(error)}`);
+        return;
+      }
+      await drain();
+    },
+    async push(provider, event) {
+      await arm();
+      const taken: string[] = [];
+      for (const entry of armed) {
+        if (entry.source.provider !== provider) continue;
+        try {
+          const occurrence = entry.source.fromPush(entry.params, event);
+          if (occurrence !== null && (await observe(entry, occurrence))) taken.push(entry.name);
+        } catch (error) {
+          log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
+        }
+      }
+      // Not awaited: a provider wants its answer in seconds, and the row
+      // already recorded is what makes the start certain.
+      if (taken.length > 0) void drain();
+      return taken;
+    },
+  };
+}
+
+/** Injectable timers, readiness and intervals, on top of the engine's own dependencies. */
+export interface StartTriggersDeps extends TriggerDeps {
+  intervalSeconds?: () => Promise<Record<SourceProvider, number>>;
+  ready?: () => Promise<void>;
+  random?: () => number;
+  /** Schedules one call and returns its canceller. */
+  setTimer?: (fire: () => void, ms: number) => () => void;
+}
+
+let running: TriggerEngine | undefined;
+
+/**
+ * Starts the factory's event triggers once the service is ready: leftover
+ * pending occurrences first, then a poll per trigger on its provider's
+ * interval, until the service shuts down.
+ */
+export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): TriggerEngine {
+  const engine = createTriggerEngine(factory, deps);
+  if (engine.triggers.length === 0) return engine;
+  running = engine;
+  const log = deps.log ?? console.log;
+  const setTimer =
+    deps.setTimer ??
+    ((fire: () => void, ms: number) => {
+      const timer = setTimeout(fire, ms);
+      timer.unref?.();
+      return () => clearTimeout(timer);
+    });
+  const cancels = new Map<string, () => void>();
+  let stopped = false;
+  onShutdown(() => {
+    stopped = true;
+    engine.stop();
+    for (const cancel of cancels.values()) cancel();
+    if (running === engine) running = undefined;
+  });
+
+  const repeat = (key: string, delay: () => number, once: () => Promise<void>) => {
+    const next = () => {
+      if (!stopped)
+        cancels.set(
+          key,
+          setTimer(() => void once().then(next), delay()),
+        );
+    };
+    return next;
+  };
+
+  void (async () => {
+    try {
+      await (deps.ready ?? whenReady)();
+      const intervals = await (deps.intervalSeconds ?? configuredIntervals)();
+      await engine.arm();
+      if (stopped) return;
+      for (const { name, provider } of engine.triggers) {
+        log(`[trigger] ${name} started: polls ${provider} every ${intervals[provider]}s`);
+        const poll = () => engine.poll(name);
+        // At once too: an occurrence from while the service was down is only
+        // found by a poll.
+        void poll().then(
+          repeat(`poll:${name}`, () => nudgeDelay(intervals[provider], deps.random), poll),
+        );
+      }
+      repeat("drain", () => DRAIN_INTERVAL_MS, engine.drain)();
+    } catch (error) {
+      log(`[trigger] event triggers not started: ${String(error)}`);
+    }
+  })();
+  return engine;
+}
+
+/**
+ * Hand a provider's pushed event to the running event triggers watching that
+ * provider. It returns once the occurrence is recorded, before any run starts,
+ * with the names of the triggers that took it.
+ */
+export async function pushEvent(provider: SourceProvider, event: unknown): Promise<string[]> {
+  return running === undefined ? [] : running.push(provider, event);
+}
+
+async function configuredIntervals(): Promise<Record<SourceProvider, number>> {
+  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
+    import("../config/factory-config.ts"),
+    import("../config/factory-root.ts"),
+  ]);
+  return readFactoryConfig(factoryRoot()).service.pollIntervalSeconds;
+}
+
+/** One failed occurrence, with the checks that refused its run. */
+export interface TriggerFailure {
+  occurrence: string;
+  at: string;
+  checks: Array<{ label: string; reason: string; repair: string }>;
+}
+
+/** Operator-facing state for one declared event trigger. */
+export interface TriggerView {
+  name: string;
+  workflow: string;
+  source: string;
+  lastEvent: string | null;
+  pending: number;
+  active: number;
+  failed: number;
+  /** The most recent failures, newest first. */
+  failures: TriggerFailure[];
+}
+
+/** Injectable storage and run listing used by the trigger listing. */
+export interface ListTriggersDeps {
+  store?: TriggerStore;
+  listRuns?: typeof listRuns;
+}
+
+/** What `jigs status` shows for each declared trigger, valid or not. */
+export async function listTriggers(
+  factory: Factory,
+  deps: ListTriggersDeps = {},
+): Promise<TriggerView[]> {
+  const declared = Object.entries(factory.triggers ?? {});
+  if (declared.length === 0) return [];
+  const store = deps.store ?? triggerStore(registrySql(), currentFactory());
+  const rows = await (deps.listRuns ?? listRuns)(factory);
+  return Promise.all(
+    declared.map(async ([name, trigger]) => {
+      const summary = await store.summary(name, FAILURES_SHOWN);
+      return {
+        name,
+        workflow: trigger.workflow,
+        source: trigger.source.kind,
+        lastEvent: summary.lastEvent?.toISOString() ?? null,
+        pending: summary.pending,
+        active: activeRuns(rows, name),
+        failed: summary.failed,
+        failures: summary.failures.map((row) => ({
+          occurrence: row.occurrence,
+          at: row.updatedAt.toISOString(),
+          checks: row.report === null ? [] : failedChecks(row.report),
+        })),
+      };
+    }),
+  );
+}
+
+/** Doctor's half: the same validations the engine refuses a trigger on, one check per trigger. */
+export function triggerChecks(factory: Factory, sources: SourceRegistry = SOURCES): Check[] {
+  return Object.entries(factory.triggers ?? {}).map(([name, trigger]) => {
+    const id = `trigger.${name}`;
+    const label = `trigger ${name}`;
+    const resolved = resolveTrigger(factory, name, trigger, sources);
+    return "reason" in resolved
+      ? failedCheck(id, label, resolved.reason, resolved.repair)
+      : { id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) };
+  });
+}
+
+interface TriggerProblem {
+  reason: string;
+  repair: string;
+}
+
+function resolveTrigger(
+  factory: Factory,
+  name: string,
+  trigger: EventTrigger,
+  sources: SourceRegistry,
+): Armed | TriggerProblem {
+  const at = `triggers.${name}`;
+  // The occurrence follows the name after a ":", and the trigger column reads
+  // the name back by splitting on the first one.
+  if (name.includes(":")) {
+    return {
+      reason: `trigger name "${name}" contains ":"`,
+      repair: `rename the "${name}" trigger in jigs.config.ts to a name without ":"\na run's trigger id is read back out of the name`,
+    };
+  }
+  const entry = factory.workflows[trigger.workflow];
+  if (!entry) {
+    return {
+      reason: `workflow "${trigger.workflow}" is not one of this factory's workflows`,
+      repair: `set ${at}.workflow in jigs.config.ts to one of: ${Object.keys(factory.workflows).join(", ")}`,
+    };
+  }
+  const source = sources[trigger.source.kind];
+  if (source === undefined) {
+    const known = Object.keys(sources);
+    return {
+      reason: `source "${trigger.source.kind}" is not a source this jigs version provides`,
+      repair:
+        known.length === 0
+          ? `remove the "${name}" trigger from jigs.config.ts\nthis jigs version provides no sources; upgrade jigs for the one it names`
+          : `set ${at}.source in jigs.config.ts to one of: ${known.join(", ")}`,
+    };
+  }
+  const params = source.params.safeParse(trigger.source.params);
+  if (!params.success) {
+    return {
+      reason: `source params do not satisfy ${trigger.source.kind}: ${issues(params.error.issues)}`,
+      repair: `fix ${at}.source in jigs.config.ts`,
+    };
+  }
+  const maxActive = trigger.maxActive ?? DEFAULT_MAX_ACTIVE;
+  if (!Number.isInteger(maxActive) || maxActive < 1) {
+    return {
+      reason: `maxActive ${maxActive} is not a whole number of at least 1`,
+      repair: `set ${at}.maxActive in jigs.config.ts to 1 or more, or remove it for the default of ${DEFAULT_MAX_ACTIVE}`,
+    };
+  }
+  const lookbackMinutes = trigger.lookbackMinutes ?? DEFAULT_LOOKBACK_MINUTES;
+  if (!Number.isFinite(lookbackMinutes) || lookbackMinutes <= 0) {
+    return {
+      reason: `lookbackMinutes ${lookbackMinutes} is not a positive number of minutes`,
+      repair: `set ${at}.lookbackMinutes in jigs.config.ts above 0, or remove it for the default of ${DEFAULT_LOOKBACK_MINUTES}`,
+    };
+  }
+  const inputs = entry.inputs.safeParse({ ...trigger.inputs, ...source.sampleInputs });
+  if (!inputs.success) {
+    return {
+      reason: `the ${trigger.workflow} workflow does not accept what this trigger hands it: ${issues(inputs.error.issues)}`,
+      repair: `make the ${trigger.workflow} workflow's inputs accept ${Object.keys(source.sampleInputs).join(", ") || "no fields"} from the ${trigger.source.kind} source, and fix ${at}.inputs in jigs.config.ts to supply the rest`,
+    };
+  }
+  return { name, trigger, source, params: params.data, maxActive, lookbackMinutes };
+}
+
+function issues(list: z.core.$ZodIssue[]): string {
+  return list.map((issue) => `${issue.path.join(".") || "(root)"} ${issue.message}`).join("; ");
+}
+
+function failureReport(
+  name: string,
+  result: Exclude<StartRunResult, { kind: "started" }>,
+): CheckReport {
+  if (result.kind === "preflight-failed") return result.report;
+  const failure =
+    result.kind === "unknown-workflow"
+      ? {
+          reason: `its workflow is not one of this factory's workflows (known: ${result.knownWorkflows.join(", ")})`,
+          repair: `set triggers.${name}.workflow in jigs.config.ts to one of: ${result.knownWorkflows.join(", ")}`,
+        }
+      : {
+          reason: `invalid inputs: ${issues(result.issues)}`,
+          repair: `fix triggers.${name}.inputs in jigs.config.ts to satisfy its workflow's inputs`,
+        };
+  return {
+    ok: false,
+    checks: [{ id: `trigger.${name}`, label: `trigger ${name}`, ok: false, ...failure }],
+  };
+}
+
+function activeRuns(rows: RunRow[], name: string): number {
+  const trigger = eventTriggerLabel(name);
+  return rows.filter((row) => row.trigger === trigger && !finished(row)).length;
+}

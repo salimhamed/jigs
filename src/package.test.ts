@@ -108,7 +108,14 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
 
 test("the root, the routines entry, the steps entry and the seven step topics are the factory's subpaths", () => {
   const topics = ["agents", "human", "linear", "pull-requests", "workspaces", "git", "runtime"];
-  const service = ["./app", "./nitro", "./schedules", "./automatic-release", "./build"];
+  const service = [
+    "./app",
+    "./nitro",
+    "./schedules",
+    "./triggers",
+    "./automatic-release",
+    "./build",
+  ];
   const plugins = ["./plugins/start-world", "./plugins/start-dashboard"];
   expect(Object.keys(pkg.exports).sort()).toEqual(
     [

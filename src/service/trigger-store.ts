@@ -1,0 +1,166 @@
+// The event triggers' record of every occurrence they saw, and where each
+// trigger's polling has got to. The row, not the provider, is the dedupe
+// record: a run that decides to do nothing leaves no trace anywhere else.
+
+import { and, asc, count, desc, eq, max, sql } from "drizzle-orm";
+import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import type { CheckReport } from "../checks/index.ts";
+import type { RegistrySql } from "../steps/runtime/registry.ts";
+
+export type OccurrenceState = "pending" | "started" | "failed" | "skipped";
+
+// Keyed by factory like jigs_resources: several factories may share one
+// database, and every query filters on the factory.
+export const occurrences = pgTable(
+  "jigs_triggers",
+  {
+    factory: text("factory").notNull(),
+    trigger: text("trigger").notNull(),
+    occurrence: text("occurrence").notNull(),
+    state: text("state").$type<OccurrenceState>().notNull(),
+    // The source's reference, kept so a row that waits past a restart or the
+    // cap starts with what it was seen with. Fixed inputs are merged at start.
+    inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
+    occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
+    runId: text("run_id"),
+    report: jsonb("report").$type<CheckReport>(),
+    createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.factory, table.trigger, table.occurrence] })],
+);
+
+export const markers = pgTable(
+  "jigs_trigger_markers",
+  {
+    factory: text("factory").notNull(),
+    trigger: text("trigger").notNull(),
+    enabledAt: timestamp("enabled_at", { withTimezone: true }).notNull(),
+    polledThrough: timestamp("polled_through", { withTimezone: true }).notNull(),
+  },
+  (table) => [primaryKey({ columns: [table.factory, table.trigger] })],
+);
+
+export interface Occurrence {
+  trigger: string;
+  occurrence: string;
+  state: OccurrenceState;
+  inputs: Record<string, unknown>;
+  occurredAt: Date;
+  runId: string | null;
+  report: CheckReport | null;
+  updatedAt: Date;
+}
+
+export interface TriggerMarker {
+  enabledAt: Date;
+  polledThrough: Date;
+}
+
+export interface TriggerSummary {
+  lastEvent: Date | null;
+  pending: number;
+  failed: number;
+  /** The most recent failed rows, newest first. */
+  failures: Occurrence[];
+}
+
+/** What the trigger engine reads and writes, over one factory's rows. */
+export interface TriggerStore {
+  /** The trigger's marker, written as `now` the first time it is asked for. */
+  enable(trigger: string, now: Date): Promise<TriggerMarker>;
+  advance(trigger: string, polledThrough: Date): Promise<void>;
+  /** Insert the row unless the occurrence is already recorded; true when it was new. */
+  record(
+    row: Pick<Occurrence, "trigger" | "occurrence" | "state" | "inputs" | "occurredAt">,
+  ): Promise<boolean>;
+  /** Oldest occurrence first. */
+  pending(trigger: string): Promise<Occurrence[]>;
+  started(trigger: string, occurrence: string, runId: string): Promise<void>;
+  failed(trigger: string, occurrence: string, report: CheckReport): Promise<void>;
+  summary(trigger: string, failures: number): Promise<TriggerSummary>;
+}
+
+export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
+  const row = (trigger: string, occurrence: string) =>
+    and(
+      eq(occurrences.factory, factory),
+      eq(occurrences.trigger, trigger),
+      eq(occurrences.occurrence, occurrence),
+    );
+  const ofTrigger = (trigger: string) =>
+    and(eq(occurrences.factory, factory), eq(occurrences.trigger, trigger));
+  // Only a pending row moves: a second writer can never turn a started row
+  // back into a failed one, or restart it.
+  const settle = async (
+    trigger: string,
+    occurrence: string,
+    set: Pick<Occurrence, "state"> & Partial<Pick<Occurrence, "runId" | "report">>,
+  ) => {
+    await db
+      .update(occurrences)
+      .set({ ...set, updatedAt: sql`now()` })
+      .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")));
+  };
+
+  return {
+    async enable(trigger, now) {
+      await db
+        .insert(markers)
+        .values({ factory, trigger, enabledAt: now, polledThrough: now })
+        .onConflictDoNothing();
+      const [marker] = await db
+        .select({ enabledAt: markers.enabledAt, polledThrough: markers.polledThrough })
+        .from(markers)
+        .where(and(eq(markers.factory, factory), eq(markers.trigger, trigger)));
+      if (marker === undefined) throw new Error(`trigger ${trigger} has no marker after enabling`);
+      return marker;
+    },
+    async advance(trigger, polledThrough) {
+      await db
+        .update(markers)
+        .set({ polledThrough })
+        .where(and(eq(markers.factory, factory), eq(markers.trigger, trigger)));
+    },
+    async record(occurrence) {
+      const inserted = await db
+        .insert(occurrences)
+        .values({ factory, ...occurrence })
+        .onConflictDoNothing()
+        .returning({ occurrence: occurrences.occurrence });
+      return inserted.length > 0;
+    },
+    async pending(trigger) {
+      return db
+        .select()
+        .from(occurrences)
+        .where(and(ofTrigger(trigger), eq(occurrences.state, "pending")))
+        .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
+    },
+    started: (trigger, occurrence, runId) =>
+      settle(trigger, occurrence, { state: "started", runId }),
+    failed: (trigger, occurrence, report) =>
+      settle(trigger, occurrence, { state: "failed", report }),
+    async summary(trigger, failures) {
+      const counts = await db
+        .select({ state: occurrences.state, rows: count(), last: max(occurrences.occurredAt) })
+        .from(occurrences)
+        .where(ofTrigger(trigger))
+        .groupBy(occurrences.state);
+      const recent = await db
+        .select()
+        .from(occurrences)
+        .where(and(ofTrigger(trigger), eq(occurrences.state, "failed")))
+        .orderBy(desc(occurrences.updatedAt))
+        .limit(failures);
+      const rows = (state: OccurrenceState) => counts.find((c) => c.state === state)?.rows ?? 0;
+      const lasts = counts.flatMap((c) => (c.last === null ? [] : [c.last.getTime()]));
+      return {
+        lastEvent: lasts.length === 0 ? null : new Date(Math.max(...lasts)),
+        pending: rows("pending"),
+        failed: rows("failed"),
+        failures: recent,
+      };
+    },
+  };
+}

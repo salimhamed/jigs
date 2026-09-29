@@ -63,6 +63,7 @@ test("public package docs exclude service plumbing and the empty human module", 
     "./nitro",
     "./build",
     "./schedules",
+    "./triggers",
     "./plugins/start-world",
     "./routines",
   ];

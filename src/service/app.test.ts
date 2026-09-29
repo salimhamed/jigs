@@ -608,7 +608,7 @@ test("health outside a factory reports a null root rather than failing liveness"
 test("GET /api/runs answers with empty runs when nothing has launched", async () => {
   const res = await app.request("/api/runs");
   expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ runs: [], schedules: [] });
+  expect(await res.json()).toEqual({ runs: [], schedules: [], triggers: [] });
 });
 
 test("GET /api/runs lists each run with the resources it recorded and their states", async () => {
