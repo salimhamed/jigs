@@ -7,7 +7,7 @@
 // ../../steps/agents/execute-agent.ts is the step side of the same split.
 
 import type { FailedCheck } from "../../checks/catalog.ts";
-import { resumeFailed } from "./agent-session.ts";
+import { isResumeFailed, resumeFailed } from "./agent-session.ts";
 import {
   type AgentRequest,
   buildAgentRequest,
@@ -67,8 +67,9 @@ export function unwrapAgentStep(result: Awaited<ReturnType<ExecuteAgentStep>>): 
  *
  * @remarks
  * An answer that fails `output` is asked for once more with the reasons: the agent's session is
- * resumed with only the reasons when the harness returned one, and otherwise the original prompt
- * is sent again with the reasons appended. A second invalid answer throws its `ZodError`.
+ * resumed with only the reasons when the harness returned one, and otherwise, or when that session
+ * cannot be resumed, the original request is sent again with the reasons appended to its prompt.
+ * A second invalid answer throws its `ZodError`.
  */
 export async function runAgent<T = undefined>(
   config: RunAgentOptions<T>,
@@ -77,11 +78,21 @@ export async function runAgent<T = undefined>(
   const run = async (options: RunAgentOptions<T>) =>
     unwrapAgentStep(await executeAgent(buildAgentRequest(options)));
   const result = await run(config);
-  return parseOrAskAgain(config.output, result, (rejection) =>
-    run(
-      result.session === undefined
-        ? { ...config, prompt: `${config.prompt}\n\n${rejection}` }
-        : { ...config, resume: result.session, prompt: rejection },
-    ),
-  );
+  return parseOrAskAgain(config.output, result, async (rejection, error) => {
+    if (result.session !== undefined) {
+      try {
+        return await run({ ...config, resume: result.session, prompt: rejection });
+      } catch (resumeError) {
+        if (!isResumeFailed(resumeError)) throw resumeError;
+      }
+    }
+    try {
+      return await run({ ...config, prompt: `${config.prompt}\n\n${rejection}` });
+    } catch (resumeError) {
+      // A resume failure escaping here would send agentSession back to its fresh
+      // prompt, and to a third retry of the same bad answer.
+      if (isResumeFailed(resumeError)) throw error;
+      throw resumeError;
+    }
+  });
 }

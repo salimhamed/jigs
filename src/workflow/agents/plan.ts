@@ -132,7 +132,7 @@ export function parseOutput<T>(schema: z.ZodType<T> | undefined, raw: unknown): 
 export async function parseOrAskAgain<R extends { output: unknown }, T>(
   schema: z.ZodType<T> | undefined,
   result: R,
-  askAgain: (rejection: string) => Promise<R>,
+  askAgain: (rejection: string, error: z.ZodError) => Promise<R>,
 ): Promise<Omit<R, "output"> & { output: T }> {
   try {
     return { ...result, output: parseOutput(schema, result.output) };
@@ -140,6 +140,7 @@ export async function parseOrAskAgain<R extends { output: unknown }, T>(
     if (!(error instanceof z.ZodError)) throw error;
     const again = await askAgain(
       `Your answer was rejected:\n${z.prettifyError(error)}\n\nAnswer again, fixing that.`,
+      error,
     );
     return { ...again, output: parseOutput(schema, again.output) };
   }

@@ -163,7 +163,9 @@ test("the reviewer is told no pull request or CI exists yet and to stay off GitH
   for (const { prompt } of reviews) {
     expect(prompt).toContain("No pull request exists yet and CI has not run");
     expect(prompt).toContain("do not look up pull requests, branches or CI status on GitHub");
-    expect(prompt).toContain("leave acceptance criteria about CI or the pull request to jigs");
+    expect(prompt).toContain(
+      "leave acceptance criteria about CI or the pull request to the pull-request phase that follows",
+    );
   }
 });
 

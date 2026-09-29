@@ -24,6 +24,8 @@ const session = (id: string): AgentSessionRef => ({
   descriptor: describeHarness(harness),
 });
 
+const stale = Symbol("the resume the step reports unusable");
+
 // Answers in order; each call records the wire it was sent, as a replay would.
 function agent(answers: unknown[], sessions = true) {
   const wires: AgentRequest[] = [];
@@ -31,6 +33,7 @@ function agent(answers: unknown[], sessions = true) {
     wires.push(wire);
     const output = answers[wires.length - 1];
     if (output instanceof Error) throw output;
+    if (output === stale) return { resumeFailed: "no rollout found" };
     return sessions
       ? { text: "", output, session: session(`s-${wires.length}`) }
       : { text: "", output };
@@ -83,7 +86,7 @@ test("errors other than an invalid answer are not retried", async () => {
   expect(calls).toBe(1);
 });
 
-test("a replay sends the same second request", async () => {
+test("the retry request is deterministic", async () => {
   const first = agent([{ note: "" }, { note: "fixed" }]);
   const replay = agent([{ note: "" }, { note: "fixed" }]);
 
@@ -107,5 +110,56 @@ test("an agent session sends an invalid answer back to the session, not the fres
   expect(wires.map((wire) => [wire.prompt.split("\n")[0], wire.resume?.id])).toEqual([
     ["everything", undefined],
     ["Your answer was rejected:", "s-1"],
+  ]);
+});
+
+test("a session that cannot be resumed for the retry falls back to the original prompt", async () => {
+  const { wires, execute } = agent([{ note: "" }, stale, { note: "fixed" }]);
+
+  const result = await runAgent(options, execute);
+
+  expect(result.output).toEqual({ note: "fixed" });
+  expect(wires.map((wire) => wire.resume?.id)).toEqual([undefined, "s-1", undefined]);
+  expect(wires[2]?.prompt).toMatch(/^Judge the change\.\n\nYour answer was rejected:\n/);
+});
+
+test("an agent session's fresh turn falls back without a session and holds the one that answered", async () => {
+  const { wires, execute } = agent([{ note: "" }, stale, { note: "fixed" }, { note: "next" }]);
+  const builder = bindAgentSession((config) => runAgent(config, execute))({
+    name: "builder",
+    harness,
+    cwd: "/w",
+  });
+
+  expect(await builder.run({ resume: "new", fresh: "everything", output: verdict })).toEqual({
+    note: "fixed",
+  });
+  await builder.run({ resume: "new", fresh: "everything", output: verdict });
+
+  expect(wires.map((wire) => [wire.prompt.split("\n")[0], wire.resume?.id])).toEqual([
+    ["everything", undefined],
+    ["Your answer was rejected:", "s-1"],
+    ["everything", undefined],
+    ["new", "s-3"],
+  ]);
+});
+
+test("an agent session's resume turn never goes back to fresh to retry a bad answer", async () => {
+  const { wires, execute } = agent([{ note: "ok" }, { note: "" }, stale, stale]);
+  const builder = bindAgentSession((config) => runAgent(config, execute))({
+    name: "builder",
+    harness,
+    cwd: "/w",
+  });
+  const turn = { resume: "new", fresh: "everything", output: verdict };
+
+  await builder.run(turn);
+  await expect(builder.run(turn)).rejects.toBeInstanceOf(z.ZodError);
+
+  expect(wires.map((wire) => [wire.prompt.split("\n")[0], wire.resume?.id])).toEqual([
+    ["everything", undefined],
+    ["new", "s-1"],
+    ["Your answer was rejected:", "s-2"],
+    ["new", "s-1"],
   ]);
 });
