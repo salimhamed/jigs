@@ -89,30 +89,56 @@ export async function runStatuses(runIds: readonly string[]): Promise<Map<string
   return new Map(found.flatMap((run) => (run === null ? [] : [[run.runId, run.status]])));
 }
 
-/**
- * Queue a delivery for an existing run: the run's ID and nothing else. The handler loads the
- * run's event log and replays it, so a second copy is safe.
- */
-// The same message @workflow/core 5.0.0-beta.57 sends from reenqueueRun
-// (dist/runtime/runs.js:166) and @workflow/world from reenqueueActiveRuns on
-// every World start (dist/recovery.js); neither is exported through
-// `workflow`. With no runInput the runtime never takes turbo's first-delivery
-// path (runtime.js, `const turbo`), which skips the event log.
-export async function enqueueRun(runId: string): Promise<void> {
-  const world = await getWorld();
-  const run = await world.runs.get(runId, { resolveData: "none" });
-  const namespace = process.env.WORKFLOW_QUEUE_NAMESPACE;
-  const prefix = namespace ? `__${namespace}_wkf_workflow_` : "__wkf_workflow_";
-  await world.queue(
-    `${prefix}${run.workflowName}`,
-    { runId },
-    { deploymentId: run.deploymentId, specVersion: run.specVersion ?? LEGACY_SPEC_VERSION },
-  );
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+
+/** When a run ID was minted: the millisecond time a ULID leads with. */
+export function runIdTime(runId: string): number | null {
+  if (!RUN_ID_SHAPE.test(runId)) return null;
+  let ms = 0;
+  for (const char of runId.slice("wrun_".length, "wrun_".length + 10))
+    ms = ms * 32 + CROCKFORD.indexOf(char);
+  return ms;
 }
 
-// @workflow/world's SPEC_VERSION_LEGACY: what reenqueueRun stamps on a run
-// that recorded none.
-const LEGACY_SPEC_VERSION = 1;
+/**
+ * Every run of a workflow minted at or after `since` that carries this plaintext attribute,
+ * newest first. Attributes are stored beside the run, not in its inputs, so this still finds a
+ * run whose inputs the World encrypts.
+ */
+export async function findRunsByAttribute(query: {
+  workflowName?: string;
+  key: string;
+  value: string;
+  since: Date;
+}): Promise<Array<{ runId: string; status: string }>> {
+  const world = await getWorld();
+  const found: Array<{ runId: string; status: string }> = [];
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await world.runs.list({
+      ...(query.workflowName === undefined ? {} : { workflowName: query.workflowName }),
+      resolveData: "none",
+      pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
+    });
+    for (const run of page.data) {
+      // The listing is ordered by run ID, whose time this process's clock
+      // minted. world-postgres' created_at is a zone-less timestamp that reads
+      // back hours off on a server not set to UTC.
+      const minted = runIdTime(run.runId);
+      if (minted !== null && minted < query.since.getTime()) return found;
+      if (run.attributes?.[query.key] === query.value)
+        found.push({ runId: run.runId, status: run.status });
+    }
+    cursor = nextCursor(page, seen, "runs");
+  } while (cursor !== undefined);
+  return found;
+}
+
+/** Cancel a run through the SDK, as `jigs cancel` does. */
+export async function cancelRun(runId: string): Promise<void> {
+  await getRun(runId).cancel();
+}
 
 /**
  * What the providers say about one run's suspensions: the pull request the

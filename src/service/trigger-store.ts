@@ -2,7 +2,7 @@
 // trigger's polling has got to. The row, not the provider, is the dedupe
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
-import { and, asc, count, desc, eq, isNotNull, isNull, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gt, isNotNull, isNull, max, sql } from "drizzle-orm";
 import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../checks/index.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
@@ -22,14 +22,16 @@ export const occurrences = pgTable(
     // cap starts with what it was seen with. Fixed inputs are merged at start.
     inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    // Set once, just before the first start is attempted, with the run ID
-    // that start and every retry of it use: only such a pending row can have
-    // a run the World already holds, and it can only be that one. Renewed
-    // only once the World would refuse the ID.
+    // Set once, just before the first start: from then the row holds a slot,
+    // and its run is found by its occurrence attribute.
     attemptedAt: timestamp("attempted_at", { withTimezone: true }),
     runId: text("run_id"),
     // When the engine saw the started run finish, so the cap stops asking.
     settledAt: timestamp("settled_at", { withTimezone: true }),
+    // Only a start after its lookup found nothing can race a run the SDK had
+    // queued but not recorded: until this time, drains look for a second one.
+    duplicateCheckUntil: timestamp("duplicate_check_until", { withTimezone: true }),
+    duplicateRunIds: jsonb("duplicate_run_ids").$type<string[]>(),
     report: jsonb("report").$type<CheckReport>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
@@ -57,6 +59,8 @@ export interface Occurrence {
   attemptedAt: Date | null;
   runId: string | null;
   settledAt: Date | null;
+  duplicateCheckUntil: Date | null;
+  duplicateRunIds: string[] | null;
   report: CheckReport | null;
   updatedAt: Date;
 }
@@ -75,6 +79,8 @@ export interface TriggerSummary {
   failed: number;
   /** The most recent failed rows, newest first. */
   failures: Occurrence[];
+  /** Rows with more than one run for their occurrence. */
+  duplicates: Array<Pick<Occurrence, "occurrence"> & { runIds: string[] }>;
 }
 
 /** What the trigger engine reads and writes, over one factory's rows. */
@@ -88,15 +94,14 @@ export interface TriggerStore {
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
-  /** Mark a pending row as about to start as this run, returning the first attempt's time and
-   *  run; `renew` replaces them. */
-  attempt(
-    trigger: string,
-    occurrence: string,
-    runId: string,
-    at: Date,
-    options?: { renew?: boolean },
-  ): Promise<{ attemptedAt: Date; runId: string }>;
+  /** Mark a pending row as about to start, returning its first attempt's time. */
+  attempt(trigger: string, occurrence: string, at: Date): Promise<Date>;
+  /** Look for a second run of this occurrence until then. */
+  watchForDuplicate(trigger: string, occurrence: string, until: Date): Promise<void>;
+  /** Rows still watched for a second run at this time. */
+  watched(trigger: string, now: Date): Promise<Occurrence[]>;
+  /** Record the runs found for one occurrence, and stop watching it. */
+  duplicated(trigger: string, occurrence: string, runIds: string[]): Promise<void>;
   /** Started rows whose run has not been seen to finish. */
   unsettled(
     trigger: string,
@@ -163,23 +168,36 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .where(and(ofTrigger(trigger), eq(occurrences.state, "pending")))
         .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
     },
-    async attempt(trigger, occurrence, runId, at, options = {}) {
+    async attempt(trigger, occurrence, at) {
       const [updated] = await db
         .update(occurrences)
         .set({
-          ...(options.renew
-            ? { attemptedAt: at, runId }
-            : {
-                attemptedAt: sql`coalesce(${occurrences.attemptedAt}, ${at.toISOString()}::timestamptz)`,
-                runId: sql`coalesce(${occurrences.runId}, ${runId})`,
-              }),
+          attemptedAt: sql`coalesce(${occurrences.attemptedAt}, ${at.toISOString()}::timestamptz)`,
           updatedAt: sql`now()`,
         })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
-        .returning({ attemptedAt: occurrences.attemptedAt, runId: occurrences.runId });
-      if (updated?.attemptedAt == null || updated.runId === null)
+        .returning({ attemptedAt: occurrences.attemptedAt });
+      if (updated?.attemptedAt == null)
         throw new Error(`${trigger} ${occurrence} is no longer pending`);
-      return { attemptedAt: updated.attemptedAt, runId: updated.runId };
+      return updated.attemptedAt;
+    },
+    async watchForDuplicate(trigger, occurrence, until) {
+      await db
+        .update(occurrences)
+        .set({ duplicateCheckUntil: until })
+        .where(row(trigger, occurrence));
+    },
+    async watched(trigger, now) {
+      return db
+        .select()
+        .from(occurrences)
+        .where(and(ofTrigger(trigger), gt(occurrences.duplicateCheckUntil, now)));
+    },
+    async duplicated(trigger, occurrence, runIds) {
+      await db
+        .update(occurrences)
+        .set({ duplicateRunIds: runIds, duplicateCheckUntil: null })
+        .where(row(trigger, occurrence));
     },
     async unsettled(trigger) {
       return (
@@ -232,6 +250,10 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .where(and(ofTrigger(trigger), eq(occurrences.state, "failed")))
         .orderBy(desc(occurrences.updatedAt))
         .limit(failures);
+      const duplicates = await db
+        .select({ occurrence: occurrences.occurrence, runIds: occurrences.duplicateRunIds })
+        .from(occurrences)
+        .where(and(ofTrigger(trigger), isNotNull(occurrences.duplicateRunIds)));
       const rows = (state: OccurrenceState) => counts.find((c) => c.state === state)?.rows ?? 0;
       const lasts = counts.flatMap((c) => (c.last === null ? [] : [c.last.getTime()]));
       return {
@@ -240,6 +262,10 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         attempted: attempted?.rows ?? 0,
         failed: rows("failed"),
         failures: recent,
+        duplicates: duplicates.map((dup) => ({
+          occurrence: dup.occurrence,
+          runIds: dup.runIds ?? [],
+        })),
       };
     },
   };

@@ -1,6 +1,4 @@
-import type { World } from "@workflow/world";
 import { start } from "workflow/api";
-import { getWorld } from "workflow/runtime";
 import type { z } from "zod";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
 import type { Factory, Injected } from "../workflow/factory.ts";
@@ -12,11 +10,13 @@ type Refusal =
 
 export type StartRunResult = { kind: "started"; runId: string } | Refusal;
 
-/** A run that passed validation and preflight, ready for the World. With `runId`, `launch`
- *  creates it under that ID and queues nothing: the caller queues it with `enqueueRun` once it
- *  sees the run. */
+/** A run that passed validation and preflight, ready for the World. `attributes` are seeded on
+ *  the run as plaintext, so they stay readable when the World encrypts its inputs. */
 export type PreparedRun =
-  | { kind: "ready"; launch(triggerId: string, runId?: string): Promise<string> }
+  | {
+      kind: "ready";
+      launch(triggerId: string, attributes?: Record<string, string>): Promise<string>;
+    }
   | Refusal;
 
 /** Everything before the World: input validation, then preflight. */
@@ -47,11 +47,11 @@ export async function prepareRun(
 
   return {
     kind: "ready",
-    async launch(triggerId, runId) {
+    async launch(triggerId, attributes) {
       const args: [unknown] = [{ ...parsed.data, ...({ triggerId } satisfies Injected) }];
-      const run = await (runId === undefined
+      const run = await (attributes === undefined
         ? start(entry.workflow, args)
-        : start(entry.workflow, args, { world: createOnly(await getWorld(), runId) }));
+        : start(entry.workflow, args, { attributes }));
       return run.runId;
     },
   };
@@ -63,22 +63,9 @@ export async function startRun(
   workflowName: string,
   inputs: unknown,
   triggerId: string,
+  attributes?: Record<string, string>,
 ): Promise<StartRunResult> {
   const prepared = await prepareRun(factory, workflowName, inputs);
   if (prepared.kind !== "ready") return prepared;
-  return { kind: "started", runId: await prepared.launch(triggerId) };
-}
-
-// start() mints the run ID from its World's createRunId and queues the run's
-// first delivery beside creating it, so a World that answers with this ID and
-// queues nothing, for this call alone, creates the run under an ID the caller
-// already recorded. The caller queues it once it sees the run: start()'s own
-// delivery carries the run's input, which a second copy of would take the
-// runtime's first-delivery path on a run that already exists.
-function createOnly(world: World, runId: string): World {
-  const bare = runId.slice("wrun_".length);
-  return Object.create(world, {
-    createRunId: { value: () => bare },
-    queue: { value: async () => ({ messageId: null }) },
-  }) as World;
+  return { kind: "started", runId: await prepared.launch(triggerId, attributes) };
 }

@@ -17,8 +17,10 @@ gate re-derives. Starting twice is a second agent working the same page. So
 every occurrence gets a row in a `jigs_triggers` table, keyed by trigger name
 and occurrence. The row is written `pending`, the run is started through the
 ordinary trigger path, and then the row is marked `started`. Startup starts any
-leftover `pending` row. A crash between the two writes costs a delay, never a
-duplicate.
+leftover `pending` row. After a crash, startup finds the run by its occurrence
+attribute and adopts it. A duplicate is possible only if the service dies
+mid-start while the SDK has queued a run it hasn't recorded yet; jigs status
+flags it, and nothing cancels it automatically.
 
 - **The source defines an occurrence, and jigs enforces it.** A workflow
   cannot, because the decision comes before any run exists. A PagerDuty

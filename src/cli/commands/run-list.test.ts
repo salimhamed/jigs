@@ -170,6 +170,7 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
             ],
           },
         ],
+        duplicates: [{ occurrence: "PDEF", runIds: ["wrun_A", "wrun_B"] }],
       },
     ],
   });
@@ -179,6 +180,9 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
     "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
     "FAIL pages PABC: GitHub identity: GITHUB_TOKEN is not set",
     "  set GITHUB_TOKEN in the factory repo's .env",
+    "FAIL pages PDEF: 2 runs started for this occurrence: wrun_A, wrun_B",
+    "  if both are working it, cancel one:",
+    "    pnpm exec jigs cancel wrun_B",
   ]);
 });
 

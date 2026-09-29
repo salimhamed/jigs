@@ -103,12 +103,9 @@ test("an attempt is stamped on a pending row, and a started row settles once", a
     inputs: {},
     occurredAt: at(0),
   });
-  const attempted = await store.attempt("pages", "P1", "wrun_first", at(1));
-  expect(attempted).toEqual({ attemptedAt: at(1), runId: "wrun_first" });
-  expect((await store.pending("pages"))[0]).toMatchObject(attempted);
-  // A retry keeps the first attempt's time and run ID: a start whose outcome
-  // was lost can only ever be that one run.
-  expect(await store.attempt("pages", "P1", "wrun_second", at(2))).toEqual(attempted);
+  expect(await store.attempt("pages", "P1", at(1))).toEqual(at(1));
+  // A retry keeps the first attempt's time: the lookup reaches back to it.
+  expect(await store.attempt("pages", "P1", at(2))).toEqual(at(1));
   expect(await store.summary("pages", 5)).toMatchObject({ pending: 0, attempted: 1 });
 
   await store.started("pages", "P1", "wrun_first");
@@ -117,7 +114,25 @@ test("an attempt is stamped on a pending row, and a started row settles once", a
   ]);
   await store.settle("pages", "P1");
   expect(await store.unsettled("pages")).toEqual([]);
-  await expect(store.attempt("pages", "P1", "wrun_third", at(3))).rejects.toThrow(
-    "no longer pending",
-  );
+  await expect(store.attempt("pages", "P1", at(3))).rejects.toThrow("no longer pending");
+});
+
+test("a watched row is listed until its time, and a recorded duplicate ends the watch", async () => {
+  const store = triggerStore(db, "factory-f");
+  await store.record({
+    trigger: "pages",
+    occurrence: "P1",
+    state: "pending",
+    inputs: {},
+    occurredAt: at(0),
+  });
+  await store.watchForDuplicate("pages", "P1", at(60));
+  expect((await store.watched("pages", at(30))).map((row) => row.occurrence)).toEqual(["P1"]);
+  expect(await store.watched("pages", at(61))).toEqual([]);
+
+  await store.duplicated("pages", "P1", ["wrun_a", "wrun_b"]);
+  expect(await store.watched("pages", at(30))).toEqual([]);
+  expect((await store.summary("pages", 5)).duplicates).toEqual([
+    { occurrence: "P1", runIds: ["wrun_a", "wrun_b"] },
+  ]);
 });

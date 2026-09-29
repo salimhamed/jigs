@@ -1,17 +1,16 @@
-// The Postgres World under an event trigger's two steps: the run created under
-// an ID the row already holds, with nothing queued, then queued by jigs with a
-// delivery that carries no input. The compiled e2e proves a run so queued
-// twice executes once; this proves what reaches the queue.
+// A real start on the Postgres World, found again by the attribute an event
+// trigger seeds, and a run whose queue write failed cancelled before it can run.
 import { execFileSync } from "node:child_process";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
 import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
+import { start } from "workflow/api";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../workflow/factory.ts";
-import { enqueueRun, runStatuses } from "./runs.ts";
+import { cancelRun, findRunsByAttribute, runIdTime, runStatuses } from "./runs.ts";
 import { prepareRun } from "./trigger.ts";
 
 const adminUrl = new URL(
@@ -40,6 +39,8 @@ beforeAll(async () => {
     env: { ...process.env, WORKFLOW_POSTGRES_URL: testUrl.toString() },
     stdio: "ignore",
   });
+  // West of UTC, where world-postgres' zone-less created_at reads back early.
+  await admin.query(`ALTER DATABASE "${database}" SET timezone TO 'America/Los_Angeles'`);
   await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
   oldBaseUrl = process.env.WORKFLOW_LOCAL_BASE_URL;
   process.env.WORKFLOW_LOCAL_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -61,14 +62,6 @@ afterAll(async () => {
   await admin.end();
 });
 
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-function runIdNow(): string {
-  let time = "";
-  for (let ms = Date.now(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
-    time = CROCKFORD[ms % 32] + time;
-  return `wrun_${time}${"0123456789ABCDEF"}`;
-}
-
 const workflowName = "workflow//./workflows/respond//respond";
 const factory = {
   workflows: {
@@ -79,29 +72,65 @@ const factory = {
   },
 } satisfies Factory;
 
-const launch = async (runId: string) => {
-  const prepared = await prepareRun(factory, "respond", { page: "P1" });
+const launch = async (value: string) => {
+  const prepared = await prepareRun(factory, "respond", { page: value });
   if (prepared.kind !== "ready") throw new Error(prepared.kind);
-  return prepared.launch("trigger:pages:P1", runId);
+  return prepared.launch(`trigger:pages:${value}`, { "jigs.occurrence": value });
 };
 
-test("a launch under a chosen ID creates that run and queues nothing, however often it repeats", async () => {
-  const runId = runIdNow();
-  expect(await launch(runId)).toBe(runId);
-  expect(await launch(runId)).toBe(runId);
+test("a started run is found by its attribute, whatever the server's time zone", async () => {
+  const since = new Date();
+  const runId = await launch("a".repeat(64));
+  await launch("b".repeat(64));
 
-  const listed = await world.runs.list({ workflowName, resolveData: "none" });
-  expect(listed.data.map((run) => run.runId)).toEqual([runId]);
-  expect(await runStatuses([runId])).toEqual(new Map([[runId, "pending"]]));
-  await new Promise((resolve) => setTimeout(resolve, 1_000));
-  expect(deliveries.get(runId)).toBeUndefined();
+  expect(runIdTime(runId)).toBeGreaterThanOrEqual(since.getTime());
+  // The skew the lookup must not stop on: created_at reads back hours early.
+  const stored = await world.runs.get(runId, { resolveData: "none" });
+  expect(stored.createdAt.getTime()).toBeLessThan(since.getTime() - 3_600_000);
+  expect(
+    await findRunsByAttribute({
+      workflowName,
+      key: "jigs.occurrence",
+      value: "a".repeat(64),
+      since: new Date(since.getTime() - 60_000),
+    }),
+  ).toEqual([{ runId, status: "pending" }]);
 });
 
-test("a queued run's deliveries name it and carry no input, however often it is queued", async () => {
-  const runId = runIdNow().replace(/.$/, "X");
-  await launch(runId);
-  await enqueueRun(runId);
-  await enqueueRun(runId);
-  await expect.poll(() => deliveries.get(runId)?.length ?? 0, { timeout: 15_000 }).toBe(2);
-  for (const body of deliveries.get(runId) ?? []) expect(body).not.toHaveProperty("runInput");
+test("a run whose queue write failed is found pending and cancelled before any delivery", async () => {
+  const value = "c".repeat(64);
+  const since = new Date(Date.now() - 60_000);
+  const failing = Object.create(world, {
+    queue: {
+      value: async () => {
+        throw new Error("injected queue failure");
+      },
+    },
+  });
+  await expect(
+    start({ workflowId: workflowName }, [{ page: "P3", triggerId: "trigger:pages:P3" }], {
+      world: failing,
+      attributes: { "jigs.occurrence": value },
+    }),
+  ).rejects.toThrow("injected queue failure");
+
+  const [orphan] = await findRunsByAttribute({
+    workflowName,
+    key: "jigs.occurrence",
+    value,
+    since,
+  });
+  expect(orphan?.status).toBe("pending");
+  await cancelRun(orphan?.runId as string);
+  expect(await runStatuses([orphan?.runId as string])).toEqual(
+    new Map([[orphan?.runId, "cancelled"]]),
+  );
+  // Cancelled before anything queued it: even the World's own restart
+  // recovery, which queues only pending and running runs, leaves it alone.
+  await world.close?.();
+  world = createWorld({ connectionString: testUrl.toString(), queueConcurrency: 1 });
+  setWorld(world);
+  await world.start();
+  await new Promise((resolve) => setTimeout(resolve, 1_000));
+  expect(deliveries.get(orphan?.runId as string)).toBeUndefined();
 });

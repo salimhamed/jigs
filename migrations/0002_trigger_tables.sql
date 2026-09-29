@@ -8,6 +8,8 @@ CREATE TABLE "jigs_triggers" (
   "attempted_at" timestamptz,
   "run_id" text,
   "settled_at" timestamptz,
+  "duplicate_check_until" timestamptz,
+  "duplicate_run_ids" jsonb,
   "report" jsonb,
   "created_at" timestamptz NOT NULL DEFAULT now(),
   "updated_at" timestamptz NOT NULL DEFAULT now(),

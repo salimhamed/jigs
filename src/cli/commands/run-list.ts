@@ -43,6 +43,7 @@ export interface RunListTrigger {
     at: string;
     checks: Array<{ label: string; reason: string; repair: string }>;
   }>;
+  duplicates: Array<{ occurrence: string; runIds: string[] }>;
 }
 
 export interface RunListResult {
@@ -152,14 +153,24 @@ export async function showRuns(
 // A failed occurrence is never retried, so its repair is the operator's to
 // apply before the next occurrence arrives.
 function triggerFailureLines(triggers: readonly RunListTrigger[]): string[] {
-  return triggers.flatMap((trigger) =>
-    trigger.failures.flatMap((failure) =>
+  return triggers.flatMap((trigger) => [
+    ...trigger.failures.flatMap((failure) =>
       failure.checks.flatMap((check) => [
         `${tone("FAIL")} ${trigger.name} ${failure.occurrence}: ${check.label}: ${check.reason}`,
         ...indent(hintLines(check.repair)),
       ]),
     ),
-  );
+    // Nothing cancels a second run: both may be doing the work, and only the
+    // operator can tell.
+    ...trigger.duplicates.flatMap((duplicate) => [
+      `${tone("FAIL")} ${trigger.name} ${duplicate.occurrence}: ${duplicate.runIds.length} runs started for this occurrence: ${duplicate.runIds.join(", ")}`,
+      ...indent(
+        hintLines(
+          `if both are working it, cancel one: \`pnpm exec jigs cancel ${duplicate.runIds.at(-1)}\``,
+        ),
+      ),
+    ]),
+  ]);
 }
 
 export function waitingCell(run: RunListRun): string {
