@@ -52,8 +52,7 @@ export function scheduleTriggerId(name: string, at: Date): string {
 
 export const eventTriggerLabel = (name: string): string => `${EVENT_TRIGGER_PREFIX}${name}`;
 
-/** What an event trigger's run records as its triggerId: exact, so a start
- *  interrupted before its row was marked can be found again. */
+/** What an event trigger's run records as its triggerId: the trigger and the occurrence. */
 export const eventTriggerId = (name: string, occurrence: string): string =>
   `${eventTriggerLabel(name)}:${occurrence}`;
 

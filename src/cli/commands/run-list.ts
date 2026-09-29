@@ -43,7 +43,7 @@ export interface RunListTrigger {
     at: string;
     checks: Array<{ label: string; reason: string; repair: string }>;
   }>;
-  duplicates: Array<{ occurrence: string; runIds: string[] }>;
+  duplicates: Array<{ occurrence: string; runId: string | null; runIds: string[] }>;
 }
 
 export interface RunListResult {
@@ -161,15 +161,17 @@ function triggerFailureLines(triggers: readonly RunListTrigger[]): string[] {
       ]),
     ),
     // Nothing cancels a second run: both may be doing the work, and only the
-    // operator can tell.
-    ...trigger.duplicates.flatMap((duplicate) => [
-      `${tone("FAIL")} ${trigger.name} ${duplicate.occurrence}: ${duplicate.runIds.length} runs started for this occurrence: ${duplicate.runIds.join(", ")}`,
-      ...indent(
-        hintLines(
-          `if both are working it, cancel one: \`pnpm exec jigs cancel ${duplicate.runIds.at(-1)}\``,
+    // operator can tell. The one to cancel is one the row did not record, so
+    // the run the trigger counts keeps going.
+    ...trigger.duplicates.flatMap((duplicate) => {
+      const extra = duplicate.runIds.find((runId) => runId !== duplicate.runId);
+      return [
+        `${tone("FAIL")} ${trigger.name} ${duplicate.occurrence}: ${duplicate.runIds.length} runs started for this occurrence: ${duplicate.runIds.join(", ")}`,
+        ...indent(
+          hintLines(`if both are working it, cancel one: \`pnpm exec jigs cancel ${extra}\``),
         ),
-      ),
-    ]),
+      ];
+    }),
   ]);
 }
 

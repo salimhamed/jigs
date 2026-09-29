@@ -103,13 +103,25 @@ test("an attempt is stamped on a pending row, and a started row settles once", a
     inputs: {},
     occurredAt: at(0),
   });
-  expect(await store.attempt("pages", "P1", at(1))).toEqual(at(1));
-  // A retry keeps the first attempt's time: the lookup reaches back to it.
-  expect(await store.attempt("pages", "P1", at(2))).toEqual(at(1));
+  await store.attempt("pages", "P1", at(1));
+  await store.startFailed("pages", "P1", at(2));
+  await store.cancelledRun("pages", "P1", "wrun_orphan");
+  await store.cancelledRun("pages", "P1", "wrun_orphan2");
+  expect((await store.pending("pages"))[0]).toMatchObject({
+    attemptedAt: at(1),
+    startFailedAt: at(2),
+    cancelledRunIds: ["wrun_orphan", "wrun_orphan2"],
+  });
+  // Each attempt records its own time, and clears the failed start before it.
+  await store.attempt("pages", "P1", at(3));
+  expect((await store.pending("pages"))[0]).toMatchObject({
+    attemptedAt: at(3),
+    startFailedAt: null,
+  });
   expect(await store.summary("pages", 5)).toMatchObject({ pending: 0, attempted: 1 });
 
   await store.started("pages", "P1", "wrun_first");
-  expect(await store.unsettled("pages")).toEqual([
+  expect(await store.unsettled("pages")).toMatchObject([
     { occurrence: "P1", runId: "wrun_first", startedAt: expect.any(Date) },
   ]);
   await store.settle("pages", "P1");
@@ -126,13 +138,16 @@ test("a watched row is listed until its time, and a recorded duplicate ends the 
     inputs: {},
     occurredAt: at(0),
   });
-  await store.watchForDuplicate("pages", "P1", at(60));
+  await store.watchForDuplicate("pages", "P1", at(0), at(60));
   expect((await store.watched("pages", at(30))).map((row) => row.occurrence)).toEqual(["P1"]);
   expect(await store.watched("pages", at(61))).toEqual([]);
 
   await store.duplicated("pages", "P1", ["wrun_a", "wrun_b"]);
   expect(await store.watched("pages", at(30))).toEqual([]);
   expect((await store.summary("pages", 5)).duplicates).toEqual([
-    { occurrence: "P1", runIds: ["wrun_a", "wrun_b"] },
+    { occurrence: "P1", runId: null, runIds: ["wrun_a", "wrun_b"] },
   ]);
+  await store.undupe("pages", "P1", "wrun_b");
+  expect((await store.summary("pages", 5)).duplicates).toEqual([]);
+  expect((await store.watched("pages", at(0))).length).toBe(0);
 });

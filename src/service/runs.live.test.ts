@@ -134,3 +134,50 @@ test("a run whose queue write failed is found pending and cancelled before any d
   await new Promise((resolve) => setTimeout(resolve, 1_000));
   expect(deliveries.get(orphan?.runId as string)).toBeUndefined();
 });
+
+test("a start whose run creation fails while its queue accepts throws, and its delivery creates the run", async () => {
+  const value = "d".repeat(64);
+  const since = new Date(Date.now() - 60_000);
+  // world-postgres passes a raw pg error through, which start() does not
+  // treat as retryable.
+  const failing = Object.create(world, {
+    events: {
+      value: {
+        ...world.events,
+        create: async () => {
+          throw new Error("Connection terminated unexpectedly");
+        },
+      },
+    },
+  });
+  await expect(
+    start({ workflowId: workflowName }, [{ page: "P4", triggerId: "trigger:pages:P4" }], {
+      world: failing,
+      attributes: { "jigs.occurrence": value },
+    }),
+  ).rejects.toThrow("Connection terminated unexpectedly");
+  const lookup = () => findRunsByAttribute({ workflowName, key: "jigs.occurrence", value, since });
+  expect(await lookup()).toEqual([]);
+
+  // What the runtime does with the first delivery: run_started with the
+  // queued input creates the run, attributes included.
+  const delivered = () =>
+    [...deliveries.entries()].find(([, bodies]) =>
+      bodies.some((body) => JSON.stringify(body).includes(value)),
+    );
+  await expect.poll(delivered, { timeout: 15_000 }).toBeDefined();
+  const [runId, bodies] = delivered() as [string, Array<{ runInput: Record<string, unknown> }>];
+  const runInput = bodies[0]?.runInput as Record<string, unknown>;
+  await world.events.create(runId, {
+    eventType: "run_started",
+    specVersion: runInput.specVersion,
+    eventData: {
+      input: runInput.input,
+      deploymentId: runInput.deploymentId,
+      workflowName: runInput.workflowName,
+      executionContext: runInput.executionContext,
+      attributes: runInput.attributes,
+    },
+  } as never);
+  expect(await lookup()).toEqual([{ runId, status: "running" }]);
+});

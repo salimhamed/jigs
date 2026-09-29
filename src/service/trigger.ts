@@ -63,9 +63,8 @@ export async function startRun(
   workflowName: string,
   inputs: unknown,
   triggerId: string,
-  attributes?: Record<string, string>,
 ): Promise<StartRunResult> {
   const prepared = await prepareRun(factory, workflowName, inputs);
   if (prepared.kind !== "ready") return prepared;
-  return { kind: "started", runId: await prepared.launch(triggerId, attributes) };
+  return { kind: "started", runId: await prepared.launch(triggerId) };
 }

@@ -88,9 +88,16 @@ const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
 // The SDK mints the run ID from this process's clock just after the attempt
 // is recorded; the margin covers the clock stepping back in between.
 const LOOKUP_MARGIN_MS = 60_000;
-// A run the SDK queued but never recorded is created by its first delivery,
-// which comes once the World runs again; after this, none is still coming.
-const DUPLICATE_WATCH_MS = 60 * 60_000;
+// How long after a start threw its run may still be created or moved on by
+// the delivery the queue accepted: an idle worker takes it at once, and the
+// queue's first four retries back off about 85 seconds in all. A pending run
+// is cancelled, or an absent one started again, only after this.
+const DELIVERY_SETTLE_MS = 5 * 60_000;
+// The longest a queued delivery is still expected to create its run: the
+// queue's first seven retries back off about 29 minutes in all. Until then a
+// started run the World does not hold yet counts as active, and a start after
+// a lookup miss is watched for a second run.
+const LATE_DELIVERY_MS = 60 * 60_000;
 const START_WRITE_TRIES = 3;
 
 /**
@@ -124,10 +131,9 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   let stopped = false;
   let marking: Promise<void> | undefined;
   let chain: Promise<void> = Promise.resolve();
-  // Held in memory until written: a run whose `started` write failed, and runs
-  // a failed start left behind that could not be cancelled yet.
+  // A run whose `started` write failed, held until written. A crash loses it,
+  // and the lookup finds the run again.
   const unrecorded = new Map<string, string>();
-  const orphans = new Map<string, string[]>();
   const rowKey = (entry: Armed, occurrence: string) => `${entry.name}\0${occurrence}`;
 
   // Polls and pushes wait on this alone, never on a drain: a restart with a
@@ -165,17 +171,33 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   // The trigger's own started rows, not a scan of the World: a run another
   // factory started, or one whose inputs the World encrypts, cannot miscount.
+  // While an occurrence has more than one live run, each counts.
   async function activeRuns(entry: Armed): Promise<number> {
     const started = await store().unsettled(entry.name);
-    const statuses = await statusesOf(started.flatMap((row) => (row.runId ? [row.runId] : [])));
+    const statuses = await statusesOf(
+      started.flatMap((row) => row.duplicateRunIds ?? (row.runId ? [row.runId] : [])),
+    );
+    const live = (runId: string) => {
+      const status = statuses.get(runId);
+      return status !== undefined && !TERMINAL_RUN_STATUSES.has(status);
+    };
     let active = 0;
     for (const row of started) {
-      // A row is marked started only once its run was seen, so a run the
-      // World no longer holds was removed after it ran.
+      if (row.duplicateRunIds !== null) {
+        const running = row.duplicateRunIds.filter(live);
+        if (running.length <= 1)
+          await store().undupe(entry.name, row.occurrence, running[0] ?? null);
+        if (running.length === 0) await store().settle(entry.name, row.occurrence);
+        active += running.length;
+        continue;
+      }
       const status = row.runId === null ? undefined : statuses.get(row.runId);
-      if (status === undefined || TERMINAL_RUN_STATUSES.has(status))
-        await store().settle(entry.name, row.occurrence);
-      else active += 1;
+      // A resilient start returns before the World holds the run; its
+      // delivery creates it.
+      const unwritten =
+        status === undefined && now().getTime() - row.startedAt.getTime() < LATE_DELIVERY_MS;
+      if (unwritten || (status !== undefined && !TERMINAL_RUN_STATUSES.has(status))) active += 1;
+      else await store().settle(entry.name, row.occurrence);
     }
     return active;
   }
@@ -198,17 +220,20 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       .update(`${slug()}\n${eventTriggerId(entry.name, occurrence)}`)
       .digest("hex");
 
-  // The runs carrying this row's occurrence, newest first; a run cancelled
-  // here after a failed start is not one.
-  const runsOf = async (entry: Armed, row: Occurrence) =>
-    (
+  // The runs carrying this row's occurrence, newest first, minted since its
+  // latest attempt or the given time. A run the engine cancelled after a
+  // failed start is not one; a run anyone else cancelled is.
+  const runsOf = async (entry: Armed, row: Occurrence, since = row.attemptedAt as Date) => {
+    const cancelled = new Set(row.cancelledRunIds ?? []);
+    return (
       await findRuns({
         ...(entry.workflowName === undefined ? {} : { workflowName: entry.workflowName }),
         key: OCCURRENCE_ATTRIBUTE,
         value: attributeOf(entry, row.occurrence),
-        since: new Date((row.attemptedAt as Date).getTime() - LOOKUP_MARGIN_MS),
+        since: new Date(since.getTime() - LOOKUP_MARGIN_MS),
       })
-    ).filter((run) => run.status !== "cancelled");
+    ).filter((run) => !cancelled.has(run.runId));
+  };
 
   async function markStarted(entry: Armed, occurrence: string, runId: string): Promise<void> {
     for (let attempt = 1; ; attempt += 1) {
@@ -228,11 +253,26 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }
   }
 
-  // A start that throws may still have created its run: the SDK creates it
-  // and queues it at once, and a rejected queue write leaves it pending with
-  // nothing to run it. Such a run is cancelled so it can never run late, and
-  // the row, holding its slot, starts again on a later drain.
+  async function adopt(
+    entry: Armed,
+    row: Occurrence,
+    runs: Array<{ runId: string; status: string }>,
+  ): Promise<boolean> {
+    // The oldest run that got past pending, else the oldest: a pending one may
+    // be a run the queue never took.
+    const moved = runs.filter((run) => run.status !== "pending");
+    const target = (moved.at(-1) ?? runs.at(-1)) as { runId: string };
+    await markStarted(entry, row.occurrence, target.runId);
+    if (runs.length > 1) await flagDuplicate(entry, row.occurrence, runs);
+    return runs.some((run) => !TERMINAL_RUN_STATUSES.has(run.status));
+  }
+
+  // A start that throws is uncertain either way: the queue may have rejected
+  // a run it created, or accepted one whose creation failed and that its
+  // delivery will create. The row records it and holds its slot until a
+  // lookup settles which.
   async function launch(entry: Armed, row: Occurrence, prepared: Ready): Promise<void> {
+    await store().attempt(entry.name, row.occurrence, now());
     let runId: string;
     try {
       runId = await prepared.launch(eventTriggerId(entry.name, row.occurrence), {
@@ -240,77 +280,81 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       });
     } catch (error) {
       log(`[trigger] ${entry.name} ${row.occurrence} start failed: ${String(error)}`);
-      const left = await runsOf(entry, row);
-      const live = left.find((run) => run.status !== "pending");
-      if (live !== undefined) return markStarted(entry, row.occurrence, live.runId);
-      await cancelOrphans(
-        entry,
-        row.occurrence,
-        left.map((run) => run.runId),
-      );
+      await store().startFailed(entry.name, row.occurrence, now());
       return;
     }
     await markStarted(entry, row.occurrence, runId);
   }
 
-  // True when none is left to cancel.
-  async function cancelOrphans(entry: Armed, occurrence: string, runIds: string[]) {
-    const left: string[] = [];
-    for (const runId of runIds) {
-      try {
-        await cancel(runId);
-        log(
-          `[trigger] ${entry.name} ${occurrence}: cancelled run ${runId}, left by a failed start`,
-        );
-      } catch (error) {
-        left.push(runId);
-        log(
-          `[trigger] ${entry.name} ${occurrence}: could not cancel run ${runId}: ${String(error)}`,
-        );
-      }
-    }
-    if (left.length > 0) orphans.set(rowKey(entry, occurrence), left);
-    else orphans.delete(rowKey(entry, occurrence));
-    return left.length === 0;
-  }
-
-  // An attempted row holds its slot until it resolves. True while it does.
-  async function resolve(entry: Armed, row: Occurrence): Promise<boolean> {
-    const key = rowKey(entry, row.occurrence);
-    const held = unrecorded.get(key);
-    if (held !== undefined) {
-      await markStarted(entry, row.occurrence, held);
-      return true;
-    }
-    const pendingOrphans = orphans.get(key);
-    if (
-      pendingOrphans !== undefined &&
-      !(await cancelOrphans(entry, row.occurrence, pendingOrphans))
-    )
-      return true;
-    // A run found is adopted, pending or not: after a crash the World's own
-    // restart recovery queues a run that was created and never queued.
-    const found = await runsOf(entry, row);
-    const oldest = found.at(-1);
-    if (oldest !== undefined) {
-      await markStarted(entry, row.occurrence, oldest.runId);
-      if (found.length > 1) await flagDuplicate(entry, row.occurrence, found);
-      return !TERMINAL_RUN_STATUSES.has(oldest.status);
-    }
+  // Nothing found: the only start that can race a run the SDK queued and had
+  // not recorded. The watch is set first, so even a refusal below is watched.
+  async function startAgain(entry: Armed, row: Occurrence): Promise<boolean> {
+    await store().watchForDuplicate(
+      entry.name,
+      row.occurrence,
+      row.attemptedAt as Date,
+      new Date(now().getTime() + LATE_DELIVERY_MS),
+    );
     const prepared = await prepareFor(entry, row);
     if (prepared.kind !== "ready") {
       await refuse(entry, row, prepared);
       return false;
     }
-    // Nothing found: the one start that can race a run the SDK queued before
-    // the crash and had not recorded. Later drains look for that second run.
-    await store().watchForDuplicate(
-      entry.name,
-      row.occurrence,
-      new Date(now().getTime() + DUPLICATE_WATCH_MS),
-    );
     await launch(entry, row, prepared);
     return true;
+  }
+
+  // Past the settle period a pending run is one the queue never took, so no
+  // delivery will run it. Its status is read again just before the cancel: a
+  // run that moved on is adopted instead.
+  async function cancelOrphans(entry: Armed, row: Occurrence, pending: string[]): Promise<boolean> {
+    const statuses = await statusesOf(pending);
+    const moved = pending.find((runId) => {
+      const status = statuses.get(runId);
+      return status !== undefined && status !== "pending";
+    });
+    if (moved !== undefined)
+      return adopt(entry, row, [{ runId: moved, status: statuses.get(moved) as string }]);
+    for (const runId of pending) {
+      try {
+        await cancel(runId);
+        await store().cancelledRun(entry.name, row.occurrence, runId);
+        log(
+          `[trigger] ${entry.name} ${row.occurrence}: cancelled run ${runId}, left by a failed start`,
+        );
+      } catch (error) {
+        log(
+          `[trigger] ${entry.name} ${row.occurrence}: could not cancel run ${runId}: ${String(error)}`,
+        );
+      }
+    }
+    return true;
+  }
+
+  // An attempted row holds its slot until it resolves. True while it does.
+  async function resolve(entry: Armed, row: Occurrence): Promise<boolean> {
+    const held = unrecorded.get(rowKey(entry, row.occurrence));
+    if (held !== undefined) {
+      await markStarted(entry, row.occurrence, held);
+      return true;
+    }
+    const found = await runsOf(entry, row);
+    if (row.startFailedAt === null) {
+      // A crash between the start and its record: a run found is adopted,
+      // pending or not, since the World's restart recovery queues a run that
+      // was created and never queued.
+      return found.length > 0 ? adopt(entry, row, found) : startAgain(entry, row);
+    }
+    const moved = found.filter((run) => run.status !== "pending");
+    if (moved.length > 0) return adopt(entry, row, found);
+    if (now().getTime() - row.startFailedAt.getTime() < DELIVERY_SETTLE_MS) return true;
+    if (found.length > 0)
+      return cancelOrphans(
+        entry,
+        row,
+        found.map((run) => run.runId),
+      );
+    return startAgain(entry, row);
   }
 
   async function flagDuplicate(
@@ -327,7 +371,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   async function checkDuplicates(entry: Armed): Promise<void> {
     for (const row of await store().watched(entry.name, now())) {
-      const found = await runsOf(entry, row);
+      const found = await runsOf(entry, row, row.duplicateCheckSince ?? (row.attemptedAt as Date));
       if (found.length > 1) await flagDuplicate(entry, row.occurrence, found);
     }
   }
@@ -356,8 +400,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         await refuse(entry, row, prepared);
         continue;
       }
-      const attemptedAt = await store().attempt(entry.name, row.occurrence, now());
-      await launch(entry, { ...row, attemptedAt }, prepared);
+      await launch(entry, row, prepared);
       active += 1;
     }
   }
@@ -405,7 +448,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         const through = now();
         const events = await entry.source.poll(entry.params, marker.polledThrough);
         let fresh = 0;
-        let unrecorded: Date | undefined;
+        let failedAt: Date | undefined;
         for (const event of events) {
           // An event the source cannot key would fail the same way on every
           // poll, so it is passed over rather than held for.
@@ -419,7 +462,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
           try {
             if (await observe(entry, event, occurrence)) fresh += 1;
           } catch (error) {
-            if (unrecorded === undefined || event.at < unrecorded) unrecorded = event.at;
+            if (failedAt === undefined || event.at < failedAt) failedAt = event.at;
             log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
           }
         }
@@ -427,12 +470,12 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         // behind it, so the next poll sees it again, but never further back
         // than the lookback: anything older would only be skipped.
         const next =
-          unrecorded === undefined
+          failedAt === undefined
             ? through
             : new Date(
                 Math.max(
                   marker.polledThrough.getTime(),
-                  Math.min(through.getTime(), unrecorded.getTime() - 1),
+                  Math.min(through.getTime(), failedAt.getTime() - 1),
                   now().getTime() - entry.lookbackMinutes * 60_000,
                 ),
               );
@@ -581,14 +624,15 @@ export interface TriggerView {
   failed: number;
   /** The most recent failures, newest first. */
   failures: TriggerFailure[];
-  /** Occurrences more than one run was started for. */
-  duplicates: Array<{ occurrence: string; runIds: string[] }>;
+  /** Occurrences more than one run was started for, with the run each row recorded. */
+  duplicates: Array<{ occurrence: string; runId: string | null; runIds: string[] }>;
 }
 
 /** Injectable storage and run listing used by the trigger listing. */
 export interface ListTriggersDeps {
   store?: TriggerStore;
   listRuns?: typeof listRuns;
+  now?: () => Date;
 }
 
 /** What `jigs status` shows for each declared trigger, valid or not. */
@@ -600,7 +644,9 @@ export async function listTriggers(
   if (declared.length === 0) return [];
   const store = deps.store ?? triggerStore(registrySql(), currentFactory());
   const rows = await (deps.listRuns ?? listRuns)(factory);
+  const held = new Set(rows.map((row) => row.runId));
   const live = new Set(rows.filter((row) => !finished(row)).map((row) => row.runId));
+  const now = (deps.now ?? (() => new Date()))();
   return Promise.all(
     declared.map(async ([name, trigger]) => {
       const [summary, started] = await Promise.all([
@@ -613,11 +659,18 @@ export async function listTriggers(
         source: trigger.source.kind,
         lastEvent: summary.lastEvent?.toISOString() ?? null,
         pending: summary.pending,
-        // What the engine's cap counts: live started runs, and attempts not
-        // yet resolved.
+        // What the engine's cap counts: live started runs, each run of a
+        // duplicated occurrence, runs the World does not hold yet, and
+        // attempts not yet resolved.
         active:
-          started.filter((row) => row.runId !== null && live.has(row.runId)).length +
-          summary.attempted,
+          started.reduce((sum, row) => {
+            if (row.duplicateRunIds !== null)
+              return sum + row.duplicateRunIds.filter((runId) => live.has(runId)).length;
+            if (row.runId === null) return sum;
+            const unwritten =
+              !held.has(row.runId) && now.getTime() - row.startedAt.getTime() < LATE_DELIVERY_MS;
+            return sum + (live.has(row.runId) || unwritten ? 1 : 0);
+          }, 0) + summary.attempted,
         failed: summary.failed,
         failures: summary.failures.map((row) => ({
           occurrence: row.occurrence,
