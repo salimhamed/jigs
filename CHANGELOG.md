@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.4](https://github.com/salimhamed/jigs/compare/jigs-v0.78.3...jigs-v0.78.4) (2026-09-29)
+
+
+### Bug Fixes
+
+* **agents:** retry invalid structured answers once, and keep the reviewer off GitHub ([#453](https://github.com/salimhamed/jigs/issues/453)) ([3c2d532](https://github.com/salimhamed/jigs/commit/3c2d532d5e9568037de5a3a6f84748891931f097))
+
 ## [0.78.3](https://github.com/salimhamed/jigs/compare/jigs-v0.78.2...jigs-v0.78.3) (2026-09-28)
 
 
