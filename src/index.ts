@@ -169,6 +169,8 @@ export type {
   ResourceState,
   RunResource,
 } from "./workflow/runtime/resources.ts";
+export type { SlackAuthor, SlackMessageSnapshot, SlackPost } from "./workflow/slack/snapshot.ts";
 export { slack } from "./workflow/slack/sources.ts";
+export type { SlackQuestion } from "./workflow/slack/wait-for-reply.ts";
 export { unreachable } from "./workflow/unreachable.ts";
 export type { Worktree } from "./workflow/workspaces/worktree.ts";

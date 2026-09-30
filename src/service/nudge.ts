@@ -7,11 +7,12 @@
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import type { WebhookProvider } from "../config/factory-config.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { TICKET_TOKEN_PREFIX } from "../workflow/linear/ticket-token.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
+import { SLACK_THREAD_TOKEN_PREFIX } from "../workflow/slack/thread-token.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
+import type { SourceProvider } from "./sources.ts";
 import { recordWake } from "./wake-note.ts";
 
 // Subtracted, never added: the interval is a promise, so the jitter only ever
@@ -26,7 +27,7 @@ interface Subject {
   select: (hooks: HeldHook[]) => HeldHook[];
 }
 
-const SUBJECTS: Record<WebhookProvider, Subject> = {
+const SUBJECTS: Record<SourceProvider, Subject> = {
   github: {
     label: "pull requests",
     select: (hooks) => hooks.filter((hook) => hook.token.startsWith(PULL_REQUEST_TOKEN_PREFIX)),
@@ -48,6 +49,10 @@ const SUBJECTS: Record<WebhookProvider, Subject> = {
           halted.has(haltKey(hook.runId, hook.token.slice(TICKET_TOKEN_PREFIX.length))),
       );
     },
+  },
+  slack: {
+    label: "Slack threads",
+    select: (hooks) => hooks.filter((hook) => hook.token.startsWith(SLACK_THREAD_TOKEN_PREFIX)),
   },
 };
 
@@ -91,7 +96,7 @@ export function nudgeDelay(intervalSeconds: number, random: () => number = Math.
  * call, so nudging a busy run buys nothing and grows its event log.
  */
 export async function nudgeProvider(
-  provider: WebhookProvider,
+  provider: SourceProvider,
   deps: NudgeDeps = {},
 ): Promise<NudgeReport> {
   const { label, select } = SUBJECTS[provider];
@@ -146,7 +151,7 @@ export async function nudgeProvider(
 
 /** Sweep each provider on its own repeating timer until stopped, one sweep per provider at a time. */
 export function startNudges(
-  intervalSeconds: Record<WebhookProvider, number>,
+  intervalSeconds: Record<SourceProvider, number>,
   deps: NudgeDeps = {},
 ): { stop: () => void } {
   const setTimer =
@@ -157,17 +162,16 @@ export function startNudges(
       timer.unref?.();
       return () => clearTimeout(timer);
     });
-  const cancels = new Map<WebhookProvider, () => void>();
+  const cancels = new Map<SourceProvider, () => void>();
   let stopped = false;
-  const schedule = (provider: WebhookProvider) => {
+  const schedule = (provider: SourceProvider) => {
     if (stopped) return;
     const fire = () => {
       void nudgeProvider(provider, deps).then(() => schedule(provider));
     };
     cancels.set(provider, setTimer(fire, nudgeDelay(intervalSeconds[provider], deps.random)));
   };
-  schedule("github");
-  schedule("linear");
+  for (const provider of Object.keys(SUBJECTS) as SourceProvider[]) schedule(provider);
   return {
     stop: () => {
       stopped = true;

@@ -26,6 +26,7 @@ import * as linearOperations from "@jigs-ai/jigs/steps/linear";
 import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
 import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
+import * as slackOperations from "@jigs-ai/jigs/steps/slack";
 import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
 import * as workspacesOperations from "@jigs-ai/jigs/steps/workspaces";
 import { getStepMetadata, getWorkflowMetadata } from "workflow";
@@ -197,6 +198,34 @@ export async function postIncidentNote(incidentId: string, content: string) {
 // One attempt: a lost POST response may already have added the note, and
 // nothing on the incident tells a retry. A missed note beats a doubled one.
 postIncidentNote.maxRetries = 0;
+
+/**
+ * Read a Slack message and its thread replies, with each author's name and email.
+ *
+ * @group Slack messages
+ */
+export async function fetchSlackMessage(message: { channel: string; ts: string }) {
+  "use step";
+  return slackOperations.fetchSlackMessage(message);
+}
+
+/**
+ * Post plain mrkdwn text to a Slack channel, or reply in the thread under `threadTs`.
+ *
+ * @group Slack messages
+ */
+export async function postSlackMessage(message: {
+  channel: string;
+  text: string;
+  threadTs?: string;
+}) {
+  "use step";
+  return slackOperations.postSlackMessage(message);
+}
+
+// One attempt, like the pull request comments: a retry cannot tell whether a
+// post whose response was lost reached Slack.
+postSlackMessage.maxRetries = 0;
 
 /**
  * Prepare this run's scratch directory, preserving it when the run resumes.

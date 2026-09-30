@@ -184,9 +184,10 @@ Your workflow decides which feedback needs a reply and what to do next.
 
 ## Polling and webhooks
 
-The built-in GitHub and Linear waits always have polling as a fallback.
-Webhooks make them react sooner, but are not required for correctness. A poll
-or webhook wakes the run so it can read the current facts again. Custom SDK
+The built-in GitHub, Linear and Slack waits always have polling as a fallback.
+Webhooks, and Slack's Socket Mode, make them react sooner, but are not required
+for correctness. A poll or push wakes the run so it can read the current facts
+again. Custom SDK
 hooks need their own event delivery; jigs does not automatically poll them.
 See [Configuration](/guide/configuration#webhooks) for webhook setup and intervals.
 

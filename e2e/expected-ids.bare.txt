@@ -12,11 +12,13 @@ step//./jigs/steps//executeJev
 step//./jigs/steps//executeModel
 step//./jigs/steps//fetchIncidentSnapshot
 step//./jigs/steps//fetchPullRequestState
+step//./jigs/steps//fetchSlackMessage
 step//./jigs/steps//fetchTicketSnapshot
 step//./jigs/steps//markPullRequestReady
 step//./jigs/steps//mergePullRequest
 step//./jigs/steps//openPullRequest
 step//./jigs/steps//postIncidentNote
+step//./jigs/steps//postSlackMessage
 step//./jigs/steps//postTicketHumanInputRequest
 step//./jigs/steps//postTicketNote
 step//./jigs/steps//provisionWorktree

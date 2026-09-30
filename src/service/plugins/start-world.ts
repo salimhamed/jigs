@@ -361,11 +361,14 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
 // One connection for the whole service: every Slack listener reads the same
 // message stream.
 async function startSlackSocketMode(): Promise<void> {
-  const [{ startSlackSocket }, { pushEvent }] = await Promise.all([
+  const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
     import("../slack-socket.ts"),
     import("../triggers.ts"),
+    import("../slack-thread-wake.ts"),
   ]);
-  const socket = startSlackSocket({ onMessage: (event) => pushEvent("slack", event) });
+  const socket = startSlackSocket({
+    onMessage: (event) => Promise.all([pushEvent("slack", event), wakeSlackThread(event)]),
+  });
   onShutdown(() => socket.stop(), { phase: "quiesce" });
 }
 
@@ -438,7 +441,7 @@ export default async function startWorld() {
     nudge.stop();
   });
   if (config.slack?.socketMode) await startSlackSocketMode();
-  await Promise.all([nudgeProvider("github"), nudgeProvider("linear")]);
+  await Promise.all([nudgeProvider("github"), nudgeProvider("linear"), nudgeProvider("slack")]);
 
   // The generated factory plugin starts automatic release after this plugin
   // reaches readiness. It imports the compiled factory so per-workflow policy

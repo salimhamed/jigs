@@ -1,5 +1,6 @@
 import { createHook, type Hook } from "workflow";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../pull-requests/pull-request.ts";
+import { SLACK_THREAD_TOKEN_PREFIX } from "../slack/thread-token.ts";
 import { TICKET_TOKEN_PREFIX, ticketToken } from "./ticket-token.ts";
 
 // The claim's hook token names the ticket, never the run: owning it is the
@@ -28,6 +29,9 @@ function claimedThing(token: string): string {
   }
   if (token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) {
     return `pull request ${token.slice(PULL_REQUEST_TOKEN_PREFIX.length)}`;
+  }
+  if (token.startsWith(SLACK_THREAD_TOKEN_PREFIX)) {
+    return `the Slack thread ${token.slice(SLACK_THREAD_TOKEN_PREFIX.length)}`;
   }
   return token;
 }

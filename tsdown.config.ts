@@ -14,6 +14,7 @@ export default defineConfig({
     "steps/linear/index": "src/steps/linear/index.ts",
     "steps/pagerduty/index": "src/steps/pagerduty/index.ts",
     "steps/pull-requests/index": "src/steps/pull-requests/index.ts",
+    "steps/slack/index": "src/steps/slack/index.ts",
     "steps/workspaces/index": "src/steps/workspaces/index.ts",
     "steps/git/index": "src/steps/git/index.ts",
     "steps/runtime/index": "src/steps/runtime/index.ts",

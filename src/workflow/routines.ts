@@ -34,3 +34,4 @@ export {
   postReviewAnswers,
 } from "./pull-requests/answers.ts";
 export { bindPullRequestSteps, type PullRequestSteps } from "./pull-requests/bind.ts";
+export { type SlackReplySteps, waitForSlackReply } from "./slack/wait-for-reply.ts";

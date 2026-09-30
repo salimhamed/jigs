@@ -93,6 +93,10 @@
       "types": "./dist/steps/pull-requests/index.d.ts",
       "default": "./dist/steps/pull-requests/index.js"
     },
+    "./steps/slack": {
+      "types": "./dist/steps/slack/index.d.ts",
+      "default": "./dist/steps/slack/index.js"
+    },
     "./steps/workspaces": {
       "types": "./dist/steps/workspaces/index.d.ts",
       "default": "./dist/steps/workspaces/index.js"
