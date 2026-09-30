@@ -96,6 +96,7 @@ export {
   type GitHubDefinition,
   type LinearDefinition,
   type Schedule,
+  type SlackDefinition,
   type SourceDescriptor,
   type TicketWorkflowInputs,
   ticketInputSchema,

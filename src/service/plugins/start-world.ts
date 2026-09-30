@@ -7,7 +7,7 @@
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
-import type { WebhooksConfig } from "../../config/factory-config.ts";
+import type { SlackConfig, WebhooksConfig } from "../../config/factory-config.ts";
 import { plainHint } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopProcessGroups } from "../../steps/agents/harnesses/process-group.ts";
@@ -125,6 +125,45 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
   if (missing.length > 0) {
     error(
       `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
+    );
+    exit(1);
+    return false;
+  }
+  return true;
+}
+
+/** Injectable configuration and output used by the Slack startup gate. */
+export interface SlackAppTokenGateDeps {
+  slack?: () => Promise<SlackConfig | undefined>;
+  exit?: (code: number) => void;
+  error?: (line: string) => void;
+}
+
+async function configuredSlack(): Promise<SlackConfig | undefined> {
+  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
+    import("../../config/factory-config.ts"),
+    import("../../config/factory-root.ts"),
+  ]);
+  return readFactoryConfig(factoryRoot()).slack;
+}
+
+// The webhook rule, for the same reason: Socket Mode switched on without its
+// token would leave the factory silently polling.
+/** Refuse service startup when Slack Socket Mode is on without `SLACK_APP_TOKEN`. */
+export async function gateOnSlackAppToken(deps: SlackAppTokenGateDeps = {}): Promise<boolean> {
+  const error = deps.error ?? ((line: string) => console.error(line));
+  const exit = deps.exit ?? process.exit;
+  let slack: SlackConfig | undefined;
+  try {
+    slack = await (deps.slack ?? configuredSlack)();
+  } catch (err) {
+    error(`[service] could not read the slack configuration: ${describe(err)}`);
+    exit(1);
+    return false;
+  }
+  if (slack?.socketMode && !process.env.SLACK_APP_TOKEN) {
+    error(
+      "[service] slack.socketMode is on but SLACK_APP_TOKEN is not set. Set it in the factory's .env to an app-level token with connections:write, or turn socketMode off in jigs.config.ts, then restart the service",
     );
     exit(1);
     return false;
@@ -342,6 +381,7 @@ export default async function startWorld() {
 
   setBootPhase("webhooks");
   if (!(await gateOnWebhookSecrets())) return;
+  if (!(await gateOnSlackAppToken())) return;
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.

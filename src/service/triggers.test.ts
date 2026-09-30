@@ -1327,7 +1327,7 @@ test("a failed arm at boot is retried by the polls, and the timers still run", a
     log: (line) => lines.push(line),
     runStatuses: async () => new Map(),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300 }),
+    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300 }),
     random: () => 0,
     setTimer: (fire, ms) => {
       timers.push({ fire, ms });
@@ -1352,7 +1352,7 @@ test("the service arms, polls each trigger at once and again on its provider's i
     log: () => {},
     runStatuses: async () => new Map(),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300 }),
+    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300 }),
     random: () => 0,
     setTimer: (fire, ms) => {
       timers.push({ fire, ms });

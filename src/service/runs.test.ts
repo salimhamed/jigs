@@ -89,7 +89,11 @@ function reviewApproval(): void {
   vi.spyOn(root, "factoryRoot").mockReturnValue("/factory");
   vi.spyOn(config, "readFactoryConfig").mockReturnValue({
     bindings: {},
-    service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 300, linear: 300 } },
+    service: {
+      port: 8990,
+      dashboardPort: 9090,
+      pollIntervalSeconds: { github: 300, linear: 300, slack: 300 },
+    },
     github: {
       identities: [
         { mode: "app", appId: 1, installations: { acme: 2 }, privateKeyPath: "k", operator: "me" },
