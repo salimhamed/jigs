@@ -74,6 +74,26 @@ test("a literal credential left in the config fails without appearing in the out
   expect(JSON.stringify(outcome)).toContain("Authorization");
 });
 
+test.each([
+  ["a token literal", "ghp_abc123SECRETxyz"],
+  ["a lowercase name", "probe_source"],
+])("%s fails the check without appearing in its outcome or logs", async (_label, value) => {
+  const log = vi.spyOn(console, "log");
+  const error = vi.spyOn(console, "error");
+  const warn = vi.spyOn(console, "warn");
+  const outcome = await check(
+    { command: "never-started", env: { PROBE_TOKEN: value }, probe: { tool: "get_probe_token" } },
+    process.cwd(),
+    { [value]: "set" },
+  );
+  expect(outcome).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("not an environment variable name"),
+  });
+  const written = JSON.stringify([outcome, log.mock.calls, error.mock.calls, warn.mock.calls]);
+  expect(written).not.toContain(value);
+});
+
 test("a set bearer token is never echoed when the server then fails", async () => {
   const outcome = await check(
     { url: "http://127.0.0.1:1/mcp", bearerTokenEnv: "PD_TOKEN", probe: { tool: "x" } },

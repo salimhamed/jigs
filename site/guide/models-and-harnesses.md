@@ -194,10 +194,15 @@ harnesses.claude({
 });
 ```
 
-The agent gets the variables its servers name, so they need no
+Names use uppercase letters, digits and underscores. The agent gets the
+variables its servers name, so they need no
 [`agents.env`](/guide/configuration#agents-env) entry. If one is not set, the
 step fails before the agent starts and names the variable. A Pi server also
 lists the `tools` the model may call.
+
+The named variables are in the agent's own environment, so an agent with shell
+access can read them. Give agents least-privilege tokens, such as a read-only
+PagerDuty key for a triage agent.
 
 ## Claude Code
 

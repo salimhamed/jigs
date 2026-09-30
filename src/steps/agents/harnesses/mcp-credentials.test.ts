@@ -70,3 +70,33 @@ test("a value that is not a variable name is rejected without echoing it", () =>
   expect(problem?.missing).toBeUndefined();
   expect(JSON.stringify(problem)).not.toContain("s3cr3t");
 });
+
+test.each([
+  ["a token literal", "ghp_abc123SECRETxyz"],
+  ["a lowercase name", "pd_token"],
+])("%s is rejected as not an environment variable name, without echoing it", (_label, value) => {
+  const problem = mcpCredentialProblem(
+    "pd",
+    { command: "node", env: { TOKEN: value }, probe },
+    { [value]: "set" },
+  );
+  expect(problem?.reason).toContain("not an environment variable name");
+  expect(problem?.missing).toBeUndefined();
+  expect(JSON.stringify(problem)).not.toContain(value);
+});
+
+test("bearerTokenEnv alongside an Authorization header in any case is a configuration failure", () => {
+  const problem = mcpCredentialProblem(
+    "pd",
+    {
+      url: "https://x",
+      headers: { authorization: "PD_HEADER" },
+      bearerTokenEnv: "PD_TOKEN",
+      probe,
+    },
+    { PD_HEADER: "a", PD_TOKEN: "b" },
+  );
+  expect(problem?.reason).toContain("'authorization'");
+  expect(problem?.reason).toContain("bearerTokenEnv");
+  expect(JSON.stringify(problem)).not.toContain("PD_HEADER");
+});

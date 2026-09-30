@@ -64,7 +64,7 @@ function credentialFailure(
     reason,
     repair:
       missing === undefined
-        ? `replace the value with the name of a variable in ${SERVICE_ENV_FILE}\n${DECLARED_PER_STEP}`
+        ? `fix the '${name}' server's credential names; each names a variable in ${SERVICE_ENV_FILE}\n${DECLARED_PER_STEP}`
         : `set ${missing} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
   };
 }

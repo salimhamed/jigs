@@ -5,7 +5,7 @@ export type ResolvedMcpServer =
   | { command: string; args?: string[]; env?: Record<string, string> }
   | { url: string; headers?: Record<string, string> };
 
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
+const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
 
 function namedEntries(server: McpServerConfig): { field: string; source: string }[] {
   if ("command" in server)
@@ -42,10 +42,21 @@ export function mcpCredentialProblem(
   server: McpServerConfig,
   env: Record<string, string>,
 ): { reason: string; missing?: string } | undefined {
+  if (!("command" in server) && server.bearerTokenEnv !== undefined) {
+    const authorization = Object.keys(server.headers ?? {}).find(
+      (header) => header.toLowerCase() === "authorization",
+    );
+    if (authorization !== undefined)
+      return {
+        reason: `MCP server '${name}' sets both bearerTokenEnv and header '${authorization}'; use one`,
+      };
+  }
   for (const { field, source } of namedEntries(server)) {
-    // A literal left over from before names were required may be a secret, so it is not echoed.
+    // Such a value may be a secret, so it is not echoed.
     if (typeof source !== "string" || !ENV_NAME.test(source))
-      return { reason: `MCP server '${name}' ${field} must name a step-side environment variable` };
+      return {
+        reason: `MCP server '${name}' ${field} is not an environment variable name (uppercase letters, digits and underscores)`,
+      };
     const value = env[source];
     if (value === undefined || value.trim() === "")
       return {
