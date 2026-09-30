@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.6](https://github.com/salimhamed/jigs/compare/jigs-v0.78.5...jigs-v0.78.6) (2026-09-30)
+
+
+### Features
+
+* add PagerDuty as a provider ([#457](https://github.com/salimhamed/jigs/issues/457)) ([bd8ebaa](https://github.com/salimhamed/jigs/commit/bd8ebaa5356f9e1cb451173e91c50e49bacdd0cc))
+
 ## [0.78.5](https://github.com/salimhamed/jigs/compare/jigs-v0.78.4...jigs-v0.78.5) (2026-09-30)
 
 
