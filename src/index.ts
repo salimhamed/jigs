@@ -170,5 +170,6 @@ export type {
   ResourceState,
   RunResource,
 } from "./workflow/runtime/resources.ts";
+export { slack } from "./workflow/slack/sources.ts";
 export { unreachable } from "./workflow/unreachable.ts";
 export type { Worktree } from "./workflow/workspaces/worktree.ts";

@@ -4,6 +4,7 @@
 
 import type { z } from "zod";
 import type { FactoryConfig } from "../config/factory-config.ts";
+import { SLACK_SOURCES } from "./slack-sources.ts";
 
 /** A provider with its own `service.pollIntervalSeconds` entry. */
 export type SourceProvider = keyof FactoryConfig["service"]["pollIntervalSeconds"];
@@ -26,10 +27,10 @@ export interface Source<P = unknown> {
   /** Occurrences since the given time. Overlap with an earlier poll is harmless. */
   poll(params: P, since: Date): Promise<SourceOccurrence[]>;
   /** The same occurrence from a pushed provider event, or null when the event is not one. */
-  fromPush(params: P, event: unknown): SourceOccurrence | null;
+  fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each kind has its own params
 export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 
-export const SOURCES: SourceRegistry = {};
+export const SOURCES: SourceRegistry = { ...SLACK_SOURCES };

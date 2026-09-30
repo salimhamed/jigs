@@ -44,6 +44,10 @@ settings:
 | `users:read` | Looking up the names of the people who wrote a message. |
 | `users:read.email` | Looking up their email addresses. |
 
+The bot events `message.channels` and `message.groups` are what Socket Mode
+delivers. Socket Mode needs no public URL: the factory's service opens the
+connection to Slack itself.
+
 Some workspaces require an admin to approve new apps. If yours does, Slack asks
 for approval when you install.
 
@@ -81,7 +85,11 @@ Add a `slack` section to `jigs.config.ts`:
 slack: { socketMode: true },
 ```
 
-With `socketMode: false`, `SLACK_APP_TOKEN` is not needed.
+With `socketMode: true`, the service holds a Socket Mode connection and sees a
+message within a second of it being posted. It still polls every
+[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds
+underneath, so a message posted while the service is down is still found. With
+`socketMode: false`, jigs only polls, and `SLACK_APP_TOKEN` is not needed.
 
 A workflow that uses Slack declares it:
 
@@ -94,6 +102,76 @@ const requires = {
 ```
 
 Run `pnpm exec jigs up` to rebuild and restart the service.
+
+## Start runs from messages
+
+An event trigger starts one run per message. Pick one of two sources:
+
+| Source | Starts a run for |
+| --- | --- |
+| `slack.messages({ channels })` | Every top-level message in the channels. |
+| `slack.mentions({ channels })` | Only top-level messages that mention the bot, such as `@<name>'s jigs`. |
+
+List channels by ID, such as `C0123ABCD`, not by name. Slack shows a channel's
+ID at the bottom of its details. The bot must be a member of each one.
+
+```ts
+// jigs.config.ts
+import { defineFactory, slack } from "@jigs-ai/jigs";
+
+export default defineFactory({
+  service: { dashboardPort: 3456 },
+  workflows: { answer: () => import("./workflows/answer/answer.ts") },
+  slack: { socketMode: true },
+  triggers: {
+    "answer-questions": {
+      workflow: "answer",
+      source: slack.mentions({ channels: ["C0123ABCD"] }),
+    },
+  },
+});
+```
+
+Each run gets the inputs `{ channel, ts }`, the message's channel and
+timestamp, merged over the trigger's own `inputs`. They are a reference: the
+run reads the message itself. The workflow's inputs must accept them:
+
+```ts
+// workflows/answer/answer.ts
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+
+const inputs = z.object({ channel: z.string(), ts: z.string() });
+
+export async function answer(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  return { channel: input.channel, ts: input.ts };
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { integrations: ["slack"] },
+  workflow: answer,
+});
+```
+
+Only top-level messages count. Thread replies, edits, deletes, channel joins
+and any other message with a subtype never start a run, and neither do the
+bot's own posts. Direct messages are never read.
+
+Each message starts at most one run, whether it arrives over Socket Mode, by
+polling or both, and however often Slack sends it again. A new trigger starts
+with messages posted after the service first runs it. After the service was
+down, it starts runs only for messages from the last 60 minutes; set the
+trigger's `lookbackMinutes` to change that. At most 3 of a trigger's runs are
+active at once, and later messages wait their turn; set `maxActive` to change
+that.
+
+When a channel cannot be read, for example because the bot was removed from
+it, polling skips that channel and keeps reading the trigger's other channels.
+The service log names the channel and how to fix it: invite the bot back or
+remove the channel from the trigger. Messages posted there while it was skipped
+start runs only if Socket Mode delivered them.
 
 ## Checks
 

@@ -525,7 +525,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       for (const entry of armed) {
         if (entry.source.provider !== provider) continue;
         try {
-          const pushed = entry.source.fromPush(entry.params, event);
+          const pushed = await entry.source.fromPush(entry.params, event);
           if (pushed === null) continue;
           const occurrence = entry.source.occurrence(pushed.inputs);
           if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
@@ -783,13 +783,9 @@ function resolveTrigger(
   }
   const source = sources[trigger.source.kind];
   if (source === undefined) {
-    const known = Object.keys(sources);
     return {
       reason: `source "${trigger.source.kind}" is not a source this jigs version provides`,
-      repair:
-        known.length === 0
-          ? `remove the "${name}" trigger from jigs.config.ts\nthis jigs version provides no sources; upgrade jigs for the one it names`
-          : `set ${at}.source in jigs.config.ts to one of: ${known.join(", ")}`,
+      repair: `set ${at}.source in jigs.config.ts to one of: ${Object.keys(sources).join(", ")}`,
     };
   }
   const params = source.params.safeParse(trigger.source.params);
