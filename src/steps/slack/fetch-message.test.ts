@@ -143,6 +143,17 @@ test.each([
   expect(calls("users.info")).toBe(0);
 });
 
+test("a thread reply's ts fails at once, naming the top-level message's ts", async () => {
+  // Slack answers a reply's ts with the reply alone.
+  routes["conversations.replies"] = () => ({ ok: true, messages: [humanReply] });
+  const error = await fetchSlackMessage({ channel: CHANNEL, ts: humanReply.ts }).catch((e) => e);
+  expect(error).toMatchObject({
+    fatal: true,
+    message: `the Slack message ${CHANNEL} ${humanReply.ts} is a thread reply; pass its thread's top-level message ts, ${human.ts}`,
+  });
+  expect(calls("users.info")).toBe(0);
+});
+
 test("any other Slack error fails the snapshot, naming the missing scope", async () => {
   routes["conversations.replies"] = () => ({ ok: true, messages: [human] });
   routes["users.info"] = () => ({ ok: false, error: "missing_scope", needed: "users:read" });

@@ -8,6 +8,7 @@ import {
   slackReplies,
   slackUser,
 } from "../../providers/slack.ts";
+import { JigsError } from "../../workflow/errors.ts";
 import type {
   SlackAuthor,
   SlackMessageSnapshot,
@@ -16,6 +17,17 @@ import type {
 
 // What conversations.replies answers for a message that was deleted.
 const GONE_CODES = new Set(["thread_not_found", "message_not_found"]);
+
+// `fatal` is what the SDK's FatalError.is reads: a retry reads the same reply.
+class SlackThreadReplyError extends JigsError {
+  readonly fatal = true;
+  constructor(channel: string, ts: string, threadTs: string) {
+    super(
+      `the Slack message ${channel} ${ts} is a thread reply; pass its thread's top-level message ts, ${threadTs}`,
+    );
+    this.name = "SlackThreadReplyError";
+  }
+}
 
 async function authorOf(
   message: SlackMessage,
@@ -46,8 +58,8 @@ async function authorOf(
  * author's name and email.
  *
  * @remarks
- * `ts` must be a top-level message. A reply's ts reads as gone, as a deleted
- * message does.
+ * `ts` must be a top-level message. A reply's ts fails the step without a
+ * retry, naming the top-level message's ts.
  *
  * @group Read
  */
@@ -67,6 +79,10 @@ export async function fetchSlackMessage({
     throw error;
   }
   const [message, ...replies] = thread;
+  // Slack answers a reply's ts with the reply alone, which names its parent.
+  if (message?.ts === ts && message.thread_ts !== undefined && message.thread_ts !== ts) {
+    throw new SlackThreadReplyError(channel, ts, message.thread_ts);
+  }
   // A deleted message that has replies stays in its thread as a tombstone.
   if (message === undefined || message.ts !== ts || message.subtype === "tombstone") {
     console.log(`[slack] snapshot ${channel} ${ts}: gone`);

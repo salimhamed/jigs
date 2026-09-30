@@ -194,15 +194,11 @@ export const postPullRequestNote = pullRequests.postPullRequestNote;
 /**
  * Wait for a human to reply in a Slack thread after the question, and return the reply.
  *
- * @group Slack messages
- *
  * @remarks
- * Waits with no time limit, until a reply or `jigs cancel`. Socket Mode, the service's poll
- * and `jigs poke` each make it read the thread again. Replies from bots, including the
- * factory's own, never count. `threadTs` must be the thread's top-level message. Deleting it
- * while the run waits fails the run. A reply already in the thread returns at once to every
- * run that asks; a second run that has to park while another waits on the thread fails with
- * `HookConflictError`.
+ * Binds the library's `waitForSlackReply` routine to this factory's `fetchSlackMessage`
+ * step; its documentation covers wakes, deletion and conflicts.
+ *
+ * @group Slack messages
  */
 export const waitForSlackReply = (question: SlackQuestion) =>
   waitForSlackReplyRoutine(question, { fetchSlackMessage });

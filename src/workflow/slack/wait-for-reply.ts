@@ -33,18 +33,21 @@ function tsValue(ts: string): bigint {
   return BigInt(seconds + micros.padEnd(6, "0").slice(0, 6));
 }
 
-// The wake carries nothing: socket events, the service's poll and `jigs poke`
-// all only make the routine read the thread again.
 /**
  * Wait, with no time limit, for a human to reply in a Slack thread after the
  * question, and return the first such reply.
  *
  * @remarks
- * `threadTs` must be the thread's top-level message: a reply's ts reads as
- * deleted, which fails the wait. When a human reply is already in the
- * thread, every run waiting on it returns that reply; a second run that has
- * to park while another waits on the thread fails with the Workflow SDK's
- * `HookConflictError`.
+ * Waits until a reply or `jigs cancel`. Socket Mode, the service's poll and
+ * `jigs poke` each make it read the thread again. Replies from bots,
+ * including the factory's own, never count. `threadTs` must be the thread's
+ * top-level message: a reply's ts fails the wait, naming the top-level
+ * message's ts. Deleting the message while the run waits fails the run. When
+ * a human reply is already in the thread, every run waiting on it returns
+ * that reply; a second run that has to park while another waits on the
+ * thread fails with the Workflow SDK's `HookConflictError`.
+ *
+ * @group Slack messages
  */
 export async function waitForSlackReply(
   question: SlackQuestion,
@@ -53,6 +56,7 @@ export async function waitForSlackReply(
   const { fetchSlackMessage } = steps;
   const { channel, threadTs, after } = question;
   const token = slackThreadToken(channel, threadTs);
+  // The wake carries nothing; it only makes the routine read the thread again.
   const hook = createHook<unknown>({ token });
   try {
     const since = tsValue(after);

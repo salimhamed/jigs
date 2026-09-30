@@ -66,6 +66,16 @@ test.skipIf(!configured)(
   },
 );
 
+test.skipIf(!configured)("a thread reply's ts fails, naming the top-level message", async () => {
+  const ts = await postSlackMessage({ channel, text: "jigs live test: reply parent" });
+  posted.push(ts);
+  const reply = await postSlackMessage({ channel, text: "jigs live test: reply", threadTs: ts });
+  posted.push(reply);
+  await expect(fetchSlackMessage({ channel, ts: reply })).rejects.toThrow(
+    `is a thread reply; pass its thread's top-level message ts, ${ts}`,
+  );
+});
+
 test.skipIf(!configured)("a deleted message snapshots as gone", async () => {
   const ts = await postSlackMessage({ channel, text: "jigs live test: deleted" });
   expect((await deleteMessage(ts)).ok).toBe(true);
