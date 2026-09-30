@@ -3,7 +3,9 @@ import { z } from "zod";
 import type { Factory, WorkflowInputs } from "../workflow/factory.ts";
 
 const { start, resolveIssueRef, preflightChecks } = vi.hoisted(() => ({
-  start: vi.fn(async (_workflow: unknown, _args: unknown[]) => ({ runId: "wrun_test" })),
+  start: vi.fn(async (_workflow: unknown, _args: unknown[], _options?: unknown) => ({
+    runId: "wrun_test",
+  })),
   preflightChecks: vi.fn(() => []),
   resolveIssueRef: vi.fn(() => {
     throw new Error("Unexpected Linear access");
@@ -16,7 +18,7 @@ vi.mock("../checks/index.ts", () => ({
 }));
 vi.mock("../providers/linear.ts", () => ({ resolveIssueRef }));
 
-const { startRun } = await import("./trigger.ts");
+const { prepareRun, startRun } = await import("./trigger.ts");
 const inputs = z.object({ ticket: z.string(), attempts: z.number().default(3) });
 const factory = {
   workflows: {
@@ -37,6 +39,18 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
   ]);
   expect(resolveIssueRef).not.toHaveBeenCalled();
   expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
+});
+
+test("attributes are seeded on the run, where encrypted inputs cannot hide them", async () => {
+  start.mockClear();
+  const prepared = await prepareRun(factory, "run", { ticket: "abc" });
+  if (prepared.kind !== "ready") throw new Error(prepared.kind);
+  await prepared.launch("trig", { "jigs.occurrence": "x" });
+  expect(start).toHaveBeenCalledExactlyOnceWith(
+    factory.workflows.run.workflow,
+    [{ ticket: "abc", attempts: 3, triggerId: "trig" }],
+    { attributes: { "jigs.occurrence": "x" } },
+  );
 });
 
 test("invalid inputs cannot start a run", async () => {

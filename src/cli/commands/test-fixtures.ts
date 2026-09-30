@@ -197,6 +197,7 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
             ...run,
           })),
           schedules: [],
+          triggers: [],
         }),
       );
     } else if (req.url === "/api/doctor") {

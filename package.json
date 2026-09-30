@@ -45,6 +45,10 @@
       "types": "./dist/schedules.d.ts",
       "default": "./dist/schedules.js"
     },
+    "./triggers": {
+      "types": "./dist/triggers.d.ts",
+      "default": "./dist/triggers.js"
+    },
     "./automatic-release": {
       "types": "./dist/automatic-release.d.ts",
       "default": "./dist/automatic-release.js"
@@ -143,6 +147,7 @@
     "smol-toml": "^1.8.0",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^28.0.0",
+    "ulid": "3.0.2",
     "yaml": "^2.9.0"
   },
   "peerDependencies": {

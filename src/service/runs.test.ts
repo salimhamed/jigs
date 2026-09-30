@@ -14,9 +14,13 @@ import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import {
   enrichSuspensions,
+  eventTriggerId,
+  findRunsByAttribute,
   listRunSteps,
   listRuns,
   runExists,
+  runIdTime,
+  runStatuses,
   runsWithActiveStep,
   type StepView,
   scheduleTriggerId,
@@ -388,6 +392,84 @@ test("a scheduled run names its schedule, without the tick it fired on", async (
   world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
   const rows = await listRuns(factory);
   expect(rows[0]?.trigger).toBe("schedule:nightly-sweep");
+});
+
+test("an event trigger's run names its trigger, without the occurrence", async () => {
+  const triggerId = eventTriggerId("pages", "C123:1727.0001");
+  world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
+  const rows = await listRuns(factory);
+  expect(rows[0]?.trigger).toBe("trigger:pages");
+});
+
+test("run statuses are read by ID, and a run the World lacks is absent", async () => {
+  world({ runs: [worldRun({ status: "completed" })] });
+  expect(await runStatuses([RUN_A, RUN_B])).toEqual(new Map([[RUN_A, "completed"]]));
+});
+
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+// A run ID minted at this time, as the SDK mints them: `wrun_` and a ULID.
+function runIdAt(at: Date, tail: string): string {
+  let time = "";
+  for (let ms = at.getTime(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
+    time = CROCKFORD[ms % 32] + time;
+  return `wrun_${time}${tail.padStart(16, "0")}`;
+}
+
+test("a run is found by its plaintext attribute, newest first, not before `since`", async () => {
+  const listed: unknown[] = [];
+  const minute = (m: number) => new Date(Date.UTC(2026, 8, 29, 12, m));
+  // created_at reads back seven hours early, as world-postgres' timestamp
+  // column does on a server west of UTC; only the run ID's time is honest.
+  const run = (m: number, tail: string, value?: string) => ({
+    runId: runIdAt(minute(m), tail),
+    workflowName: STAMPED_WORKFLOW_ID,
+    status: "running",
+    createdAt: new Date(minute(m).getTime() - 7 * 3_600_000),
+    attributes: value === undefined ? {} : { "jigs.occurrence": value },
+  });
+  const [newest, mine, again, old] = [
+    run(30, "3"),
+    run(20, "2", "mine"),
+    run(15, "4", "mine"),
+    run(5, "1", "old"),
+  ];
+  const pages = [[newest, mine, again], [old]];
+  setWorld({
+    specVersion: SPEC_VERSION_CURRENT,
+    runs: {
+      list: async (params: { pagination?: { cursor?: string } }) => {
+        listed.push(params);
+        const index = params.pagination?.cursor === undefined ? 0 : 1;
+        return { data: pages[index], hasMore: index === 0, cursor: index === 0 ? "p1" : null };
+      },
+    },
+  } as unknown as Parameters<typeof setWorld>[0]);
+  const find = (value: string, m: number) =>
+    findRunsByAttribute({
+      workflowName: STAMPED_WORKFLOW_ID,
+      key: "jigs.occurrence",
+      value,
+      since: minute(m),
+    }).then((runs) => runs.map((run) => run.runId));
+
+  // Every run that carries it, so a second start for one occurrence shows.
+  expect(await find("mine", 10)).toEqual([mine.runId, again.runId]);
+  expect(listed[0]).toMatchObject({
+    workflowName: STAMPED_WORKFLOW_ID,
+    resolveData: "none",
+    pagination: { sortOrder: "desc" },
+  });
+  // Older than `since`: the scan stops rather than reading all history.
+  expect(await find("old", 10)).toEqual([]);
+  expect(await find("old", 0)).toEqual([old.runId]);
+});
+
+test("a run ID's time is read from its ULID, and one that cannot be read is none", () => {
+  const at = new Date("2026-09-29T12:00:00.000Z");
+  expect(runIdTime(runIdAt(at, "1"))).toBe(at.getTime());
+  expect(runIdTime("wrun_short")).toBeNull();
+  // Past the 48-bit time a ULID can hold: decodeTime rejects it.
+  expect(runIdTime("wrun_8ZZZZZZZZZZZZZZZZZZZZZZZZZ")).toBeNull();
 });
 
 test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {

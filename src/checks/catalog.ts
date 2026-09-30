@@ -26,7 +26,8 @@ export interface Check {
   run(): Promise<CheckResult>;
 }
 
-export type CheckOutcome = { id: string; label: string } & CheckResult;
+/** `unanswered` marks a failure the check did not give: it threw, or did not answer in time. */
+export type CheckOutcome = { id: string; label: string; unanswered?: true } & CheckResult;
 
 export type FailedCheck = Extract<CheckOutcome, { ok: false }>;
 
@@ -51,21 +52,23 @@ export async function runChecks(
 ): Promise<CheckReport> {
   const outcomes = await Promise.all(
     checks.map(async (check): Promise<CheckOutcome> => {
-      const timeout = new Promise<CheckResult>((resolve) => {
+      const timeout = new Promise<CheckResult & { unanswered?: true }>((resolve) => {
         // AbortSignal.timeout's timer is unref'd, so nothing to clean up.
         AbortSignal.timeout(timeoutMs).addEventListener("abort", () =>
           resolve({
             ok: false,
             reason: `the check did not answer within ${timeoutMs}ms`,
             repair: `the ${check.id} check did not answer within ${timeoutMs}ms\nretry, and report this if it repeats`,
+            unanswered: true,
           }),
         );
       });
       const result = await Promise.race([check.run(), timeout]).catch(
-        (err: unknown): CheckResult => ({
+        (err: unknown): CheckResult & { unanswered?: true } => ({
           ok: false,
           reason: String(err),
           repair: `the ${check.id} check itself failed, so report this`,
+          unanswered: true,
         }),
       );
       return { id: check.id, label: check.label, ...result };

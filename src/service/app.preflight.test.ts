@@ -66,6 +66,7 @@ const scheduledApp = createApp({
     bound: { workflow: async () => undefined, inputs: z.object({}) },
   },
   schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
+  triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
 });
 
 let tmp: string;
@@ -257,7 +258,7 @@ test("a green preflight lets the trigger call start()", async () => {
   removeTmpDir(workspace);
 });
 
-test("doctor reports a malformed schedule beside the catalog's own checks", async () => {
+test("doctor reports a malformed schedule and trigger beside the catalog's own checks", async () => {
   seedThreeFailures();
   const body = (await (await scheduledApp.request("/api/doctor")).json()) as {
     ok: boolean;
@@ -267,6 +268,8 @@ test("doctor reports a malformed schedule beside the catalog's own checks", asyn
   const schedule = body.checks.find((check) => check.id === "schedule.nightly");
   expect(schedule?.label).toBe("schedule nightly");
   expect(schedule?.repair).toContain("fix schedules.nightly.cron");
+  const trigger = body.checks.find((check) => check.id === "trigger.pages");
+  expect(trigger?.reason).toBe('source "nope.pages" is not a source this jigs version provides');
   expect(body.checks.some((check) => check.id.startsWith("harness."))).toBe(false);
 });
 

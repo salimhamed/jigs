@@ -3,18 +3,28 @@ import type { z } from "zod";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
 import type { Factory, Injected } from "../workflow/factory.ts";
 
-export type StartRunResult =
-  | { kind: "started"; runId: string }
+type Refusal =
   | { kind: "unknown-workflow"; knownWorkflows: string[] }
   | { kind: "invalid-inputs"; issues: z.core.$ZodIssue[] }
   | { kind: "preflight-failed"; report: CheckReport };
 
-export async function startRun(
+export type StartRunResult = { kind: "started"; runId: string } | Refusal;
+
+/** A run that passed validation and preflight, ready for the World. `attributes` are seeded on
+ *  the run as plaintext, so they stay readable when the World encrypts its inputs. */
+export type PreparedRun =
+  | {
+      kind: "ready";
+      launch(triggerId: string, attributes?: Record<string, string>): Promise<string>;
+    }
+  | Refusal;
+
+/** Everything before the World: input validation, then preflight. */
+export async function prepareRun(
   factory: Factory,
   workflowName: string,
   inputs: unknown,
-  triggerId: string,
-): Promise<StartRunResult> {
+): Promise<PreparedRun> {
   const entry = factory.workflows[workflowName];
   if (!entry) {
     return {
@@ -35,7 +45,26 @@ export async function startRun(
   const report = await runChecks(preflightChecks(entry.requires ?? {}, parsed.data));
   if (!report.ok) return { kind: "preflight-failed", report };
 
-  const injection = { triggerId } satisfies Injected;
-  const run = await start(entry.workflow, [{ ...parsed.data, ...injection }]);
-  return { kind: "started", runId: run.runId };
+  return {
+    kind: "ready",
+    async launch(triggerId, attributes) {
+      const args: [unknown] = [{ ...parsed.data, ...({ triggerId } satisfies Injected) }];
+      const run = await (attributes === undefined
+        ? start(entry.workflow, args)
+        : start(entry.workflow, args, { attributes }));
+      return run.runId;
+    },
+  };
+}
+
+/** Validate, preflight and start a run. */
+export async function startRun(
+  factory: Factory,
+  workflowName: string,
+  inputs: unknown,
+  triggerId: string,
+): Promise<StartRunResult> {
+  const prepared = await prepareRun(factory, workflowName, inputs);
+  if (prepared.kind !== "ready") return prepared;
+  return { kind: "started", runId: await prepared.launch(triggerId) };
 }

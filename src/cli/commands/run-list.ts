@@ -1,7 +1,7 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
 import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
-import { displayPath, formatTable, tone } from "../output.ts";
+import { displayPath, formatTable, hintLines, indent, tone } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 export type RunListSuspension = RunSuspension;
@@ -30,9 +30,27 @@ export interface RunListSchedule {
   active: string | null;
 }
 
+export interface RunListTrigger {
+  name: string;
+  workflow: string;
+  source: string;
+  lastOccurrence: string | null;
+  pending: number;
+  active: number;
+  failed: number;
+  failures: Array<{
+    occurrence: string;
+    at: string;
+    checks: Array<{ label: string; reason: string; repair: string }>;
+  }>;
+}
+
 export interface RunListResult {
   runs: RunListRun[];
   schedules: RunListSchedule[];
+  triggers: RunListTrigger[];
+  /** Set when the service could not read its triggers; runs and schedules still show. */
+  triggersError?: string;
 }
 
 export interface RunListOptions {
@@ -112,7 +130,42 @@ export async function showRuns(
       deps.out(line);
     }
   }
+  if (result.triggersError !== undefined) {
+    deps.out("");
+    deps.out(`${tone("FAIL")} triggers unavailable: ${result.triggersError}`);
+  }
+  if (result.triggers.length > 0) {
+    deps.out("");
+    for (const line of formatTable(
+      ["TRIGGER", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
+      result.triggers.map((trigger) => [
+        trigger.name,
+        trigger.workflow,
+        trigger.source,
+        trigger.lastOccurrence ?? "-",
+        String(trigger.pending),
+        String(trigger.active),
+        String(trigger.failed),
+      ]),
+    )) {
+      deps.out(line);
+    }
+    for (const line of triggerFailureLines(result.triggers)) deps.out(line);
+  }
   return result;
+}
+
+// A failed occurrence is never retried, so its repair is the operator's to
+// apply before the next occurrence arrives.
+function triggerFailureLines(triggers: readonly RunListTrigger[]): string[] {
+  return triggers.flatMap((trigger) =>
+    trigger.failures.flatMap((failure) =>
+      failure.checks.flatMap((check) => [
+        `${tone("FAIL")} ${trigger.name} ${failure.occurrence}: ${check.label}: ${check.reason}`,
+        ...indent(hintLines(check.repair)),
+      ]),
+    ),
+  );
 }
 
 export function waitingCell(run: RunListRun): string {
