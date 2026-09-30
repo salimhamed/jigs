@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.5
+# @jigs-ai/jigs v0.78.6
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -161,6 +161,30 @@ access token and to `review` with a GitHub App.
 ###### operator?
 
 > `optional` **operator**: `string`
+
+##### pagerduty?
+
+> `optional` **pagerduty**: `object`
+
+###### identity
+
+> **identity**: `object` = `pagerDutyIdentitySchema`
+
+###### identity.from
+
+> **from**: `string`
+
+###### identity.mode
+
+> **mode**: `"app"`
+
+###### identity.region
+
+> **region**: `"us"` \| `"eu"`
+
+###### identity.subdomain
+
+> **subdomain**: `string`
 
 ##### release?
 
@@ -438,6 +462,36 @@ const linear = {
   identity: { mode: "app" },
   operator: "salim@example.com",
 } satisfies LinearDefinition;
+```
+
+***
+
+### PagerDutyDefinition
+
+> **PagerDutyDefinition** = `z.input`\<*typeof* `pagerDutySchema`\>
+
+Who jigs is on PagerDuty: a scoped OAuth application acting on one account.
+
+#### Remarks
+
+`identity.mode` is `app`, the only mode: jigs mints its own token from
+`PAGERDUTY_CLIENT_ID` and `PAGERDUTY_CLIENT_SECRET` in `.env`. `subdomain`
+and `region` name the account, as in `acme.pagerduty.com` on the `us`
+service region.
+
+`from` is required: the email of a real PagerDuty user. PagerDuty refuses a
+write that names no user, so every note jigs adds is attributed to them.
+`jigs doctor` fails when no PagerDuty user has the email.
+
+#### Example
+
+Use this value for `pagerduty` in `jigs.config.ts`.
+```ts
+import type { PagerDutyDefinition } from "@jigs-ai/jigs";
+
+const pagerduty = {
+  identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
+} satisfies PagerDutyDefinition;
 ```
 
 ***

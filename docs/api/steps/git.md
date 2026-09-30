@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.5
+# @jigs-ai/jigs v0.78.6
 
 Low-level Git operations for factory-owned steps. Workflow code normally uses
 the generated `#jigs/steps` wrappers.
