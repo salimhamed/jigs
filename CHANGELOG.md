@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.81.0](https://github.com/salimhamed/jigs/compare/jigs-v0.80.0...jigs-v0.81.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* start Slack trigger runs for other bots' posts ([#473](https://github.com/salimhamed/jigs/issues/473))
+
+### Features
+
+* start Slack trigger runs for other bots' posts ([#473](https://github.com/salimhamed/jigs/issues/473)) ([8bf6b94](https://github.com/salimhamed/jigs/commit/8bf6b945a400ef3677c547338569a7477d9f655c))
+
 ## [0.80.0](https://github.com/salimhamed/jigs/compare/jigs-v0.79.0...jigs-v0.80.0) (2026-09-30)
 
 
