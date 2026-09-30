@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.78.8](https://github.com/salimhamed/jigs/compare/jigs-v0.78.7...jigs-v0.78.8) (2026-09-30)
+
+
+### Features
+
+* add PagerDuty incident snapshot and note steps ([#460](https://github.com/salimhamed/jigs/issues/460)) ([416b18b](https://github.com/salimhamed/jigs/commit/416b18bffd16c4df577fede5196806ef4223fe66))
+* start runs from Slack messages and mentions ([#463](https://github.com/salimhamed/jigs/issues/463)) ([4d6301d](https://github.com/salimhamed/jigs/commit/4d6301d78f34e23437fa94cea93a47f5f89acc19))
+
 ## [0.78.7](https://github.com/salimhamed/jigs/compare/jigs-v0.78.6...jigs-v0.78.7) (2026-09-30)
 
 
