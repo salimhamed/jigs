@@ -106,8 +106,17 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("the root, the routines entry, the steps entry and the seven step topics are the factory's subpaths", () => {
-  const topics = ["agents", "human", "linear", "pull-requests", "workspaces", "git", "runtime"];
+test("the root, the routines entry, the steps entry and the eight step topics are the factory's subpaths", () => {
+  const topics = [
+    "agents",
+    "human",
+    "linear",
+    "pagerduty",
+    "pull-requests",
+    "workspaces",
+    "git",
+    "runtime",
+  ];
   const service = [
     "./app",
     "./nitro",
@@ -261,6 +270,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "resolveLinearIssue",
     "setTicketStatus",
   ],
+  "steps/pagerduty/index.ts": ["fetchIncidentSnapshot", "postIncidentNote"],
   "steps/pull-requests/index.ts": [
     "fetchPullRequestState",
     "commentOnPullRequest",

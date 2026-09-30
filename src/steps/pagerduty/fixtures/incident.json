@@ -1,0 +1,93 @@
+{
+  "incident_number": 19831,
+  "title": "jigs live test: safe to ignore, resolves itself",
+  "description": "jigs live test: safe to ignore, resolves itself",
+  "created_at": "2026-09-30T06:28:09Z",
+  "updated_at": "2026-09-30T06:28:09Z",
+  "status": "triggered",
+  "incident_key": null,
+  "service": {
+    "id": "P48FPG2",
+    "type": "service_reference",
+    "summary": "jigs-sandbox",
+    "self": "https://api.pagerduty.com/services/P48FPG2",
+    "html_url": "https://acme.pagerduty.com/service-directory/P48FPG2"
+  },
+  "assignments": [
+    {
+      "at": "2026-09-30T06:28:09Z",
+      "assignee": {
+        "id": "PXNA3IV",
+        "type": "user_reference",
+        "summary": "Example Responder",
+        "self": "https://api.pagerduty.com/users/PXNA3IV",
+        "html_url": "https://acme.pagerduty.com/users/PXNA3IV"
+      }
+    }
+  ],
+  "assigned_via": "escalation_policy",
+  "last_status_change_at": "2026-09-30T06:28:09Z",
+  "resolved_at": null,
+  "first_trigger_log_entry": {
+    "id": "R9M9KPH5FAY3WNZ7Z3U916T5HO",
+    "type": "trigger_log_entry_reference",
+    "summary": "Triggered through the API.",
+    "self": "https://api.pagerduty.com/log_entries/R9M9KPH5FAY3WNZ7Z3U916T5HO",
+    "html_url": "https://acme.pagerduty.com/incidents/Q38Z72W5PMTIS1/log_entries/R9M9KPH5FAY3WNZ7Z3U916T5HO"
+  },
+  "alert_counts": {
+    "all": 1,
+    "triggered": 1,
+    "resolved": 0
+  },
+  "is_mergeable": true,
+  "incident_type": {
+    "name": "incident_default"
+  },
+  "escalation_policy": {
+    "id": "PWRV0RR",
+    "type": "escalation_policy_reference",
+    "summary": "jigs-sandbox",
+    "self": "https://api.pagerduty.com/escalation_policies/PWRV0RR",
+    "html_url": "https://acme.pagerduty.com/escalation_policies/PWRV0RR"
+  },
+  "teams": [
+    {
+      "id": "PTWXH6V",
+      "type": "team_reference",
+      "summary": "Jigs POC",
+      "self": "https://api.pagerduty.com/teams/PTWXH6V",
+      "html_url": "https://acme.pagerduty.com/teams/PTWXH6V"
+    }
+  ],
+  "impacted_services": [
+    {
+      "id": "P48FPG2",
+      "type": "service_reference",
+      "summary": "jigs-sandbox",
+      "self": "https://api.pagerduty.com/services/P48FPG2",
+      "html_url": "https://acme.pagerduty.com/service-directory/P48FPG2"
+    }
+  ],
+  "pending_actions": [],
+  "acknowledgements": [],
+  "basic_alert_grouping": null,
+  "alert_grouping": null,
+  "last_status_change_by": {
+    "id": "P48FPG2",
+    "type": "service_reference",
+    "summary": "jigs-sandbox",
+    "self": "https://api.pagerduty.com/services/P48FPG2",
+    "html_url": "https://acme.pagerduty.com/service-directory/P48FPG2"
+  },
+  "priority": null,
+  "incidents_responders": [],
+  "responder_requests": [],
+  "subscriber_requests": [],
+  "urgency": "high",
+  "id": "Q38Z72W5PMTIS1",
+  "type": "incident",
+  "summary": "[#19831] jigs live test: safe to ignore, resolves itself",
+  "self": "https://api.pagerduty.com/incidents/Q38Z72W5PMTIS1",
+  "html_url": "https://acme.pagerduty.com/incidents/Q38Z72W5PMTIS1"
+}

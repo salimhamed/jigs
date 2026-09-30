@@ -85,6 +85,10 @@
       "types": "./dist/steps/linear/index.d.ts",
       "default": "./dist/steps/linear/index.js"
     },
+    "./steps/pagerduty": {
+      "types": "./dist/steps/pagerduty/index.d.ts",
+      "default": "./dist/steps/pagerduty/index.js"
+    },
     "./steps/pull-requests": {
       "types": "./dist/steps/pull-requests/index.d.ts",
       "default": "./dist/steps/pull-requests/index.js"

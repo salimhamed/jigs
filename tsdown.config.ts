@@ -12,6 +12,7 @@ export default defineConfig({
     "steps/agents/index": "src/steps/agents/index.ts",
     "steps/human/index": "src/steps/human/index.ts",
     "steps/linear/index": "src/steps/linear/index.ts",
+    "steps/pagerduty/index": "src/steps/pagerduty/index.ts",
     "steps/pull-requests/index": "src/steps/pull-requests/index.ts",
     "steps/workspaces/index": "src/steps/workspaces/index.ts",
     "steps/git/index": "src/steps/git/index.ts",

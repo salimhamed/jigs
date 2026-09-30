@@ -23,6 +23,7 @@ export interface PagerDutyReference {
   id: string;
   type?: string;
   summary?: string;
+  html_url?: string;
 }
 
 export interface PagerDutyIncident {
@@ -34,6 +35,8 @@ export interface PagerDutyIncident {
   created_at: string;
   html_url: string;
   service: PagerDutyReference;
+  assignments: Array<{ at?: string; assignee: PagerDutyReference }>;
+  escalation_policy: PagerDutyReference;
 }
 
 export interface PagerDutyNote {
