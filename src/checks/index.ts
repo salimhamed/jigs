@@ -162,14 +162,23 @@ function linearChecks(): Check[] {
   return linearIdentityChecks(identity, linearProbes);
 }
 
-// The bot token is worth checking whatever the config says; only Socket Mode
-// comes from it, and an unreadable config is the binding checks' diagnosis.
-function slackDoctorChecks(): Check[] {
-  let slack: SlackConfig = { socketMode: false };
+// The bot token is worth checking whatever the config says, so a missing or
+// unreadable slack section falls back to no Socket Mode and no extra scopes.
+// An unreadable config is the binding checks' diagnosis.
+function configuredSlack(): SlackConfig {
+  let slack: SlackConfig | undefined;
   try {
-    slack = readFactoryConfig(factoryRoot()).slack ?? slack;
+    slack = readFactoryConfig(factoryRoot()).slack;
   } catch {}
-  return [...slackIdentityChecks(slackProbes), ...slackSocketModeChecks(slack, slackProbes)];
+  return slack ?? { socketMode: false, scopes: [] };
+}
+
+function slackDoctorChecks(): Check[] {
+  const slack = configuredSlack();
+  return [
+    ...slackIdentityChecks(slackProbes, slack.scopes),
+    ...slackSocketModeChecks(slack, slackProbes),
+  ];
 }
 
 // An unreadable config is the identity check's diagnosis, so it adds nothing here.
@@ -237,7 +246,9 @@ export function preflightChecks(
     ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
     ...(integrations.includes("pagerduty") ? pagerDutyChecks() : []),
-    ...(integrations.includes("slack") ? slackIdentityChecks(slackProbes) : []),
+    ...(integrations.includes("slack")
+      ? slackIdentityChecks(slackProbes, configuredSlack().scopes)
+      : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
     ...(requires.models ?? []).flatMap((source) => {

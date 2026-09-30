@@ -211,9 +211,14 @@ export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchem
  * the service also holds a Socket Mode connection that delivers messages
  * within a second; it refuses to start without `SLACK_APP_TOKEN`, and doctor
  * checks that token opens a connection. Polling on
- * `service.pollIntervalSeconds.slack` runs either way.
+ * `service.pollIntervalSeconds.slack` runs either way. `scopes` names the bot
+ * scopes the factory's own Slack calls need beyond jigs' own; doctor checks the
+ * bot holds them.
  */
-export const slackSchema = z.strictObject({ socketMode: z.boolean() });
+export const slackSchema = z.strictObject({
+  socketMode: z.boolean(),
+  scopes: z.array(z.string().min(1)).default([]),
+});
 
 /** Resolve the credentials for one account. */
 export function installationFor(

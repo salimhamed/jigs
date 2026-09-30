@@ -520,7 +520,11 @@ test("Socket Mode without its app-level token refuses the boot and names the var
   const exit = vi.fn();
   const error = vi.fn();
   expect(
-    await gateOnSlackAppToken({ slack: async () => ({ socketMode: true }), exit, error }),
+    await gateOnSlackAppToken({
+      slack: async () => ({ socketMode: true, scopes: [] }),
+      exit,
+      error,
+    }),
   ).toBe(false);
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("SLACK_APP_TOKEN"));
@@ -528,7 +532,7 @@ test("Socket Mode without its app-level token refuses the boot and names the var
 
 test.each([
   ["no slack section", undefined],
-  ["Socket Mode off", { socketMode: false }],
+  ["Socket Mode off", { socketMode: false, scopes: [] }],
 ])("%s needs no app-level token to boot", async (_name, slack) => {
   vi.stubEnv("SLACK_APP_TOKEN", "");
   const exit = vi.fn();
@@ -539,6 +543,9 @@ test.each([
 test("Socket Mode with its app-level token boots", async () => {
   vi.stubEnv("SLACK_APP_TOKEN", "xapp-set");
   expect(
-    await gateOnSlackAppToken({ slack: async () => ({ socketMode: true }), exit: vi.fn() }),
+    await gateOnSlackAppToken({
+      slack: async () => ({ socketMode: true, scopes: [] }),
+      exit: vi.fn(),
+    }),
   ).toBe(true);
 });
