@@ -8,10 +8,10 @@ what the agent found to the incident as a note. It needs the factory's
 
 `#jigs/steps` has two PagerDuty steps:
 
-- `fetchIncidentSnapshot(incidentId)` reads the incident once: its number,
-  title, status, urgency, creation time and URL, and its service, assignees and
-  escalation policy, each with an id, a name and a link. Every later step in
-  the same run works from this copy.
+- `fetchIncidentSnapshot(incidentId)` reads the incident: its number, title,
+  status, urgency, creation time and URL, and its service, assignees and
+  escalation policy, each with an id, a name and a link. Later steps in the run
+  work from this copy; a run that resumes reads the incident afresh.
 - `postIncidentNote(incidentId, content)` adds a note and returns its
   `noteId`. The note is attributed to your `from` user and ends in a line such
   as `jigs run wrun_01K…`, so a responder can find the run with `jigs status`.

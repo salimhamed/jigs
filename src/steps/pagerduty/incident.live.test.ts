@@ -12,8 +12,8 @@ import { postIncidentNote } from "./notes.ts";
 
 // The steps against a real test incident on the sandbox service, opened
 // through the Events API and always resolved afterwards. Runs only with
-// PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET, PAGERDUTY_FROM and
-// PAGERDUTY_EVENTS_ROUTING_KEY set.
+// PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET, PAGERDUTY_FROM,
+// PAGERDUTY_EVENTS_ROUTING_KEY and PAGERDUTY_SUBDOMAIN set.
 vi.mock("../../providers/pagerduty.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/pagerduty.ts")>()),
   pagerDutyClientFor: vi.fn(),
@@ -22,17 +22,19 @@ vi.mock("../../providers/pagerduty.ts", async (importOriginal) => ({
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
 const from = env("PAGERDUTY_FROM");
 const routingKey = env("PAGERDUTY_EVENTS_ROUTING_KEY");
+const subdomain = env("PAGERDUTY_SUBDOMAIN");
 const configured =
   env("PAGERDUTY_CLIENT_ID") !== undefined &&
   env("PAGERDUTY_CLIENT_SECRET") !== undefined &&
   from !== undefined &&
-  routingKey !== undefined;
+  routingKey !== undefined &&
+  subdomain !== undefined;
 const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 
 describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
   const identity: PagerDutyIdentity = {
     mode: "app",
-    subdomain: env("PAGERDUTY_SUBDOMAIN") ?? "junglescout",
+    subdomain: subdomain ?? "",
     region: env("PAGERDUTY_REGION") === "eu" ? "eu" : "us",
     from: from ?? "",
   };
