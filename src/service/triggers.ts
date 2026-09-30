@@ -754,6 +754,19 @@ export function triggerChecks(
   });
 }
 
+/** Each declared trigger whose source this jigs version provides, with the provider it polls. */
+export function triggerProviders(
+  factory: Factory,
+  sources: SourceRegistry = SOURCES,
+): Record<string, SourceProvider> {
+  return Object.fromEntries(
+    Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
+      const source = sources[trigger.source.kind];
+      return source === undefined ? [] : [[name, source.provider]];
+    }),
+  );
+}
+
 interface TriggerProblem {
   reason: string;
   repair: string;

@@ -92,7 +92,7 @@ function reviewApproval(): void {
     service: {
       port: 8990,
       dashboardPort: 9090,
-      pollIntervalSeconds: { github: 300, linear: 300, slack: 300 },
+      pollIntervalSeconds: { github: 300, linear: 300, slack: 300, pagerduty: 300 },
     },
     github: {
       identities: [

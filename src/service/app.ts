@@ -27,7 +27,7 @@ import { bootPhase, isReady } from "./readiness.ts";
 import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { startRun } from "./trigger.ts";
-import { listTriggers, triggerChecks } from "./triggers.ts";
+import { listTriggers, triggerChecks, triggerProviders } from "./triggers.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -120,7 +120,7 @@ export function createApp(factory: Factory): Hono {
   app.get("/api/doctor", async (c) =>
     c.json(
       await runChecks([
-        ...doctorChecks(factory.workflows),
+        ...doctorChecks(factory.workflows, triggerProviders(factory)),
         ...scheduleChecks(factory),
         ...triggerChecks(factory),
       ]),

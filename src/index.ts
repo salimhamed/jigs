@@ -120,7 +120,6 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
-
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export {
@@ -140,6 +139,7 @@ export {
   type TicketReviewPromptInput,
   ticketReviewPrompt,
 } from "./workflow/linear/ticket-review.prompt.ts";
+export { type PagerDutyIncidentsParams, pagerduty } from "./workflow/pagerduty/source.ts";
 
 export type { IncidentRef, IncidentSnapshot } from "./workflow/pagerduty/snapshot.ts";
 

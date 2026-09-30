@@ -230,6 +230,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "interpolate",
     "isPullRequestMergeReady",
     "models",
+    "pagerduty",
     "parseMarkers",
     "pullRequestSnapshotKey",
     "rebuildContextPrompt",

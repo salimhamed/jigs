@@ -53,14 +53,16 @@ const serviceSchema = z.strictObject({
   // never derived: a default would silently land on another factory's service
   // port, and the two numbers have to be the operator's to move.
   dashboardPort: portSchema,
-  // How often the service wakes each parked run to re-read its provider. With
-  // that provider's webhook on, this is only the floor under a lost delivery.
+  // How often the service wakes each parked run to re-read its provider, and
+  // polls each event trigger's source. With that provider's webhook on, this is
+  // only the floor under a lost delivery.
   pollIntervalSeconds: z.preprocess(
     (section) => section ?? {},
     z.strictObject({
       github: pollIntervalSchema,
       linear: pollIntervalSchema,
       slack: pollIntervalSchema,
+      pagerduty: pollIntervalSchema,
     }),
   ),
 });

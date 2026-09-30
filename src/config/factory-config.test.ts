@@ -91,6 +91,7 @@ test.each([
   [{ service: { dashboardPort: 9090, pollIntervalSeconds: { slack: 10 } } }, "slack"],
   [{ service: { dashboardPort: 9090 }, slack: {} }, "socketMode"],
   [{ service: { dashboardPort: 9090 }, slack: { socketMode: true, mode: "app" } }, '"mode"'],
+  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { pagerduty: 10 } } }, "pagerduty"],
   [{ service: { dashboardPort: 9090 }, webhooks: { github: { enabled: true } } }, "url"],
   [
     {
@@ -121,7 +122,7 @@ test("service port defaults while dashboard port is explicit", () => {
   expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).service).toEqual({
     port: 8990,
     dashboardPort: 3456,
-    pollIntervalSeconds: { github: 300, linear: 300, slack: 300 },
+    pollIntervalSeconds: { github: 300, linear: 300, slack: 300, pagerduty: 300 },
   });
 });
 
@@ -129,7 +130,7 @@ test("each provider's poll interval defaults on its own and may sit at the floor
   expect(
     parseFactoryConfig({ service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } } })
       .service.pollIntervalSeconds,
-  ).toEqual({ github: 300, linear: 30, slack: 300 });
+  ).toEqual({ github: 300, linear: 30, slack: 300, pagerduty: 300 });
 });
 
 test("without a slack section the factory has no Slack app", () => {

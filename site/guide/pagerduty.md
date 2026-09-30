@@ -17,7 +17,7 @@ An account admin or owner does this once per PagerDuty account.
 
    | Scope | What jigs uses it for |
    | --- | --- |
-   | `incidents.read` | Reading and listing incidents, and the preflight check. |
+   | `incidents.read` | Reading and listing incidents, polling for new ones, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
    | `webhook_subscriptions.read` | Checking the webhook that delivers incident events. |
    | `users.read` | `jigs doctor`'s check of the `from` user. |
@@ -69,7 +69,8 @@ service.
 
 ## 4. Check the setup
 
-`pnpm exec jigs doctor` checks, whenever the factory has a `pagerduty` section:
+`pnpm exec jigs doctor` checks, whenever the factory has a `pagerduty` section
+or a trigger on a PagerDuty source:
 
 - **PagerDuty identity**: both `.env` variables are set, PagerDuty issues a
   token for them, and the token can list incidents.
@@ -79,6 +80,7 @@ A workflow that lists `pagerduty` in `requires.integrations` gets the identity
 check before every run, and a run does not start while it fails:
 
 ```ts
+// workflows/respond/respond.ts
 import { defineWorkflow } from "@jigs-ai/jigs";
 import { z } from "zod";
 
@@ -91,3 +93,45 @@ export default defineWorkflow({
 
 Each failure ends with a repair line naming the `.env` variables, the
 `jigs.config.ts` setting or the app scope to fix.
+
+## 5. Start a run for each new incident
+
+An [event trigger](/guide/configuration#triggers) on the `pagerduty.incidents`
+source starts one run for each newly triggered incident. This one starts the
+`respond` workflow above for every high-urgency incident on one service:
+
+```ts
+// jigs.config.ts
+import { defineFactory, pagerduty } from "@jigs-ai/jigs";
+
+export default defineFactory({
+  service: { port: 8990, dashboardPort: 9090 },
+  pagerduty: {
+    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
+  },
+  workflows: {
+    respond: () => import("./workflows/respond/respond.ts"),
+  },
+  triggers: {
+    "checkout-pages": {
+      workflow: "respond",
+      source: pagerduty.incidents({ service_ids: ["PABC123"], urgencies: ["high"] }),
+    },
+  },
+});
+```
+
+- The parameters are PagerDuty's own list-incidents parameters: `service_ids`,
+  `team_ids` and `urgencies`. Each list matches any of its values, and one you
+  leave out does not filter.
+- Each run gets `{ incident: "<id>" }`, merged over the trigger's `inputs`. The
+  workflow reads the incident itself.
+- An incident starts at most one run, ever. One that is still triggered after
+  its run ends does not start another, and neither does acknowledging and
+  re-triggering it.
+- The service asks PagerDuty for triggered incidents every
+  `service.pollIntervalSeconds.pagerduty` seconds (default 300, minimum 30).
+  A new incident can take up to one interval to start its run.
+- An incident that was acknowledged or resolved before a poll saw it starts no
+  run.
+

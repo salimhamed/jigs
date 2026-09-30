@@ -281,9 +281,14 @@ function configuredProviders(): Record<Integration, boolean> {
   }
 }
 
-// Every check follows the factory: its workflows' manifests and its
-// configuration. A provider, harness or AWS profile nothing uses is not checked.
-export function doctorChecks(workflows: WorkflowManifests): Check[] {
+// Every check follows the factory: its workflows' manifests, the providers its
+// event triggers poll, and its configuration. A provider, harness or AWS
+// profile nothing uses is not checked. `triggers` maps each trigger to the
+// provider its source reads.
+export function doctorChecks(
+  workflows: WorkflowManifests,
+  triggers: Record<string, Integration> = {},
+): Check[] {
   const users = requirementUsers(workflows, (requires) => [
     ...(requires.integrations ?? []),
     ...(requires.aws ? (["aws"] as const) : []),
@@ -291,7 +296,10 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
   const configured = configuredProviders();
   const provider = (name: Integration, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
-    return needing.length > 0 || configured[name] ? neededByWorkflows(checks(), needing) : [];
+    const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
+    return needing.length > 0 || polling.length > 0 || configured[name]
+      ? neededByWorkflows(checks(), needing, polling)
+      : [];
   };
   const aws = users.get("aws") ?? [];
   return [
