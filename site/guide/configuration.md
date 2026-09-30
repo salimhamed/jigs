@@ -101,6 +101,7 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | `dashboardPort` | required | Where the service hosts the run dashboard. |
 | `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
 | `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
+| `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine
 rarely clash.
@@ -333,6 +334,20 @@ out, logs a warning and posts the comment anyway. A mention never stops a run.
 The `pagerduty` section says which PagerDuty account jigs works on and which
 user its notes are attributed to. See [PagerDuty](/guide/pagerduty) for setup.
 
+## Slack {#slack}
+
+`slack` connects the factory's own Slack app. Set it up by following
+[Slack](/guide/slack), which has the manifest to paste.
+
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+slack: { socketMode: true },
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `socketMode` | required | Use Socket Mode. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
+
 ## Webhooks {#webhooks}
 
 Webhooks improve latency, not correctness. Without them, the built-in GitHub
@@ -381,6 +396,8 @@ is missing, and lists the credentials still empty.
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
+| `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
+| `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. |

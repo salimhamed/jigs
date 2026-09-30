@@ -48,6 +48,7 @@ export default {
           { text: "Build a workflow", link: "/guide/build-a-workflow" },
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
           { text: "Waiting and external events", link: "/guide/waiting-and-events" },
+          { text: "Slack", link: "/guide/slack" },
           { text: "Recipes", link: "/guide/recipes" },
           { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },

@@ -97,6 +97,7 @@ export {
   type LinearDefinition,
   type PagerDutyDefinition,
   type Schedule,
+  type SlackDefinition,
   type SourceDescriptor,
   type TicketWorkflowInputs,
   ticketInputSchema,

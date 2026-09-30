@@ -8,6 +8,7 @@ import {
   gateOnBindingClones,
   gateOnHarnessRuntimes,
   gateOnRegistry,
+  gateOnSlackAppToken,
   gateOnWebhookSecrets,
   gateOnWorldStart,
 } from "./start-world.ts";
@@ -495,4 +496,32 @@ test.each([
 test("an enabled provider with its secret boots", async () => {
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
+});
+
+test("Socket Mode without its app-level token refuses the boot and names the variable", async () => {
+  vi.stubEnv("SLACK_APP_TOKEN", "");
+  const exit = vi.fn();
+  const error = vi.fn();
+  expect(
+    await gateOnSlackAppToken({ slack: async () => ({ socketMode: true }), exit, error }),
+  ).toBe(false);
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("SLACK_APP_TOKEN"));
+});
+
+test.each([
+  ["no slack section", undefined],
+  ["Socket Mode off", { socketMode: false }],
+])("%s needs no app-level token to boot", async (_name, slack) => {
+  vi.stubEnv("SLACK_APP_TOKEN", "");
+  const exit = vi.fn();
+  expect(await gateOnSlackAppToken({ slack: async () => slack, exit })).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
+});
+
+test("Socket Mode with its app-level token boots", async () => {
+  vi.stubEnv("SLACK_APP_TOKEN", "xapp-set");
+  expect(
+    await gateOnSlackAppToken({ slack: async () => ({ socketMode: true }), exit: vi.fn() }),
+  ).toBe(true);
 });

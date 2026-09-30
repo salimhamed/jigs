@@ -57,7 +57,11 @@ const serviceSchema = z.strictObject({
   // that provider's webhook on, this is only the floor under a lost delivery.
   pollIntervalSeconds: z.preprocess(
     (section) => section ?? {},
-    z.strictObject({ github: pollIntervalSchema, linear: pollIntervalSchema }),
+    z.strictObject({
+      github: pollIntervalSchema,
+      linear: pollIntervalSchema,
+      slack: pollIntervalSchema,
+    }),
   ),
 });
 
@@ -198,6 +202,14 @@ export const pagerDutyIdentitySchema = z.strictObject({
 /** A factory's PagerDuty settings: exactly one PagerDuty identity. */
 export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchema });
 
+/**
+ * A factory's Slack app. The app always acts as itself, so there is no identity
+ * mode; `SLACK_BOT_TOKEN` in `.env` is its credential. With `socketMode` on,
+ * the service refuses to start without `SLACK_APP_TOKEN`, and doctor checks
+ * that token opens a Socket Mode connection.
+ */
+export const slackSchema = z.strictObject({ socketMode: z.boolean() });
+
 /** Resolve the credentials for one account. */
 export function installationFor(
   identities: GithubIdentity[],
@@ -232,6 +244,9 @@ const factoryConfigSchema = z.looseObject({
   github: z.preprocess((section) => section ?? {}, githubSchema),
   linear: z.preprocess((section) => section ?? {}, linearSchema),
   pagerduty: pagerDutySchema.optional(),
+  // Absent, the factory has no Slack app. Socket Mode is stated outright for
+  // the same reason each webhook provider is.
+  slack: slackSchema.optional(),
   release: releaseSchema.optional(),
   // Service variables every agent harness receives beyond jigs' base set.
   agents: z.preprocess((section) => section ?? {}, agentsSchema),
@@ -241,6 +256,7 @@ export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type WebhookProvider = "github" | "linear";
+export type SlackConfig = z.output<typeof slackSchema>;
 
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 /** Who jigs is on Linear: a personal API key, or an OAuth application acting as itself. */

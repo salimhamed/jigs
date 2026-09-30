@@ -300,6 +300,29 @@ test("doctor checks a provider the factory configuration asks for", () => {
   expect(ids()).not.toContain("github.identity");
 });
 
+test("a slack section asks doctor for the Slack checks, and Socket Mode adds its own", () => {
+  const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  expect(ids()).not.toContain("slack.identity");
+  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: false } }");
+  expect(ids()).toEqual(["slack.identity"]);
+  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: true } }");
+  expect(ids()).toEqual(["slack.identity", "slack.socket-mode"]);
+});
+
+test("a workflow requiring slack preflights the bot token, never the Socket Mode connection", async () => {
+  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: true } }");
+  vi.stubEnv("SLACK_BOT_TOKEN", "");
+  vi.stubEnv("SLACK_APP_TOKEN", "");
+  const slack = { integrations: ["slack" as const] };
+  expect(preflightIds(slack)).toEqual(["slack.identity"]);
+  const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
+  expect(report.checks.find((c) => c.id === "slack.identity")).toMatchObject({
+    ok: false,
+    reason: "SLACK_BOT_TOKEN is not set (needed by workflow answer)",
+  });
+});
+
 test("a factory config that cannot be read fails the Linear check as itself", async () => {
   const factory = makeTmpDir();
   onTestFinished(() => removeTmpDir(factory));

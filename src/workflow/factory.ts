@@ -9,6 +9,7 @@ import type {
   githubSchema,
   linearSchema,
   pagerDutySchema,
+  slackSchema,
   webhooksSchema,
 } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
@@ -273,6 +274,26 @@ export type LinearDefinition = z.input<typeof linearSchema>;
 export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
 
 /**
+ * The factory's Slack app, which posts as its own bot.
+ *
+ * @remarks
+ * The bot token goes in `.env` as `SLACK_BOT_TOKEN`. With `socketMode` on, the
+ * service needs the app-level token in `SLACK_APP_TOKEN` and refuses to start
+ * without it.
+ *
+ * @example
+ * Use this value for `slack` in `jigs.config.ts`.
+ * ```ts
+ * import type { SlackDefinition } from "@jigs-ai/jigs";
+ *
+ * const slack = { socketMode: true } satisfies SlackDefinition;
+ * ```
+ *
+ * @group Factory and workflows
+ */
+export type SlackDefinition = z.input<typeof slackSchema>;
+
+/**
  * Where provider webhooks reach the service, and which providers send them.
  * Without this section the service still wakes parked runs by polling.
  *
@@ -343,13 +364,14 @@ export interface FactoryDefinition {
      * of the interval is taken off at random so services do not all poll at
      * once.
      */
-    pollIntervalSeconds?: { github?: number; linear?: number };
+    pollIntervalSeconds?: { github?: number; linear?: number; slack?: number };
   };
   agents?: AgentsDefinition;
   webhooks?: WebhooksDefinition;
   github?: GitHubDefinition;
   linear?: LinearDefinition;
   pagerduty?: PagerDutyDefinition;
+  slack?: SlackDefinition;
   release?: ReleasePolicy;
   bindings?: Record<string, BindingDefinition>;
   workflows: Record<string, () => Promise<{ default: AnyWorkflowDefinition }>>;
