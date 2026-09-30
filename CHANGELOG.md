@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.79.0](https://github.com/salimhamed/jigs/compare/jigs-v0.78.10...jigs-v0.79.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* take Claude and Codex MCP credentials by environment variable name ([#469](https://github.com/salimhamed/jigs/issues/469))
+
+### Features
+
+* take Claude and Codex MCP credentials by environment variable name ([#469](https://github.com/salimhamed/jigs/issues/469)) ([c687534](https://github.com/salimhamed/jigs/commit/c68753442f9a5654513e6667bd2d30392856a179))
+
 ## [0.78.10](https://github.com/salimhamed/jigs/compare/jigs-v0.78.9...jigs-v0.78.10) (2026-09-30)
 
 
