@@ -173,6 +173,131 @@ The service log names the channel and how to fix it: invite the bot back or
 remove the channel from the trigger. Messages posted there while it was skipped
 start runs only if Socket Mode delivered them.
 
+## Read a message
+
+`fetchSlackMessage({ channel, ts })` reads a message, its permalink and its
+thread's replies, oldest first. Each post names its author, with their display
+name, their email, whether they are a bot, and `isOwnBot` for the factory's own
+bot. `ts` must be a top-level message; a reply's `ts` reads as gone. A deleted
+message reads as `{ gone: true }`, so the workflow can end quietly:
+
+```ts
+import { fetchSlackMessage } from "#jigs/steps";
+
+export async function readMessage(channel: string, ts: string) {
+  const message = await fetchSlackMessage({ channel, ts });
+  if (message.gone) return null;
+  return `${message.author.name}: ${message.text}`;
+}
+```
+
+Like every step, a read is recorded, so a resumed run sees the same message it
+saw before. Read again to see what changed.
+
+## Post a message
+
+`postSlackMessage({ channel, text, threadTs })` posts plain Slack `mrkdwn`
+text as the factory's bot. With `threadTs` it replies in the thread under that
+message; without it, it posts a new message in the channel. It returns the new
+message's `ts`.
+
+A post is tried once. If Slack's answer is lost, the step fails rather than
+risk posting twice.
+
+## Wait for a reply
+
+`waitForSlackReply({ channel, threadTs, after })` parks the run until someone
+replies in the thread under `threadTs`, and returns the first reply posted
+after the message `after`, usually the question the workflow just posted.
+`threadTs` must be the thread's top-level message, never a reply. The
+reply comes back with its text and author:
+
+```ts
+import { waitForSlackReply } from "#jigs/routines";
+import { postSlackMessage } from "#jigs/steps";
+
+export async function askInThread(channel: string, ts: string, question: string) {
+  const asked = await postSlackMessage({ channel, threadTs: ts, text: question });
+  const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked });
+  return `${reply.author.name} (${reply.author.email ?? "no email"}): ${reply.text}`;
+}
+```
+
+Any person's reply counts. Replies from bots, including the factory's own, never
+do. The wait has no time limit: it ends with a reply, or when you cancel the run
+with `jigs cancel`. With Socket Mode on, a reply wakes the run within a second.
+The service also re-reads the thread every
+[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
+and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
+time. Deleting the thread's top-level message while a run waits fails the run.
+
+## Example: answer questions in a channel
+
+This workflow starts for each message that mentions the bot. A Jev decision
+model decides whether it is a question about the codebase, and whether it is
+clear enough to answer. If not clear, the workflow asks in the thread and waits.
+Then an agent researches the code and the answer is posted in the thread.
+
+```ts
+// workflows/answer/answer.ts
+import { defineWorkflow, harnesses, models, type WorkflowInputs, yesNo } from "@jigs-ai/jigs";
+import { z } from "zod";
+import { askJev, runAgent, waitForSlackReply } from "#jigs/routines";
+import { fetchSlackMessage, postSlackMessage, provisionWorktree } from "#jigs/steps";
+
+const inputs = z.object({ channel: z.string(), ts: z.string() });
+const agents = { researcher: harnesses.claude({ model: "sonnet" }) };
+const decisionModel = models.openrouter("typesafe/jev-1.13");
+
+export async function answer(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  const { channel, ts } = input;
+  const message = await fetchSlackMessage({ channel, ts });
+  if (message.gone) return { answered: false };
+
+  const { answers } = await askJev({
+    model: decisionModel,
+    state: { message: message.text },
+    questions: {
+      aboutCode: yesNo("Is this a question about the codebase?"),
+      clear: yesNo("Is it clear enough to answer without asking anything back?"),
+    },
+  });
+  if (answers.aboutCode.probability < 0.7) return { answered: false };
+
+  let question = message.text;
+  if (answers.clear.probability < 0.5) {
+    const asked = await postSlackMessage({
+      channel,
+      threadTs: ts,
+      text: "Which part of the codebase do you mean?",
+    });
+    const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked });
+    question += `\n\n${reply.author.name} added: ${reply.text}`;
+  }
+
+  const worktree = await provisionWorktree({ binding: "app", branch: `answer/${input.triggerId}` });
+  const research = await runAgent({
+    harness: agents.researcher,
+    cwd: worktree.path,
+    prompt: `Answer this question about the code. Do not change files.\n\n${question}`,
+  });
+  await postSlackMessage({ channel, threadTs: ts, text: research.text });
+  return { answered: true };
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, bindings: ["app"], integrations: ["slack"], models: [decisionModel] },
+  workflow: answer,
+});
+```
+
+Register it with the `slack.mentions` trigger from
+[Start runs from messages](#start-runs-from-messages). The decision model needs
+`OPENROUTER_API_KEY` in `.env`; see
+[Models and harnesses](/guide/models-and-harnesses#jev-decisions).
+
 ## Checks
 
 `jigs doctor`, and `jigs up`, check that Slack accepts `SLACK_BOT_TOKEN` and

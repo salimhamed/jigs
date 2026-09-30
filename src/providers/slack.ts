@@ -164,6 +164,7 @@ export interface SlackMessage {
   text?: string;
   user?: string;
   bot_id?: string;
+  bot_profile?: { name?: string };
   subtype?: string;
   thread_ts?: string;
 }

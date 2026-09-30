@@ -101,7 +101,7 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | `dashboardPort` | required | Where the service hosts the run dashboard. |
 | `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
 | `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
-| `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels. Minimum 30. |
+| `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels, and runs waiting on a thread reply re-read it. Minimum 30. |
 | `pollIntervalSeconds.pagerduty` | `300` | How often [event triggers](#triggers) on PagerDuty look for new incidents. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine

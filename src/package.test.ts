@@ -106,13 +106,14 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("the root, the routines entry, the steps entry and the eight step topics are the factory's subpaths", () => {
+test("the root, the routines entry, the steps entry and the nine step topics are the factory's subpaths", () => {
   const topics = [
     "agents",
     "human",
     "linear",
     "pagerduty",
     "pull-requests",
+    "slack",
     "workspaces",
     "git",
     "runtime",
@@ -256,6 +257,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "claimTicket",
     "postPullRequestNote",
     "postReviewAnswers",
+    "waitForSlackReply",
   ],
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],
@@ -282,6 +284,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "replyToPullRequestReviewThread",
     "reviewPullRequest",
   ],
+  "steps/slack/index.ts": ["fetchSlackMessage", "postSlackMessage"],
   "steps/index.ts": ["AgentSessionError", "createAgentRunner"],
   "steps/agents/index.ts": ["executeAgent", "executeJev", "executeModel"],
   "steps/runtime/index.ts": [

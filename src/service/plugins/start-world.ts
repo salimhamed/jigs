@@ -361,11 +361,24 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
 // One connection for the whole service: every Slack listener reads the same
 // message stream.
 async function startSlackSocketMode(): Promise<void> {
-  const [{ startSlackSocket }, { pushEvent }] = await Promise.all([
+  const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
     import("../slack-socket.ts"),
     import("../triggers.ts"),
+    import("../slack-thread-wake.ts"),
   ]);
-  const socket = startSlackSocket({ onMessage: (event) => pushEvent("slack", event) });
+  const socket = startSlackSocket({
+    onMessage: async (event) => {
+      const [pushed, woken] = await Promise.allSettled([
+        pushEvent("slack", event),
+        wakeSlackThread(event),
+      ]);
+      const where = `${event.channel}:${event.ts}`;
+      if (pushed.status === "rejected")
+        console.log(`[slack] could not start runs for ${where}: ${String(pushed.reason)}`);
+      if (woken.status === "rejected")
+        console.log(`[slack] could not wake the thread of ${where}: ${String(woken.reason)}`);
+    },
+  });
   onShutdown(() => socket.stop(), { phase: "quiesce" });
 }
 
@@ -438,7 +451,7 @@ export default async function startWorld() {
     nudge.stop();
   });
   if (config.slack?.socketMode) await startSlackSocketMode();
-  await Promise.all([nudgeProvider("github"), nudgeProvider("linear")]);
+  await Promise.all([nudgeProvider("github"), nudgeProvider("linear"), nudgeProvider("slack")]);
 
   // The generated factory plugin starts automatic release after this plugin
   // reaches readiness. It imports the compiled factory so per-workflow policy

@@ -54,6 +54,10 @@ import type {
   ReviewThread,
   RunAgentOptions,
   RunResource,
+  SlackAuthor,
+  SlackMessageSnapshot,
+  SlackPost,
+  SlackQuestion,
   StatusReason,
   ThreadAnswers,
   TicketClaim,
@@ -128,6 +132,10 @@ type RootTypeSurface = {
   reviewThread: ReviewThread;
   runAgentOptions: RunAgentOptions;
   runResource: RunResource;
+  slackAuthor: SlackAuthor;
+  slackMessageSnapshot: SlackMessageSnapshot;
+  slackPost: SlackPost;
+  slackQuestion: SlackQuestion;
   statusReason: StatusReason;
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;

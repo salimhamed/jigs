@@ -28,6 +28,7 @@ const held = [
   { runId: "wrun_D", token: "jigs:needs-human:def:comment-1" },
   // A halt marker from another run names no claim this run holds.
   { runId: "wrun_E", token: "jigs:needs-human:abc:comment-2" },
+  { runId: "wrun_F", token: "slack:thread:C0C5EUZ7P9Q:1790723478.961719" },
 ];
 
 function sweepDeps(overrides: NudgeDeps = {}) {
@@ -66,6 +67,13 @@ test("the pull request sweep nudges only pull request hooks", async () => {
   // `jigs status <run-id>` reads this back only for the run that was actually woken.
   expect(lastWake("github:pr:acme/api#1", "wrun_A")?.kind).toBe("nudge sweep");
   expect(lastWake("github:pr:acme/api#1", "wrun_B")).toBeUndefined();
+});
+
+test("the Slack sweep nudges only the hooks of runs waiting on a thread", async () => {
+  const { deps, resumed, lines } = sweepDeps();
+  expect((await nudgeProvider("slack", deps)).nudged).toBe(1);
+  expect(resumed).toEqual(["slack:thread:C0C5EUZ7P9Q:1790723478.961719"]);
+  expect(lines).toEqual(["[nudge] Slack threads: 1 held, 1 nudged, 0 mid-turn, 0 gone, 0 failed"]);
 });
 
 test("a run in the middle of a turn is skipped rather than queued behind itself", async () => {
@@ -168,7 +176,7 @@ test("each provider sweeps on its own interval, again after each sweep, until st
   const { deps, resumed } = sweepDeps();
   const cancelled: number[] = [];
   const nudge = startNudges(
-    { github: 60, linear: 120 },
+    { github: 60, linear: 120, pagerduty: 150, slack: 90 },
     {
       ...deps,
       random: () => 0,
@@ -179,22 +187,22 @@ test("each provider sweeps on its own interval, again after each sweep, until st
     },
   );
 
-  expect(fires.map((timer) => timer.ms)).toEqual([60_000, 120_000]);
+  expect(fires.map((timer) => timer.ms)).toEqual([60_000, 120_000, 150_000, 90_000]);
   fires[0]?.fire();
   // The next sweep is scheduled only once this one has finished, so two can
   // never overlap.
-  await vi.waitFor(() => expect(fires).toHaveLength(3));
-  expect(fires[2]?.ms).toBe(60_000);
+  await vi.waitFor(() => expect(fires).toHaveLength(5));
+  expect(fires[4]?.ms).toBe(60_000);
   expect(resumed).toEqual(["github:pr:acme/api#1", "github:pr:acme/api#2"]);
   fires[1]?.fire();
-  await vi.waitFor(() => expect(fires).toHaveLength(4));
-  expect(fires[3]?.ms).toBe(120_000);
+  await vi.waitFor(() => expect(fires).toHaveLength(6));
+  expect(fires[5]?.ms).toBe(120_000);
   expect(resumed.at(-1)).toBe("linear:ticket:def");
 
   nudge.stop();
-  expect(cancelled.sort()).toEqual([3, 4]);
-  fires[2]?.fire();
+  expect(cancelled.sort()).toEqual([3, 4, 5, 6]);
+  fires[4]?.fire();
   await vi.waitFor(() => expect(resumed).toHaveLength(5));
   // A fire that was already in flight still sweeps, but schedules nothing new.
-  expect(fires).toHaveLength(4);
+  expect(fires).toHaveLength(6);
 });
