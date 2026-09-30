@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.10](https://github.com/salimhamed/jigs/compare/jigs-v0.78.9...jigs-v0.78.10) (2026-09-30)
+
+
+### Features
+
+* read Slack messages, post to Slack and wait for a thread reply ([#464](https://github.com/salimhamed/jigs/issues/464)) ([414392b](https://github.com/salimhamed/jigs/commit/414392bbbb98ecd5524985038525144e546e84a7))
+
 ## [0.78.9](https://github.com/salimhamed/jigs/compare/jigs-v0.78.8...jigs-v0.78.9) (2026-09-30)
 
 
