@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.6
+# @jigs-ai/jigs v0.78.7
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -231,9 +231,21 @@ once.
 
 > `optional` **linear**: `number`
 
+###### pollIntervalSeconds.slack?
+
+> `optional` **slack**: `number`
+
 ###### port?
 
 > `optional` **port**: `number`
+
+##### slack?
+
+> `optional` **slack**: `object`
+
+###### socketMode
+
+> **socketMode**: `boolean`
 
 ##### triggers?
 
@@ -492,6 +504,29 @@ import type { PagerDutyDefinition } from "@jigs-ai/jigs";
 const pagerduty = {
   identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
 } satisfies PagerDutyDefinition;
+```
+
+***
+
+### SlackDefinition
+
+> **SlackDefinition** = `z.input`\<*typeof* `slackSchema`\>
+
+The factory's Slack app, which posts as its own bot.
+
+#### Remarks
+
+The bot token goes in `.env` as `SLACK_BOT_TOKEN`. With `socketMode` on, the
+service needs the app-level token in `SLACK_APP_TOKEN` and refuses to start
+without it.
+
+#### Example
+
+Use this value for `slack` in `jigs.config.ts`.
+```ts
+import type { SlackDefinition } from "@jigs-ai/jigs";
+
+const slack = { socketMode: true } satisfies SlackDefinition;
 ```
 
 ***

@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.6
+# @jigs-ai/jigs v0.78.7
 
 Low-level agent and model execution functions for factory-owned step wrappers.
 
