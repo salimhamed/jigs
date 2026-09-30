@@ -258,8 +258,8 @@ export function preflightChecks(
 // itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
 // Linear, a PagerDuty webhook needs PagerDuty, and an App identity, a pagerduty
 // section or a slack section is set up on purpose. The key and PAT identities
-// are what every scaffold states, so they ask for nothing. An unreadable config asks for nothing either: the binding
-// checks report it.
+// are what every scaffold states, so they ask for nothing. An unreadable config
+// asks for nothing either: the binding checks report it.
 function configuredProviders(): Record<Integration, boolean> {
   try {
     const { bindings, webhooks, github, linear, pagerduty, slack } = readFactoryConfig(
