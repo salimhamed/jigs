@@ -50,6 +50,8 @@ const SUBJECTS: Record<SourceProvider, Subject> = {
       );
     },
   },
+  // No run parks on an incident yet; PagerDuty polls only for its trigger.
+  pagerduty: { label: "PagerDuty incidents", select: () => [] },
   slack: {
     label: "Slack threads",
     select: (hooks) => hooks.filter((hook) => hook.token.startsWith(SLACK_THREAD_TOKEN_PREFIX)),

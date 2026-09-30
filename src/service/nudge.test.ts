@@ -176,7 +176,7 @@ test("each provider sweeps on its own interval, again after each sweep, until st
   const { deps, resumed } = sweepDeps();
   const cancelled: number[] = [];
   const nudge = startNudges(
-    { github: 60, linear: 120, slack: 90 },
+    { github: 60, linear: 120, pagerduty: 150, slack: 90 },
     {
       ...deps,
       random: () => 0,
@@ -187,22 +187,22 @@ test("each provider sweeps on its own interval, again after each sweep, until st
     },
   );
 
-  expect(fires.map((timer) => timer.ms)).toEqual([60_000, 120_000, 90_000]);
+  expect(fires.map((timer) => timer.ms)).toEqual([60_000, 120_000, 150_000, 90_000]);
   fires[0]?.fire();
   // The next sweep is scheduled only once this one has finished, so two can
   // never overlap.
-  await vi.waitFor(() => expect(fires).toHaveLength(4));
-  expect(fires[3]?.ms).toBe(60_000);
+  await vi.waitFor(() => expect(fires).toHaveLength(5));
+  expect(fires[4]?.ms).toBe(60_000);
   expect(resumed).toEqual(["github:pr:acme/api#1", "github:pr:acme/api#2"]);
   fires[1]?.fire();
-  await vi.waitFor(() => expect(fires).toHaveLength(5));
-  expect(fires[4]?.ms).toBe(120_000);
+  await vi.waitFor(() => expect(fires).toHaveLength(6));
+  expect(fires[5]?.ms).toBe(120_000);
   expect(resumed.at(-1)).toBe("linear:ticket:def");
 
   nudge.stop();
-  expect(cancelled.sort()).toEqual([3, 4, 5]);
-  fires[3]?.fire();
+  expect(cancelled.sort()).toEqual([3, 4, 5, 6]);
+  fires[4]?.fire();
   await vi.waitFor(() => expect(resumed).toHaveLength(5));
   // A fire that was already in flight still sweeps, but schedules nothing new.
-  expect(fires).toHaveLength(5);
+  expect(fires).toHaveLength(6);
 });
