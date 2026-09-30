@@ -18,10 +18,14 @@ type Params = z.output<typeof paramsSchema>;
 
 const CHANNEL_TYPES = new Set(["channel", "group"]);
 
+// An allowlist, so a subtype Slack adds later stays out until it is known to
+// be a new post. `thread_broadcast` is a reply, however it is shown.
+const NEW_POST_SUBTYPES = new Set([undefined, "bot_message", "file_share", "me_message"]);
+
 // The bot's own posts are skipped by author, which ADR 0011 allows because
 // the factory's app only ever acts as itself.
 function startsRun(message: SlackMessage, bot: SlackAuth, mentionsOnly: boolean): boolean {
-  if (message.subtype !== undefined) return false;
+  if (!NEW_POST_SUBTYPES.has(message.subtype)) return false;
   if (message.thread_ts !== undefined && message.thread_ts !== message.ts) return false;
   if (message.user === bot.userId || message.bot_id === bot.botId) return false;
   return !mentionsOnly || (message.text ?? "").includes(`<@${bot.userId}>`);
