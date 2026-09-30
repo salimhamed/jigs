@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.1](https://github.com/salimhamed/jigs/compare/jigs-v0.81.0...jigs-v0.81.1) (2026-09-30)
+
+
+### Features
+
+* call any Slack Web API method from a factory step ([#475](https://github.com/salimhamed/jigs/issues/475)) ([c477c80](https://github.com/salimhamed/jigs/commit/c477c802a2de0198e855d0cf8cfa2868ce6f4593))
+
 ## [0.81.0](https://github.com/salimhamed/jigs/compare/jigs-v0.80.0...jigs-v0.81.0) (2026-09-30)
 
 
