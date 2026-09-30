@@ -84,7 +84,7 @@ test("pending rows come oldest first, and the summary counts and names failures"
 
   expect((await store.pending("pages")).map((row) => row.occurrence)).toEqual(["early", "late"]);
   const summary = await store.summary("pages", 5);
-  expect(summary).toMatchObject({ lastEvent: at(9), pending: 2, failed: 1 });
+  expect(summary).toMatchObject({ lastOccurrence: at(9), pending: 2, failed: 1 });
   expect(summary.failures.map((row) => [row.occurrence, row.report])).toEqual([["broken", report]]);
   // Another factory sharing the database sees none of it.
   expect(await triggerStore(db, "factory-c").pending("pages")).toEqual([]);

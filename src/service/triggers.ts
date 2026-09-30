@@ -23,7 +23,7 @@ import { onShutdown } from "./shutdown.ts";
 import {
   SOURCES,
   type Source,
-  type SourceEvent,
+  type SourceOccurrence,
   type SourceProvider,
   type SourceRegistry,
 } from "./sources.ts";
@@ -92,30 +92,18 @@ const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
 // The SDK mints the run ID from this process's clock just after the attempt
 // is recorded; the margin covers the clock stepping back in between.
 const LOOKUP_MARGIN_MS = 60_000;
-// How long after an attempt, or after the World began delivering, an
-// unconfirmed start is waited on before jigs gives up on it: an idle worker
-// takes a delivery at once, the queue's first four retries back off about 85
-// seconds in all, and after a crash the World's restart recovery queues every
-// pending run as it boots.
+// How long an unconfirmed start is waited on: past the queue's first retries,
+// and past the restart recovery that queues pending runs as the World boots.
 const DELIVERY_SETTLE_MS = 5 * 60_000;
-// How long a started run the World does not hold yet keeps its slot: a
-// resilient start returns before its delivery creates the run. Not a bound on
-// how late a delivery can be; a run is counted whenever it is live.
-// A resilient run delivered later than this is live but on no row the cap
-// counts, so it can take the trigger one past maxActive, with no warning.
+// How long a resilient start's not-yet-created run holds its slot; one created
+// later can take the trigger one past maxActive.
 const LATE_DELIVERY_MS = 60 * 60_000;
 const START_WRITE_TRIES = 3;
 
-/** One `--input` value as `jigs run` reads it back: raw unless it would parse as JSON. */
-function inputValue(value: unknown): string {
-  if (typeof value !== "string") return JSON.stringify(value);
-  try {
-    JSON.parse(value);
-    return JSON.stringify(value);
-  } catch {
-    return value;
-  }
-}
+// `jigs run` parses each `--input` value as JSON, so JSON round-trips every
+// value on one line. A backtick is escaped too: it would end the command in a
+// rendered repair.
+const inputValue = (value: unknown): string => JSON.stringify(value).replaceAll("`", "\\u0060");
 
 const shellQuote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 
@@ -128,12 +116,7 @@ function occurrenceAttribute(factorySlug: string, trigger: string, occurrence: s
 
 type LiveRuns = Map<string, Array<{ runId: string; status: string }>>;
 
-/**
- * What a trigger's cap counts, row by row: each live run of an occurrence; at
- * least one for an attempt not yet resolved; and one for a started run the
- * World does not hold yet, for a while. The engine and `jigs status` both
- * count with this.
- */
+/** What a trigger's cap counts, shared by the engine and `jigs status` so the two agree. */
 async function tally(
   store: TriggerStore,
   trigger: string,
@@ -232,18 +215,22 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   // Occurrences before the trigger was first enabled are not its business at
   // all; ones older than the lookback are recorded so they are never started.
-  async function observe(entry: Armed, event: SourceEvent, occurrence: string): Promise<boolean> {
+  async function observe(
+    entry: Armed,
+    seen: SourceOccurrence,
+    occurrence: string,
+  ): Promise<boolean> {
     const enabledAt = entry.marker?.enabledAt;
-    if (enabledAt === undefined || event.at < enabledAt) return false;
-    const stale = event.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
+    if (enabledAt === undefined || seen.at < enabledAt) return false;
+    const stale = seen.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
     const state = stale ? "skipped" : "pending";
     const recorded = await store().record({
       trigger: entry.name,
       occurrence,
       attribute: occurrenceAttribute(slug(), entry.name, occurrence),
       state,
-      inputs: event.inputs,
-      occurredAt: event.at,
+      inputs: seen.inputs,
+      occurredAt: seen.at,
     });
     if (recorded && stale) {
       log(
@@ -261,7 +248,9 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     failedChecks(refusal.report).every((check) => check.unanswered === true);
 
   async function refuse(entry: Armed, row: Occurrence, refusal: Refusal): Promise<void> {
-    if (unanswered(refusal)) {
+    // Retried until the row is a settle period old; then its checks' silence
+    // is the report.
+    if (unanswered(refusal) && now().getTime() - row.createdAt.getTime() < DELIVERY_SETTLE_MS) {
       log(
         `[trigger] ${entry.name} ${row.occurrence} waits: preflight did not answer: ${failedChecks(
           (refusal as { report: CheckReport }).report,
@@ -332,10 +321,8 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     return true;
   }
 
-  // An attempted row not yet started: its start threw, the process died, or a
-  // write failed. Its run is adopted if it can be found; otherwise, after the
-  // settle period, the row is failed for the operator to decide. It is never
-  // launched again.
+  // An attempted row is never launched again: its run is adopted, or the row
+  // fails for the operator.
   async function resolve(entry: Armed, row: Occurrence): Promise<void> {
     const key = rowKey(entry, row.occurrence);
     const held = unrecorded.get(key);
@@ -384,15 +371,12 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
           id: `trigger.${entry.name}`,
           label: `trigger ${entry.name}`,
           ok: false,
-          ...(cancelled === undefined
-            ? {
-                reason: `its start could not be confirmed: no run of ${workflow} appeared`,
-                repair: `check \`pnpm exec jigs status\` for a run of ${workflow} started around ${(row.attemptedAt as Date).toISOString()}\nif there is none, start it:\n${run}\njigs adopts the run if one appears later`,
-              }
-            : {
-                reason: `its run ${cancelled} was created but never queued, and was cancelled`,
-                repair: `start it:\n${run}`,
-              }),
+          reason:
+            cancelled === undefined
+              ? `its start could not be confirmed: no run of ${workflow} appeared`
+              : `its run ${cancelled} was created but never queued, and was cancelled`,
+          // Check first either way: a cancel can race a run that had just begun.
+          repair: `check \`pnpm exec jigs status\` for a run of ${workflow} started around ${(row.attemptedAt as Date).toISOString()}\nif there is none, start it:\n${run}\njigs adopts the run if one appears later`,
         },
       ],
     };
@@ -493,23 +477,23 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         // Taken before the read, so an occurrence landing during it is in the
         // next window too; the overlap is deduplicated.
         const through = now();
-        const events = await entry.source.poll(entry.params, marker.polledThrough);
+        const polled = await entry.source.poll(entry.params, marker.polledThrough);
         let fresh = 0;
         let failedAt: Date | undefined;
-        for (const event of events) {
-          // An event the source cannot key would fail the same way on every
+        for (const seen of polled) {
+          // An occurrence the source cannot key would fail the same way on every
           // poll, so it is passed over rather than held for.
           let occurrence: string;
           try {
-            occurrence = entry.source.occurrence(event.inputs);
+            occurrence = entry.source.occurrence(seen.inputs);
           } catch (error) {
-            log(`[trigger] ${name} passed over an event: ${String(error)}`);
+            log(`[trigger] ${name} passed over an occurrence it could not key: ${String(error)}`);
             continue;
           }
           try {
-            if (await observe(entry, event, occurrence)) fresh += 1;
+            if (await observe(entry, seen, occurrence)) fresh += 1;
           } catch (error) {
-            if (failedAt === undefined || event.at < failedAt) failedAt = event.at;
+            if (failedAt === undefined || seen.at < failedAt) failedAt = seen.at;
             log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
           }
         }
@@ -528,7 +512,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
               );
         await store().advance(name, next);
         entry.marker = { ...marker, polledThrough: next };
-        log(`[trigger] ${name}: polled, ${events.length} seen, ${fresh} new`);
+        log(`[trigger] ${name}: polled, ${polled.length} seen, ${fresh} new`);
       } catch (error) {
         log(`[trigger] ${name} poll failed: ${String(error)}`);
         return;
@@ -666,7 +650,7 @@ export interface TriggerView {
   name: string;
   workflow: string;
   source: string;
-  lastEvent: string | null;
+  lastOccurrence: string | null;
   pending: number;
   active: number;
   failed: number;
@@ -712,7 +696,7 @@ export async function listTriggers(
         name,
         workflow: trigger.workflow,
         source: trigger.source.kind,
-        lastEvent: summary.lastEvent?.toISOString() ?? null,
+        lastOccurrence: summary.lastOccurrence?.toISOString() ?? null,
         pending: summary.pending,
         active,
         failed: summary.failed,
@@ -758,7 +742,8 @@ export function triggerChecks(
               ...summary.failures.flatMap((row) =>
                 (row.report === null ? [] : failedChecks(row.report)).flatMap((check) => [
                   `${row.occurrence}: ${check.reason}`,
-                  ...check.repair.split("\n").map((line) => `  ${line}`),
+                  // Plain text: backticks mark commands only in rendered hints.
+                  ...check.repair.split("\n").map((line) => `  ${line.replaceAll("`", "")}`),
                 ]),
               ),
             ].join("\n"),

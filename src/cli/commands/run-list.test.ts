@@ -153,7 +153,7 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
         name: "pages",
         workflow: "respond",
         source: "pagerduty.incidents",
-        lastEvent: "2026-08-26T11:00:00.000Z",
+        lastOccurrence: "2026-08-26T11:00:00.000Z",
         pending: 2,
         active: 3,
         failed: 1,
@@ -175,7 +175,7 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
   });
   await showRuns(deps(), { now: NOW });
   expect(lines.slice(2)).toEqual([
-    "TRIGGER  WORKFLOW  SOURCE               LAST EVENT                PENDING  ACTIVE  FAILED",
+    "TRIGGER  WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  ACTIVE  FAILED",
     "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
     "FAIL pages PABC: GitHub identity: GITHUB_TOKEN is not set",
     "  set GITHUB_TOKEN in the factory repo's .env",

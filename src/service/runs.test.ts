@@ -19,6 +19,7 @@ import {
   listRunSteps,
   listRuns,
   runExists,
+  runIdTime,
   runStatuses,
   runsWithActiveStep,
   type StepView,
@@ -461,6 +462,14 @@ test("a run is found by its plaintext attribute, newest first, not before `since
   // Older than `since`: the scan stops rather than reading all history.
   expect(await find("old", 10)).toEqual([]);
   expect(await find("old", 0)).toEqual([old.runId]);
+});
+
+test("a run ID's time is read from its ULID, and one that cannot be read is none", () => {
+  const at = new Date("2026-09-29T12:00:00.000Z");
+  expect(runIdTime(runIdAt(at, "1"))).toBe(at.getTime());
+  expect(runIdTime("wrun_short")).toBeNull();
+  // Past the 48-bit time a ULID can hold: decodeTime rejects it.
+  expect(runIdTime("wrun_8ZZZZZZZZZZZZZZZZZZZZZZZZZ")).toBeNull();
 });
 
 test("a run whose inputs cannot be read reads as manual, like every other launch", async () => {

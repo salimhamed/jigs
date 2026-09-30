@@ -1,10 +1,13 @@
+import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { CheckReport } from "../checks/index.ts";
+import { parseInputs } from "../cli/commands/run.ts";
+import { hintLines } from "../cli/output.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { eventTriggerId, runIdTime } from "./runs.ts";
-import type { Source, SourceEvent, SourceRegistry } from "./sources.ts";
+import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
 import type { PreparedRun } from "./trigger.ts";
 import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
 import {
@@ -36,7 +39,7 @@ const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 // A source whose provider hands back whatever the test queued, and whose
 // pushed events are `{ page }` objects.
 function fakeSource() {
-  const queued: SourceEvent[] = [];
+  const queued: SourceOccurrence[] = [];
   const polls: Date[] = [];
   const source: Source<{ service: string }> = {
     provider: "github",
@@ -58,7 +61,7 @@ function fakeSource() {
   return { source, queued, polls };
 }
 
-function memoryStore() {
+function memoryStore(now: () => Date = () => T0) {
   const rows = new Map<string, Occurrence>();
   const marks = new Map<string, TriggerMarker>();
   const key = (trigger: string, occurrence: string) => `${trigger}\0${occurrence}`;
@@ -87,6 +90,7 @@ function memoryStore() {
         runId: null,
         startedAt: null,
         report: null,
+        createdAt: now(),
         updatedAt: T0,
       });
       return true;
@@ -134,7 +138,7 @@ function memoryStore() {
     summary: async (trigger) => {
       const mine = [...rows.values()].filter((row) => row.trigger === trigger);
       return {
-        lastEvent: null,
+        lastOccurrence: null,
         pending: mine.filter((row) => row.state === "pending" && row.attemptedAt === null).length,
         failed: mine.filter((row) => row.state === "failed").length,
         failures: mine.filter((row) => row.state === "failed"),
@@ -214,14 +218,14 @@ function harness(
   } = {},
 ) {
   const { source, queued, polls } = fakeSource();
-  const memory = options.memory ?? memoryStore();
+  let clock = T0;
+  const memory = options.memory ?? memoryStore(() => clock);
   const lines: string[] = [];
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
   const runs = options.runs ?? [];
   const modes = options.modes ?? [];
   const cancelled: string[] = [];
   const cancelFailures = { before: 0, after: 0 };
-  let clock = T0;
   const sources: SourceRegistry = { "fake.pages": source };
   const held = () => runs.filter((run) => run.inWorld);
   const deps = {
@@ -347,16 +351,16 @@ const activeOf = async (h: ReturnType<typeof harness>) =>
     })
   )[0]?.active;
 
-const event = (page: string, at: Date): SourceEvent => ({ inputs: { page }, at });
+const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({ inputs: { page }, at });
 
 test("an occurrence seen twice, polled then pushed, starts one run", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(2));
-  h.queued.push(event("P1", minutes(1)));
+  h.queued.push(occurrenceAt("P1", minutes(1)));
   await h.engine.poll("pages");
   expect(await h.engine.push("github", { page: "P1" })).toEqual([]);
-  h.queued.push(event("P1", minutes(1)));
+  h.queued.push(occurrenceAt("P1", minutes(1)));
   await h.engine.poll("pages");
   await h.engine.drain();
 
@@ -435,10 +439,10 @@ test("past maxActive, occurrences wait and start oldest first as runs finish", a
   await h.engine.arm();
   h.at(minutes(10));
   h.queued.push(
-    event("P4", minutes(4)),
-    event("P1", minutes(1)),
-    event("P3", minutes(3)),
-    event("P2", minutes(2)),
+    occurrenceAt("P4", minutes(4)),
+    occurrenceAt("P1", minutes(1)),
+    occurrenceAt("P3", minutes(3)),
+    occurrenceAt("P2", minutes(2)),
   );
   await h.engine.poll("pages");
 
@@ -462,7 +466,7 @@ test("the cap defaults to three", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(10));
-  h.queued.push(...["P1", "P2", "P3", "P4"].map((page, i) => event(page, minutes(i + 1))));
+  h.queued.push(...["P1", "P2", "P3", "P4"].map((page, i) => occurrenceAt(page, minutes(i + 1))));
   await h.engine.poll("pages");
   expect(h.starts).toHaveLength(3);
 });
@@ -470,7 +474,7 @@ test("the cap defaults to three", async () => {
 test("a new trigger starts from now: nothing before its first enable is recorded", async () => {
   const h = harness();
   await h.engine.arm();
-  h.queued.push(event("OLD", minutes(-1)), event("NEW", minutes(0)));
+  h.queued.push(occurrenceAt("OLD", minutes(-1)), occurrenceAt("NEW", minutes(0)));
   await h.engine.poll("pages");
 
   expect(h.polls).toEqual([T0]);
@@ -483,7 +487,7 @@ test("after downtime, occurrences past the lookback are skipped and recent ones 
   await h.memory.store.enable("pages", minutes(-600));
   h.at(minutes(0));
   await h.engine.arm();
-  h.queued.push(event("STALE", minutes(-45)), event("FRESH", minutes(-10)));
+  h.queued.push(occurrenceAt("STALE", minutes(-45)), occurrenceAt("FRESH", minutes(-10)));
   await h.engine.poll("pages");
 
   expect(h.polls).toEqual([minutes(-600)]);
@@ -497,7 +501,7 @@ test("the lookback defaults to an hour", async () => {
   const h = harness();
   await h.memory.store.enable("pages", minutes(-600));
   await h.engine.arm();
-  h.queued.push(event("A", minutes(-61)), event("B", minutes(-59)));
+  h.queued.push(occurrenceAt("A", minutes(-61)), occurrenceAt("B", minutes(-59)));
   await h.engine.poll("pages");
   expect(h.memory.state("pages", "A")?.state).toBe("skipped");
   expect(h.memory.state("pages", "B")?.state).toBe("started");
@@ -665,7 +669,7 @@ test("a thrown start with no run found is failed with a repair after the settle 
   expect(row?.state).toBe("failed");
   expect(row?.report?.checks[0]).toMatchObject({
     reason: "its start could not be confirmed: no run of respond appeared",
-    repair: `check \`pnpm exec jigs status\` for a run of respond started around ${minutes(2).toISOString()}\nif there is none, start it:\n\`pnpm exec jigs run respond --input 'team=infra' --input 'page=P1'\`\njigs adopts the run if one appears later`,
+    repair: checkFirst(minutes(2), `--input 'team="infra"' --input 'page="P1"'`),
   });
   expect(h.starts).toHaveLength(2);
   expect(h.starts[1]?.triggerId).toBe(eventTriggerId("pages", "LATE"));
@@ -686,8 +690,10 @@ test("a thrown start whose run is pending after the settle period is cancelled a
   expect(h.cancelled).toEqual([orphan.runId]);
   const row = h.memory.state("pages", "P1");
   expect(row?.state).toBe("failed");
+  // The cancel can race a run that had just begun, so it too checks first.
   expect(row?.report?.checks[0]).toMatchObject({
     reason: `its run ${orphan.runId} was created but never queued, and was cancelled`,
+    repair: checkFirst(minutes(2), `--input 'team="infra"' --input 'page="P1"'`),
   });
   expect(h.starts).toHaveLength(1);
 });
@@ -837,6 +843,9 @@ test("S3: the settle period runs from when the engine is armed, after the servic
   });
 });
 
+const checkFirst = (at: Date, inputs: string) =>
+  `check \`pnpm exec jigs status\` for a run of respond started around ${at.toISOString()}\nif there is none, start it:\n\`pnpm exec jigs run respond ${inputs}\`\njigs adopts the run if one appears later`;
+
 const unansweredReport = (reason: string): CheckReport => ({
   ok: false,
   checks: [
@@ -957,24 +966,86 @@ test("E: fixed inputs that clash with the source's are refused at boot with the 
   );
 });
 
-test("an unconfirmed start's repair quotes each input so the command pastes as it reads", async () => {
+test("an unconfirmed start's command round-trips every input through the CLI's own parser", async () => {
+  const inputs = {
+    page: 'line one\nline `two` it\'s "$HOME" \\ back',
+    uni: "héllo 🔥",
+    number: "42",
+    count: 3,
+    flag: true,
+    none: null,
+    nested: { a: [1, "b'c"] },
+  };
   const h = harness({ modes: ["nothing"] });
   await h.engine.arm();
   await h.memory.store.record({
     trigger: "pages",
     occurrence: "P1",
     state: "pending",
-    inputs: { page: 'it\'s $HOME "here"', count: 3, nested: { a: [1] }, number: "42" },
+    inputs,
     attribute: attributeFor("P1"),
     occurredAt: T0,
   });
   await h.engine.drain();
   h.at(minutes(6));
   await h.engine.drain();
-  const repair = h.memory.state("pages", "P1")?.report?.checks[0];
-  expect(repair?.ok === false && repair.repair.split("\n")[2]).toBe(
-    `\`pnpm exec jigs run respond --input 'team=infra' --input 'page=it'\\''s $HOME "here"' --input 'count=3' --input 'nested={"a":[1]}' --input 'number="42"'\``,
+  const check = h.memory.state("pages", "P1")?.report?.checks[0];
+  const repair = check?.ok === false ? check.repair : "";
+  const line = repair.split("\n").find((text) => text.startsWith("`pnpm exec jigs run")) as string;
+  // One command, one line, no backtick but the pair around it.
+  expect(line.match(/`/g)).toHaveLength(2);
+  const args = execFileSync(
+    "bash",
+    ["-c", `set -- ${line.slice("`pnpm exec jigs run respond".length, -1)}; printf '%s\\0' "$@"`],
+    { encoding: "utf8" },
+  )
+    .split("\0")
+    .filter((arg) => arg !== "");
+  const pairs = args.filter((_arg, i) => args[i - 1] === "--input");
+  expect(parseInputs(pairs)).toEqual({ team: "infra", ...inputs });
+  // Rendered by status and doctor, the command stays on one line, printed plainly.
+  const rendered = hintLines(repair);
+  expect(rendered.filter((text) => text.includes("jigs run"))).toEqual([`  ${line.slice(1, -1)}`]);
+  const doctor = await triggerChecks(
+    factory({ pages: pagesTrigger }),
+    { "fake.pages": fakeSource().source },
+    { store: h.memory.store },
+  )
+    .find((c) => c.id === "trigger.pages.failed")
+    ?.run();
+  const detail = doctor?.ok === true ? (doctor.detail ?? "") : "";
+  expect(detail.split("\n").filter((text) => text.includes("jigs run"))).toEqual([
+    `  ${line.slice(1, -1)}`,
+  ]);
+});
+
+test("a preflight that keeps not answering is failed with its report once the settle period has passed", async () => {
+  const h = harness({
+    prepare: async () => ({
+      kind: "preflight-failed",
+      report: unansweredReport("the check did not answer within 15000ms"),
+    }),
+  });
+  await h.engine.arm();
+  await pendingRow(h.memory.store, "P1", T0);
+  h.at(new Date(minutes(5).getTime() - 1000));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "pending", attemptedAt: null });
+  h.at(new Date(minutes(5).getTime() + 1000));
+  await h.engine.drain();
+  const row = h.memory.state("pages", "P1");
+  expect(row?.state).toBe("failed");
+  expect(row?.report?.checks).toEqual(
+    unansweredReport("the check did not answer within 15000ms").checks,
   );
+  const [view] = await listTriggers(factory({ pages: pagesTrigger }), {
+    store: h.memory.store,
+    liveRunsByAttribute: h.deps.liveRunsByAttribute,
+    runStatuses: h.deps.runStatuses,
+    now: h.deps.now,
+  });
+  expect(view?.failed).toBe(1);
+  expect(h.starts).toEqual([]);
 });
 
 test("a failed uncertain start is listed with its repair in status and in doctor", async () => {
@@ -1003,7 +1074,9 @@ test("a failed uncertain start is listed with its repair in status and in doctor
   expect(outcome?.ok === true && outcome.detail?.split("\n")).toEqual([
     "1 failed, each waiting on the operator",
     "P1: its start could not be confirmed: no run of respond appeared",
-    ...(repair?.ok === false ? repair.repair.split("\n").map((line) => `  ${line}`) : []),
+    ...(repair?.ok === false
+      ? repair.repair.split("\n").map((line) => `  ${line.replaceAll("`", "")}`)
+      : []),
   ]);
 });
 
@@ -1055,29 +1128,31 @@ test("an occurrence that could not be recorded is polled again, not skipped past
   const h = harness({ store: flaky });
   await h.engine.arm();
   h.at(minutes(10));
-  h.queued.push(event("P8", minutes(2)), event("P9", minutes(4)));
+  h.queued.push(occurrenceAt("P8", minutes(2)), occurrenceAt("P9", minutes(4)));
   await h.engine.poll("pages");
   failing = false;
   h.at(minutes(20));
-  h.queued.push(event("P9", minutes(4)));
+  h.queued.push(occurrenceAt("P9", minutes(4)));
   await h.engine.poll("pages");
 
   expect(h.polls[1]?.getTime()).toBeLessThan(minutes(4).getTime());
   expect(memory.state("pages", "P9")?.state).toBe("started");
 });
 
-test("an event whose occurrence cannot be derived is passed over, not held", async () => {
+test("an occurrence the source cannot key is passed over, not held", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(10));
-  h.queued.push({ inputs: {}, at: minutes(2) }, event("P1", minutes(3)));
+  h.queued.push({ inputs: {}, at: minutes(2) }, occurrenceAt("P1", minutes(3)));
   await h.engine.poll("pages");
   h.at(minutes(20));
   await h.engine.poll("pages");
 
   expect(h.polls[1]).toEqual(minutes(10));
   expect(h.memory.state("pages", "P1")?.state).toBe("started");
-  expect(h.lines).toContain("[trigger] pages passed over an event: Error: no page id in the event");
+  expect(h.lines).toContain(
+    "[trigger] pages passed over an occurrence it could not key: Error: no page id in the event",
+  );
 });
 
 test("a window held for an unrecorded occurrence never reaches back past the lookback", async () => {
@@ -1091,7 +1166,7 @@ test("a window held for an unrecorded occurrence never reaches back past the loo
   const h = harness({ store: failing });
   await memory.store.enable("pages", minutes(-600));
   await h.engine.arm();
-  h.queued.push(event("P1", minutes(-100)));
+  h.queued.push(occurrenceAt("P1", minutes(-100)));
   await h.engine.poll("pages");
   await h.engine.poll("pages");
   expect(h.polls).toEqual([minutes(-600), minutes(-60)]);

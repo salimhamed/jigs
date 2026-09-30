@@ -1,5 +1,6 @@
 // Run identity and the run listing behind `jigs status`.
 
+import { decodeTime } from "ulid";
 import { getRun } from "workflow/api";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
@@ -88,15 +89,34 @@ export async function runStatuses(runIds: readonly string[]): Promise<Map<string
   return new Map(found.flatMap((run) => (run === null ? [] : [[run.runId, run.status]])));
 }
 
-const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-
-/** When a run ID was minted: the millisecond time a ULID leads with. */
+/** When a run ID was minted: the millisecond time its ULID leads with, or null if it has none. */
 export function runIdTime(runId: string): number | null {
   if (!RUN_ID_SHAPE.test(runId)) return null;
-  let ms = 0;
-  for (const char of runId.slice("wrun_".length, "wrun_".length + 10))
-    ms = ms * 32 + CROCKFORD.indexOf(char);
-  return ms;
+  try {
+    return decodeTime(runId.slice("wrun_".length));
+  } catch {
+    return null;
+  }
+}
+
+// The World's runs of a workflow, newest run ID first, a page at a time.
+async function* listedRuns(
+  filter: { workflowName: string | undefined; status?: Array<"pending" | "running"> },
+  limit: number,
+) {
+  const world = await getWorld();
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await world.runs.list({
+      ...(filter.workflowName === undefined ? {} : { workflowName: filter.workflowName }),
+      ...(filter.status === undefined ? {} : { status: filter.status }),
+      resolveData: "none",
+      pagination: { limit, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
+    });
+    yield* page.data;
+    cursor = nextCursor(page, seen, "runs");
+  } while (cursor !== undefined);
 }
 
 /**
@@ -110,28 +130,17 @@ export async function findRunsByAttribute(query: {
   value: string;
   since: Date;
 }): Promise<Array<{ runId: string; status: string }>> {
-  const world = await getWorld();
   const found: Array<{ runId: string; status: string }> = [];
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page = await world.runs.list({
-      ...(query.workflowName === undefined ? {} : { workflowName: query.workflowName }),
-      resolveData: "none",
-      pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
-    });
-    for (const run of page.data) {
-      // Stops early on two assumptions: world-postgres lists by run ID, newest
-      // first, and a run ID is a ULID minted on this process's clock. An ID
-      // that does not decode never stops the scan. (created_at is no help: a
-      // zone-less timestamp that reads back hours off on a server not in UTC.)
-      const minted = runIdTime(run.runId);
-      if (minted !== null && minted < query.since.getTime()) return found;
-      if (run.attributes?.[query.key] === query.value)
-        found.push({ runId: run.runId, status: run.status });
-    }
-    cursor = nextCursor(page, seen, "runs");
-  } while (cursor !== undefined);
+  for await (const run of listedRuns({ workflowName: query.workflowName }, 100)) {
+    // Stops early on two assumptions: world-postgres lists by run ID, newest
+    // first, and a run ID is a ULID minted on this process's clock. An ID
+    // that does not decode never stops the scan. (created_at is no help: a
+    // zone-less timestamp that reads back hours off on a server not in UTC.)
+    const minted = runIdTime(run.runId);
+    if (minted !== null && minted < query.since.getTime()) return found;
+    if (run.attributes?.[query.key] === query.value)
+      found.push({ runId: run.runId, status: run.status });
+  }
   return found;
 }
 
@@ -143,24 +152,12 @@ export async function liveRunsByAttribute(
   workflowName: string | undefined,
   key: string,
 ): Promise<Map<string, Array<{ runId: string; status: string }>>> {
-  const world = await getWorld();
   const grouped = new Map<string, Array<{ runId: string; status: string }>>();
-  const seen = new Set<string>();
-  let cursor: string | undefined;
-  do {
-    const page = await world.runs.list({
-      ...(workflowName === undefined ? {} : { workflowName }),
-      status: ["pending", "running"],
-      resolveData: "none",
-      pagination: { limit: 1000, ...(cursor === undefined ? {} : { cursor }) },
-    });
-    for (const run of page.data) {
-      const value = run.attributes?.[key];
-      if (value === undefined) continue;
-      grouped.set(value, [...(grouped.get(value) ?? []), { runId: run.runId, status: run.status }]);
-    }
-    cursor = nextCursor(page, seen, "runs");
-  } while (cursor !== undefined);
+  for await (const run of listedRuns({ workflowName, status: ["pending", "running"] }, 1000)) {
+    const value = run.attributes?.[key];
+    if (value === undefined) continue;
+    grouped.set(value, [...(grouped.get(value) ?? []), { runId: run.runId, status: run.status }]);
+  }
   return grouped;
 }
 

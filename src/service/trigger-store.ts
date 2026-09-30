@@ -59,6 +59,7 @@ export interface Occurrence {
   runId: string | null;
   startedAt: Date | null;
   report: CheckReport | null;
+  createdAt: Date;
   updatedAt: Date;
 }
 
@@ -68,7 +69,7 @@ export interface TriggerMarker {
 }
 
 export interface TriggerSummary {
-  lastEvent: Date | null;
+  lastOccurrence: Date | null;
   /** Pending rows not yet attempted. */
   pending: number;
   failed: number;
@@ -235,7 +236,7 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
       const rows = (state: OccurrenceState) => counts.find((c) => c.state === state)?.rows ?? 0;
       const lasts = counts.flatMap((c) => (c.last === null ? [] : [c.last.getTime()]));
       return {
-        lastEvent: lasts.length === 0 ? null : new Date(Math.max(...lasts)),
+        lastOccurrence: lasts.length === 0 ? null : new Date(Math.max(...lasts)),
         pending: rows("pending") - (attempted?.rows ?? 0),
         failed: rows("failed"),
         failures: recent,

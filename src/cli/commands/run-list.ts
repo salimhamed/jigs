@@ -34,7 +34,7 @@ export interface RunListTrigger {
   name: string;
   workflow: string;
   source: string;
-  lastEvent: string | null;
+  lastOccurrence: string | null;
   pending: number;
   active: number;
   failed: number;
@@ -137,12 +137,12 @@ export async function showRuns(
   if (result.triggers.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["TRIGGER", "WORKFLOW", "SOURCE", "LAST EVENT", "PENDING", "ACTIVE", "FAILED"],
+      ["TRIGGER", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
       result.triggers.map((trigger) => [
         trigger.name,
         trigger.workflow,
         trigger.source,
-        trigger.lastEvent ?? "-",
+        trigger.lastOccurrence ?? "-",
         String(trigger.pending),
         String(trigger.active),
         String(trigger.failed),
