@@ -64,7 +64,7 @@ afterEach(() => {
 
 test("the scope names the account by region and subdomain, then the v1 scopes", () => {
   expect(pagerDutyScope(IDENTITY)).toBe(
-    "as_account-us.acme incidents.read incidents.write webhook_subscriptions.read services.read users.read",
+    "as_account-us.acme incidents.read incidents.write webhook_subscriptions.read users.read",
   );
   expect(pagerDutyScope({ ...IDENTITY, region: "eu" })).toMatch(/^as_account-eu\.acme /);
 });
@@ -119,15 +119,15 @@ test("a token response that is not JSON fails cleanly, without echoing the body"
   expect(err.message).toBe("PagerDuty's token response (HTTP 200) was not JSON");
 });
 
-test("a token close to its expiry is replaced before it is used", async () => {
+test("a token is reused until it expires, then replaced", async () => {
   let minted = 0;
   let now = 0;
   const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`, 3600));
   const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch, now: () => now });
   expect(await auth.bearer()).toBe("token-1");
-  now = 3_000_000;
+  now = 3_599_999;
   expect(await auth.bearer()).toBe("token-1");
-  now = 3_500_000;
+  now = 3_600_000;
   expect(await auth.bearer()).toBe("token-2");
 });
 

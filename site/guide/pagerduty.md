@@ -20,7 +20,6 @@ An account admin or owner does this once per PagerDuty account.
    | `incidents.read` | Reading and listing incidents, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
    | `webhook_subscriptions.read` | Checking the webhook that delivers incident events. |
-   | `services.read` | Reading the services incidents belong to. |
    | `users.read` | `jigs doctor`'s check of the `from` user. |
 
 4. Register the app and copy its **client ID** and **client secret**. PagerDuty

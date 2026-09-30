@@ -104,7 +104,8 @@ const userProbes = (
     name: "On Call",
     email: "oncall@example.com",
   }),
-): PagerDutyUserProbes => ({ userByEmail: found });
+  token: PagerDutyUserProbes["token"] = async () => {},
+): PagerDutyUserProbes => ({ token, userByEmail: found });
 
 test("a from email that belongs to a user passes and names them", async () => {
   expect((await runChecks(pagerDutyFromChecks(IDENTITY, userProbes()))).checks).toEqual([
@@ -151,19 +152,53 @@ test("a user lookup the token may not make names users.read", async () => {
   });
 });
 
-test("any other lookup failure points back at the identity check", async () => {
+test("a lookup PagerDuty did not answer says to retry", async () => {
+  for (const err of [
+    new PagerDutyApiError(429, "GET /users", "{}", "rate limited for 600s"),
+    new PagerDutyApiError(503, "GET /users", "unavailable"),
+    new TypeError("fetch failed"),
+  ]) {
+    const [result] = (
+      await runChecks(
+        pagerDutyFromChecks(
+          IDENTITY,
+          userProbes(async () => {
+            throw err;
+          }),
+        ),
+      )
+    ).checks;
+    expect(result).toMatchObject({
+      ok: false,
+      reason: expect.stringContaining("could not look up oncall@example.com"),
+      repair: expect.stringContaining("PagerDuty did not answer: retry"),
+    });
+  }
+});
+
+test("the from user is not checked while the identity has no token", async () => {
+  let looked = false;
   const [result] = (
     await runChecks(
       pagerDutyFromChecks(
         IDENTITY,
-        userProbes(async () => {
-          throw new Error("PagerDuty refused a client-credentials token (HTTP 401)");
-        }),
+        userProbes(
+          async () => {
+            looked = true;
+            return null;
+          },
+          async () => {
+            throw new Error("PagerDuty refused a client-credentials token (HTTP 401)");
+          },
+        ),
       ),
     )
   ).checks;
-  expect(result).toMatchObject({
-    ok: false,
-    repair: expect.stringContaining("repair the PagerDuty identity check"),
+  expect(result).toEqual({
+    id: "pagerduty.from",
+    label: "PagerDuty from user",
+    ok: true,
+    detail: "not checked: the PagerDuty identity check failed",
   });
+  expect(looked).toBe(false);
 });

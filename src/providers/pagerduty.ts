@@ -75,12 +75,10 @@ export interface WebhookSubscriptionMatch {
 // scope and a rate limit apart.
 export class PagerDutyApiError extends JigsError {
   readonly status: number;
-  readonly body: string;
 
   constructor(status: number, request: string, body: string, detail?: string) {
     super(`PagerDuty API ${status} on ${request}: ${detail ?? body.slice(0, MAX_ERROR_BODY)}`);
     this.status = status;
-    this.body = body;
   }
 }
 

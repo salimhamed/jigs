@@ -71,6 +71,8 @@ export function pagerDutyIdentityChecks(
 
 /** The PagerDuty lookup the from check makes. */
 export interface PagerDutyUserProbes {
+  /** Mint, or reuse, the app's token; without one the identity check reports the failure. */
+  token(): Promise<void>;
   userByEmail(email: string): Promise<PagerDutyUser | null>;
 }
 
@@ -87,6 +89,11 @@ export function pagerDutyFromChecks(
       id: "pagerduty.from",
       label: "PagerDuty from user",
       run: async () => {
+        try {
+          await probes.token();
+        } catch {
+          return { ok: true, detail: "not checked: the PagerDuty identity check failed" };
+        }
         let user: PagerDutyUser | null;
         try {
           user = await probes.userByEmail(from);
@@ -96,7 +103,7 @@ export function pagerDutyFromChecks(
             reason: `could not look up ${from} in PagerDuty: ${err instanceof Error ? err.message : String(err)}`,
             repair: forbidden(err)
               ? `grant users.read to the PagerDuty scoped OAuth app, then: \`${RESTART_SERVICE}\``
-              : "repair the PagerDuty identity check, then: `pnpm exec jigs doctor`",
+              : "PagerDuty did not answer: retry `pnpm exec jigs doctor`, and check PagerDuty's status page if it repeats",
           };
         }
         if (user === null) {

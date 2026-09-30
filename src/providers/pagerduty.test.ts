@@ -207,6 +207,7 @@ test("a 400 carries PagerDuty's error and the request", async () => {
   );
   const err = await rejection<PagerDutyApiError>(client.createNote("Q1", "x"));
   expect(err.status).toBe(400);
+  expect(err).not.toHaveProperty("body");
   expect(err.message).toContain("POST /incidents/Q1/notes");
   expect(err.message).toContain("1027");
   expect(err.message).not.toContain("token-1");

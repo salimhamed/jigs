@@ -21,7 +21,6 @@ export const PAGERDUTY_SCOPES = [
   "incidents.read",
   "incidents.write",
   "webhook_subscriptions.read",
-  "services.read",
   "users.read",
 ] as const;
 
@@ -30,10 +29,6 @@ export const PAGERDUTY_IDENTITY_VARIABLES = [
   "PAGERDUTY_CLIENT_ID",
   "PAGERDUTY_CLIENT_SECRET",
 ] as const;
-
-// A token lasts a day; one this close to its end is replaced before a call
-// can carry it past expiry.
-const EXPIRY_MARGIN_MS = 5 * 60_000;
 
 export type EnvLookup = (name: string) => string | undefined;
 type FetchLike = typeof fetch;
@@ -71,9 +66,7 @@ async function refusal(res: Response, secret: string): Promise<string> {
     detail = [body.error, body.error_description]
       .filter((part): part is string => typeof part === "string" && part !== "")
       .join(": ");
-  } catch {
-    // Not JSON: the status alone is what is safe to say.
-  }
+  } catch {}
   return detail.replaceAll(secret, "[redacted]");
 }
 
@@ -147,12 +140,11 @@ export function createPagerDutyAuth(
     return value;
   };
   let cached: MintedToken | null = null;
-  // The mint in flight, so concurrent calls share one token.
   let minting: Promise<MintedToken> | null = null;
   return {
     identity,
     async bearer(): Promise<string> {
-      if (cached !== null && cached.expiresAt - EXPIRY_MARGIN_MS > now()) return cached.token;
+      if (cached !== null && cached.expiresAt > now()) return cached.token;
       if (minting === null) {
         minting = mintPagerDutyToken(
           identity,

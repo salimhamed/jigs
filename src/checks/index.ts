@@ -207,6 +207,7 @@ function pagerDutyFromDoctorChecks(): Check[] {
     return [];
   }
   return pagerDutyFromChecks(identity, {
+    token: pagerDutyProbes.token,
     userByEmail: (email) => pagerDutyClientFor().findUserByEmail(email),
   });
 }

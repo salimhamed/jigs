@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type GithubIdentity,
   type LinearIdentity,
+  type PagerDutyIdentity,
   type ResolvedService,
   readFactoryConfig,
   resolveService,
@@ -87,11 +88,11 @@ export interface UpOptions {
 const credentialSlots = (
   linear: LinearIdentity,
   github: GithubIdentity[],
-  pagerduty: boolean,
+  pagerduty: PagerDutyIdentity | undefined,
 ): string[] => [
   ...LINEAR_IDENTITY_VARIABLES[linear.mode],
   ...(github.some((identity) => identity.mode === "pat") ? ["GITHUB_TOKEN"] : []),
-  ...(pagerduty ? PAGERDUTY_IDENTITY_VARIABLES : []),
+  ...(pagerduty !== undefined ? PAGERDUTY_IDENTITY_VARIABLES : []),
 ];
 
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
@@ -207,7 +208,7 @@ function locate(cwd: string): {
   service: ResolvedService;
   linear: LinearIdentity;
   github: GithubIdentity[];
-  pagerduty: boolean;
+  pagerduty: PagerDutyIdentity | undefined;
 } {
   const factoryRoot = locateFactoryRoot(cwd);
   const service = resolveService(factoryRoot);
@@ -217,7 +218,7 @@ function locate(cwd: string): {
     service,
     linear: config.linear.identity,
     github: config.github.identities,
-    pagerduty: config.pagerduty !== undefined,
+    pagerduty: config.pagerduty?.identity,
   };
 }
 
