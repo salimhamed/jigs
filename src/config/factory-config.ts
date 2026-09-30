@@ -179,8 +179,8 @@ export const linearSchema = z.strictObject({
 /**
  * A factory's Slack app. The app always acts as itself, so there is no identity
  * mode; `SLACK_BOT_TOKEN` in `.env` is its credential. With `socketMode` on,
- * the service also holds a Socket Mode connection, opened with the app-level
- * token in `SLACK_APP_TOKEN`.
+ * the service refuses to start without `SLACK_APP_TOKEN`, and doctor checks
+ * that token opens a Socket Mode connection.
  */
 export const slackSchema = z.strictObject({ socketMode: z.boolean() });
 
