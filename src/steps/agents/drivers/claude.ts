@@ -12,6 +12,7 @@ import {
 } from "../../../workflow/agents/harness-config.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
+import { mcpCredentialVariables, resolveMcpServer } from "../harnesses/mcp-credentials.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
@@ -19,23 +20,16 @@ import type { Driver, DriverRequest, ExecutorGeneration, OpenedModel } from "./t
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
+  env: Record<string, string>,
 ): Record<string, ClaudeMcpServerConfig> {
   return Object.fromEntries(
-    Object.entries(servers).map(([name, server]) => [
-      name,
-      "command" in server
-        ? {
-            type: "stdio",
-            command: server.command,
-            ...(server.args === undefined ? {} : { args: server.args }),
-            ...(server.env === undefined ? {} : { env: server.env }),
-          }
-        : {
-            type: "http",
-            url: server.url,
-            ...(server.headers === undefined ? {} : { headers: server.headers }),
-          },
-    ]),
+    Object.entries(servers).map(([name, server]) => {
+      const resolved = resolveMcpServer(server, env);
+      return [
+        name,
+        "command" in resolved ? { type: "stdio", ...resolved } : { type: "http", ...resolved },
+      ];
+    }),
   );
 }
 
@@ -86,7 +80,9 @@ export function createClaudeDriver(
         permissionMode: "bypassPermissions",
         allowDangerouslySkipPermissions: true,
         ...(resume === undefined ? {} : { resume: resume.id }),
-        ...(harness.mcpServers === undefined ? {} : { mcpServers: mcpServers(harness.mcpServers) }),
+        ...(harness.mcpServers === undefined
+          ? {}
+          : { mcpServers: mcpServers(harness.mcpServers, context.env) }),
       });
       return {
         model: claudeCode(harness.model, settings),
@@ -121,7 +117,12 @@ export function createClaudeDriver(
     },
     installationChecks: () => [harnessRuntimeCheck("claude"), claudeAuthCheck()],
     requestChecks: () => [],
-    envAllowlist: () => CLAUDE_ENV,
+    envAllowlist: (request) => [
+      ...CLAUDE_ENV,
+      ...("harness" in request && request.harness.kind === "claude"
+        ? mcpCredentialVariables(request.harness.mcpServers ?? {})
+        : []),
+    ],
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
     setsEnv: [],
     displayName: "Claude Code",

@@ -121,7 +121,7 @@ PAGERDUTY_USER_API_KEY=...
 ```
 
 Each `env` entry maps a variable the server receives to a variable in the
-service's environment. A Pi agent gets the variables its MCP servers name,
+service's environment. An agent gets the variables its MCP servers name,
 so the token needs no [`agents.env`](/guide/configuration#agents-env) entry.
 An account on the EU service region also maps `PAGERDUTY_API_HOST` to a
 variable set to `https://api.eu.pagerduty.com`.

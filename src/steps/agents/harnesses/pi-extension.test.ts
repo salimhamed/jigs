@@ -2,7 +2,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
 import {
-  piMcpEnvironmentVariables,
   piMcpToolNames,
   writePiMcpExtension,
   writePiSubmitResultExtension,
@@ -113,7 +112,7 @@ test("MCP extension removes the generic proxy from every provider tool shape", a
   expect(beforeRequest?.({ payload: clean })).toBe(clean);
 });
 
-test("MCP helpers expose only environment names and Pi-visible direct tool names", () => {
+test("MCP helpers expose Pi-visible direct tool names", () => {
   const servers = {
     "linear-personal": {
       command: "node",
@@ -123,7 +122,6 @@ test("MCP helpers expose only environment names and Pi-visible direct tool names
     },
   };
 
-  expect(piMcpEnvironmentVariables(servers)).toEqual(["LINEAR_API_KEY"]);
   expect(piMcpToolNames(servers)).toEqual(["linear-personal_issues_lookup"]);
 });
 

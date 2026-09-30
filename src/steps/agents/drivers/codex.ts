@@ -21,6 +21,7 @@ import {
   prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
+import { mcpCredentialVariables, resolveMcpServer } from "../harnesses/mcp-credentials.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { codexAppServerStepSettings } from "./codex-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
@@ -29,23 +30,18 @@ import type { Driver, DriverRequest, HarnessTarget, OpenContext, OpenedModel } f
 type CodexMcpServerConfig = NonNullable<CodexAppServerSettings["mcpServers"]>[string];
 function mcpServers(
   servers: Record<string, McpServerConfig>,
+  env: Record<string, string>,
 ): Record<string, CodexMcpServerConfig> {
   return Object.fromEntries(
-    Object.entries(servers).map(([name, server]) => [
-      name,
-      "command" in server
-        ? {
-            transport: "stdio",
-            command: server.command,
-            ...(server.args === undefined ? {} : { args: server.args }),
-            ...(server.env === undefined ? {} : { env: server.env }),
-          }
-        : {
-            transport: "http",
-            url: server.url,
-            ...(server.headers === undefined ? {} : { httpHeaders: server.headers }),
-          },
-    ]),
+    Object.entries(servers).map(([name, server]) => {
+      const resolved = resolveMcpServer(server, env);
+      if ("command" in resolved) return [name, { transport: "stdio", ...resolved }];
+      const { headers, ...rest } = resolved;
+      return [
+        name,
+        { transport: "http", ...rest, ...(headers === undefined ? {} : { httpHeaders: headers }) },
+      ];
+    }),
   );
 }
 function descriptor(request: DriverRequest): CodexHarness {
@@ -114,7 +110,7 @@ export function createCodexDriver(
           autoApprove: true,
           ...(harness.mcpServers === undefined
             ? {}
-            : { mcpServers: mcpServers(harness.mcpServers) }),
+            : { mcpServers: mcpServers(harness.mcpServers, context.env) }),
         }),
       );
       // The thread rides on the call, not the settings: a persistent-mode
@@ -144,7 +140,10 @@ export function createCodexDriver(
     installationChecks: () => [harnessRuntimeCheck("codex"), codexAuthCheck()],
     requestChecks: () => [],
     jitChecks: (target) => [codexWorktreeConfigCheck(target.cwd)],
-    envAllowlist: () => [],
+    envAllowlist: (request) =>
+      "harness" in request && request.harness.kind === "codex"
+        ? mcpCredentialVariables(request.harness.mcpServers ?? {})
+        : [],
     sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
     setsEnv: ["CODEX_HOME"],
     displayName: "Codex",
