@@ -72,8 +72,9 @@ native builds they bring; the CLI must never import them.
 
 PR titles are conventional commits, checked by CI. Merging to `main` opens or
 updates a release-please PR; it auto-merges once its checks pass, then the tag,
-GitHub release and npm publish follow. The release branch also commits the
-generated Markdown API reference in `docs/api/`, which ships in the package.
+GitHub release and npm publish follow. The publish job generates the Markdown
+API reference in `docs/api/` from the tag; it ships in the package and is never
+committed.
 
 Repository settings the release depends on:
 
