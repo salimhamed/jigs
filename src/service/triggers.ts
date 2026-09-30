@@ -189,7 +189,8 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   const cancel = deps.cancelRun ?? cancelRun;
   const liveRuns = deps.liveRunsByAttribute ?? liveRunsByAttribute;
   // When the World began delivering: set on arm, after the service's readiness
-  // gates. Until then no uncertain row is settled.
+  // gates, whether or not the markers could be written. Until then no
+  // uncertain row is settled.
   let bootedAt: Date | undefined;
   const slug = deps.factorySlug ?? currentFactory;
   let opened: TriggerStore | undefined = deps.store;
@@ -353,6 +354,8 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     // way.)
     if (pending !== undefined && !threw.has(key))
       return markStarted(entry, row.occurrence, pending.runId);
+    // A run that could not be cancelled keeps the row attempted, so the next
+    // drain tries again rather than failing a row whose run may yet run.
     for (const run of found) {
       try {
         await cancel(run.runId);
@@ -360,6 +363,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         log(
           `[trigger] ${entry.name} ${row.occurrence}: could not cancel run ${run.runId}: ${String(error)}`,
         );
+        return;
       }
     }
     await store().failed(entry.name, row.occurrence, unconfirmedReport(entry, row, pending?.runId));
@@ -469,8 +473,10 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   return {
     triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
     async arm() {
-      await markers();
+      // Before the markers: arm runs once the World is ready, and a failed
+      // marker write, retried by the polls, must not leave the clock unset.
       bootedAt ??= now();
+      await markers();
       void drain();
     },
     drain,
@@ -609,7 +615,8 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
       await (deps.ready ?? whenReady)();
       const intervals = await (deps.intervalSeconds ?? configuredIntervals)();
       if (stopped) return;
-      // A failed arm is retried by every poll; the timers run either way.
+      // A failed arm's markers are retried by every poll, and its settle clock
+      // is already set; the timers run either way.
       await engine.arm().catch((error: unknown) => {
         log(`[trigger] could not enable triggers, retrying on each poll: ${String(error)}`);
       });

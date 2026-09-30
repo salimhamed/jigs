@@ -720,6 +720,50 @@ test("a thrown start whose queue accepted is adopted when its run appears, even 
   expect(h.starts).toHaveLength(2);
 });
 
+test("a first arm whose markers fail still starts the settle clock, so an unconfirmed start fails", async () => {
+  const h = harness({ modes: ["nothing"] });
+  const enable = h.memory.store.enable;
+  let fails = 1;
+  h.memory.store.enable = async (trigger, now) => {
+    if (fails-- > 0) throw new Error("db blip");
+    return enable(trigger, now);
+  };
+  await expect(h.engine.arm()).rejects.toThrow("db blip");
+  await pendingRow(h.memory.store, "P1", T0);
+  // A later poll retries the markers; the drain starts P1, whose start throws.
+  await h.engine.poll("pages");
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(1);
+  h.at(minutes(4));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("pending");
+  h.at(minutes(6));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("failed");
+});
+
+test("a cancel that fails keeps the row attempted, and retries before failing it", async () => {
+  const h = harness({ modes: ["queue-rejected"] });
+  await h.engine.arm();
+  await pendingRow(h.memory.store, "P1", T0);
+  await h.engine.drain();
+  const orphan = h.runs[0] as FakeRun;
+  h.at(minutes(6));
+  h.cancelFailures.before = 1;
+  await h.engine.drain();
+  // Not failed, and not adopted: the never-queued run is still pending.
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "pending", runId: null });
+  await h.engine.drain();
+  expect(orphan.status).toBe("cancelled");
+  const row = h.memory.state("pages", "P1");
+  expect(row?.state).toBe("failed");
+  expect(row?.report?.checks[0]).toMatchObject({
+    reason: `its run ${orphan.runId} was created but never queued, and was cancelled`,
+  });
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("failed");
+});
+
 test("a run someone else cancelled is adopted as the occurrence's run", async () => {
   const run = runFor("P1", T0, "cancelled");
   const h = harness({ runs: [run] });
