@@ -1,0 +1,72 @@
+{
+  "event": {
+    "id": "01DEN2PLD9K5GYVNQMG1C8JSKG",
+    "event_type": "incident.triggered",
+    "resource_type": "incident",
+    "occurred_at": "2026-09-29T12:01:00.412Z",
+    "agent": {
+      "html_url": "https://acme.pagerduty.com/services/PSVC001",
+      "id": "PSVC001",
+      "self": "https://api.pagerduty.com/services/PSVC001",
+      "summary": "checkout",
+      "type": "service_reference"
+    },
+    "client": { "name": "Datadog" },
+    "data": {
+      "id": "Q1",
+      "type": "incident",
+      "self": "https://api.pagerduty.com/incidents/Q1",
+      "html_url": "https://acme.pagerduty.com/incidents/Q1",
+      "number": 1,
+      "status": "triggered",
+      "incident_key": "d3640fbd41094207a1c11e58e46b1662",
+      "created_at": "2026-09-29T12:01:00Z",
+      "title": "Checkout latency Q1",
+      "service": {
+        "html_url": "https://acme.pagerduty.com/services/PSVC001",
+        "id": "PSVC001",
+        "self": "https://api.pagerduty.com/services/PSVC001",
+        "summary": "checkout",
+        "type": "service_reference"
+      },
+      "assignees": [
+        {
+          "html_url": "https://acme.pagerduty.com/users/PUSR001",
+          "id": "PUSR001",
+          "self": "https://api.pagerduty.com/users/PUSR001",
+          "summary": "On Call",
+          "type": "user_reference"
+        }
+      ],
+      "escalation_policy": {
+        "html_url": "https://acme.pagerduty.com/escalation_policies/PEP001",
+        "id": "PEP001",
+        "self": "https://api.pagerduty.com/escalation_policies/PEP001",
+        "summary": "Checkout",
+        "type": "escalation_policy_reference"
+      },
+      "teams": [
+        {
+          "html_url": "https://acme.pagerduty.com/teams/PTEAM01",
+          "id": "PTEAM01",
+          "self": "https://api.pagerduty.com/teams/PTEAM01",
+          "summary": "Payments",
+          "type": "team_reference"
+        }
+      ],
+      "priority": {
+        "html_url": "https://acme.pagerduty.com/account/incident_priorities",
+        "id": "PPRI001",
+        "self": "https://api.pagerduty.com/priorities/PPRI001",
+        "summary": "P1",
+        "type": "priority"
+      },
+      "urgency": "high",
+      "conference_bridge": {
+        "conference_number": "+1 1234123412,,987654321#",
+        "conference_url": "https://example.com/bridge"
+      },
+      "resolve_reason": null
+    }
+  }
+}

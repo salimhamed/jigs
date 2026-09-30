@@ -1,5 +1,5 @@
 import { createHmac } from "node:crypto";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { SPEC_VERSION_CURRENT } from "@workflow/world";
@@ -15,8 +15,14 @@ import * as sql from "../steps/runtime/registry.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
+import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
+import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import * as queue from "./queue.ts";
+import { eventTriggerId } from "./runs.ts";
+import { memoryTriggerStore } from "./test-fixtures.ts";
+import type { PreparedRun } from "./trigger.ts";
+import * as triggers from "./triggers.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -52,6 +58,7 @@ const fixture = {
     url: "https://factory.example.ts.net",
     github: { enabled: true },
     linear: { enabled: true },
+    pagerduty: { enabled: false },
   },
 } satisfies Factory;
 
@@ -117,6 +124,7 @@ beforeEach(() => {
   vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
   vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "pd-hook-secret");
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
   resetGithubAuth();
   resetLinearAuth();
@@ -162,6 +170,7 @@ test.each([
       url: "https://factory.example.ts.net",
       github: { enabled: false },
       linear: { enabled: false },
+      pagerduty: { enabled: false },
     },
   ],
 ])("with %s, neither ingress route exists", async (_name, webhooks) => {
@@ -184,7 +193,12 @@ test.each([
 test("one provider switched on mounts only its own route", async () => {
   const githubOnly = createApp({
     workflows: fixture.workflows,
-    webhooks: { url: "https://f.test", github: { enabled: true }, linear: { enabled: false } },
+    webhooks: {
+      url: "https://f.test",
+      github: { enabled: true },
+      linear: { enabled: false },
+      pagerduty: { enabled: false },
+    },
   });
   const body = commentPayload();
   expect(
@@ -936,4 +950,147 @@ test("a factory with no schedules answers an empty listing", async () => {
   const res = await app.request("/api/schedules");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual([]);
+});
+
+// Each run starts from an incident on the one service the trigger watches.
+const paged = {
+  workflows: {
+    respond: { workflow: async () => undefined, inputs: z.object({ incident: z.string() }) },
+  },
+  triggers: {
+    pages: { workflow: "respond", source: pagerduty.incidents({ service_ids: ["PSVC001"] }) },
+  },
+  webhooks: {
+    url: "https://factory.example.ts.net",
+    github: { enabled: false },
+    linear: { enabled: false },
+    pagerduty: { enabled: true },
+  },
+} satisfies Factory;
+const pagedApp = createApp(paged);
+
+const incidentTriggered = () =>
+  readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8");
+const postPagerDuty = (body: string, headers: Record<string, string> = {}) =>
+  pagedApp.request("/ingress/pagerduty", { method: "POST", body, headers });
+const signPagerDuty = (body: string, secret = "pd-hook-secret") => `v1=${sign(body, secret)}`;
+
+test("PagerDuty's route exists only when its webhook is switched on", async () => {
+  const body = incidentTriggered();
+  const headers = { "x-pagerduty-signature": signPagerDuty(body) };
+  expect((await app.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
+    404,
+  );
+  const off = createApp({
+    ...paged,
+    webhooks: { ...paged.webhooks, pagerduty: { enabled: false } },
+  });
+  expect((await off.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
+    404,
+  );
+});
+
+test.each([
+  ["a forged signature", { "x-pagerduty-signature": "v1=00" }],
+  ["no signature", {}],
+])("POST /ingress/pagerduty with %s is a 401 that logs no signature", async (_name, headers) => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const push = vi.spyOn(triggers, "pushEvent");
+  const res = await postPagerDuty(incidentTriggered(), headers);
+  expect(res.status).toBe(401);
+  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] pagerduty rejected reason=signature");
+  expect(push).not.toHaveBeenCalled();
+});
+
+test("POST /ingress/pagerduty without a configured secret fails closed", async () => {
+  vi.spyOn(console, "log").mockImplementation(() => undefined);
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
+  const body = incidentTriggered();
+  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body, "") });
+  expect(res.status).toBe(401);
+});
+
+test("a signed PagerDuty event no trigger takes is acknowledged and logged as ignored", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const body = incidentTriggered().replace("incident.triggered", "incident.acknowledged");
+  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ ignored: true });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
+  );
+});
+
+test("a push that fails is still acknowledged, so PagerDuty keeps the subscription on", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  vi.spyOn(triggers, "pushEvent").mockRejectedValueOnce(new Error("registry unreachable"));
+  const body = incidentTriggered();
+  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
+  );
+});
+
+test("a signed incident.triggered is recorded at once, and its run starts", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  const T0 = new Date("2026-09-29T12:00:00.000Z");
+  const memory = memoryTriggerStore(() => T0, T0);
+  const starts: Array<{ inputs: unknown; triggerId: string }> = [];
+  const timers: number[] = [];
+  let release = () => {};
+  const started = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  triggers.startTriggers(paged, {
+    store: memory.store,
+    sources: {
+      "pagerduty.incidents": pagerDutyIncidents({
+        client: () => ({ listIncidents: async () => [] }) as never,
+        now: () => T0,
+      }),
+    },
+    now: () => T0,
+    log: () => {},
+    factorySlug: () => "factory-test",
+    runStatuses: async () => new Map(),
+    findRunsByAttribute: async () => [],
+    liveRunsByAttribute: async () => new Map(),
+    cancelRun: async () => {},
+    prepareRun: async (_factory, _workflow, inputs): Promise<PreparedRun> => ({
+      kind: "ready",
+      launch: async (triggerId) => {
+        // Held open: the webhook's answer must not wait on the start.
+        await started;
+        starts.push({ inputs, triggerId });
+        return "wrun_1";
+      },
+    }),
+    ready: async () => {},
+    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
+    random: () => 0,
+    setTimer: (_fire, ms) => {
+      timers.push(ms);
+      return () => {};
+    },
+  });
+  await vi.waitFor(() => expect(timers).toHaveLength(2));
+
+  const body = incidentTriggered();
+  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
+
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ triggers: ["pages"] });
+  expect(log).toHaveBeenCalledWith(
+    "[ingress] pagerduty accepted triggers=pages event=incident.triggered",
+  );
+  expect(memory.state("pages", "Q1")).toMatchObject({ state: "pending" });
+  expect(starts).toEqual([]);
+  release();
+  await vi.waitFor(() =>
+    expect(starts).toEqual([
+      { inputs: { incident: "Q1" }, triggerId: eventTriggerId("pages", "Q1") },
+    ]),
+  );
 });

@@ -21,13 +21,18 @@ import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
-import { verifyGithubSignature, verifyLinearSignature } from "./ingress.ts";
+import {
+  verifyGithubSignature,
+  verifyLinearSignature,
+  verifyPagerDutySignature,
+} from "./ingress.ts";
+import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { startRun } from "./trigger.ts";
-import { listTriggers, triggerChecks, triggerProviders } from "./triggers.ts";
+import { listTriggers, pushEvent, triggerChecks, triggerProviders } from "./triggers.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
 
 // The app is library code: a factory repo installs this package and hands in
@@ -134,6 +139,7 @@ export function createApp(factory: Factory): Hono {
   // stray delivery is a 404 rather than work.
   if (factory.webhooks?.github.enabled) mountGithubIngress(app);
   if (factory.webhooks?.linear.enabled) mountLinearIngress(app);
+  if (factory.webhooks?.pagerduty.enabled) mountPagerDutyIngress(app);
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
@@ -363,6 +369,38 @@ function mountLinearIngress(app: Hono): void {
       return c.json({ ignored: true });
     }
     return resumeAndLog(c, "linear", [token], event, resumeHook);
+  });
+}
+
+// PagerDuty events start runs rather than wake them. The answer waits only
+// for the occurrence's row, never the start, so it lands well inside
+// PagerDuty's timeout; an event no trigger takes, of any type, is acknowledged.
+function mountPagerDutyIngress(app: Hono): void {
+  app.post("/ingress/pagerduty", async (c) => {
+    const secret = webhookSecret("pagerduty");
+    const rawBody = await c.req.text();
+    const signature = c.req.header("x-pagerduty-signature");
+    if (secret === undefined || !verifyPagerDutySignature(rawBody, signature, secret)) {
+      console.log("[ingress] pagerduty rejected reason=signature");
+      return c.json({ error: "invalid signature" }, 401);
+    }
+    const payload = parseJson(rawBody);
+    const event = `event=${sanitizeForLog(pagerDutyEventType(payload) ?? "unknown")}`;
+    let triggers: string[];
+    try {
+      triggers = await pushEvent("pagerduty", payload);
+    } catch (error) {
+      // Still a 2xx: PagerDuty switches a subscription off after repeated
+      // failures, and the poll finds the incident anyway.
+      console.log(`[ingress] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
+      return c.json({ delivered: false });
+    }
+    if (triggers.length === 0) {
+      console.log(`[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
+      return c.json({ ignored: true });
+    }
+    console.log(`[ingress] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
+    return c.json({ triggers });
   });
 }
 

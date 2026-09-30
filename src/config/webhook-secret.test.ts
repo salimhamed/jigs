@@ -38,3 +38,9 @@ test("each provider reads its own variable", () => {
   expect(webhookSecret("linear", factory)).toBe("linear-file");
   expect(webhookSecret("github", factory)).toBeUndefined();
 });
+
+test("PagerDuty reads its own variable", () => {
+  writeFileSync(path.join(factory, ".env"), "PAGERDUTY_WEBHOOK_SECRET=pd-file\n");
+  expect(webhookSecret("pagerduty", factory)).toBe("pd-file");
+  expect(webhookSecret("linear", factory)).toBeUndefined();
+});

@@ -458,6 +458,7 @@ const WEBHOOKS = {
   url: "https://factory.example.ts.net",
   github: { enabled: true },
   linear: { enabled: false },
+  pagerduty: { enabled: false },
 };
 
 test("an enabled provider without its secret refuses the boot and names the variable", async () => {
@@ -491,6 +492,22 @@ test.each([
   const exit = vi.fn();
   expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
   expect(exit).not.toHaveBeenCalled();
+});
+
+test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
+  const exit = vi.fn();
+  const error = vi.fn();
+  await gateOnWebhookSecrets({
+    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
+    exit,
+    error,
+  });
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(error).toHaveBeenCalledExactlyOnceWith(
+    expect.stringContaining("PAGERDUTY_WEBHOOK_SECRET is not set"),
+  );
 });
 
 test("an enabled provider with its secret boots", async () => {

@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
@@ -136,7 +137,53 @@ test("the occurrence is the incident id, and params take PagerDuty's names only"
   expect(source.params.safeParse({ urgencies: ["urgent"] }).success).toBe(false);
   expect(source.params.safeParse({ service_ids: [] }).success).toBe(false);
   expect(source.params.safeParse({ statuses: ["acknowledged"] }).success).toBe(false);
-  expect(await source.fromPush({}, { event: { event_type: "incident.triggered" } })).toBeNull();
+});
+
+// An `incident.triggered` delivery as PagerDuty's v3 webhooks send it.
+const triggered = (): { event: Record<string, unknown> & { data: Record<string, unknown> } } =>
+  JSON.parse(
+    readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
+  );
+const withEvent = (fields: Record<string, unknown>, data: Record<string, unknown> = {}) => {
+  const payload = triggered();
+  return { event: { ...payload.event, ...fields, data: { ...payload.event.data, ...data } } };
+};
+
+test("a pushed incident.triggered is the same occurrence the poll finds", async () => {
+  const api = recordedApi();
+  api.replies.push([incident("Q1", minutes(1))]);
+  const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
+
+  const pushed = await source.fromPush({}, triggered());
+
+  expect(pushed).toEqual({ inputs: { incident: "Q1" }, at: minutes(1) });
+  expect(await source.poll({}, T0)).toEqual([pushed]);
+});
+
+test("any other webhook event is not an occurrence", async () => {
+  const source = pagerDutyIncidents({ client: () => recordedApi().client });
+  for (const event_type of ["incident.acknowledged", "incident.resolved", "pagey.ping"])
+    expect(await source.fromPush({}, withEvent({ event_type }))).toBeNull();
+  expect(await source.fromPush({}, null)).toBeNull();
+  expect(await source.fromPush({}, { ping: true })).toBeNull();
+});
+
+test("a pushed incident is filtered as the poll's own parameters filter it", async () => {
+  const source = pagerDutyIncidents({ client: () => recordedApi().client });
+  const push = (params: Parameters<typeof source.fromPush>[0], data = {}) =>
+    source.fromPush(params, withEvent({}, data));
+  expect(await push({ service_ids: ["PSVC001", "PSVC002"] })).not.toBeNull();
+  expect(await push({ service_ids: ["PSVC002"] })).toBeNull();
+  expect(await push({ team_ids: ["PTEAM01"] })).not.toBeNull();
+  expect(await push({ team_ids: ["PTEAM02"] })).toBeNull();
+  expect(await push({ team_ids: ["PTEAM01"] }, { teams: [] })).toBeNull();
+  expect(await push({ urgencies: ["high"] })).not.toBeNull();
+  expect(await push({ urgencies: ["low"] })).toBeNull();
+});
+
+test("an incident.triggered without an incident is refused rather than taken", async () => {
+  const source = pagerDutyIncidents({ client: () => recordedApi().client });
+  await expect(source.fromPush({}, withEvent({}, { id: undefined }))).rejects.toThrow();
 });
 
 const respond: Factory = {
@@ -320,4 +367,31 @@ test("the source is shipped, and its trigger polls PagerDuty for doctor", async 
     ok: false,
     reason: expect.stringContaining("urgencies"),
   });
+});
+
+test("an incident pushed, then polled, starts exactly one run", async () => {
+  const h = engineHarness();
+  await h.engine.arm();
+  h.at(minutes(2));
+
+  expect(await h.engine.push("pagerduty", triggered())).toEqual(["pages"]);
+  await h.engine.drain();
+  h.api.replies.push([incident("Q1", minutes(1))]);
+  await h.engine.poll("pages");
+  expect(await h.engine.push("pagerduty", triggered())).toEqual([]);
+  await h.engine.drain();
+
+  expect(h.starts).toEqual([
+    { inputs: { team: "infra", incident: "Q1" }, triggerId: eventTriggerId("pages", "Q1") },
+  ]);
+  expect(h.memory.state("pages", "Q1")?.occurredAt).toEqual(minutes(1));
+});
+
+test("a pushed incident on a service the trigger does not watch starts nothing", async () => {
+  const h = engineHarness();
+  await h.engine.arm();
+  h.at(minutes(2));
+  const elsewhere = withEvent({}, { service: { id: "PSVC009" } });
+  expect(await h.engine.push("pagerduty", elsewhere)).toEqual([]);
+  expect(h.memory.rows.size).toBe(0);
 });

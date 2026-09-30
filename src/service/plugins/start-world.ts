@@ -119,7 +119,7 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
     return false;
   }
   const { webhookSecret, webhookSecretVariable } = await import("../../config/webhook-secret.ts");
-  const missing = (["github", "linear"] as const)
+  const missing = (["github", "linear", "pagerduty"] as const)
     .filter((provider) => webhooks?.[provider].enabled && webhookSecret(provider) === undefined)
     .map(webhookSecretVariable);
   if (missing.length > 0) {

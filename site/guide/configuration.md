@@ -187,7 +187,8 @@ export default defineFactory({
 - An occurrence starts at most one run, ever, even if the run decides to do
   nothing or ends while the incident is still open.
 - The service polls each source on its provider's
-  [`pollIntervalSeconds`](#service).
+  [`pollIntervalSeconds`](#service). A PagerDuty [webhook](#webhooks) starts
+  runs sooner; the poll still finds anything a delivery missed.
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
@@ -429,8 +430,9 @@ To start runs from Slack messages, see
 ## Webhooks {#webhooks}
 
 Webhooks improve latency, not correctness. Without them, the built-in GitHub
-and Linear waits continue to poll at [`pollIntervalSeconds`](#service). A lost
-webhook delivery only delays the next check. See
+and Linear waits, and [event triggers](#triggers) on PagerDuty, continue to
+poll at [`pollIntervalSeconds`](#service). A lost webhook delivery only delays
+the next check. See
 [Waiting and external events](/guide/waiting-and-events) for how runs wait.
 
 ```ts factory-options
@@ -439,6 +441,7 @@ webhooks: {
   url: "https://my-machine.my-tailnet.ts.net",
   github: { enabled: true },
   linear: { enabled: false },
+  pagerduty: { enabled: false },
 },
 ```
 
@@ -455,10 +458,19 @@ webhooks: {
    Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
    only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET` and run
    `jigs service restart`.
+4. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
+   and add a subscription on the service or team your triggers watch, for the
+   `incident.triggered` event only, delivering to
+   `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
+   in `.env` as `PAGERDUTY_WEBHOOK_SECRET`, set `pagerduty: { enabled: true }`
+   and run `jigs service restart`. A new incident then starts its run within
+   seconds instead of at the next poll, and never starts a second one.
 
 A provider that is enabled without its secret stops the service from starting.
-`jigs doctor` checks the secrets and, for GitHub, whether recent deliveries were
-rejected.
+`jigs doctor` checks the secrets, whether recent GitHub deliveries were
+rejected, and whether the PagerDuty subscription exists and is active. PagerDuty
+switches a subscription off after repeated failed deliveries; enable it again
+on its page under **Integrations → Generic Webhooks (v3)**.
 
 ## `.env` {#env}
 
@@ -474,6 +486,7 @@ is missing, and lists the credentials still empty.
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
+| `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 | `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
 | `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
