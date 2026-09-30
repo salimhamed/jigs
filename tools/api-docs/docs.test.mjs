@@ -1,5 +1,5 @@
 import { execFileSync } from "node:child_process";
-import { mkdir, mkdtemp, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, readdir, readFile, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -194,78 +194,24 @@ test("API navigation labels generated imports and low-level implementations sepa
   expect(sidebar.at(-1).items).toEqual([{ text: "git", link: "/api/steps/git" }]);
 });
 
-test("release docs generate independently while GitHub gates auto-merge", async () => {
-  const workflow = parse(
+test("the publish job generates the reference from the tag, and nothing commits it", async () => {
+  const release = parse(
     await readFile(path.join(rootDir, ".github/workflows/release.yml"), "utf8"),
   );
-  expect(workflow.on.push.branches).toContain("release-please--branches--main");
-  expect(workflow.concurrency.group).toContain("github.ref");
+  expect(release.on.push.branches).toEqual(["main"]);
 
-  const docsJob = workflow.jobs["api-docs"];
-  expect(docsJob.needs).toBeUndefined();
-  expect(docsJob.if).toContain("release-please--branches--main");
-  const serialized = JSON.stringify(docsJob);
-  expect(serialized).toContain("RELEASE_PLEASE_TOKEN");
-  const generateStep = docsJob.steps.find((step) => step.run?.includes("docs"));
-  expect(generateStep?.run).toBe("pnpm run docs");
-  expect(serialized).toContain("git diff --cached --quiet");
-  expect(serialized).toContain("git add -f docs/api");
+  const steps = release.jobs.publish.steps.map((step) => step.run ?? step.uses);
+  const docs = steps.indexOf("pnpm run docs");
+  expect(docs).toBeGreaterThan(-1);
+  expect(docs).toBeLessThan(steps.findIndex((run) => run?.includes("npm publish")));
 
-  const mergeStep = workflow.jobs["release-please"].steps.find(
-    (step) => step.name === "Enable auto-merge for the release PR",
+  const workflows = await Promise.all(
+    ["release.yml", "ci.yml"].map((name) =>
+      readFile(path.join(rootDir, ".github/workflows", name), "utf8"),
+    ),
   );
-  expect(mergeStep.env.GH_TOKEN).toContain("RELEASE_PLEASE_TOKEN");
-  expect(mergeStep.run).toContain("gh pr list --head release-please--branches--main");
-  expect(mergeStep.run).toContain('gh pr merge "$pr" --auto --squash');
-  expect(mergeStep.run).not.toContain("gh pr checks");
-  expect(mergeStep.if).toBeUndefined();
+  for (const workflow of workflows) expect(workflow).not.toContain("git add -f docs/api");
 });
-
-test.each(["unchanged", "changed", "added", "deleted"])(
-  "the release CI docs gate handles %s generated pages",
-  async (change) => {
-    const workflow = parse(await readFile(path.join(rootDir, ".github/workflows/ci.yml"), "utf8"));
-    const gate = workflow.jobs.ci.steps.find(
-      (step) => step.name === "Verify the release API reference is current",
-    );
-    expect(gate.if).toContain("github.head_ref == 'release-please--branches--main'");
-    expect(gate.run).toContain("pnpm run docs");
-
-    const directory = await tempDir();
-    const git = (...args) => execFileSync("git", args, { cwd: directory, stdio: "pipe" });
-    git("init", "--quiet");
-    await writeFile(path.join(directory, ".gitignore"), "docs/api/\n");
-    await mkdir(path.join(directory, "docs/api"), { recursive: true });
-    const page = path.join(directory, "docs/api/index.md");
-    await writeFile(page, "Released reference\n");
-    git("add", "-f", ".gitignore", "docs/api");
-    git(
-      "-c",
-      "user.name=Docs test",
-      "-c",
-      "user.email=docs@example.com",
-      "commit",
-      "-qm",
-      "Release",
-    );
-
-    if (change === "changed") await writeFile(page, "Next release reference\n");
-    if (change === "added") {
-      await writeFile(path.join(directory, "docs/api/new-entry.md"), "New API\n");
-    }
-    if (change === "deleted") await rm(page);
-
-    // Rendering is exercised above; run the actual workflow's Git guard
-    // against tracked changes and ignored new files in an isolated checkout.
-    const check = () =>
-      execFileSync("bash", ["-e", "-c", gate.run.replace("pnpm run docs", "true")], {
-        cwd: directory,
-        stdio: "pipe",
-      });
-    if (change === "unchanged") expect(check).not.toThrow();
-    else expect(check).toThrow();
-  },
-);
 
 test("the website covers the public entries, llms.txt and the favicon inside the Pages subpath", async () => {
   const destination = await tempDir();
