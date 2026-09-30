@@ -75,6 +75,8 @@ export const webhooksSchema = z.strictObject({
   url: z.url(),
   github: webhookProviderSchema,
   linear: webhookProviderSchema,
+  // Absent, PagerDuty is off: a factory without PagerDuty need not mention it.
+  pagerduty: webhookProviderSchema.optional(),
 });
 
 // Who jigs is on GitHub. `pat` is the operator's own token, so every pull
@@ -259,7 +261,7 @@ const factoryConfigSchema = z.looseObject({
 export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
-export type WebhookProvider = "github" | "linear";
+export type WebhookProvider = "github" | "linear" | "pagerduty";
 export type SlackConfig = z.output<typeof slackSchema>;
 
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;

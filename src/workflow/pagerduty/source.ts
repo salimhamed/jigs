@@ -36,7 +36,8 @@ export const pagerduty = {
    * with `{ incident: "<id>" }` as its inputs, even one acknowledged or
    * resolved before the service saw it; the workflow can check the status and
    * skip one that is already handled. The service polls on
-   * `service.pollIntervalSeconds.pagerduty`.
+   * `service.pollIntervalSeconds.pagerduty`, and with PagerDuty webhooks
+   * switched on it starts the run as soon as `incident.triggered` arrives.
    *
    * @example
    * ```ts

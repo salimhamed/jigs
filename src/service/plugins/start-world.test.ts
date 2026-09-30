@@ -493,6 +493,22 @@ test.each([
   expect(exit).not.toHaveBeenCalled();
 });
 
+test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
+  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
+  const exit = vi.fn();
+  const error = vi.fn();
+  await gateOnWebhookSecrets({
+    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
+    exit,
+    error,
+  });
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(error).toHaveBeenCalledExactlyOnceWith(
+    expect.stringContaining("PAGERDUTY_WEBHOOK_SECRET is not set"),
+  );
+});
+
 test("an enabled provider with its secret boots", async () => {
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);

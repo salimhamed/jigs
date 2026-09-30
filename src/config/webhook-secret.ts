@@ -5,6 +5,15 @@ import { factoryEnvValue } from "./factory-env.ts";
 const SECRET_VARIABLES: Record<WebhookProvider, string> = {
   github: "GITHUB_WEBHOOK_SECRET",
   linear: "LINEAR_WEBHOOK_SECRET",
+  pagerduty: "PAGERDUTY_WEBHOOK_SECRET",
+};
+
+const SECRET_SOURCES: Record<WebhookProvider, string> = {
+  github: "generate a secret: `openssl rand -hex 32`",
+  linear: "copy the signing secret from the Linear webhook's settings page",
+  // PagerDuty shows it once, when the subscription is created.
+  pagerduty:
+    "copy the signing secret PagerDuty showed when the webhook subscription was created, or create the subscription again for a new one",
 };
 
 /** The environment variable holding a provider's webhook signing secret. */
@@ -28,9 +37,5 @@ export function missingWebhookSecret(provider: WebhookProvider, factoryRoot: str
 }
 
 export function webhookSecretRepair(provider: WebhookProvider, factoryRoot: string): string {
-  const source =
-    provider === "github"
-      ? "generate a secret: `openssl rand -hex 32`"
-      : "copy the signing secret from the Linear webhook's settings page";
-  return `${source}\nset it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")}\nrestart the service: \`pnpm exec jigs service restart\``;
+  return `${SECRET_SOURCES[provider]}\nset it as ${SECRET_VARIABLES[provider]} in ${path.join(factoryRoot, ".env")}\nrestart the service: \`pnpm exec jigs service restart\``;
 }

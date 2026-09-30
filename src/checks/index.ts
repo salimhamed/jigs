@@ -56,6 +56,7 @@ import {
   pagerDutyFromChecks,
   pagerDutyIdentityChecks,
 } from "./pagerduty-identity.ts";
+import { pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
 import { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
 import { webhookChecks } from "./webhooks.ts";
 
@@ -255,7 +256,7 @@ export function preflightChecks(
 
 // Beyond what a workflow requires, the configuration can ask for a provider
 // itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
-// Linear, and an App identity, a pagerduty section or a slack section is set up
+// Linear, a PagerDuty webhook needs PagerDuty, and an App identity, a pagerduty section or a slack section is set up
 // on purpose. The key and PAT identities are what every scaffold states, so they
 // ask for nothing. An unreadable config asks for nothing either: the binding
 // checks report it.
@@ -273,7 +274,7 @@ function configuredProviders(): Record<Integration, boolean> {
         (webhooks?.linear.enabled ?? false) ||
         linear.identity.mode === "app" ||
         linear.operator !== undefined,
-      pagerduty: pagerduty !== undefined,
+      pagerduty: pagerduty !== undefined || (webhooks?.pagerduty?.enabled ?? false),
       slack: slack !== undefined,
     };
   } catch {
@@ -310,6 +311,13 @@ export function doctorChecks(
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),
+    ...pagerDutyWebhookChecks({
+      factoryRoot,
+      probes: {
+        token: pagerDutyProbes.token,
+        subscriptions: (url) => pagerDutyClientFor().listWebhookSubscriptions({ url }),
+      },
+    }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),

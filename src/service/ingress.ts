@@ -33,3 +33,17 @@ export function verifyLinearSignature(
   if (signatureHeader === undefined) return false;
   return hmacMatches(rawBody, signatureHeader, secret);
 }
+
+// PagerDuty: `x-pagerduty-signature: v1=<hex>[,v1=<hex>...]`. While a secret is
+// rotated PagerDuty signs with each, and any one matching is enough.
+export function verifyPagerDutySignature(
+  rawBody: string,
+  signatureHeader: string | undefined,
+  secret: string,
+): boolean {
+  if (signatureHeader === undefined) return false;
+  return signatureHeader
+    .split(",")
+    .map((value) => value.trim())
+    .some((value) => value.startsWith("v1=") && hmacMatches(rawBody, value.slice(3), secret));
+}
