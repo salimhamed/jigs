@@ -250,10 +250,8 @@ export type LinearDefinition = z.input<typeof linearSchema>;
  *
  * @remarks
  * The bot token goes in `.env` as `SLACK_BOT_TOKEN`. With `socketMode` on, the
- * service also receives messages over Socket Mode as they are posted, and needs
- * the app-level token in `SLACK_APP_TOKEN`; the service refuses to start
- * without it. Polling runs either way, every `service.pollIntervalSeconds.slack`
- * seconds.
+ * service needs the app-level token in `SLACK_APP_TOKEN` and refuses to start
+ * without it.
  *
  * @example
  * Use this value for `slack` in `jigs.config.ts`.

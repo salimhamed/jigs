@@ -3,6 +3,7 @@
 // Socket Mode connection. Reads env and hits the network, so it is reached
 // from a step, a check or the service, never from workflow code.
 
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../checks/core.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
 import { credentialRoot } from "./credential-root.ts";
@@ -71,7 +72,7 @@ async function slackCall<T extends SlackReply>(
   if (secret === undefined) {
     throw new JigsError(
       `${token} is not set`,
-      `set ${token} in the factory repo's .env, then: \`pnpm exec jigs service restart\``,
+      `set ${token} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
     );
   }
   const form = new URLSearchParams();
@@ -157,8 +158,6 @@ export function slackBot(): Promise<SlackAuth> {
   return bot;
 }
 
-// Slack's own field names: a polled message and a Socket Mode event carry the
-// same shape, so one type serves both.
 /** A channel message as Slack returns it. */
 export interface SlackMessage {
   ts: string;
@@ -170,7 +169,7 @@ export interface SlackMessage {
 }
 
 /** A channel's messages after `oldest` (exclusive), newest first, as Slack returns them. */
-export function slackHistory(channel: string, { oldest }: { oldest?: string } = {}) {
+export function slackHistory(channel: string, { oldest }: { oldest: string }) {
   return slackPages<SlackMessage>("conversations.history", { channel, oldest }, "messages");
 }
 

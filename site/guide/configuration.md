@@ -341,7 +341,7 @@ slack: { socketMode: true },
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
+| `socketMode` | required | Use Socket Mode. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
 
 ## Webhooks {#webhooks}
 

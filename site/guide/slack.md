@@ -44,10 +44,6 @@ settings:
 | `users:read` | Looking up the names of the people who wrote a message. |
 | `users:read.email` | Looking up their email addresses. |
 
-The bot events `message.channels` and `message.groups` are what Socket Mode
-delivers. Socket Mode needs no public URL: the factory's service opens the
-connection to Slack itself.
-
 Some workspaces require an admin to approve new apps. If yours does, Slack asks
 for approval when you install.
 
@@ -85,11 +81,7 @@ Add a `slack` section to `jigs.config.ts`:
 slack: { socketMode: true },
 ```
 
-With `socketMode: true`, the service holds a Socket Mode connection and sees a
-message within a second of it being posted. It still polls every
-[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds
-underneath, so nothing is lost while the service is down. With
-`socketMode: false`, jigs only polls, and `SLACK_APP_TOKEN` is not needed.
+With `socketMode: false`, `SLACK_APP_TOKEN` is not needed.
 
 A workflow that uses Slack declares it:
 

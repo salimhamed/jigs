@@ -24,6 +24,13 @@ const and = (items: readonly string[]) => items.join(" and ");
 // about the token.
 const REJECTED_TOKEN = new Set(["invalid_auth", "not_authed", "token_revoked", "account_inactive"]);
 
+const createAppToken = `create an app-level token with the connections:write scope under Basic Information → App-Level Tokens in ${APP_SETTINGS}`;
+
+const SOCKET_MODE_FIX: Record<string, string> = {
+  missing_scope: `an app-level token's scopes are fixed when it is made; ${createAppToken}`,
+  not_allowed_token_type: `SLACK_APP_TOKEN must be an app-level token (xapp-), not the bot token; ${createAppToken}`,
+};
+
 /** Whether the bot token is set, accepted by Slack and granted every scope jigs uses. */
 export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackEnvValue): Check[] {
   return [
@@ -82,7 +89,6 @@ export function slackSocketModeChecks(
   env: EnvLookup = slackEnvValue,
 ): Check[] {
   if (!slack.socketMode) return [];
-  const createToken = `create an app-level token with the connections:write scope under Basic Information → App-Level Tokens in ${APP_SETTINGS}`;
   return [
     {
       id: "slack.socket-mode",
@@ -92,7 +98,7 @@ export function slackSocketModeChecks(
           return {
             ok: false,
             reason: "slack.socketMode is on but SLACK_APP_TOKEN is not set",
-            repair: `${createToken}, set it as SLACK_APP_TOKEN in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+            repair: `${createAppToken}, set it as SLACK_APP_TOKEN in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
           };
         }
         try {
@@ -100,13 +106,9 @@ export function slackSocketModeChecks(
           return { ok: true };
         } catch (err) {
           const reason = `SLACK_APP_TOKEN could not open a Socket Mode connection: ${err instanceof Error ? err.message : String(err)}`;
-          const code = err instanceof SlackApiError ? err.code : undefined;
           const fix =
-            code === "missing_scope"
-              ? `an app-level token's scopes are fixed when it is made; ${createToken}`
-              : code === "not_allowed_token_type"
-                ? `SLACK_APP_TOKEN must be an app-level token (xapp-), not the bot token; ${createToken}`
-                : `turn on Socket Mode in ${APP_SETTINGS}; if the token was revoked, ${createToken}`;
+            (err instanceof SlackApiError ? SOCKET_MODE_FIX[err.code] : undefined) ??
+            `turn on Socket Mode in ${APP_SETTINGS}; if the token was revoked, ${createAppToken}`;
           return {
             ok: false,
             reason,
