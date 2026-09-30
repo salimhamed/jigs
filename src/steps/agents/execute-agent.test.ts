@@ -235,6 +235,8 @@ test("generic execution dependencies contain no driver-private operations", () =
 });
 
 test("claude agent step hydrates from wire config with the harness invariants forced", async () => {
+  vi.stubEnv("CLAUDE_TEST_STDIO_TOKEN", "stdio-secret");
+  vi.stubEnv("CLAUDE_TEST_HEADER", "header-secret");
   const wire = buildAgentRequest({
     harness: harnesses.claude({
       model: "sonnet",
@@ -243,12 +245,12 @@ test("claude agent step hydrates from wire config with the harness invariants fo
         probe: {
           command: "node",
           args: ["p.mjs"],
-          env: { T: "1" },
+          env: { T: "CLAUDE_TEST_STDIO_TOKEN" },
           probe: { tool: "ping" },
         },
         remote: {
           url: "https://mcp.example",
-          headers: { a: "b" },
+          headers: { a: "CLAUDE_TEST_HEADER" },
           probe: { tool: "ping" },
         },
       },
@@ -266,9 +268,10 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   expect(settings.settingSources).toEqual(["project"]);
   expect(settings.effort).toBe("medium");
   expect(settings.mcpServers).toEqual({
-    probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "1" } },
-    remote: { type: "http", url: "https://mcp.example", headers: { a: "b" } },
+    probe: { type: "stdio", command: "node", args: ["p.mjs"], env: { T: "stdio-secret" } },
+    remote: { type: "http", url: "https://mcp.example", headers: { a: "header-secret" } },
   });
+  expect(JSON.stringify(wire)).not.toContain("secret");
   expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
   expect(captured.options?.system).toBeUndefined();
   expect(captured.homeRunIds).toEqual([]);
@@ -303,6 +306,39 @@ test("codex agent step runs on the app-server under an invocation home with fixe
     probe: { transport: "stdio", command: "node" },
   });
   expect(captured.homeRunIds).toEqual(["run-7"]);
+});
+
+test("codex resolves MCP credentials from the step environment by name", async () => {
+  vi.stubEnv("CODEX_TEST_BEARER", "bearer-secret");
+  vi.stubEnv("CODEX_TEST_STDIO_TOKEN", "stdio-secret");
+  const wire = buildAgentRequest({
+    harness: harnesses.codex({
+      model: "gpt-5.5",
+      mcpServers: {
+        local: { command: "node", env: { TOKEN: "CODEX_TEST_STDIO_TOKEN" }, probe: { tool: "p" } },
+        remote: {
+          url: "https://mcp.example",
+          bearerTokenEnv: "CODEX_TEST_BEARER",
+          probe: { tool: "p" },
+        },
+      },
+    }),
+    cwd: worktree,
+    prompt: "implement it",
+  });
+  const { deps, captured } = makeDeps();
+
+  await agentStep(wire, { workflowRunId: "run-codex-mcp" }, deps);
+
+  expect(captured.codexSettings?.mcpServers).toEqual({
+    local: { transport: "stdio", command: "node", env: { TOKEN: "stdio-secret" } },
+    remote: {
+      transport: "http",
+      url: "https://mcp.example",
+      httpHeaders: { Authorization: "Bearer bearer-secret" },
+    },
+  });
+  expect(JSON.stringify(wire)).not.toContain("secret");
 });
 
 test("a Codex descriptor that smuggles sandbox or config policy loses to jigs' policy", async () => {
@@ -1143,32 +1179,54 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
   expect(ask.captured.piHome).toBeUndefined();
 });
 
-test("pi rejects missing step-side MCP credentials before probing a server", async () => {
-  vi.stubEnv("OPENROUTER_API_KEY", "model-secret");
-  vi.stubEnv("PI_MISSING_MCP_TOKEN", "");
-  const wire = buildAgentRequest({
-    harness: harnesses.pi(models.openrouter("openai/gpt-oss"), {
-      mcpServers: {
-        probe: {
-          command: "never-contacted",
-          env: { TOKEN: "PI_MISSING_MCP_TOKEN" },
-          tools: ["ping"],
-          probe: { tool: "ping" },
-        },
-      },
-    }),
-    cwd: worktree,
-    prompt: "never reached",
-  });
-  const run = makeDeps({}, { piRequestChecks: true });
-  run.deps.jitFailures = vi.fn(async () => undefined);
+test.each([
+  [
+    "claude",
+    (mcpServers: Record<string, never>) => harnesses.claude({ model: "opus", mcpServers }),
+  ],
+  [
+    "codex",
+    (mcpServers: Record<string, never>) => harnesses.codex({ model: "gpt-5.5", mcpServers }),
+  ],
+  [
+    "pi",
+    (mcpServers: Record<string, never>) =>
+      harnesses.pi(models.openrouter("openai/gpt-oss"), { mcpServers }),
+  ],
+] as const)(
+  "%s fails the JIT check, naming the variable, when an MCP credential is unset",
+  async (_kind, build) => {
+    vi.stubEnv("OPENROUTER_API_KEY", "model-secret");
+    vi.stubEnv("MISSING_MCP_TOKEN", "");
+    const server = {
+      command: "never-contacted",
+      env: { TOKEN: "MISSING_MCP_TOKEN" },
+      tools: ["ping"],
+      probe: { tool: "ping" },
+    };
+    const wire = buildAgentRequest({
+      harness: build({ probe: server as never }),
+      cwd: worktree,
+      prompt: "never reached",
+    });
+    const run = makeDeps({}, { piRequestChecks: true });
+    run.deps.jitFailures = executionSeams.jitFailures;
 
-  await expect(
-    executeAgentWith(wire, { workflowRunId: "missing-mcp-secret" }, run.deps),
-  ).rejects.toThrow("PI_MISSING_MCP_TOKEN");
-  expect(run.deps.jitFailures).not.toHaveBeenCalled();
-  expect(run.captured.piHome).toBeUndefined();
-});
+    const result = await executeAgentWith(wire, { workflowRunId: "missing-mcp-secret" }, run.deps);
+
+    expect(result).toMatchObject({
+      jitFailure: [
+        expect.objectContaining({
+          reason: expect.stringContaining("MISSING_MCP_TOKEN"),
+          repair: expect.stringContaining("set MISSING_MCP_TOKEN"),
+        }),
+      ],
+    });
+    expect(run.captured.piHome).toBeUndefined();
+    expect(run.captured.codexSettings).toBeUndefined();
+    expect(run.captured.options).toBeUndefined();
+  },
+);
 
 test("parallel pi runs keep different MCP universes in separate extensions", async () => {
   const otherWorktree = path.join(tmp, "pi-parallel-worktree");

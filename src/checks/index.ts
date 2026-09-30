@@ -15,12 +15,7 @@ import { pagerDutyClientFor } from "../providers/pagerduty.ts";
 import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
 import { slackAuthTest, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
-import type {
-  AskableModelSource,
-  Harness,
-  McpServerConfig,
-  PiMcpServerConfig,
-} from "../workflow/agents/harness-config.ts";
+import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {
@@ -323,54 +318,16 @@ export function doctorChecks(
 // "did not answer".
 export const JIT_TIMEOUT_MS = 3 * CHECK_TIMEOUT_MS + 5_000;
 
-function resolveNamedEnvironment(
-  values: Record<string, string> | undefined,
-  env: Record<string, string>,
-) {
-  if (values === undefined) return undefined;
-  return Object.fromEntries(
-    Object.entries(values).map(([target, source]) => [target, env[source] ?? ""]),
-  );
-}
-
-function piProbeServer(server: PiMcpServerConfig, env: Record<string, string>): McpServerConfig {
-  if ("command" in server) {
-    return {
-      command: server.command,
-      ...(server.args === undefined ? {} : { args: server.args }),
-      ...(server.env === undefined ? {} : { env: resolveNamedEnvironment(server.env, env) }),
-      probe: server.probe,
-    };
-  }
-  const headers = resolveNamedEnvironment(server.headers, env) ?? {};
-  if (server.bearerTokenEnv !== undefined)
-    headers.authorization = `Bearer ${env[server.bearerTokenEnv] ?? ""}`;
-  return {
-    url: server.url,
-    ...(Object.keys(headers).length === 0 ? {} : { headers }),
-    probe: server.probe,
-  };
-}
-
 // Preflight's backstop: everything a step can only learn at hydration, once
 // the body has built its harness config — which no manifest could declare
 // ahead of the run. `env` is the environment the step hands its harness.
 export function jitChecks(target: HarnessTarget, env: Record<string, string>): Check[] {
   const harness = target.harness;
   const driver = driverFor(harness.kind);
-  const probeableServers =
-    harness.kind === "pi"
-      ? Object.fromEntries(
-          Object.entries(harness.mcpServers ?? {})
-            .filter(([, server]) => !("auth" in server && server.auth === "oauth"))
-            .map(([name, server]) => [name, piProbeServer(server, env)]),
-        )
-      : (harness.mcpServers ?? {});
   return [
     ...(driver?.jitChecks?.(target) ?? []),
-    // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
-    // client cannot reproduce that flow without adding a second integration,
-    // so OAuth servers are exercised by the Pi tool call itself.
-    ...mcpServerChecks(probeableServers, target.cwd, harness.kind === "pi" ? {} : env),
+    ...mcpServerChecks(harness.mcpServers ?? {}, target.cwd, env, {
+      inherit: harness.kind !== "pi",
+    }),
   ];
 }

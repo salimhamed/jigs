@@ -228,20 +228,6 @@ export function validatePiMcpServers(servers: Record<string, PiMcpServerConfig>)
     throw new Error("Pi MCP direct tool names must be unique after adapter prefixing");
 }
 
-/** Return the host variables referenced by one explicit Pi MCP snapshot. */
-export function piMcpEnvironmentVariables(servers: Record<string, PiMcpServerConfig>): string[] {
-  const names = new Set<string>();
-  for (const server of Object.values(servers)) {
-    if ("command" in server) {
-      for (const name of Object.values(server.env ?? {})) names.add(name);
-      continue;
-    }
-    for (const name of Object.values(server.headers ?? {})) names.add(name);
-    if (server.bearerTokenEnv !== undefined) names.add(server.bearerTokenEnv);
-  }
-  return [...names];
-}
-
 /** Return the Pi-visible names of every explicitly allowed direct MCP tool. */
 export function piMcpToolNames(servers: Record<string, PiMcpServerConfig>): string[] {
   return Object.entries(servers).flatMap(([server, config]) =>

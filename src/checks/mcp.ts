@@ -3,8 +3,18 @@ import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js"
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { checkWorktreeCodexMcpConfig } from "../steps/agents/harnesses/codex-config-guard.ts";
-import type { McpServerConfig, McpToolProbe } from "../workflow/agents/harness-config.ts";
+import {
+  mcpCredentialProblem,
+  type ResolvedMcpServer,
+  resolveMcpServer,
+} from "../steps/agents/harnesses/mcp-credentials.ts";
+import type {
+  McpServerConfig,
+  McpToolProbe,
+  PiMcpServerConfig,
+} from "../workflow/agents/harness-config.ts";
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 // MCP checks are JIT-only by design: a step's servers are built inside the
 // workflow body, so there is nothing to preflight — and an agent's
@@ -14,15 +24,15 @@ const DECLARED_PER_STEP =
   "MCP servers are declared per step in the workflow body, never repo-owned";
 
 function transportFor(
-  server: McpServerConfig,
+  server: ResolvedMcpServer,
   cwd: string,
-  env: Record<string, string>,
+  inherited: Record<string, string>,
 ): Transport {
   if ("command" in server) {
     return new StdioClientTransport({
       command: server.command,
       ...(server.args !== undefined ? { args: server.args } : {}),
-      env: { ...env, ...server.env },
+      env: { ...inherited, ...server.env },
       // The worktree, for the same reason: a server whose command or args
       // resolve relative to the working tree is otherwise proven somewhere it
       // will never run.
@@ -36,12 +46,43 @@ function transportFor(
   });
 }
 
-async function checkMcpServer(
+type ServerChecks = {
+  /** Whether a stdio server inherits the step environment besides its declaration. */
+  inherit: boolean;
+};
+
+function credentialFailure(
   name: string,
   server: McpServerConfig,
+  env: Record<string, string>,
+): CheckResult | undefined {
+  const problem = mcpCredentialProblem(name, server, env);
+  if (problem === undefined) return undefined;
+  const { reason, missing } = problem;
+  return {
+    ok: false,
+    reason,
+    repair:
+      missing === undefined
+        ? `fix the '${name}' server's credential names; each names a variable in ${SERVICE_ENV_FILE}\n${DECLARED_PER_STEP}`
+        : `set ${missing} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+  };
+}
+
+async function checkMcpServer(
+  name: string,
+  server: McpServerConfig | PiMcpServerConfig,
   cwd: string,
   env: Record<string, string>,
+  options: ServerChecks,
 ): Promise<CheckResult> {
+  const credentials = credentialFailure(name, server, env);
+  if (credentials !== undefined) return credentials;
+  // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
+  // client cannot reproduce that flow without adding a second integration,
+  // so OAuth servers are exercised by the Pi tool call itself.
+  if ("auth" in server && server.auth === "oauth") return { ok: true };
+
   // Typed required, still guarded: this check is the last thing standing
   // between a JSON-shaped caller and an unproven server.
   const probe: McpToolProbe | undefined = server.probe;
@@ -55,9 +96,12 @@ async function checkMcpServer(
 
   const client = new Client({ name: "jigs", version: "0" });
   try {
-    await client.connect(transportFor(server, cwd, env), {
-      timeout: CHECK_TIMEOUT_MS,
-    });
+    await client.connect(
+      transportFor(resolveMcpServer(server, env), cwd, options.inherit ? env : {}),
+      {
+        timeout: CHECK_TIMEOUT_MS,
+      },
+    );
   } catch (err) {
     return {
       ok: false,
@@ -102,18 +146,19 @@ async function checkMcpServer(
   }
 }
 
-// `env` is what the server inherits besides its own declaration: the step
-// environment for Claude and Codex, nothing for Pi, whose adapter starts each
-// child from its declaration.
+// `env` is the step environment, which the named credentials resolve from. A
+// Claude or Codex stdio server also inherits it; Pi's adapter starts each child
+// from its declaration alone.
 export function mcpServerChecks(
-  servers: Record<string, McpServerConfig>,
+  servers: Record<string, McpServerConfig | PiMcpServerConfig>,
   cwd: string,
-  env: Record<string, string> = {},
+  env: Record<string, string>,
+  options: ServerChecks,
 ): Check[] {
   return Object.entries(servers).map(([name, server]) => ({
     id: `mcp.${name}`,
     label: `MCP server ${name}`,
-    run: () => checkMcpServer(name, server, cwd, env),
+    run: () => checkMcpServer(name, server, cwd, env, options),
   }));
 }
 

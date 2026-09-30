@@ -13,22 +13,54 @@ export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> }
 /**
  * Configuration for an MCP server launched as a child process.
  *
+ * @remarks
+ * Credentials never appear in workflow code: each `env` value names an environment variable of
+ * the service, read when the step starts the agent. A step whose named variable is not set fails
+ * before the agent starts.
+ *
+ * @example
+ * ```ts
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * // The server reads PAGERDUTY_USER_API_KEY; its value comes from the service's PD_USER_TOKEN.
+ * const triager = harnesses.claude({
+ *   model: "opus",
+ *   mcpServers: {
+ *     pagerduty: {
+ *       command: "uvx",
+ *       args: ["pagerduty-mcp"],
+ *       env: { PAGERDUTY_USER_API_KEY: "PD_USER_TOKEN" },
+ *       probe: { tool: "get_user_data" },
+ *     },
+ *   },
+ * });
+ * ```
+ *
  * @group Harnesses and models
  */
 export type McpStdioServerConfig = {
   command: string;
   args?: string[];
+  /** Maps the server's variable names to the names of the service variables holding their values. */
   env?: Record<string, string>;
   probe: McpToolProbe;
 };
 /**
  * Configuration for an MCP server reached over HTTP.
  *
+ * @remarks
+ * Credentials never appear in workflow code: each `headers` value and `bearerTokenEnv` name an
+ * environment variable of the service, read when the step starts the agent. A step whose named
+ * variable is not set fails before the agent starts.
+ *
  * @group Harnesses and models
  */
 export type McpHttpServerConfig = {
   url: string;
+  /** Maps HTTP header names to the names of the service variables holding their values. */
   headers?: Record<string, string>;
+  /** Names the service variable holding a token sent as `Authorization: Bearer <token>`. */
+  bearerTokenEnv?: string;
   probe: McpToolProbe;
 };
 /**
@@ -43,9 +75,7 @@ export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
  *
  * @group Harnesses and models
  */
-export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "env"> & {
-  /** Maps child variable names to step-side source environment variable names. */
-  env?: Record<string, string>;
+export type PiMcpStdioServerConfig = McpStdioServerConfig & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 };
@@ -54,9 +84,7 @@ export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "env"> & {
  *
  * @group Harnesses and models
  */
-export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
-  /** Maps HTTP header names to step-side source environment variable names. */
-  headers?: Record<string, string>;
+export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "bearerTokenEnv"> & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 } & (
@@ -72,7 +100,6 @@ export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "headers"> & {
       }
     | {
         auth?: never;
-        /** Name of the step-side environment variable containing a bearer token. */
         bearerTokenEnv: string;
       }
   );

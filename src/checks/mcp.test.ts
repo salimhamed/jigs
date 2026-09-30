@@ -24,8 +24,12 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function check(server: McpServerConfig, cwd = process.cwd()) {
-  const report = await runChecks(mcpServerChecks({ linear: server }, cwd));
+async function check(
+  server: McpServerConfig,
+  cwd = process.cwd(),
+  env: Record<string, string> = { PROBE_SOURCE: "t" },
+) {
+  const report = await runChecks(mcpServerChecks({ linear: server }, cwd, env, { inherit: false }));
   const outcome = report.checks[0];
   if (outcome === undefined) throw new Error("no outcome");
   return outcome;
@@ -36,11 +40,69 @@ test("a declared server that starts and answers its probe tool passes", async ()
     await check({
       command: "node",
       args: [PROBE_SERVER],
-      env: { PROBE_TOKEN: "t" },
+      env: { PROBE_TOKEN: "PROBE_SOURCE" },
       probe: { tool: "get_probe_token" },
     }),
   ).toEqual({ id: "mcp.linear", label: "MCP server linear", ok: true });
 });
+
+test("a named variable that is not set fails before the server starts, naming the variable only", async () => {
+  const outcome = await check(
+    {
+      command: "never-started",
+      env: { PROBE_TOKEN: "MISSING_PROBE_TOKEN" },
+      probe: { tool: "get_probe_token" },
+    },
+    process.cwd(),
+    {},
+  );
+  expect(outcome).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("MISSING_PROBE_TOKEN"),
+    repair: expect.stringContaining("set MISSING_PROBE_TOKEN in"),
+  });
+});
+
+test("a literal credential left in the config fails without appearing in the outcome", async () => {
+  const outcome = await check({
+    url: "http://127.0.0.1:1/mcp",
+    headers: { Authorization: "Bearer lit-eral-secret" },
+    probe: { tool: "get_probe_token" },
+  });
+  expect(outcome.ok).toBe(false);
+  expect(JSON.stringify(outcome)).not.toContain("lit-eral-secret");
+  expect(JSON.stringify(outcome)).toContain("Authorization");
+});
+
+test.each([
+  ["a token literal", "ghp_abc123SECRETxyz"],
+  ["a lowercase name", "probe_source"],
+])("%s fails the check without appearing in its outcome or logs", async (_label, value) => {
+  const log = vi.spyOn(console, "log");
+  const error = vi.spyOn(console, "error");
+  const warn = vi.spyOn(console, "warn");
+  const outcome = await check(
+    { command: "never-started", env: { PROBE_TOKEN: value }, probe: { tool: "get_probe_token" } },
+    process.cwd(),
+    { [value]: "set" },
+  );
+  expect(outcome).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("not an environment variable name"),
+  });
+  const written = JSON.stringify([outcome, log.mock.calls, error.mock.calls, warn.mock.calls]);
+  expect(written).not.toContain(value);
+});
+
+test("a set bearer token is never echoed when the server then fails", async () => {
+  const outcome = await check(
+    { url: "http://127.0.0.1:1/mcp", bearerTokenEnv: "PD_TOKEN", probe: { tool: "x" } },
+    process.cwd(),
+    { PD_TOKEN: "very-secret-token" },
+  );
+  expect(outcome.ok).toBe(false);
+  expect(JSON.stringify(outcome)).not.toContain("very-secret-token");
+}, 20_000);
 
 test("a server does not inherit ambient credential-shaped variables", async () => {
   vi.stubEnv("PROBE_TOKEN", "ambient");
@@ -121,9 +183,65 @@ test("a Pi server's named variables resolve from the step environment, not the s
       .split("\n")
       .map((line) => (JSON.parse(line) as { env: Record<string, string> }).env.PROBE_TOKEN);
 
-  await probe({});
+  const unset = await probe({});
+  expect(unset.checks.find((outcome) => outcome.id === "mcp.s")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("PROBE_SOURCE"),
+  });
   await probe({ PROBE_SOURCE: "from-step" });
-  expect(probedTokens()).toEqual(["", "from-step"]);
+  expect(probedTokens()).toEqual(["from-step"]);
+});
+
+test("a Claude server's named variables resolve from the step environment", async () => {
+  const report = await runChecks(
+    jitChecks(
+      {
+        harness: {
+          kind: "claude",
+          model: "m",
+          mcpServers: {
+            s: {
+              command: "node",
+              args: [PROBE_SERVER],
+              env: { PROBE_TOKEN: "CLAUDE_PROBE_SOURCE" },
+              probe: { tool: "get_probe_token" },
+            },
+          },
+        },
+        cwd: tmp,
+      },
+      { PATH: process.env.PATH ?? "" },
+    ),
+  );
+  expect(report.checks.find((outcome) => outcome.id === "mcp.s")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("CLAUDE_PROBE_SOURCE"),
+  });
+});
+
+test("a Pi OAuth server is not probed but its named headers must be set", async () => {
+  const target = (headers: Record<string, string>) => ({
+    harness: {
+      kind: "pi" as const,
+      model: { kind: "openai-codex" as const, model: "m" },
+      mcpServers: {
+        s: {
+          url: "http://127.0.0.1:1/mcp",
+          auth: "oauth" as const,
+          headers,
+          tools: ["x"],
+          probe: { tool: "x" },
+        },
+      },
+    },
+    cwd: tmp,
+  });
+  expect((await runChecks(jitChecks(target({}), {}))).ok).toBe(true);
+  const missing = await runChecks(jitChecks(target({ "X-Org": "ORG_ID" }), {}));
+  expect(missing.checks.find((outcome) => outcome.id === "mcp.s")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("ORG_ID"),
+  });
 });
 
 test("a server is spawned in the worktree, so a relative arg resolves the way the step will resolve it", async () => {
@@ -131,7 +249,7 @@ test("a server is spawned in the worktree, so a relative arg resolves the way th
   const server: McpServerConfig = {
     command: "node",
     args: ["probe-server.mjs"],
-    env: { PROBE_TOKEN: "t" },
+    env: { PROBE_TOKEN: "PROBE_SOURCE" },
     probe: { tool: "get_probe_token" },
   };
   expect(await check(server, tmp)).toMatchObject({ ok: true });

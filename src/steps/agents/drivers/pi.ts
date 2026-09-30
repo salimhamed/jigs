@@ -9,10 +9,10 @@ import type { PiHarness } from "../../../workflow/agents/harness-config.ts";
 import type { AgentRequest } from "../../../workflow/agents/plan.ts";
 import { recordRunDirectory } from "../../runtime/registry.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "../harnesses/executables.ts";
+import { mcpCredentialVariables } from "../harnesses/mcp-credentials.ts";
 import type { PiExecutionOptions } from "../harnesses/pi.ts";
 import { executePi } from "../harnesses/pi.ts";
 import {
-  piMcpEnvironmentVariables,
   piMcpToolNames,
   SUBMIT_RESULT_TOOL,
   validatePiMcpServers,
@@ -166,7 +166,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
                 ...(request.outputSchema === undefined ? [] : [SUBMIT_RESULT_TOOL]),
               ]),
             ];
-      const mcpEnvironment = new Set(piMcpEnvironmentVariables(harness.mcpServers ?? {}));
+      const mcpEnvironment = new Set(mcpCredentialVariables(harness.mcpServers ?? {}));
       const stream = deps.openStepStream();
       if (stream !== undefined)
         tap = createPiStreamTap(stream, {
@@ -235,13 +235,11 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       if (harness === undefined) return [];
       if (harness.mcpServers !== undefined) validatePiMcpServers(harness.mcpServers);
       const model = planPiModel(harness);
-      const mcpCredentials = piMcpEnvironmentVariables(harness.mcpServers ?? {});
       return [
         ...(model.runtimeSource === undefined
           ? []
           : [openaiCompatibleRuntimeCheck(model.runtimeSource)]),
         ...(model.credential === undefined ? [] : [modelApiKeyCheck(model.credential.sourceEnv)]),
-        ...mcpCredentials.map((name) => modelApiKeyCheck(name)),
         ...(model.subscriptionAuth ? [piOpenaiCodexAuthCheck()] : []),
       ];
     },
@@ -252,7 +250,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
       const servers = Object.values(harness.mcpServers ?? {});
       return [
         ...(credential === undefined ? [] : [credential.sourceEnv]),
-        ...piMcpEnvironmentVariables(harness.mcpServers ?? {}),
+        ...mcpCredentialVariables(harness.mcpServers ?? {}),
         // The adapter's OAuth store is the OS keyring, which Linux reaches
         // over the session bus.
         ...(servers.some((server) => "auth" in server && server.auth === "oauth")

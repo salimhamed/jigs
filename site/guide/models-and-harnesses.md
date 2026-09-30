@@ -166,6 +166,44 @@ to keep execution consistent. Use TypeScript autocomplete and the
 [harness types](/api/jigs#harnesses-and-models) for the exact settings. Provider
 callbacks or live objects belong inside a [custom agent step](/guide/custom-agent-step).
 
+## MCP servers
+
+Give a `runAgent` harness MCP servers with `mcpServers`. The servers you list
+are all the agent sees: jigs ignores user, project and plugin MCP configuration
+for every harness. Each server names a `probe` tool, which the step calls
+before the agent starts to prove the server works.
+
+Credentials never go in workflow code. An `env` entry, a header and
+`bearerTokenEnv` each name a variable in the factory's
+[`.env`](/guide/configuration#env), and the step reads its value when it starts
+the agent:
+
+```ts
+import { harnesses } from "@jigs-ai/jigs";
+
+harnesses.claude({
+  model: "opus",
+  mcpServers: {
+    docs: {
+      url: "https://mcp.example.com/mcp",
+      bearerTokenEnv: "DOCS_MCP_TOKEN", // sent as Authorization: Bearer <value>
+      headers: { "X-Org": "DOCS_MCP_ORG" },
+      probe: { tool: "search" },
+    },
+  },
+});
+```
+
+Names use uppercase letters, digits and underscores. The agent gets the
+variables its servers name, so they need no
+[`agents.env`](/guide/configuration#agents-env) entry. If one is not set, the
+step fails before the agent starts and names the variable. A Pi server also
+lists the `tools` the model may call.
+
+The named variables are in the agent's own environment, so an agent with shell
+access can read them. Give agents least-privilege tokens, such as a read-only
+PagerDuty key for a triage agent.
+
 ## Claude Code
 
 `harnesses.claude({ model, ...settings })` is a harness for `runAgent` and
