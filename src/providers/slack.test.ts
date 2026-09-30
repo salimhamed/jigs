@@ -1,9 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  resetSlack,
   SlackApiError,
   slackAuthTest,
-  slackBot,
   slackHistory,
   slackOpenConnection,
   slackPermalink,
@@ -54,7 +52,6 @@ beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
 });
 afterEach(() => {
-  resetSlack();
   vi.useRealTimers();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
@@ -75,16 +72,16 @@ test("auth.test names the bot and reads its scopes from the response header", as
   });
 });
 
-test("a response without the scopes header reports the scopes as unknown", async () => {
+test("a response without the scopes header reports no scopes", async () => {
   fetchMock.mockResolvedValueOnce(reply(AUTH_OK));
-  expect((await slackAuthTest()).scopes).toBeNull();
+  expect((await slackAuthTest()).scopes).toEqual([]);
 });
 
 test("a Slack error carries its code and never the token", async () => {
   fetchMock.mockResolvedValueOnce(reply({ ok: false, error: "invalid_auth" }));
   const error = await slackAuthTest().catch((err: unknown) => err);
   expect(error).toBeInstanceOf(SlackApiError);
-  expect(error).toMatchObject({ method: "auth.test", code: "invalid_auth" });
+  expect(error).toMatchObject({ code: "invalid_auth", message: "Slack auth.test: invalid_auth" });
   expect(String(error)).not.toContain(BOT_TOKEN);
 });
 
@@ -98,8 +95,10 @@ test("a missing scope names the scope Slack asked for", async () => {
     }),
   );
   const error = await slackUser("U1").catch((err: unknown) => err);
-  expect(error).toMatchObject({ code: "missing_scope", needed: "users:read" });
-  expect((error as Error).message).toContain("users:read");
+  expect(error).toMatchObject({
+    code: "missing_scope",
+    message: "Slack users.info: missing_scope (needs users:read)",
+  });
 });
 
 test("an unset bot token names the .env key before any request", async () => {
@@ -128,6 +127,29 @@ test("a rate-limited call waits out Retry-After and tries again", async () => {
   expect(fetchMock).toHaveBeenCalledTimes(2);
 });
 
+test("an unreadable Retry-After waits one second", async () => {
+  vi.useFakeTimers();
+  fetchMock
+    .mockResolvedValueOnce(
+      reply(
+        { ok: false, error: "ratelimited" },
+        { status: 429, headers: { "retry-after": "soon" } },
+      ),
+    )
+    .mockResolvedValueOnce(reply(AUTH_OK));
+  const pending = slackAuthTest();
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect((await pending).userId).toBe("U0C59SU5V29");
+});
+
+test("a Retry-After over a minute fails as ratelimited instead of waiting", async () => {
+  fetchMock.mockResolvedValueOnce(
+    reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "61" } }),
+  );
+  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
+  expect(fetchMock).toHaveBeenCalledTimes(1);
+});
+
 test("a call still rate-limited after its retries fails as ratelimited", async () => {
   vi.useFakeTimers();
   fetchMock.mockImplementation(async () =>
@@ -139,7 +161,14 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
   expect(fetchMock).toHaveBeenCalledTimes(4);
 });
 
+// slackBot's cache is the module's, so each test takes a fresh module.
+async function freshSlackBot() {
+  vi.resetModules();
+  return (await import("./slack.ts")).slackBot;
+}
+
 test("the bot's own identity is read once per process", async () => {
+  const slackBot = await freshSlackBot();
   fetchMock.mockImplementation(async () => reply(AUTH_OK));
   const [first, second] = await Promise.all([slackBot(), slackBot()]);
   expect(first).toEqual(second);
@@ -148,6 +177,7 @@ test("the bot's own identity is read once per process", async () => {
 });
 
 test("a failed identity read is not cached", async () => {
+  const slackBot = await freshSlackBot();
   fetchMock
     .mockResolvedValueOnce(reply({ ok: false, error: "invalid_auth" }))
     .mockResolvedValueOnce(reply(AUTH_OK));

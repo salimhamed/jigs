@@ -94,13 +94,20 @@ test("missing scopes are each named in the reason and the repair", async () => {
   );
 });
 
-test("unreported scopes fail rather than pass unverified", async () => {
+test("an unreachable Slack is not blamed on the token", async () => {
   const [identity] = await run(
     false,
-    probes({ authTest: async () => ({ ...AUTH, scopes: null }) }),
+    probes({
+      authTest: async () => {
+        throw new TypeError("fetch failed");
+      },
+    }),
   );
-  expect(identity).toMatchObject({ ok: false });
-  expect(identity).toHaveProperty("reason", expect.stringContaining("x-oauth-scopes"));
+  expect(identity).toMatchObject({
+    ok: false,
+    reason: "Slack could not be reached: fetch failed",
+    repair: expect.stringContaining("retry"),
+  });
 });
 
 test("with Socket Mode on, the app-level token must open a connection", async () => {

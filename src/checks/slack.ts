@@ -20,6 +20,10 @@ type EnvLookup = (name: SlackToken) => string | undefined;
 const APP_SETTINGS = "the Slack app's settings (api.slack.com/apps)";
 const and = (items: readonly string[]) => items.join(" and ");
 
+// The codes Slack gives a token it will not accept; anything else says nothing
+// about the token.
+const REJECTED_TOKEN = new Set(["invalid_auth", "not_authed", "token_revoked", "account_inactive"]);
+
 /** Whether the bot token is set, accepted by Slack and granted every scope jigs uses. */
 export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackEnvValue): Check[] {
   return [
@@ -38,19 +42,19 @@ export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackE
         try {
           auth = await probes.authTest();
         } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          if (err instanceof SlackApiError && REJECTED_TOKEN.has(err.code)) {
+            return {
+              ok: false,
+              reason: `SLACK_BOT_TOKEN is set but Slack rejected it: ${message}`,
+              repair: `copy the current Bot User OAuth Token from OAuth & Permissions in ${APP_SETTINGS} into SLACK_BOT_TOKEN in ${SERVICE_ENV_FILE}, installing the app first if it is not installed, then: \`${RESTART_SERVICE}\``,
+            };
+          }
           return {
             ok: false,
-            reason: `SLACK_BOT_TOKEN is set but Slack rejected it: ${err instanceof Error ? err.message : String(err)}`,
-            repair: `copy the current Bot User OAuth Token from OAuth & Permissions in ${APP_SETTINGS} into SLACK_BOT_TOKEN in ${SERVICE_ENV_FILE}, installing the app first if it is not installed, then: \`${RESTART_SERVICE}\``,
-          };
-        }
-        if (auth.scopes === null) {
-          return {
-            ok: false,
-            reason:
-              "Slack's auth.test answer carried no x-oauth-scopes header, so the bot token's scopes cannot be checked",
+            reason: `Slack could not be reached: ${message}`,
             repair:
-              "make sure nothing between the service and slack.com strips response headers, then: `pnpm exec jigs doctor`",
+              "check that this machine can reach slack.com, then retry: `pnpm exec jigs doctor`",
           };
         }
         const granted = new Set(auth.scopes);

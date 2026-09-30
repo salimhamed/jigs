@@ -21,8 +21,9 @@ export const SLACK_BOT_SCOPES = [
 
 export type SlackToken = "SLACK_BOT_TOKEN" | "SLACK_APP_TOKEN";
 
-// Beyond this Slack is refusing on purpose, and waiting longer only holds a step.
+// Beyond these Slack is refusing on purpose, and waiting longer only holds a step.
 const RATE_LIMITED_ATTEMPTS = 4;
+const MAX_RETRY_AFTER_SECONDS = 60;
 
 // A ceiling for a proxy that answers every page with a cursor, not a real
 // channel's size.
@@ -40,16 +41,11 @@ export function slackEnvValue(name: SlackToken): string | undefined {
 
 /** Slack answered `ok: false`. `code` is Slack's error string, such as `invalid_auth`. */
 export class SlackApiError extends JigsError {
-  readonly method: string;
   readonly code: string;
-  /** The scope Slack names on a `missing_scope` error. */
-  readonly needed: string | undefined;
 
   constructor(method: string, code: string, needed?: string) {
     super(`Slack ${method}: ${code}${needed === undefined ? "" : ` (needs ${needed})`}`);
-    this.method = method;
     this.code = code;
-    this.needed = needed;
   }
 }
 
@@ -89,9 +85,13 @@ async function slackCall<T extends SlackReply>(
       },
       body: form.toString(),
     });
-    if (res.status === 429 && attempt < RATE_LIMITED_ATTEMPTS) {
-      await sleep(Number(res.headers.get("retry-after") ?? 1) * 1000);
-      continue;
+    if (res.status === 429) {
+      const seconds = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
+      const wait = Number.isNaN(seconds) ? 1 : seconds;
+      if (attempt < RATE_LIMITED_ATTEMPTS && wait <= MAX_RETRY_AFTER_SECONDS) {
+        await sleep(wait * 1000);
+        continue;
+      }
     }
     let body: T;
     try {
@@ -120,13 +120,13 @@ async function slackPages<T>(method: string, params: Params, key: string): Promi
   throw new JigsError(`Slack ${method} kept returning a next cursor past ${MAX_PAGES} pages`);
 }
 
-/** Who the bot token acts as. `scopes` is null when Slack did not report them. */
+/** Who the bot token acts as, and the scopes Slack reports it holds. */
 export interface SlackAuth {
   userId: string;
   botId: string;
   user: string;
   team: string;
-  scopes: string[] | null;
+  scopes: string[];
 }
 
 /** Call `auth.test` with the bot token. Uncached, so a check sees a revoked token. */
@@ -134,13 +134,15 @@ export async function slackAuthTest(): Promise<SlackAuth> {
   const { body, headers } = await slackCall<
     SlackReply & { user_id: string; bot_id: string; user: string; team: string }
   >("auth.test");
-  const scopes = headers.get("x-oauth-scopes");
   return {
     userId: body.user_id,
     botId: body.bot_id,
     user: body.user,
     team: body.team,
-    scopes: scopes === null ? null : scopes.split(",").map((scope) => scope.trim()),
+    scopes: (headers.get("x-oauth-scopes") ?? "")
+      .split(",")
+      .map((scope) => scope.trim())
+      .filter((scope) => scope !== ""),
   };
 }
 
@@ -153,11 +155,6 @@ export function slackBot(): Promise<SlackAuth> {
     throw err;
   });
   return bot;
-}
-
-/** Forget the cached bot identity. */
-export function resetSlack(): void {
-  bot = null;
 }
 
 // Slack's own field names: a polled message and a Socket Mode event carry the
