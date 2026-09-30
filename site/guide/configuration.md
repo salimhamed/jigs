@@ -194,7 +194,9 @@ export default defineFactory({
 - At most `maxActive` runs of the trigger are active at once (default 3).
   Further occurrences wait and start oldest first.
 - A start that fails validation or preflight is recorded as failed and not
-  retried. `jigs status` and `jigs doctor` show it with its repair.
+  retried. A preflight check that could not reach its provider is tried again
+  for up to five minutes first. `jigs status` and `jigs doctor` show a failed
+  start with its repair.
 
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |

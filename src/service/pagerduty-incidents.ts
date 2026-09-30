@@ -52,7 +52,8 @@ export function pagerDutyIncidents(
       });
       return incidents.map((incident) => ({
         inputs: { incident: incident.id },
-        at: new Date(incident.created_at),
+        // PagerDuty's timestamps are whole seconds: the end of the second never reads as before enable.
+        at: new Date(new Date(incident.created_at).getTime() + 999),
       }));
     },
     // PagerDuty has no push path to triggers yet: the poll finds every incident.

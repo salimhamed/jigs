@@ -76,8 +76,8 @@ test("a poll lists triggered incidents with the source's own filters, from just 
   const seen = await source.poll(params, minutes(-5));
 
   expect(seen).toEqual([
-    { inputs: { incident: "Q1" }, at: minutes(-2) },
-    { inputs: { incident: "Q2" }, at: minutes(-1) },
+    { inputs: { incident: "Q1" }, at: new Date(minutes(-2).getTime() + 999) },
+    { inputs: { incident: "Q2" }, at: new Date(minutes(-1).getTime() + 999) },
   ]);
   const [url] = api.urls;
   expect(url?.pathname).toBe("/incidents");
@@ -249,6 +249,17 @@ test("an incident still triggered after its run ends does not start a second run
 
   expect(h.starts).toHaveLength(1);
   expect(h.memory.state("pages", "Q1")).toMatchObject({ state: "started", runId: "wrun_1" });
+});
+
+test("an incident created in the same second the trigger was first enabled starts its run", async () => {
+  const h = engineHarness();
+  // PagerDuty stamps whole seconds: created at 12:00:00Z, a moment before this enable.
+  h.at(new Date(T0.getTime() + 285));
+  await h.engine.arm();
+  h.at(minutes(1));
+  h.api.replies.push([incident("Q1", T0)]);
+  await h.engine.poll("pages");
+  expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "Q1")]);
 });
 
 test("an incident created before the trigger was first enabled starts nothing", async () => {
