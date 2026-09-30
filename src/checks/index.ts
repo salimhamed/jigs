@@ -162,15 +162,15 @@ function linearChecks(): Check[] {
   return linearIdentityChecks(identity, linearProbes);
 }
 
-// The bot token is worth checking whatever the config says; only Socket Mode
-// and the extra scopes come from it, and an unreadable config is the binding
-// checks' diagnosis.
+// The bot token is worth checking whatever the config says, so a missing or
+// unreadable slack section falls back to no Socket Mode and no extra scopes.
+// An unreadable config is the binding checks' diagnosis.
 function configuredSlack(): SlackConfig {
+  let slack: SlackConfig | undefined;
   try {
-    return readFactoryConfig(factoryRoot()).slack ?? { socketMode: false, scopes: [] };
-  } catch {
-    return { socketMode: false, scopes: [] };
-  }
+    slack = readFactoryConfig(factoryRoot()).slack;
+  } catch {}
+  return slack ?? { socketMode: false, scopes: [] };
 }
 
 function slackDoctorChecks(): Check[] {

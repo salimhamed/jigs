@@ -63,7 +63,7 @@ export class SlackApiError extends JigsError {
  * Web API arguments. A value that is not a string is sent JSON-encoded, the way
  * Slack takes `blocks`.
  *
- * @group Create and update
+ * @group Any Web API method
  */
 export type SlackParams = Record<string, JsonValue | undefined>;
 

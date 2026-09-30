@@ -343,7 +343,10 @@ Register it with the `slack.mentions` trigger from
 `jigs doctor`, and `jigs up`, check that Slack accepts `SLACK_BOT_TOKEN` and
 that the bot holds every scope above, plus any listed in `slack.scopes`. With
 `socketMode` on, they also check that `SLACK_APP_TOKEN` can open a Socket Mode
-connection. Each failure names the missing scope or `.env` key. Before every run of a workflow that requires
-`slack`, preflight checks the bot token and its scopes.
+connection. Each failure names the missing scope or `.env` key.
+
+Before every run of a workflow that requires `slack`, preflight checks the bot
+token and the same scopes. If the bot lacks one, including one listed in
+`slack.scopes`, the run stops before it starts.
 
 With `socketMode` on and `SLACK_APP_TOKEN` empty, the service refuses to start.

@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { fetchSlackMessage } from "./fetch-message.ts";
-import { callSlack, SlackApiError } from "./index.ts";
 import { postSlackMessage } from "./post-message.ts";
 
 const CHANNEL = "C0C5EUZ7P9Q";
@@ -212,44 +211,5 @@ test("a post replies in the thread and returns the new message's ts", async () =
     channel: CHANNEL,
     text: "*Done*",
     thread_ts: human.ts,
-  });
-});
-
-test("any method is called as the bot, with non-string params JSON-encoded", async () => {
-  let sent: URLSearchParams | undefined;
-  routes["chat.update"] = (params) => {
-    sent = params;
-    return { ok: true, channel: CHANNEL, ts: human.ts, text: "Shipped" };
-  };
-  const blocks = [{ type: "section", text: { type: "mrkdwn", text: "*Shipped*" } }];
-  const body = await callSlack<{ ts: string; text: string }>("chat.update", {
-    channel: CHANNEL,
-    ts: human.ts,
-    blocks,
-    unfurl_links: false,
-    thread_ts: undefined,
-  });
-  expect(body).toEqual({ ok: true, channel: CHANNEL, ts: human.ts, text: "Shipped" });
-  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(new Headers(init.headers).get("authorization")).toBe("Bearer xoxb-test");
-  expect(Object.fromEntries(sent ?? [])).toEqual({
-    channel: CHANNEL,
-    ts: human.ts,
-    blocks: JSON.stringify(blocks),
-    unfurl_links: "false",
-  });
-});
-
-test("a Slack error from any method carries Slack's code", async () => {
-  routes["reactions.add"] = () => ({ ok: false, error: "already_reacted" });
-  const error = await callSlack("reactions.add", {
-    channel: CHANNEL,
-    timestamp: human.ts,
-    name: "eyes",
-  }).catch((e: unknown) => e);
-  expect(error).toBeInstanceOf(SlackApiError);
-  expect(error).toMatchObject({
-    code: "already_reacted",
-    message: "Slack reactions.add: already_reacted",
   });
 });

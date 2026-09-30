@@ -30,7 +30,7 @@ import { type SlackParams, type SlackReply, slackCall } from "../../providers/sl
  * }
  * ```
  *
- * @group Create and update
+ * @group Any Web API method
  */
 export async function callSlack<T = Record<string, unknown>>(
   method: string,
