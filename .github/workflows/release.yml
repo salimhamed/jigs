@@ -92,7 +92,18 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git commit -m "docs: generate API reference for $version"
-          git push origin HEAD:release-please--branches--main
+          if git push origin HEAD:release-please--branches--main; then
+            exit 0
+          fi
+          # release-please pushes its branch twice in quick succession: a reset
+          # to main, then the version bump. The run for the first push loses
+          # this race; the run for the newer head regenerates the reference.
+          head="$(git ls-remote origin refs/heads/release-please--branches--main | cut -f1)"
+          if [ "$head" != "$GITHUB_SHA" ]; then
+            echo "branch moved to ${head:-<deleted>}; a newer run owns the reference"
+            exit 0
+          fi
+          exit 1
 
   # Only the run that cut the Releases publishes — the one the release PR's
   # squash triggered. Every other push to main leaves releases_created unset.
