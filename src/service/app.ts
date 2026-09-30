@@ -170,7 +170,7 @@ export function createApp(factory: Factory): Hono {
     const schedules = await listSchedules(factory, {
       listRuns: async () => runs,
     });
-    const triggers = await listTriggers(factory, { listRuns: async () => runs });
+    const triggers = await listTriggers(factory);
     return c.json({ runs, schedules, triggers });
   });
 

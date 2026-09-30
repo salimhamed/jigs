@@ -134,6 +134,35 @@ export async function findRunsByAttribute(query: {
   return found;
 }
 
+/**
+ * A workflow's live runs, pending or running, grouped by the value of one plaintext attribute.
+ * Runs without it are left out.
+ */
+export async function liveRunsByAttribute(
+  workflowName: string | undefined,
+  key: string,
+): Promise<Map<string, Array<{ runId: string; status: string }>>> {
+  const world = await getWorld();
+  const grouped = new Map<string, Array<{ runId: string; status: string }>>();
+  const seen = new Set<string>();
+  let cursor: string | undefined;
+  do {
+    const page = await world.runs.list({
+      ...(workflowName === undefined ? {} : { workflowName }),
+      status: ["pending", "running"],
+      resolveData: "none",
+      pagination: { limit: 1000, ...(cursor === undefined ? {} : { cursor }) },
+    });
+    for (const run of page.data) {
+      const value = run.attributes?.[key];
+      if (value === undefined) continue;
+      grouped.set(value, [...(grouped.get(value) ?? []), { runId: run.runId, status: run.status }]);
+    }
+    cursor = nextCursor(page, seen, "runs");
+  } while (cursor !== undefined);
+  return grouped;
+}
+
 /** Cancel a run through the SDK, as `jigs cancel` does. */
 export async function cancelRun(runId: string): Promise<void> {
   await getRun(runId).cancel();

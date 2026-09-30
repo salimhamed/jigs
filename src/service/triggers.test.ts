@@ -3,7 +3,7 @@ import { afterAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { CheckReport } from "../checks/index.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
-import { eventTriggerId, type RunRow } from "./runs.ts";
+import { eventTriggerId, runIdTime } from "./runs.ts";
 import type { Source, SourceEvent, SourceRegistry } from "./sources.ts";
 import type { PreparedRun } from "./trigger.ts";
 import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
@@ -62,10 +62,14 @@ function memoryStore() {
   const rows = new Map<string, Occurrence>();
   const marks = new Map<string, TriggerMarker>();
   const key = (trigger: string, occurrence: string) => `${trigger}\0${occurrence}`;
-  const settle = (trigger: string, occurrence: string, patch: Partial<Occurrence>) => {
+  const patch = (trigger: string, occurrence: string, change: Partial<Occurrence>) => {
     const row = rows.get(key(trigger, occurrence));
-    if (row?.state === "pending") rows.set(key(trigger, occurrence), { ...row, ...patch });
+    if (row) rows.set(key(trigger, occurrence), { ...row, ...change });
   };
+  const settle = (trigger: string, occurrence: string, change: Partial<Occurrence>) => {
+    if (rows.get(key(trigger, occurrence))?.state === "pending") patch(trigger, occurrence, change);
+  };
+  const failures = { attempt: 0, started: 0, cancelling: 0 };
   const store: TriggerStore = {
     enable: async (trigger, now) => {
       if (!marks.has(trigger)) marks.set(trigger, { enabledAt: now, polledThrough: now });
@@ -79,13 +83,11 @@ function memoryStore() {
       if (rows.has(key(row.trigger, row.occurrence))) return false;
       rows.set(key(row.trigger, row.occurrence), {
         ...row,
+        firstAttemptedAt: null,
         attemptedAt: null,
-        startFailedAt: null,
         cancelledRunIds: null,
         runId: null,
-        settledAt: null,
-        duplicateCheckSince: null,
-        duplicateCheckUntil: null,
+        startedAt: null,
         duplicateRunIds: null,
         report: null,
         updatedAt: T0,
@@ -97,75 +99,60 @@ function memoryStore() {
         .filter((row) => row.trigger === trigger && row.state === "pending")
         .sort((a, b) => a.occurredAt.getTime() - b.occurredAt.getTime()),
     attempt: async (trigger, occurrence, at) => {
+      if (failures.attempt > 0) {
+        failures.attempt -= 1;
+        throw new Error("attempt write failed");
+      }
       const row = rows.get(key(trigger, occurrence));
       if (row?.state !== "pending")
         throw new Error(`${trigger} ${occurrence} is no longer pending`);
-      rows.set(key(trigger, occurrence), { ...row, attemptedAt: at, startFailedAt: null });
+      const first = row.firstAttemptedAt;
+      patch(trigger, occurrence, {
+        firstAttemptedAt: first === null || at < first ? at : first,
+        attemptedAt: at,
+      });
     },
-    startFailed: async (trigger, occurrence, at) =>
-      settle(trigger, occurrence, { startFailedAt: at }),
-    cancelledRun: async (trigger, occurrence, runId) => {
+    cancelling: async (trigger, occurrence, runId) => {
+      if (failures.cancelling > 0) {
+        failures.cancelling -= 1;
+        throw new Error("cancelling write failed");
+      }
       const row = rows.get(key(trigger, occurrence));
-      if (row)
-        rows.set(key(trigger, occurrence), {
-          ...row,
-          cancelledRunIds: [...(row.cancelledRunIds ?? []), runId],
-        });
+      patch(trigger, occurrence, { cancelledRunIds: [...(row?.cancelledRunIds ?? []), runId] });
     },
-    watchForDuplicate: async (trigger, occurrence, since, until) => {
-      const row = rows.get(key(trigger, occurrence));
-      if (row)
-        rows.set(key(trigger, occurrence), {
-          ...row,
-          duplicateCheckSince: since,
-          duplicateCheckUntil: until,
-        });
+    started: async (trigger, occurrence, runId, at) => {
+      if (failures.started > 0) {
+        failures.started -= 1;
+        throw new Error("started write failed");
+      }
+      settle(trigger, occurrence, { state: "started", runId, startedAt: at });
     },
-    undupe: async (trigger, occurrence, survivor) => {
-      const row = rows.get(key(trigger, occurrence));
-      if (row)
-        rows.set(key(trigger, occurrence), {
-          ...row,
-          duplicateRunIds: null,
-          runId: survivor ?? row.runId,
-        });
-    },
-    watched: async (trigger, now) =>
+    failed: async (trigger, occurrence, report) =>
+      settle(trigger, occurrence, { state: "failed", report }),
+    byAttribute: async (trigger, attributes) =>
+      [...rows.values()].filter(
+        (row) => row.trigger === trigger && attributes.includes(row.attribute),
+      ),
+    startedSince: async (trigger, since) =>
       [...rows.values()].filter(
         (row) =>
           row.trigger === trigger &&
-          row.duplicateCheckUntil !== null &&
-          row.duplicateCheckUntil > now,
+          row.state === "started" &&
+          row.startedAt !== null &&
+          row.startedAt >= since,
       ),
-    duplicated: async (trigger, occurrence, runIds) => {
-      const row = rows.get(key(trigger, occurrence));
-      if (row)
-        rows.set(key(trigger, occurrence), {
-          ...row,
-          duplicateRunIds: runIds,
-          duplicateCheckUntil: null,
-        });
+    duplicated: async (trigger, occurrence, runIds) =>
+      patch(trigger, occurrence, { duplicateRunIds: runIds }),
+    repoint: async (trigger, occurrence, runId) => {
+      if (rows.get(key(trigger, occurrence))?.state === "started")
+        patch(trigger, occurrence, { runId });
     },
-    unsettled: async (trigger) =>
-      [...rows.values()]
-        .filter(
-          (row) => row.trigger === trigger && row.state === "started" && row.settledAt === null,
-        )
-        .map((row) => ({ ...row, startedAt: row.updatedAt })),
-    settle: async (trigger, occurrence) => {
-      const row = rows.get(key(trigger, occurrence));
-      if (row?.state === "started") rows.set(key(trigger, occurrence), { ...row, settledAt: T0 });
-    },
-    started: async (trigger, occurrence, runId) =>
-      settle(trigger, occurrence, { state: "started", runId }),
-    failed: async (trigger, occurrence, report) =>
-      settle(trigger, occurrence, { state: "failed", report }),
     summary: async (trigger) => {
       const mine = [...rows.values()].filter((row) => row.trigger === trigger);
       return {
         lastEvent: null,
-        pending: mine.filter((row) => row.state === "pending" && row.attemptedAt === null).length,
-        attempted: mine.filter((row) => row.state === "pending" && row.attemptedAt !== null).length,
+        pending: mine.filter((row) => row.state === "pending" && row.firstAttemptedAt === null)
+          .length,
         failed: mine.filter((row) => row.state === "failed").length,
         failures: mine.filter((row) => row.state === "failed"),
         duplicates: mine.flatMap((row) =>
@@ -177,7 +164,7 @@ function memoryStore() {
     },
   };
   const state = (trigger: string, occurrence: string) => rows.get(key(trigger, occurrence));
-  return { store, rows, marks, state };
+  return { store, rows, marks, state, failures };
 }
 
 const factory = (triggers: Record<string, EventTrigger>): Factory => ({
@@ -196,25 +183,39 @@ const pagesTrigger: EventTrigger = {
   inputs: { team: "infra" },
 };
 
+const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
 let runCounter = 0;
-const nextRunId = () => `wrun_${String(++runCounter).padStart(26, "0")}`;
+// A run ID as the SDK mints them, from this clock: the lookup stops on its time.
+function mintAt(at: Date): string {
+  let time = "";
+  for (let ms = at.getTime(), i = 0; i < 10; i += 1, ms = Math.floor(ms / 32))
+    time = CROCKFORD[ms % 32] + time;
+  runCounter += 1;
+  return `wrun_${time}${String(runCounter).padStart(16, "0")}`;
+}
 
-// What the World holds, as far as the engine reads it: each run's status and
-// plaintext attributes. No inputs at all, as if the World encrypted every one.
+// The World as the engine reads it: runs with a status and plaintext
+// attributes, and whether the World holds them yet. No inputs at all, as if
+// the World encrypted every one.
 interface FakeRun {
   runId: string;
   status: string;
   attributes: Record<string, string>;
+  inWorld: boolean;
 }
+
+/**
+ * How one start ends. `ok` creates and queues the run; `queue-rejected`
+ * creates it pending and throws; `accepted-uncreated` throws with the queue
+ * holding a delivery that creates it (`deliver()`); `nothing` throws before
+ * any write; `resilient` returns an ID the World holds only once delivered;
+ * `hang` never settles, as when the process dies mid-start.
+ */
+type StartMode = "ok" | "queue-rejected" | "accepted-uncreated" | "nothing" | "resilient" | "hang";
 
 const ATTRIBUTE = "jigs.occurrence";
 const attributeFor = (occurrence: string, trigger = "pages") =>
   createHash("sha256").update(`factory-a\ntrigger:${trigger}:${occurrence}`).digest("hex");
-const runOf = (occurrence: string, status = "running"): FakeRun => ({
-  runId: nextRunId(),
-  status,
-  attributes: { [ATTRIBUTE]: attributeFor(occurrence) },
-});
 
 function harness(
   options: {
@@ -222,23 +223,24 @@ function harness(
     triggers?: Record<string, EventTrigger>;
     runs?: FakeRun[];
     prepare?: TriggerDeps["prepareRun"];
-    /** Runs before the World call creates its run; throwing fails the start. */
-    launch?: (
-      inputs: unknown,
-      triggerId: string,
-      attributes: Record<string, string>,
-    ) => Promise<void>;
+    /** Runs before the World call; throwing fails the start with nothing written. */
+    launch?: (inputs: unknown, triggerId: string) => Promise<void>;
+    modes?: StartMode[];
     store?: TriggerStore;
+    memory?: ReturnType<typeof memoryStore>;
   } = {},
 ) {
   const { source, queued, polls } = fakeSource();
-  const memory = memoryStore();
+  const memory = options.memory ?? memoryStore();
   const lines: string[] = [];
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
   const runs = options.runs ?? [];
+  const modes = options.modes ?? [];
   const cancelled: string[] = [];
+  const cancelFailures = { before: 0, after: 0 };
   let clock = T0;
   const sources: SourceRegistry = { "fake.pages": source };
+  const held = () => runs.filter((run) => run.inWorld);
   const deps = {
     store: options.store ?? memory.store,
     sources,
@@ -246,16 +248,41 @@ function harness(
     log: (line: string) => lines.push(line),
     factorySlug: () => "factory-a",
     runStatuses: async (ids: readonly string[]) =>
-      new Map(runs.filter((run) => ids.includes(run.runId)).map((run) => [run.runId, run.status])),
-    findRunsByAttribute: async (query: { key: string; value: string }) =>
-      runs
+      new Map(
+        held()
+          .filter((run) => ids.includes(run.runId))
+          .map((run) => [run.runId, run.status]),
+      ),
+    findRunsByAttribute: async (query: { key: string; value: string; since: Date }) =>
+      held()
         .filter((run) => run.attributes[query.key] === query.value)
-        .reverse()
+        .filter((run) => (runIdTime(run.runId) as number) >= query.since.getTime())
+        .sort((a, b) => (a.runId < b.runId ? 1 : -1))
         .map(({ runId, status }) => ({ runId, status })),
+    liveRunsByAttribute: async (_workflow: string | undefined, key: string) => {
+      const grouped = new Map<string, Array<{ runId: string; status: string }>>();
+      for (const run of [...held()].sort((a, b) => (a.runId < b.runId ? 1 : -1))) {
+        const value = run.attributes[key];
+        if (value === undefined || (run.status !== "pending" && run.status !== "running")) continue;
+        grouped.set(value, [
+          ...(grouped.get(value) ?? []),
+          { runId: run.runId, status: run.status },
+        ]);
+      }
+      return grouped;
+    },
     cancelRun: async (runId: string) => {
+      if (cancelFailures.before > 0) {
+        cancelFailures.before -= 1;
+        throw new Error("cancel failed");
+      }
       cancelled.push(runId);
       const run = runs.find((candidate) => candidate.runId === runId);
       if (run) run.status = "cancelled";
+      if (cancelFailures.after > 0) {
+        cancelFailures.after -= 1;
+        throw new Error("cancel answer lost");
+      }
     },
     prepareRun:
       options.prepare ??
@@ -263,9 +290,21 @@ function harness(
         kind: "ready",
         launch: async (triggerId, attributes = {}) => {
           starts.push({ inputs, triggerId });
-          await options.launch?.(inputs, triggerId, attributes);
-          const runId = nextRunId();
-          runs.push({ runId, status: "running", attributes });
+          await options.launch?.(inputs, triggerId);
+          const mode = modes.shift() ?? "ok";
+          if (mode === "nothing") throw new Error("world unreachable");
+          if (mode === "hang") return new Promise<string>(() => {});
+          const runId = mintAt(clock);
+          const run = { runId, status: "running", attributes, inWorld: true };
+          if (mode === "queue-rejected") {
+            runs.push({ ...run, status: "pending" });
+            throw new Error("queue unavailable");
+          }
+          if (mode === "accepted-uncreated") {
+            runs.push({ ...run, inWorld: false });
+            throw new Error("Connection terminated unexpectedly");
+          }
+          runs.push({ ...run, inWorld: mode !== "resilient" });
           return runId;
         },
       })),
@@ -283,13 +322,53 @@ function harness(
     lines,
     starts,
     runs,
+    modes,
     cancelled,
+    cancelFailures,
     sources,
+    /** The queued deliveries create their runs. */
+    deliver: () => {
+      for (const run of runs) run.inWorld = true;
+    },
+    /** A second engine over the same rows and World, as after a restart. */
+    restart: () =>
+      createTriggerEngine(
+        factory(options.triggers ?? { pages: options.trigger ?? pagesTrigger }),
+        deps,
+      ),
     at: (next: Date) => {
       clock = next;
     },
   };
 }
+
+const pendingRow = (store: TriggerStore, occurrence: string, occurredAt: Date, trigger = "pages") =>
+  store.record({
+    trigger,
+    occurrence,
+    state: "pending",
+    inputs: { page: occurrence },
+    attribute: attributeFor(occurrence, trigger),
+    occurredAt,
+  });
+
+const liveOf = (h: ReturnType<typeof harness>, occurrence: string) =>
+  h.runs.filter(
+    (run) =>
+      run.inWorld &&
+      run.attributes[ATTRIBUTE] === attributeFor(occurrence) &&
+      (run.status === "pending" || run.status === "running"),
+  );
+
+const activeOf = async (h: ReturnType<typeof harness>) =>
+  (
+    await listTriggers(factory({ pages: pagesTrigger }), {
+      store: h.memory.store,
+      liveRunsByAttribute: h.deps.liveRunsByAttribute,
+      runStatuses: h.deps.runStatuses,
+      now: h.deps.now,
+    })
+  )[0]?.active;
 
 const event = (page: string, at: Date): SourceEvent => ({ inputs: { page }, at });
 
@@ -345,13 +424,7 @@ test("a push for another provider, or not an occurrence, is not taken", async ()
 test("a leftover pending row whose run never started is started once armed", async () => {
   const h = harness();
   await h.memory.store.enable("pages", minutes(-60));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P2",
-    state: "pending",
-    inputs: { page: "P2" },
-    occurredAt: minutes(-5),
-  });
+  await pendingRow(h.memory.store, "P2", minutes(-5));
 
   await h.engine.arm();
   await h.engine.drain();
@@ -362,337 +435,15 @@ test("a leftover pending row whose run never started is started once armed", asy
 
 const leftover = async (store: TriggerStore, occurrence: string) => {
   await store.enable("pages", minutes(-60));
-  await store.record({
-    trigger: "pages",
-    occurrence,
-    state: "pending",
-    inputs: { page: occurrence },
-    occurredAt: minutes(-5),
-  });
+  await pendingRow(store, occurrence, minutes(-5));
 };
-
-test("an attempted row whose run exists is adopted on recovery, not started again", async () => {
-  const run = runOf("P3");
-  const h = harness({ runs: [run] });
-  await leftover(h.memory.store, "P3");
-  await h.memory.store.attempt("pages", "P3", T0);
-  await h.engine.arm();
-  await h.engine.drain();
-  expect(h.starts).toEqual([]);
-  expect(h.memory.state("pages", "P3")).toMatchObject({ state: "started", runId: run.runId });
-});
-
-test("a start whose queue write failed has its pending run cancelled once settled, then starts again", async () => {
-  // The run is created, pending, and start() throws: nothing would run it.
-  let rejectQueue = true;
-  const runs: FakeRun[] = [];
-  const h = harness({
-    runs,
-    trigger: { ...pagesTrigger, maxActive: 1 },
-    launch: async (_inputs, _triggerId, attributes) => {
-      if (!rejectQueue) return;
-      runs.push({ runId: nextRunId(), status: "pending", attributes });
-      throw new Error("queue unavailable");
-    },
-  });
-  await h.engine.arm();
-  h.at(minutes(2));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: { page: "P1" },
-    occurredAt: minutes(1),
-  });
-  await h.engine.drain();
-  const orphan = runs[0]?.runId as string;
-  expect(h.memory.state("pages", "P1")?.startFailedAt).toEqual(minutes(2));
-  // Within the settle period its delivery may yet run it: held, not cancelled.
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "LATE",
-    state: "pending",
-    inputs: { page: "LATE" },
-    occurredAt: minutes(-30),
-  });
-  h.at(minutes(4));
-  await h.engine.drain();
-  expect(h.cancelled).toEqual([]);
-
-  h.at(minutes(8));
-  await h.engine.drain();
-  expect(h.cancelled).toEqual([orphan]);
-  expect(h.memory.state("pages", "P1")?.cancelledRunIds).toEqual([orphan]);
-  rejectQueue = false;
-  await h.engine.drain();
-  const row = h.memory.state("pages", "P1");
-  expect(row?.state).toBe("started");
-  expect(row?.runId).not.toBe(orphan);
-  expect(h.starts).toHaveLength(2);
-  expect(h.memory.state("pages", "LATE")).toMatchObject({ state: "pending", attemptedAt: null });
-});
-
-test("a failed start whose lookup then throws is still cancelled, never adopted pending", async () => {
-  // Validator case A.
-  const runs: FakeRun[] = [];
-  let lookupFails = true;
-  let reject = true;
-  const h = harness({
-    runs,
-    trigger: { ...pagesTrigger, maxActive: 1 },
-    launch: async (_inputs, _triggerId, attributes) => {
-      if (!reject) return;
-      reject = false;
-      runs.push({ runId: nextRunId(), status: "pending", attributes });
-      throw new Error("queue unavailable");
-    },
-  });
-  const find = h.deps.findRunsByAttribute;
-  const engine = createTriggerEngine(factory({ pages: { ...pagesTrigger, maxActive: 1 } }), {
-    ...h.deps,
-    findRunsByAttribute: async (query) => {
-      if (lookupFails) {
-        lookupFails = false;
-        throw new Error("list failed");
-      }
-      return find(query);
-    },
-  });
-  await engine.arm();
-  h.at(minutes(2));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: { page: "P1" },
-    occurredAt: minutes(1),
-  });
-  await engine.drain();
-  await engine.drain();
-  h.at(minutes(8));
-  await engine.drain();
-  await engine.drain();
-  expect(runs[0]?.status).toBe("cancelled");
-  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: runs[1]?.runId });
-});
-
-test("a start that threw while its queue accepted is not started again before its delivery", async () => {
-  // Validator case D: run_created failed, the delivery creates the run later.
-  const runs: FakeRun[] = [];
-  let delivery: FakeRun | undefined;
-  const h = harness({
-    runs,
-    launch: async (_inputs, _triggerId, attributes) => {
-      if (delivery !== undefined) return;
-      delivery = { runId: nextRunId(), status: "running", attributes };
-      throw new Error("Connection terminated unexpectedly");
-    },
-  });
-  await h.engine.arm();
-  h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
-  h.at(minutes(3));
-  await h.engine.drain();
-  expect(h.starts).toHaveLength(1);
-  runs.push(delivery as FakeRun);
-  await h.engine.drain();
-  expect(h.starts).toHaveLength(1);
-  expect(h.memory.state("pages", "P1")).toMatchObject({
-    state: "started",
-    runId: delivery?.runId,
-  });
-});
-
-test("an orphan that moved past pending before its cancel is adopted, not cancelled", async () => {
-  // Validator case E.
-  const runs: FakeRun[] = [];
-  const h = harness({
-    runs,
-    launch: async (_inputs, _triggerId, attributes) => {
-      if (runs.length > 0) return;
-      runs.push({ runId: nextRunId(), status: "pending", attributes });
-      throw new Error("queue: connection reset after commit");
-    },
-  });
-  const statuses = h.deps.runStatuses;
-  let reads = 0;
-  const engine = createTriggerEngine(factory({ pages: pagesTrigger }), {
-    ...h.deps,
-    // The lookup still reads it pending; by the check before the cancel, it ran.
-    runStatuses: async (ids) => {
-      reads += 1;
-      if (reads > 0 && runs[0]) runs[0].status = "running";
-      return statuses(ids);
-    },
-    findRunsByAttribute: async (query) =>
-      (await h.deps.findRunsByAttribute(query)).map((run) => ({ ...run, status: "pending" })),
-  });
-  await engine.arm();
-  h.at(minutes(2));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: { page: "P1" },
-    occurredAt: minutes(1),
-  });
-  await engine.drain();
-  h.at(minutes(8));
-  await engine.drain();
-  expect(h.cancelled).toEqual([]);
-  expect(h.starts).toHaveLength(1);
-  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: runs[0]?.runId });
-});
-
-test("a run someone else cancelled in the crash gap is adopted, not started again", async () => {
-  // Validator case B.
-  const cancelledByOperator = runOf("P1", "cancelled");
-  const h = harness({ runs: [cancelledByOperator] });
-  await leftover(h.memory.store, "P1");
-  await h.memory.store.attempt("pages", "P1", T0);
-  await h.engine.arm();
-  await h.engine.drain();
-  expect(h.starts).toEqual([]);
-  expect(h.memory.state("pages", "P1")).toMatchObject({
-    state: "started",
-    runId: cancelledByOperator.runId,
-  });
-});
-
-test("a start after a lookup miss whose preflight then fails is still watched", async () => {
-  // Validator case F.
-  const h = harness({
-    prepare: async () => ({ kind: "preflight-failed", report: preflightFailure }),
-  });
-  await leftover(h.memory.store, "P1");
-  await h.memory.store.attempt("pages", "P1", T0);
-  await h.engine.arm();
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P1")?.state).toBe("failed");
-  h.runs.push(runOf("P1"), runOf("P1"));
-  h.at(minutes(5));
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toHaveLength(2);
-});
-
-test("both runs of a duplicated occurrence count, and the flag clears when one is left", async () => {
-  const [first, second] = [runOf("P1"), runOf("P1")];
-  const h = harness({ runs: [first, second], trigger: { ...pagesTrigger, maxActive: 2 } });
-  await h.engine.arm();
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: { page: "P1" },
-    occurredAt: T0,
-  });
-  await h.memory.store.started("pages", "P1", first.runId);
-  await h.memory.store.duplicated("pages", "P1", [first.runId, second.runId]);
-  h.at(minutes(2));
-  await h.engine.push("github", { page: "P2" });
-  await h.engine.drain();
-  expect(h.starts).toEqual([]);
-
-  // The recorded run is cancelled; the other keeps the occurrence's slot.
-  first.status = "cancelled";
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P1")).toMatchObject({
-    runId: second.runId,
-    duplicateRunIds: null,
-    settledAt: null,
-  });
-  expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "P2")]);
-});
-
-test("the lookup reaches back only to the latest attempt", async () => {
-  const sinces: Date[] = [];
-  const h = harness();
-  const engine = createTriggerEngine(factory({ pages: pagesTrigger }), {
-    ...h.deps,
-    findRunsByAttribute: async (query) => {
-      sinces.push(query.since);
-      return h.deps.findRunsByAttribute(query);
-    },
-  });
-  await leftover(h.memory.store, "P1");
-  await h.memory.store.attempt("pages", "P1", minutes(-3 * 24 * 60));
-  await h.memory.store.attempt("pages", "P1", minutes(-10));
-  await engine.arm();
-  await engine.drain();
-  expect(sinces[0]).toEqual(minutes(-11));
-});
-
-test("a started write that fails is retried with the run ID held, never a second start", async () => {
-  const memory = memoryStore();
-  let failures = 3;
-  const flaky: TriggerStore = {
-    ...memory.store,
-    started: async (...args) => {
-      if (failures > 0) {
-        failures -= 1;
-        throw new Error("connection reset");
-      }
-      return memory.store.started(...args);
-    },
-  };
-  const h = harness({ store: flaky });
-  await h.engine.arm();
-  await memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: { page: "P1" },
-    occurredAt: T0,
-  });
-  await h.engine.drain();
-  expect(memory.state("pages", "P1")?.state).toBe("pending");
-  await h.engine.drain();
-  expect(h.starts).toHaveLength(1);
-  expect(memory.state("pages", "P1")).toMatchObject({ state: "started", runId: h.runs[0]?.runId });
-});
-
-test("a start after a lookup miss is watched, and a second run found later is flagged", async () => {
-  const h = harness();
-  await leftover(h.memory.store, "P1");
-  await h.memory.store.attempt("pages", "P1", T0);
-  await h.engine.arm();
-  await h.engine.drain();
-  const first = h.memory.state("pages", "P1")?.runId;
-  expect(h.starts).toHaveLength(1);
-
-  // The run the SDK had queued before the crash, created by its delivery.
-  const late = runOf("P1");
-  h.runs.push(late);
-  h.at(minutes(10));
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toEqual([first, late.runId]);
-  expect(h.cancelled).toEqual([]);
-  const [view] = await listTriggers(factory({ pages: pagesTrigger }), {
-    store: h.memory.store,
-    listRuns: async () => [],
-  });
-  expect(view?.duplicates).toEqual([
-    { occurrence: "P1", runId: first, runIds: [first, late.runId] },
-  ]);
-});
-
-test("a watched row stops being checked an hour after its start", async () => {
-  const h = harness();
-  await leftover(h.memory.store, "P1");
-  await h.memory.store.attempt("pages", "P1", T0);
-  await h.engine.arm();
-  await h.engine.drain();
-  h.runs.push(runOf("P1"));
-  h.at(minutes(61));
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toBeNull();
-});
 
 test("runs this trigger did not start do not count against its cap", async () => {
   const runs: FakeRun[] = [1, 2, 3].map(() => ({
-    runId: nextRunId(),
+    runId: mintAt(T0),
     status: "running",
     attributes: {},
+    inWorld: true,
   }));
   const h = harness({ runs, trigger: { ...pagesTrigger, maxActive: 1 } });
   await h.engine.arm();
@@ -856,32 +607,6 @@ test("inputs the workflow rejects at start are recorded failed with a repair", a
   });
 });
 
-test("a start that throws leaves the row pending for the next drain", async () => {
-  let fail = true;
-  const runs: FakeRun[] = [];
-  const h = harness({
-    runs,
-    launch: async () => {
-      if (fail) throw new Error("world unreachable");
-    },
-  });
-  await h.engine.arm();
-  h.at(minutes(2));
-  await h.engine.push("github", { page: "P8" });
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P8")?.state).toBe("pending");
-  expect(h.lines).toContain("[trigger] pages P8 start failed: Error: world unreachable");
-  fail = false;
-  // Its lookup finds nothing, and past the settle period no delivery is left
-  // to create it: the next drain starts it again.
-  h.at(minutes(8));
-  await h.engine.drain();
-  expect(h.memory.state("pages", "P8")).toMatchObject({
-    state: "started",
-    runId: h.runs[0]?.runId,
-  });
-});
-
 test("a preflight that throws is retried without an attempt, and keeps its own cause", async () => {
   let calls = 0;
   const h = harness({
@@ -906,65 +631,406 @@ test("a preflight that throws is retried without an attempt, and keeps its own c
   );
 });
 
-test("an attempt whose start keeps failing keeps its slot however long it waits", async () => {
-  // Salim's second case: maxActive 1, a start that fails without creating a
-  // run, an older occurrence arriving late.
+// Recovery. Every attempted row not yet started is uncertain, however it got
+// there: its runs are adopted once past pending, held while a delivery may
+// still move them, cancelled if still pending after that, and only when
+// nothing is found is the occurrence started again.
+
+const attempted = async (h: ReturnType<typeof harness>, occurrence: string, at: Date) => {
+  await pendingRow(h.memory.store, occurrence, minutes(-5));
+  await h.memory.store.attempt("pages", occurrence, at);
+};
+const runFor = (occurrence: string, at: Date, status = "running"): FakeRun => ({
+  runId: mintAt(at),
+  status,
+  attributes: { [ATTRIBUTE]: attributeFor(occurrence) },
+  inWorld: true,
+});
+
+test("after a crash, an attempted row's run found running is adopted, not started again", async () => {
+  const run = runFor("P1", T0);
+  const h = harness({ runs: [run] });
+  await attempted(h, "P1", T0);
+  await h.engine.arm();
+  await h.engine.drain();
+  expect(h.starts).toEqual([]);
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: run.runId });
+});
+
+test("after a crash, a pending run is held while the World's restart recovery queues it", async () => {
+  const run = runFor("P1", T0, "pending");
+  const h = harness({ runs: [run] });
+  await attempted(h, "P1", T0);
+  h.at(minutes(30));
+  const engine = h.restart();
+  await engine.arm();
+  await engine.drain();
+  expect(h.cancelled).toEqual([]);
+  // Recovery's delivery runs it.
+  run.status = "running";
+  h.at(minutes(31));
+  await engine.drain();
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: run.runId });
+  expect(h.starts).toEqual([]);
+});
+
+test("a queue rejection's pending run is cancelled once settled, and the occurrence starts again holding its slot", async () => {
+  const h = harness({ modes: ["queue-rejected"], trigger: { ...pagesTrigger, maxActive: 1 } });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  const orphan = h.runs[0]?.runId as string;
+  await pendingRow(h.memory.store, "LATE", minutes(-30));
+  h.at(minutes(6));
+  await h.engine.drain();
+  expect(h.cancelled).toEqual([]);
+  h.at(minutes(8));
+  await h.engine.drain();
+  expect(h.cancelled).toEqual([orphan]);
+  expect(h.memory.state("pages", "P1")?.cancelledRunIds).toEqual([orphan]);
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("started");
+  expect(h.memory.state("pages", "P1")?.runId).not.toBe(orphan);
+  expect(h.memory.state("pages", "LATE")?.firstAttemptedAt).toBeNull();
+});
+
+test("S3: a start that threw with its queue accepting is not started again before its delivery", async () => {
+  const h = harness({ modes: ["accepted-uncreated"] });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  for (const at of [2.5, 3, 4, 6.5]) {
+    h.at(minutes(at));
+    await h.engine.drain();
+  }
+  expect(h.starts).toHaveLength(1);
+  h.deliver();
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    state: "started",
+    runId: h.runs[0]?.runId,
+  });
+});
+
+test("B1/N1: a first attempt's late run is found after a second attempt, and adopted", async () => {
+  const h = harness({ modes: ["accepted-uncreated", "nothing"] });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  h.at(minutes(8));
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(2);
+  // Attempt 1's delivery creates its run after attempt 2.
+  h.at(minutes(10));
+  h.deliver();
+  await h.engine.drain();
+  h.at(minutes(20));
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(2);
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    state: "started",
+    runId: h.runs[0]?.runId,
+  });
+});
+
+test("B1/N2: a first attempt's late run is found after a second attempt that died mid-start", async () => {
+  const h = harness({ modes: ["accepted-uncreated", "hang"] });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  h.at(minutes(8));
+  void h.engine.drain();
+  await vi.waitFor(() => expect(h.starts).toHaveLength(2));
+  // The process dies; a new one boots.
+  h.at(minutes(9));
+  const engine = h.restart();
+  await engine.arm();
+  await engine.drain();
+  h.at(minutes(11));
+  h.deliver();
+  await engine.drain();
+  expect(h.starts).toHaveLength(2);
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    state: "started",
+    runId: h.runs[0]?.runId,
+  });
+});
+
+test("window (ii): a run that appears after the occurrence started again is flagged and both count", async () => {
   const h = harness({
-    trigger: { ...pagesTrigger, maxActive: 1 },
-    launch: async () => {
-      throw new Error("world unreachable");
-    },
+    modes: ["accepted-uncreated", "ok"],
+    trigger: { ...pagesTrigger, maxActive: 2 },
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
+  await pendingRow(h.memory.store, "P1", minutes(1));
   await h.engine.drain();
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "OLDER",
-    state: "pending",
-    inputs: { page: "OLDER" },
-    occurredAt: minutes(-30),
+  h.at(minutes(8));
+  await h.engine.drain();
+  const [late, second] = h.runs;
+  expect(h.memory.state("pages", "P1")?.runId).toBe(second?.runId);
+  h.at(minutes(9 * 24 * 60));
+  h.deliver();
+  await pendingRow(h.memory.store, "P2", minutes(9 * 24 * 60));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toEqual([late?.runId, second?.runId]);
+  expect(await activeOf(h)).toBe(2);
+  expect(h.memory.state("pages", "P2")?.firstAttemptedAt).toBeNull();
+  expect(h.cancelled).toEqual([]);
+});
+
+test("S4: a third live run joins the flag", async () => {
+  const runs = [runFor("P1", T0), runFor("P1", T0)];
+  const h = harness({ runs });
+  await attempted(h, "P1", T0);
+  await h.engine.arm();
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toHaveLength(2);
+  runs.push(runFor("P1", minutes(90)));
+  h.at(minutes(90));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toHaveLength(3);
+});
+
+test("the flag clears, and the row follows the survivor, when one live run is left", async () => {
+  const [first, second] = [runFor("P1", T0), runFor("P1", T0)];
+  const h = harness({ runs: [first, second] as FakeRun[] });
+  await attempted(h, "P1", T0);
+  await h.engine.arm();
+  await h.engine.drain();
+  const recorded = h.memory.state("pages", "P1")?.runId;
+  const other = recorded === first?.runId ? second : first;
+  const own = recorded === first?.runId ? first : second;
+  (own as FakeRun).status = "cancelled";
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    runId: other?.runId,
+    duplicateRunIds: null,
   });
+});
+
+test("N7: a duplicated pair adopted in a drain counts two there", async () => {
+  const h = harness({
+    runs: [runFor("P1", T0), runFor("P1", T0)],
+    trigger: { ...pagesTrigger, maxActive: 2 },
+  });
+  await attempted(h, "P1", T0);
+  await pendingRow(h.memory.store, "P2", minutes(1));
+  await h.engine.arm();
+  await h.engine.drain();
+  expect(h.starts).toEqual([]);
+  expect(h.lines).toContain("[trigger] pages: 1 waiting, 2 of 2 runs active");
+});
+
+test("B2: a refused start again whose late run then runs is flagged and counted", async () => {
+  const h = harness({
+    prepare: async () => ({ kind: "preflight-failed", report: preflightFailure }),
+    trigger: { ...pagesTrigger, maxActive: 1 },
+  });
+  await attempted(h, "P1", T0);
+  h.at(minutes(6));
+  await h.engine.arm();
+  h.at(minutes(12));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("failed");
+  const late = runFor("P1", T0);
+  h.runs.push(late);
+  await pendingRow(h.memory.store, "P2", minutes(12));
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.duplicateRunIds).toEqual([late.runId]);
+  expect(await activeOf(h)).toBe(1);
+  expect(h.memory.state("pages", "P2")?.firstAttemptedAt).toBeNull();
+});
+
+for (const [variant, arrange] of [
+  [
+    "the cancel never reached the World",
+    (h: ReturnType<typeof harness>) => {
+      h.cancelFailures.before = 1;
+    },
+  ],
+  [
+    "the intent write failed",
+    (h: ReturnType<typeof harness>) => {
+      h.memory.failures.cancelling = 1;
+    },
+  ],
+  [
+    "the World cancelled but the answer was lost",
+    (h: ReturnType<typeof harness>) => {
+      h.cancelFailures.after = 1;
+    },
+  ],
+] as const) {
+  test(`S1: the engine's own cancelled run is never adopted when ${variant}`, async () => {
+    const h = harness({ modes: ["queue-rejected"] });
+    await h.engine.arm();
+    h.at(minutes(2));
+    await pendingRow(h.memory.store, "P1", minutes(1));
+    await h.engine.drain();
+    const orphan = h.runs[0] as FakeRun;
+    arrange(h);
+    h.at(minutes(8));
+    for (let i = 0; i < 4; i += 1) await h.engine.drain();
+    expect(orphan.status).toBe("cancelled");
+    const row = h.memory.state("pages", "P1");
+    expect(row?.state).toBe("started");
+    expect(row?.runId).not.toBe(orphan.runId);
+    expect(h.starts).toHaveLength(2);
+  });
+}
+
+test("a cancelled run someone else cancelled is adopted as the occurrence's run", async () => {
+  const run = runFor("P1", T0, "cancelled");
+  const h = harness({ runs: [run] });
+  await attempted(h, "P1", T0);
+  await h.engine.arm();
+  await h.engine.drain();
+  expect(h.starts).toEqual([]);
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: run.runId });
+});
+
+test("an orphan that moved past pending just before its cancel is adopted", async () => {
+  const h = harness({ modes: ["queue-rejected"] });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  const orphan = h.runs[0] as FakeRun;
+  const statuses = h.deps.runStatuses;
+  const engine = createTriggerEngine(factory({ pages: pagesTrigger }), {
+    ...h.deps,
+    runStatuses: async (ids) => {
+      orphan.status = "running";
+      return statuses(ids);
+    },
+    findRunsByAttribute: async (query) =>
+      (await h.deps.findRunsByAttribute(query)).map((run) => ({ ...run, status: "pending" })),
+  });
+  h.at(minutes(8));
+  await engine.drain();
+  expect(h.cancelled).toEqual([]);
+  expect(h.memory.state("pages", "P1")).toMatchObject({ state: "started", runId: orphan.runId });
+});
+
+test("N8: a clock that stepped back holds past the latest attempt, and lowers the lookup bound", async () => {
+  const h = harness();
+  await attempted(h, "P1", minutes(10));
+  h.at(minutes(3));
+  const engine = h.restart();
+  await engine.arm();
+  await engine.drain();
+  expect(h.starts).toEqual([]);
+  h.at(minutes(16));
+  await engine.drain();
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    state: "started",
+    firstAttemptedAt: minutes(10),
+  });
+  await pendingRow(h.memory.store, "P3", minutes(1));
+  await h.memory.store.attempt("pages", "P3", minutes(10));
+  await h.memory.store.attempt("pages", "P3", minutes(4));
+  expect(h.memory.state("pages", "P3")?.firstAttemptedAt).toEqual(minutes(4));
+});
+
+test("a started write that fails is retried with the run ID held, never a second start", async () => {
+  const h = harness();
+  await h.engine.arm();
+  h.memory.failures.started = 3;
+  await pendingRow(h.memory.store, "P1", T0);
+  await h.engine.drain();
+  expect(h.memory.state("pages", "P1")?.state).toBe("pending");
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(1);
+  expect(h.memory.state("pages", "P1")).toMatchObject({
+    state: "started",
+    runId: h.runs[0]?.runId,
+  });
+});
+
+test("a resilient start's run counts, on the cap and in status, until the World holds it or an hour passes", async () => {
+  const h = harness({ modes: ["resilient"], trigger: { ...pagesTrigger, maxActive: 1 } });
+  await h.engine.arm();
+  await pendingRow(h.memory.store, "P1", T0);
+  await h.engine.drain();
+  await pendingRow(h.memory.store, "P2", minutes(1));
+  h.at(minutes(2));
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(1);
+  expect(await activeOf(h)).toBe(1);
+  h.at(minutes(61));
+  await h.engine.drain();
+  expect(h.starts).toHaveLength(2);
+});
+
+test("a late older occurrence waits while a newer one's run is recovered first", async () => {
+  const live = runFor("NEWER", minutes(-4));
+  const h = harness({ trigger: { ...pagesTrigger, maxActive: 1 }, runs: [live] });
+  await h.memory.store.enable("pages", minutes(-60));
+  await attempted(h, "NEWER", minutes(-4));
+  await pendingRow(h.memory.store, "OLDER", minutes(-10));
+  await h.engine.arm();
+  await h.engine.drain();
+  expect(h.starts).toEqual([]);
+  expect(h.memory.state("pages", "NEWER")).toMatchObject({ state: "started", runId: live.runId });
+  expect(h.memory.state("pages", "OLDER")?.state).toBe("pending");
+});
+
+test("an attempt whose start keeps failing keeps its slot however long it waits", async () => {
+  const h = harness({
+    modes: ["nothing", "nothing", "nothing"],
+    trigger: { ...pagesTrigger, maxActive: 1 },
+  });
+  await h.engine.arm();
+  h.at(minutes(2));
+  await pendingRow(h.memory.store, "P1", minutes(1));
+  await h.engine.drain();
+  await pendingRow(h.memory.store, "OLDER", minutes(-30));
   h.at(minutes(45));
   await h.engine.drain();
-
-  // The push's start, then one more once the first had settled.
   expect(h.starts.map((start) => start.triggerId)).toEqual([
     eventTriggerId("pages", "P1"),
     eventTriggerId("pages", "P1"),
   ]);
-  expect(h.memory.state("pages", "OLDER")).toMatchObject({ state: "pending", attemptedAt: null });
+  expect(h.memory.state("pages", "OLDER")?.firstAttemptedAt).toBeNull();
   expect(h.lines).toContain("[trigger] pages: 1 waiting, 1 of 1 runs active");
 });
 
-test("a late older occurrence waits while a newer one's run is recovered first", async () => {
-  // The reviewer's case: maxActive 1, the newer occurrence attempted with a
-  // live run, the older one arriving after it.
-  const live = runOf("NEWER");
-  const h = harness({ trigger: { ...pagesTrigger, maxActive: 1 }, runs: [live] });
-  await h.memory.store.enable("pages", minutes(-60));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "NEWER",
-    state: "pending",
-    inputs: { page: "NEWER" },
-    occurredAt: minutes(-5),
-  });
-  await h.memory.store.attempt("pages", "NEWER", minutes(-4));
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "OLDER",
-    state: "pending",
-    inputs: { page: "OLDER" },
-    occurredAt: minutes(-10),
-  });
-  await h.engine.arm();
+test("the listing shows pending, active, failed, each failure's repair and duplicates", async () => {
+  const [a, b] = [runFor("P3", T0), runFor("P3", T0)];
+  // At the cap, so the drain below only reconciles.
+  const h = harness({ runs: [a, b] as FakeRun[], trigger: { ...pagesTrigger, maxActive: 2 } });
+  await pendingRow(h.memory.store, "P1", T0);
+  await pendingRow(h.memory.store, "P2", T0);
+  await h.memory.store.failed("pages", "P2", preflightFailure);
+  await attempted(h, "P3", T0);
   await h.engine.drain();
-
-  expect(h.starts).toEqual([]);
-  expect(h.memory.state("pages", "NEWER")).toMatchObject({ state: "started", runId: live.runId });
-  expect(h.memory.state("pages", "OLDER")?.state).toBe("pending");
+  const [view] = await listTriggers(factory({ pages: pagesTrigger }), {
+    store: h.memory.store,
+    liveRunsByAttribute: h.deps.liveRunsByAttribute,
+    runStatuses: h.deps.runStatuses,
+    now: h.deps.now,
+  });
+  expect(view).toMatchObject({
+    name: "pages",
+    workflow: "respond",
+    source: "fake.pages",
+    pending: 1,
+    active: 2,
+    failed: 1,
+    failures: [{ occurrence: "P2", checks: preflightFailure.checks }],
+    duplicates: [
+      {
+        occurrence: "P3",
+        runId: h.memory.state("pages", "P3")?.runId,
+        runIds: [a?.runId, b?.runId],
+      },
+    ],
+  });
 });
 
 const gate = () => {
@@ -1046,35 +1112,6 @@ test("a window held for an unrecorded occurrence never reaches back past the loo
   await h.engine.poll("pages");
   await h.engine.poll("pages");
   expect(h.polls).toEqual([minutes(-600), minutes(-60)]);
-});
-
-test("a started run the World does not hold counts until a late delivery is past, then frees its slot", async () => {
-  // Validator case C: a resilient start returns an ID whose run its delivery
-  // creates later.
-  const h = harness({ trigger: { ...pagesTrigger, maxActive: 1 } });
-  await h.engine.arm();
-  await h.memory.store.record({
-    trigger: "pages",
-    occurrence: "P0",
-    state: "pending",
-    inputs: { page: "P0" },
-    occurredAt: T0,
-  });
-  await h.memory.store.started("pages", "P0", "wrun_not_yet_created");
-  h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
-  await h.engine.drain();
-  expect(h.starts).toEqual([]);
-  const [view] = await listTriggers(factory({ pages: pagesTrigger }), {
-    store: h.memory.store,
-    listRuns: async () => [],
-    now: () => minutes(2),
-  });
-  expect(view?.active).toBe(1);
-
-  h.at(minutes(61));
-  await h.engine.drain();
-  expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "P1")]);
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {
@@ -1188,93 +1225,6 @@ test("an unknown workflow, a colon, bad params and a bad cap each fail the check
     "source params do not satisfy fake.pages: service Invalid input: expected string, received undefined",
     "maxActive 0 is not a whole number of at least 1",
     "lookbackMinutes -1 is not a positive number of minutes",
-  ]);
-});
-
-const row = (over: Partial<RunRow> = {}): RunRow => ({
-  runId: "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM",
-  workflow: "respond",
-  status: "running",
-  trigger: "trigger:pages",
-  ticket: null,
-  createdAt: T0.toISOString(),
-  lastActivityAt: T0.toISOString(),
-  steps: 0,
-  lastStep: null,
-  suspensions: [],
-  workflowName: "workflow//./workflows/respond//respond",
-  claim: null,
-  resources: [],
-  ...over,
-});
-
-test("the listing counts pending, active and failed, and carries each failure's repair", async () => {
-  const memory = memoryStore();
-  await memory.store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: {},
-    occurredAt: T0,
-  });
-  await memory.store.record({
-    trigger: "pages",
-    occurrence: "P2",
-    state: "pending",
-    inputs: {},
-    occurredAt: T0,
-  });
-  await memory.store.failed("pages", "P2", preflightFailure);
-  for (const [occurrence, runId] of [
-    ["P3", "wrun_live"],
-    ["P4", "wrun_done"],
-  ] as const) {
-    await memory.store.record({
-      trigger: "pages",
-      occurrence,
-      state: "pending",
-      inputs: {},
-      occurredAt: T0,
-    });
-    await memory.store.started("pages", occurrence, runId);
-  }
-  // An attempted row holds a slot, as the engine's cap counts it.
-  await memory.store.record({
-    trigger: "pages",
-    occurrence: "P5",
-    state: "pending",
-    inputs: {},
-    occurredAt: T0,
-  });
-  await memory.store.attempt("pages", "P5", T0);
-  // Counted from this trigger's own started rows: a live run of the same
-  // label that it did not start is not its business.
-  const views = await listTriggers(factory({ pages: pagesTrigger }), {
-    store: memory.store,
-    listRuns: async () => [
-      row({ runId: "wrun_live" }),
-      row({ runId: "wrun_done", status: "completed" }),
-      row({ runId: "wrun_foreign" }),
-    ],
-  });
-  expect(views).toEqual([
-    {
-      name: "pages",
-      workflow: "respond",
-      source: "fake.pages",
-      lastEvent: null,
-      pending: 1,
-      active: 2,
-      failed: 1,
-      failures: [
-        {
-          occurrence: "P2",
-          at: T0.toISOString(),
-          checks: preflightFailure.checks,
-        },
-      ],
-      duplicates: [],
-    },
   ]);
 });
 

@@ -10,7 +10,13 @@ import { start } from "workflow/api";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import type { Factory } from "../workflow/factory.ts";
-import { cancelRun, findRunsByAttribute, runIdTime, runStatuses } from "./runs.ts";
+import {
+  cancelRun,
+  findRunsByAttribute,
+  liveRunsByAttribute,
+  runIdTime,
+  runStatuses,
+} from "./runs.ts";
 import { prepareRun } from "./trigger.ts";
 
 const adminUrl = new URL(
@@ -180,4 +186,30 @@ test("a start whose run creation fails while its queue accepts throws, and its d
     },
   } as never);
   expect(await lookup()).toEqual([{ runId, status: "running" }]);
+});
+
+test("live runs are listed by the status filter and grouped by their occurrence attribute", async () => {
+  const [one, two, three] = ["g".repeat(64), "h".repeat(64), "i".repeat(64)];
+  const first = await launch(one);
+  const second = await launch(one);
+  const other = await launch(two);
+  const done = await launch(three);
+  await cancelRun(done);
+
+  const live = await liveRunsByAttribute(workflowName, "jigs.occurrence");
+  expect(
+    live
+      .get(one)
+      ?.map((run) => run.runId)
+      .sort(),
+  ).toEqual([first, second].sort());
+  expect(live.get(two)).toEqual([{ runId: other, status: "pending" }]);
+  // A cancelled run is not live.
+  expect(live.has(three)).toBe(false);
+  // Let the queue hand over these runs' deliveries before the World closes.
+  await expect
+    .poll(() => [first, second, other].every((runId) => deliveries.has(runId)), {
+      timeout: 15_000,
+    })
+    .toBe(true);
 });

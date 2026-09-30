@@ -39,13 +39,14 @@ test("an occurrence is recorded once per trigger, and only pending rows move", a
     occurrence: "P1",
     state: "pending" as const,
     inputs: { page: "P1" },
+    attribute: "attr-P1",
   };
   expect(await store.record({ ...row, occurredAt: at(1) })).toBe(true);
   expect(await store.record({ ...row, occurredAt: at(2) })).toBe(false);
   // The same occurrence under another trigger is that trigger's own.
   expect(await store.record({ ...row, trigger: "other", occurredAt: at(1) })).toBe(true);
 
-  await store.started("pages", "P1", "wrun_1");
+  await store.started("pages", "P1", "wrun_1", at(3));
   await store.failed("pages", "P1", report);
   const [only] = (
     await db.$client.query(
@@ -67,6 +68,7 @@ test("pending rows come oldest first, and the summary counts and names failures"
       occurrence,
       state: "pending",
       inputs: {},
+      attribute: `attr-${occurrence}`,
       occurredAt: at(minute),
     });
   }
@@ -75,6 +77,7 @@ test("pending rows come oldest first, and the summary counts and names failures"
     occurrence: "stale",
     state: "skipped",
     inputs: {},
+    attribute: "attr-stale",
     occurredAt: at(-100),
   });
   await store.failed("pages", "broken", report);
@@ -94,60 +97,69 @@ test("the first enable is kept, and advancing moves only the poll window", async
   expect(await store.enable("pages", at(10))).toEqual({ enabledAt: at(0), polledThrough: at(5) });
 });
 
-test("an attempt is stamped on a pending row, and a started row settles once", async () => {
+test("the first attempt only ever moves back, the latest follows each attempt", async () => {
   const store = triggerStore(db, "factory-e");
   await store.record({
     trigger: "pages",
     occurrence: "P1",
     state: "pending",
     inputs: {},
+    attribute: "attr-P1",
     occurredAt: at(0),
   });
-  await store.attempt("pages", "P1", at(1));
-  await store.startFailed("pages", "P1", at(2));
-  await store.cancelledRun("pages", "P1", "wrun_orphan");
-  await store.cancelledRun("pages", "P1", "wrun_orphan2");
+  await store.attempt("pages", "P1", at(10));
+  await store.attempt("pages", "P1", at(20));
+  // A clock that stepped back lowers the lookup bound.
+  await store.attempt("pages", "P1", at(4));
   expect((await store.pending("pages"))[0]).toMatchObject({
-    attemptedAt: at(1),
-    startFailedAt: at(2),
-    cancelledRunIds: ["wrun_orphan", "wrun_orphan2"],
+    firstAttemptedAt: at(4),
+    attemptedAt: at(4),
   });
-  // Each attempt records its own time, and clears the failed start before it.
-  await store.attempt("pages", "P1", at(3));
+  await store.attempt("pages", "P1", at(30));
   expect((await store.pending("pages"))[0]).toMatchObject({
-    attemptedAt: at(3),
-    startFailedAt: null,
+    firstAttemptedAt: at(4),
+    attemptedAt: at(30),
   });
-  expect(await store.summary("pages", 5)).toMatchObject({ pending: 0, attempted: 1 });
-
-  await store.started("pages", "P1", "wrun_first");
-  expect(await store.unsettled("pages")).toMatchObject([
-    { occurrence: "P1", runId: "wrun_first", startedAt: expect.any(Date) },
+  await store.cancelling("pages", "P1", "wrun_orphan");
+  await store.cancelling("pages", "P1", "wrun_orphan2");
+  expect((await store.pending("pages"))[0]?.cancelledRunIds).toEqual([
+    "wrun_orphan",
+    "wrun_orphan2",
   ]);
-  await store.settle("pages", "P1");
-  expect(await store.unsettled("pages")).toEqual([]);
-  await expect(store.attempt("pages", "P1", at(3))).rejects.toThrow("no longer pending");
+  expect(await store.summary("pages", 5)).toMatchObject({ pending: 0 });
+
+  await store.started("pages", "P1", "wrun_first", at(31));
+  expect((await store.startedSince("pages", at(31))).map((row) => row.runId)).toEqual([
+    "wrun_first",
+  ]);
+  expect(await store.startedSince("pages", at(32))).toEqual([]);
+  await expect(store.attempt("pages", "P1", at(40))).rejects.toThrow("no longer pending");
 });
 
-test("a watched row is listed until its time, and a recorded duplicate ends the watch", async () => {
+test("rows are found by attribute, and a duplicate is recorded, cleared and repointed", async () => {
   const store = triggerStore(db, "factory-f");
-  await store.record({
-    trigger: "pages",
-    occurrence: "P1",
-    state: "pending",
-    inputs: {},
-    occurredAt: at(0),
-  });
-  await store.watchForDuplicate("pages", "P1", at(0), at(60));
-  expect((await store.watched("pages", at(30))).map((row) => row.occurrence)).toEqual(["P1"]);
-  expect(await store.watched("pages", at(61))).toEqual([]);
-
-  await store.duplicated("pages", "P1", ["wrun_a", "wrun_b"]);
-  expect(await store.watched("pages", at(30))).toEqual([]);
-  expect((await store.summary("pages", 5)).duplicates).toEqual([
-    { occurrence: "P1", runId: null, runIds: ["wrun_a", "wrun_b"] },
+  for (const occurrence of ["P1", "P2"])
+    await store.record({
+      trigger: "pages",
+      occurrence,
+      state: "pending",
+      inputs: {},
+      attribute: `attr-${occurrence}`,
+      occurredAt: at(0),
+    });
+  expect((await store.byAttribute("pages", ["attr-P2"])).map((row) => row.occurrence)).toEqual([
+    "P2",
   ]);
-  await store.undupe("pages", "P1", "wrun_b");
+  expect(await store.byAttribute("pages", [])).toEqual([]);
+
+  await store.attempt("pages", "P1", at(1));
+  await store.started("pages", "P1", "wrun_a", at(1));
+  await store.duplicated("pages", "P1", ["wrun_a", "wrun_b"]);
+  expect((await store.summary("pages", 5)).duplicates).toEqual([
+    { occurrence: "P1", runId: "wrun_a", runIds: ["wrun_a", "wrun_b"] },
+  ]);
+  await store.repoint("pages", "P1", "wrun_b");
+  await store.duplicated("pages", "P1", null);
   expect((await store.summary("pages", 5)).duplicates).toEqual([]);
-  expect((await store.watched("pages", at(0))).length).toBe(0);
+  expect((await store.byAttribute("pages", ["attr-P1"]))[0]?.runId).toBe("wrun_b");
 });

@@ -2,7 +2,7 @@
 // trigger's polling has got to. The row, not the provider, is the dedupe
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
-import { and, asc, count, desc, eq, gt, isNotNull, isNull, max, sql } from "drizzle-orm";
+import { and, asc, count, desc, eq, gte, inArray, isNotNull, max, sql } from "drizzle-orm";
 import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../checks/index.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
@@ -21,22 +21,21 @@ export const occurrences = pgTable(
     // The source's reference, kept so a row that waits past a restart or the
     // cap starts with what it was seen with. Fixed inputs are merged at start.
     inputs: jsonb("inputs").$type<Record<string, unknown>>().notNull(),
+    // The value every run of this occurrence carries as its occurrence
+    // attribute, so runs map to rows.
+    attribute: text("attribute").notNull(),
     occurredAt: timestamp("occurred_at", { withTimezone: true }).notNull(),
-    // Set just before each start: from the first the row holds a slot, and
-    // its run is looked up by its occurrence attribute from the latest.
+    // From the first attempt the row holds a slot. Its runs are looked up from
+    // the earliest attempt, which never moves forward; the settle period runs
+    // from the latest.
+    firstAttemptedAt: timestamp("first_attempted_at", { withTimezone: true }),
     attemptedAt: timestamp("attempted_at", { withTimezone: true }),
-    // A start that threw may still have created or queued its run, so the
-    // row stays uncertain, holding its slot, until a lookup settles it.
-    startFailedAt: timestamp("start_failed_at", { withTimezone: true }),
-    // Runs the engine cancelled after a failed start: never this row's run.
+    // Runs the engine chose to cancel, recorded before the cancel: once
+    // cancelled, never this row's run.
     cancelledRunIds: jsonb("cancelled_run_ids").$type<string[]>(),
     runId: text("run_id"),
-    // When the engine saw the started run finish, so the cap stops asking.
-    settledAt: timestamp("settled_at", { withTimezone: true }),
-    // Only a start after its lookup found nothing can race a run the SDK had
-    // queued but not recorded: until this time, drains look for a second one.
-    duplicateCheckSince: timestamp("duplicate_check_since", { withTimezone: true }),
-    duplicateCheckUntil: timestamp("duplicate_check_until", { withTimezone: true }),
+    startedAt: timestamp("started_at", { withTimezone: true }),
+    // Live runs of this occurrence beyond the one it should have.
     duplicateRunIds: jsonb("duplicate_run_ids").$type<string[]>(),
     report: jsonb("report").$type<CheckReport>(),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -61,14 +60,13 @@ export interface Occurrence {
   occurrence: string;
   state: OccurrenceState;
   inputs: Record<string, unknown>;
+  attribute: string;
   occurredAt: Date;
+  firstAttemptedAt: Date | null;
   attemptedAt: Date | null;
-  startFailedAt: Date | null;
   cancelledRunIds: string[] | null;
   runId: string | null;
-  settledAt: Date | null;
-  duplicateCheckSince: Date | null;
-  duplicateCheckUntil: Date | null;
+  startedAt: Date | null;
   duplicateRunIds: string[] | null;
   report: CheckReport | null;
   updatedAt: Date;
@@ -83,8 +81,6 @@ export interface TriggerSummary {
   lastEvent: Date | null;
   /** Pending rows not yet attempted. */
   pending: number;
-  /** Pending rows whose start was attempted: each holds a slot. */
-  attempted: number;
   failed: number;
   /** The most recent failed rows, newest first. */
   failures: Occurrence[];
@@ -99,27 +95,27 @@ export interface TriggerStore {
   advance(trigger: string, polledThrough: Date): Promise<void>;
   /** Insert the row unless the occurrence is already recorded; true when it was new. */
   record(
-    row: Pick<Occurrence, "trigger" | "occurrence" | "state" | "inputs" | "occurredAt">,
+    row: Pick<
+      Occurrence,
+      "trigger" | "occurrence" | "state" | "inputs" | "attribute" | "occurredAt"
+    >,
   ): Promise<boolean>;
   /** Oldest occurrence first. */
   pending(trigger: string): Promise<Occurrence[]>;
-  /** Mark a pending row as about to start now, clearing a failed start before it. */
+  /** Mark a pending row as about to start at this time. */
   attempt(trigger: string, occurrence: string, at: Date): Promise<void>;
-  startFailed(trigger: string, occurrence: string, at: Date): Promise<void>;
-  cancelledRun(trigger: string, occurrence: string, runId: string): Promise<void>;
-  /** Look for a second run of this occurrence, minted since then, until the second time. */
-  watchForDuplicate(trigger: string, occurrence: string, since: Date, until: Date): Promise<void>;
-  /** Rows still watched for a second run at this time, whatever their state. */
-  watched(trigger: string, now: Date): Promise<Occurrence[]>;
-  /** Record the runs found for one occurrence, and stop watching it. */
-  duplicated(trigger: string, occurrence: string, runIds: string[]): Promise<void>;
-  /** Clear a recorded duplicate, keeping the run that is left, if any. */
-  undupe(trigger: string, occurrence: string, survivor: string | null): Promise<void>;
-  /** Started rows whose run has not been seen to finish, with when they started. */
-  unsettled(trigger: string): Promise<Array<Occurrence & { startedAt: Date }>>;
-  settle(trigger: string, occurrence: string): Promise<void>;
-  started(trigger: string, occurrence: string, runId: string): Promise<void>;
+  /** Record that the engine is about to cancel this run. */
+  cancelling(trigger: string, occurrence: string, runId: string): Promise<void>;
+  started(trigger: string, occurrence: string, runId: string, at: Date): Promise<void>;
   failed(trigger: string, occurrence: string, report: CheckReport): Promise<void>;
+  /** The rows whose occurrence attribute is one of these, whatever their state. */
+  byAttribute(trigger: string, attributes: readonly string[]): Promise<Occurrence[]>;
+  /** Started rows started at or after this time. */
+  startedSince(trigger: string, since: Date): Promise<Occurrence[]>;
+  /** Record the live runs beyond the one expected, or clear them with null. */
+  duplicated(trigger: string, occurrence: string, runIds: string[] | null): Promise<void>;
+  /** Point a started row at the run of its occurrence that is still live. */
+  repoint(trigger: string, occurrence: string, runId: string): Promise<void>;
   summary(trigger: string, failures: number): Promise<TriggerSummary>;
 }
 
@@ -137,7 +133,7 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
   const settle = async (
     trigger: string,
     occurrence: string,
-    set: Pick<Occurrence, "state"> & Partial<Pick<Occurrence, "runId" | "report">>,
+    set: Partial<Pick<Occurrence, "state" | "runId" | "report" | "startedAt">>,
   ) => {
     await db
       .update(occurrences)
@@ -180,20 +176,20 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         .orderBy(asc(occurrences.occurredAt), asc(occurrences.createdAt));
     },
     async attempt(trigger, occurrence, at) {
+      const stamp = sql`${at.toISOString()}::timestamptz`;
       const updated = await db
         .update(occurrences)
-        .set({ attemptedAt: at, startFailedAt: null, updatedAt: sql`now()` })
+        .set({
+          // least(): a clock that stepped back lowers the bound, never raises it.
+          firstAttemptedAt: sql`least(coalesce(${occurrences.firstAttemptedAt}, ${stamp}), ${stamp})`,
+          attemptedAt: at,
+          updatedAt: sql`now()`,
+        })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")))
         .returning({ occurrence: occurrences.occurrence });
       if (updated.length === 0) throw new Error(`${trigger} ${occurrence} is no longer pending`);
     },
-    async startFailed(trigger, occurrence, at) {
-      await db
-        .update(occurrences)
-        .set({ startFailedAt: at, updatedAt: sql`now()` })
-        .where(and(row(trigger, occurrence), eq(occurrences.state, "pending")));
-    },
-    async cancelledRun(trigger, occurrence, runId) {
+    async cancelling(trigger, occurrence, runId) {
       await db
         .update(occurrences)
         .set({
@@ -201,53 +197,38 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
         })
         .where(row(trigger, occurrence));
     },
-    async watchForDuplicate(trigger, occurrence, since, until) {
-      await db
-        .update(occurrences)
-        .set({ duplicateCheckSince: since, duplicateCheckUntil: until })
-        .where(row(trigger, occurrence));
-    },
-    async watched(trigger, now) {
+    started: (trigger, occurrence, runId, at) =>
+      settle(trigger, occurrence, { state: "started", runId, startedAt: at }),
+    failed: (trigger, occurrence, report) =>
+      settle(trigger, occurrence, { state: "failed", report }),
+    async byAttribute(trigger, attributes) {
+      if (attributes.length === 0) return [];
       return db
         .select()
         .from(occurrences)
-        .where(and(ofTrigger(trigger), gt(occurrences.duplicateCheckUntil, now)));
+        .where(and(ofTrigger(trigger), inArray(occurrences.attribute, [...attributes])));
     },
-    async duplicated(trigger, occurrence, runIds) {
-      await db
-        .update(occurrences)
-        .set({ duplicateRunIds: runIds, duplicateCheckUntil: null })
-        .where(row(trigger, occurrence));
-    },
-    async undupe(trigger, occurrence, survivor) {
-      await db
-        .update(occurrences)
-        .set({
-          duplicateRunIds: null,
-          ...(survivor === null ? {} : { runId: survivor }),
-        })
-        .where(row(trigger, occurrence));
-    },
-    async unsettled(trigger) {
-      // Nothing touches a started row's updated_at but its start.
-      const rows = await db
+    async startedSince(trigger, since) {
+      return db
         .select()
         .from(occurrences)
         .where(
-          and(ofTrigger(trigger), eq(occurrences.state, "started"), isNull(occurrences.settledAt)),
+          and(
+            ofTrigger(trigger),
+            eq(occurrences.state, "started"),
+            gte(occurrences.startedAt, since),
+          ),
         );
-      return rows.map((started) => ({ ...started, startedAt: started.updatedAt }));
     },
-    async settle(trigger, occurrence) {
+    async duplicated(trigger, occurrence, runIds) {
+      await db.update(occurrences).set({ duplicateRunIds: runIds }).where(row(trigger, occurrence));
+    },
+    async repoint(trigger, occurrence, runId) {
       await db
         .update(occurrences)
-        .set({ settledAt: sql`now()` })
+        .set({ runId })
         .where(and(row(trigger, occurrence), eq(occurrences.state, "started")));
     },
-    started: (trigger, occurrence, runId) =>
-      settle(trigger, occurrence, { state: "started", runId }),
-    failed: (trigger, occurrence, report) =>
-      settle(trigger, occurrence, { state: "failed", report }),
     async summary(trigger, failures) {
       const counts = await db
         .select({ state: occurrences.state, rows: count(), last: max(occurrences.occurredAt) })
@@ -261,7 +242,7 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
           and(
             ofTrigger(trigger),
             eq(occurrences.state, "pending"),
-            isNotNull(occurrences.attemptedAt),
+            isNotNull(occurrences.firstAttemptedAt),
           ),
         );
       const recent = await db
@@ -283,7 +264,6 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
       return {
         lastEvent: lasts.length === 0 ? null : new Date(Math.max(...lasts)),
         pending: rows("pending") - (attempted?.rows ?? 0),
-        attempted: attempted?.rows ?? 0,
         failed: rows("failed"),
         failures: recent,
         duplicates: duplicates.map((dup) => ({
