@@ -32,9 +32,10 @@ export type PagerDutyIncidentsParams = z.input<typeof pagerDutyIncidentsParamsSc
  */
 export const pagerduty = {
   /**
-   * Watch for newly triggered incidents. Each incident starts at most one run,
-   * ever, with `{ incident: "<id>" }` as its inputs; an incident that is still
-   * triggered after its run ends does not start another. The service polls on
+   * Watch for new incidents. Every new incident starts at most one run, ever,
+   * with `{ incident: "<id>" }` as its inputs, even one acknowledged or
+   * resolved before the service saw it; the workflow can check the status and
+   * skip one that is already handled. The service polls on
    * `service.pollIntervalSeconds.pagerduty`.
    *
    * @example

@@ -140,7 +140,7 @@ schedules: {
 ## `triggers` {#triggers}
 
 An event trigger starts a run for each new occurrence its source reports, such
-as each newly triggered PagerDuty incident. Its workflow accepts the
+as each new PagerDuty incident. Its workflow accepts the
 source's inputs next to its own:
 
 ```ts
@@ -200,7 +200,7 @@ export default defineFactory({
 
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
-| `pagerduty.incidents` | A newly triggered incident | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
+| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`. `jigs doctor` checks that provider for every trigger

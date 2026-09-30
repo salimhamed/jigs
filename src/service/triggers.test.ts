@@ -397,6 +397,19 @@ test("a new trigger starts from now: nothing before its first enable is recorded
   expect(h.memory.state("pages", "NEW")?.state).toBe("started");
 });
 
+test("an occurrence stamped in the second its trigger was enabled is admitted, at its own time", async () => {
+  const h = harness();
+  const enabled = new Date(T0.getTime() + 700);
+  h.at(enabled);
+  await h.engine.arm();
+  h.queued.push(occurrenceAt("BEFORE", new Date(T0.getTime() - 1)), occurrenceAt("SAME", T0));
+  await h.engine.poll("pages");
+
+  expect(h.memory.marks.get("pages")?.enabledAt).toEqual(enabled);
+  expect(h.memory.state("pages", "BEFORE")).toBeUndefined();
+  expect(h.memory.state("pages", "SAME")).toMatchObject({ state: "started", occurredAt: T0 });
+});
+
 test("after downtime, occurrences past the lookback are skipped and recent ones start", async () => {
   const h = harness({ trigger: { ...pagesTrigger, lookbackMinutes: 30 } });
   await h.memory.store.enable("pages", minutes(-600));

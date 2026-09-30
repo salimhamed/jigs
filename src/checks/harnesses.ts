@@ -10,7 +10,7 @@ import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import {
   type Check,
   type CheckResult,
-  neededByWorkflows,
+  neededByUsers,
   PROBE_TIMEOUT_MS,
   requirementUsers,
   type WorkflowManifests,
@@ -219,9 +219,7 @@ export function harnessUsers(workflows: WorkflowManifests): Map<HarnessKind, str
 
 /** The installation checks of each used harness, each failure naming the workflows that need it. */
 export function usedHarnessChecks(users: Map<HarnessKind, string[]>): Check[] {
-  return [...users].flatMap(([kind, workflows]) =>
-    neededByWorkflows(harnessChecks([kind]), workflows),
-  );
+  return [...users].flatMap(([kind, workflows]) => neededByUsers(harnessChecks([kind]), workflows));
 }
 
 /** Diagnose a descriptor kind that this release cannot execute. */

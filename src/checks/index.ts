@@ -27,7 +27,7 @@ import {
   CHECK_TIMEOUT_MS,
   type Check,
   failedCheck,
-  neededByWorkflows,
+  neededByUsers,
   requirementUsers,
   type WorkflowManifests,
 } from "./catalog.ts";
@@ -298,7 +298,7 @@ export function doctorChecks(
     const needing = users.get(name) ?? [];
     const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
     return needing.length > 0 || polling.length > 0 || configured[name]
-      ? neededByWorkflows(checks(), needing, polling)
+      ? neededByUsers(checks(), needing, polling)
       : [];
   };
   const aws = users.get("aws") ?? [];
@@ -313,7 +313,7 @@ export function doctorChecks(
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),
-    ...(aws.length > 0 ? neededByWorkflows([awsCredentialsCheck()], aws) : []),
+    ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
   ];
 }
 

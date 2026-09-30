@@ -123,7 +123,7 @@ export function neededBy(workflows: readonly string[], triggers: readonly string
 
 // With no users, the factory configuration asked for these checks itself,
 // and each check's own reason already says so.
-export function neededByWorkflows(
+export function neededByUsers(
   checks: Check[],
   workflows: readonly string[],
   triggers: readonly string[] = [],

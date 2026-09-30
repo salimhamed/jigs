@@ -139,9 +139,8 @@ export {
   type TicketReviewPromptInput,
   ticketReviewPrompt,
 } from "./workflow/linear/ticket-review.prompt.ts";
-export { type PagerDutyIncidentsParams, pagerduty } from "./workflow/pagerduty/source.ts";
-
 export type { IncidentRef, IncidentSnapshot } from "./workflow/pagerduty/snapshot.ts";
+export { type PagerDutyIncidentsParams, pagerduty } from "./workflow/pagerduty/source.ts";
 
 export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
 export {

@@ -97,7 +97,7 @@ Each failure ends with a repair line naming the `.env` variables, the
 ## 5. Start a run for each new incident
 
 An [event trigger](/guide/configuration#triggers) on the `pagerduty.incidents`
-source starts one run for each newly triggered incident. This one starts the
+source starts one run for each new incident. This one starts the
 `respond` workflow above for every high-urgency incident on one service:
 
 ```ts
@@ -129,9 +129,10 @@ export default defineFactory({
 - An incident starts at most one run, ever. One that is still triggered after
   its run ends does not start another, and neither does acknowledging and
   re-triggering it.
-- The service asks PagerDuty for triggered incidents every
+- The service asks PagerDuty for new incidents every
   `service.pollIntervalSeconds.pagerduty` seconds (default 300, minimum 30).
   A new incident can take up to one interval to start its run.
-- An incident that was acknowledged or resolved before a poll saw it starts no
-  run.
+- Every new incident starts a run, even one acknowledged or resolved before a
+  poll saw it. The workflow can check the status in its snapshot and skip an
+  incident that is already handled.
 

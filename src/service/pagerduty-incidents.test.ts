@@ -27,15 +27,21 @@ const auth: PagerDutyAuth = {
 };
 
 // A list-incidents record as PagerDuty returns it, trimmed to what the client reads.
-const incident = (id: string, createdAt: Date): PagerDutyIncident => ({
+const incident = (
+  id: string,
+  createdAt: Date,
+  status: PagerDutyIncident["status"] = "triggered",
+): PagerDutyIncident => ({
   id,
   incident_number: Number.parseInt(id.replace(/\D/g, ""), 10) || 1,
   title: `Checkout latency ${id}`,
-  status: "triggered",
+  status,
   urgency: "high",
   created_at: createdAt.toISOString().replace(/\.\d{3}Z$/, "Z"),
   html_url: `https://acme.pagerduty.com/incidents/${id}`,
   service: { id: "PSVC001", type: "service_reference", summary: "checkout" },
+  assignments: [],
+  escalation_policy: { id: "PEP001", type: "escalation_policy_reference" },
 });
 
 // Serves the queued replies in order, each an `/incidents` listing split into
@@ -65,7 +71,7 @@ function recordedApi() {
   return { replies, urls, client: createPagerDutyClient(identity, { auth, fetch }) };
 }
 
-test("a poll lists triggered incidents with the source's own filters, from just behind the watermark", async () => {
+test("a poll lists incidents of every status with the source's own filters, from just behind the watermark", async () => {
   const api = recordedApi();
   api.replies.push([incident("Q1", minutes(-2)), incident("Q2", minutes(-1))]);
   const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
@@ -76,14 +82,14 @@ test("a poll lists triggered incidents with the source's own filters, from just 
   const seen = await source.poll(params, minutes(-5));
 
   expect(seen).toEqual([
-    { inputs: { incident: "Q1" }, at: new Date(minutes(-2).getTime() + 999) },
-    { inputs: { incident: "Q2" }, at: new Date(minutes(-1).getTime() + 999) },
+    { inputs: { incident: "Q1" }, at: minutes(-2) },
+    { inputs: { incident: "Q2" }, at: minutes(-1) },
   ]);
   const [url] = api.urls;
   expect(url?.pathname).toBe("/incidents");
   expect(url?.searchParams.getAll("service_ids[]")).toEqual(["PSVC001", "PSVC002"]);
   expect(url?.searchParams.getAll("urgencies[]")).toEqual(["high"]);
-  expect(url?.searchParams.getAll("statuses[]")).toEqual(["triggered"]);
+  expect(url?.searchParams.getAll("statuses[]")).toEqual(["triggered", "acknowledged", "resolved"]);
   expect(url?.searchParams.has("team_ids[]")).toBe(false);
   expect(url?.searchParams.get("since")).toBe(
     new Date(minutes(-5).getTime() - POLL_OVERLAP_MS).toISOString(),
@@ -122,7 +128,7 @@ test("after a long downtime the range stays within what PagerDuty accepts", asyn
   expect(until).toBeGreaterThanOrEqual(T0.getTime());
 });
 
-test("the occurrence is the incident id, and params take PagerDuty's names only", () => {
+test("the occurrence is the incident id, and params take PagerDuty's names only", async () => {
   const source = pagerDutyIncidents({ client: () => recordedApi().client });
   expect(source.occurrence({ incident: "Q7", team: "infra" })).toBe("Q7");
   expect(() => source.occurrence({})).toThrow("no incident id");
@@ -130,7 +136,7 @@ test("the occurrence is the incident id, and params take PagerDuty's names only"
   expect(source.params.safeParse({ urgencies: ["urgent"] }).success).toBe(false);
   expect(source.params.safeParse({ service_ids: [] }).success).toBe(false);
   expect(source.params.safeParse({ statuses: ["acknowledged"] }).success).toBe(false);
-  expect(source.fromPush({}, { event: { event_type: "incident.triggered" } })).toBeNull();
+  expect(await source.fromPush({}, { event: { event_type: "incident.triggered" } })).toBeNull();
 });
 
 const respond: Factory = {
@@ -260,6 +266,30 @@ test("an incident created in the same second the trigger was first enabled start
   h.api.replies.push([incident("Q1", T0)]);
   await h.engine.poll("pages");
   expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "Q1")]);
+  expect(h.memory.state("pages", "Q1")?.occurredAt).toEqual(T0);
+});
+
+test("an incident acknowledged or resolved before the poll still starts exactly one run", async () => {
+  const h = engineHarness();
+  await h.engine.arm();
+  h.at(minutes(5));
+  h.api.replies.push([
+    incident("Q1", minutes(1), "acknowledged"),
+    incident("Q2", minutes(2), "resolved"),
+  ]);
+  await h.engine.poll("pages");
+  h.at(minutes(10));
+  h.api.replies.push([
+    incident("Q1", minutes(1), "resolved"),
+    incident("Q2", minutes(2), "resolved"),
+  ]);
+  await h.engine.poll("pages");
+  await h.engine.drain();
+
+  expect(h.starts.map((start) => start.triggerId)).toEqual([
+    eventTriggerId("pages", "Q1"),
+    eventTriggerId("pages", "Q2"),
+  ]);
 });
 
 test("an incident created before the trigger was first enabled starts nothing", async () => {

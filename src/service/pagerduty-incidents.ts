@@ -1,5 +1,5 @@
-// The `pagerduty.incidents` source: every newly triggered incident is one
-// occurrence, keyed by its incident id.
+// The `pagerduty.incidents` source: every new incident is one occurrence,
+// keyed by its incident id, whatever its status by the time it is polled.
 
 import { type PagerDutyClient, pagerDutyClientFor } from "../providers/pagerduty.ts";
 import {
@@ -46,17 +46,18 @@ export function pagerDutyIncidents(
       ) as Record<string, string[]>;
       const incidents = await client().listIncidents({
         ...filters,
-        statuses: ["triggered"],
+        // Every status, so an incident handled within one poll interval still
+        // starts its run, as a push would; the workflow reads the status.
+        statuses: ["triggered", "acknowledged", "resolved"],
         since: new Date(from).toISOString(),
         until: new Date(until).toISOString(),
       });
       return incidents.map((incident) => ({
         inputs: { incident: incident.id },
-        // PagerDuty's timestamps are whole seconds: the end of the second never reads as before enable.
-        at: new Date(new Date(incident.created_at).getTime() + 999),
+        at: new Date(incident.created_at),
       }));
     },
     // PagerDuty has no push path to triggers yet: the poll finds every incident.
-    fromPush: () => null,
+    fromPush: async () => null,
   };
 }
