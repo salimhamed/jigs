@@ -57,8 +57,13 @@ export interface PagerDutyUser {
   email: string;
 }
 
-/** Query parameters under PagerDuty's own names; an array is sent as `name[]` once per value. */
-export type PagerDutyQuery = Record<string, string | number | boolean | readonly string[]>;
+type QueryValue = string | number | boolean | readonly string[];
+
+/**
+ * Query parameters under PagerDuty's own names; an array is sent as `name[]` once per value.
+ * Paging is the client's, so `limit` and `offset` are not accepted.
+ */
+export type PagerDutyQuery = Record<string, QueryValue> & { limit?: never; offset?: never };
 
 /** What to keep from the full webhook subscription list. */
 export interface WebhookSubscriptionMatch {
@@ -100,7 +105,7 @@ export interface PagerDutyClientDeps {
   sleep?: (ms: number) => Promise<void>;
 }
 
-function queryString(query: PagerDutyQuery): string {
+function queryString(query: Record<string, QueryValue>): string {
   const params = new URLSearchParams();
   for (const [name, value] of Object.entries(query)) {
     if (Array.isArray(value)) for (const entry of value) params.append(`${name}[]`, entry);
@@ -128,10 +133,11 @@ export function createPagerDutyClient(
     let reauthorized = false;
     let rateLimited = 0;
     for (;;) {
+      const token = await auth().bearer();
       const res = await doFetch(`${PAGERDUTY_API_URL}${apiPath}`, {
         method,
         headers: {
-          authorization: `Bearer ${await auth().bearer()}`,
+          authorization: `Bearer ${token}`,
           accept: "application/vnd.pagerduty+json;version=2",
           // PagerDuty refuses a write that names no user (error 1027).
           ...(method === "GET" ? {} : { from: identity.from }),
@@ -144,7 +150,7 @@ export function createPagerDutyClient(
       // A day-long token can be revoked early, by a re-mint with other scopes.
       if (res.status === 401 && !reauthorized) {
         reauthorized = true;
-        auth().invalidate();
+        auth().invalidate(token);
         continue;
       }
       if (res.status === 429) {
@@ -179,7 +185,10 @@ export function createPagerDutyClient(
       all.push(...batch);
       if (reply.more !== true || batch.length === 0) return all;
     }
-    throw new Error(`PagerDuty kept reporting more ${key} past ${MAX_PAGES * PAGE_LIMIT} records`);
+    throw new JigsError(
+      `PagerDuty kept reporting more ${key} past ${MAX_PAGES * PAGE_LIMIT} records on ${apiPath}`,
+      "narrow the query, for example with a later since or fewer statuses, so it matches fewer records",
+    );
   }
 
   return {

@@ -98,10 +98,15 @@ async function mintPagerDutyToken(
     const detail = await refusal(res, clientSecret);
     throw new JigsError(
       `PagerDuty refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
-      `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in the factory repo's .env against the PagerDuty scoped OAuth app, and that it grants ${PAGERDUTY_SCOPES.join(", ")} on ${identity.subdomain} (${identity.region}), then: \`pnpm exec jigs service restart\``,
+      `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in the factory repo's .env against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`pnpm exec jigs service restart\``,
     );
   }
-  const body = (await res.json()) as { access_token?: unknown; expires_in?: unknown };
+  let body: { access_token?: unknown; expires_in?: unknown };
+  try {
+    body = (await res.json()) as typeof body;
+  } catch {
+    throw new JigsError(`PagerDuty's token response (HTTP ${res.status}) was not JSON`);
+  }
   if (typeof body.access_token !== "string" || body.access_token === "") {
     throw new JigsError("PagerDuty's token response carried no access_token");
   }
@@ -113,8 +118,8 @@ export interface PagerDutyAuth {
   identity: PagerDutyIdentity;
   /** The bearer token for a REST call, minted as needed. */
   bearer(): Promise<string>;
-  /** Forget the minted token, so the next call mints a fresh one. */
-  invalidate(): void;
+  /** Forget `stale` if it is still the cached token, so the next call mints a fresh one. */
+  invalidate(stale: string): void;
 }
 
 export interface PagerDutyAuthDeps {
@@ -162,8 +167,9 @@ export function createPagerDutyAuth(
       cached = await minting;
       return cached.token;
     },
-    invalidate(): void {
-      cached = null;
+    // A late 401 on an old token must not discard one minted since.
+    invalidate(stale: string): void {
+      if (cached?.token === stale) cached = null;
     },
   };
 }

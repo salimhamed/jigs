@@ -187,7 +187,10 @@ export const pagerDutyIdentitySchema = z.strictObject({
   mode: z.literal("app"),
   subdomain: z
     .string()
-    .regex(/^[a-z0-9-]+$/i, "the account subdomain alone, such as acme for acme.pagerduty.com"),
+    .regex(
+      /^[a-z0-9-]+$/,
+      "the account subdomain alone, in lowercase, such as acme for acme.pagerduty.com",
+    ),
   region: z.enum(["us", "eu"]),
   from: z.email(),
 });

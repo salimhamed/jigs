@@ -95,8 +95,28 @@ test("invalidating a token mints a fresh one on the next call", async () => {
   const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`));
   const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch });
   expect(await auth.bearer()).toBe("token-1");
-  auth.invalidate();
+  auth.invalidate("token-1");
   expect(await auth.bearer()).toBe("token-2");
+});
+
+test("a late 401 on an old token keeps the token minted since", async () => {
+  let minted = 0;
+  const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`));
+  const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch });
+  expect(await auth.bearer()).toBe("token-1");
+  auth.invalidate("token-1");
+  expect(await auth.bearer()).toBe("token-2");
+  auth.invalidate("token-1");
+  expect(await auth.bearer()).toBe("token-2");
+  expect(doFetch).toHaveBeenCalledTimes(2);
+});
+
+test("a token response that is not JSON fails cleanly, without echoing the body", async () => {
+  const doFetch = vi.fn(async () => new Response(`<html>${SECRET}</html>`, { status: 200 }));
+  const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch });
+  const err = await rejection<Error>(auth.bearer());
+  expect(err.name).toBe("JigsError");
+  expect(err.message).toBe("PagerDuty's token response (HTTP 200) was not JSON");
 });
 
 test("a token close to its expiry is replaced before it is used", async () => {

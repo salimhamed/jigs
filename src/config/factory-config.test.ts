@@ -473,6 +473,9 @@ test("a PagerDuty identity is an app with a subdomain, a region and a from email
       pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "acme.pagerduty.com" } },
     }),
   ).toThrow("pagerduty.identity.subdomain");
+  expect(() =>
+    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "Acme" } } }),
+  ).toThrow("pagerduty.identity.subdomain");
   // Secrets live in .env, so a client id in config is refused, not ignored.
   expect(() =>
     withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, clientId: "abc" } } }),

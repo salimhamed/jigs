@@ -5,7 +5,6 @@ import {
   missingPagerDutyVariables,
   PAGERDUTY_IDENTITY_VARIABLES,
   pagerDutyEnvValue,
-  pagerDutyScope,
 } from "../providers/pagerduty-auth.ts";
 import type { Check } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
@@ -50,7 +49,7 @@ export function pagerDutyIdentityChecks(
           return {
             ok: false,
             reason: `${VARIABLES} are set but PagerDuty issued no token: ${err instanceof Error ? err.message : String(err)}`,
-            repair: `check ${VARIABLES} in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that the app grants every scope in "${pagerDutyScope(identity)}", then: \`${RESTART_SERVICE}\``,
+            repair: `check ${VARIABLES} in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region in ${FACTORY_CONFIG_FILE} name its account (now ${account}), then: \`${RESTART_SERVICE}\``,
           };
         }
         try {

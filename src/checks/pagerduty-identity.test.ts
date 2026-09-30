@@ -56,7 +56,7 @@ test("unset client variables fail before any probe runs", async () => {
   expect(calls).toEqual([]);
 });
 
-test("a refused token names the .env keys and the scopes, never the secret", async () => {
+test("a refused token names the .env keys and the account, never the secret", async () => {
   const { probes: p } = probes({
     token: async () => {
       throw new Error("PagerDuty refused a client-credentials token (HTTP 401): invalid_client");
@@ -68,7 +68,8 @@ test("a refused token names the .env keys and the scopes, never the secret", asy
     reason: expect.stringContaining("invalid_client"),
     repair: expect.stringContaining("PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET"),
   });
-  expect(result).toMatchObject({ repair: expect.stringContaining("as_account-us.acme") });
+  expect(result).toMatchObject({ repair: expect.stringContaining("(now acme (us))") });
+  expect(result).not.toMatchObject({ repair: expect.stringMatching(/\bscopes?\b/) });
   expect(JSON.stringify(result)).not.toContain("super-secret");
 });
 

@@ -59,8 +59,8 @@ function fakeAuth() {
   const auth: PagerDutyAuth & { minted: () => number } = {
     identity: IDENTITY,
     bearer: async () => `token-${minted === 0 ? ++minted : minted}`,
-    invalidate: () => {
-      minted += 1;
+    invalidate: (stale) => {
+      if (stale === `token-${minted}`) minted += 1;
     },
     minted: () => minted,
   };
@@ -293,4 +293,23 @@ test("the access probe is one small incident read", async () => {
   expect(calls).toHaveLength(1);
   expect(calls[0]?.url.pathname).toBe("/incidents");
   expect(calls[0]?.url.searchParams.get("limit")).toBe("1");
+});
+
+test("a list that never ends stops at PagerDuty's offset ceiling with a repair", async () => {
+  const { client, calls } = server(() =>
+    json({ incidents: Array.from({ length: 100 }, () => INCIDENT), more: true }),
+  );
+  const err = await rejection<Error & { hint?: string }>(client.listIncidents());
+  expect(err.name).toBe("JigsError");
+  expect(err.message).toContain("past 10000 records on /incidents");
+  expect(err.hint).toContain("narrow the query");
+  expect(calls).toHaveLength(100);
+});
+
+test("paging is the client's: limit and offset are not query parameters a caller passes", () => {
+  const { client } = server(() => json({ incidents: [], more: false }));
+  // @ts-expect-error the client pages itself
+  void client.listIncidents({ limit: 5 }).catch(() => {});
+  // @ts-expect-error the client pages itself
+  void client.listIncidents({ offset: 5 }).catch(() => {});
 });
