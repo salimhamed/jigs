@@ -205,8 +205,10 @@ export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchem
 /**
  * A factory's Slack app. The app always acts as itself, so there is no identity
  * mode; `SLACK_BOT_TOKEN` in `.env` is its credential. With `socketMode` on,
- * the service refuses to start without `SLACK_APP_TOKEN`, and doctor checks
- * that token opens a Socket Mode connection.
+ * the service also holds a Socket Mode connection that delivers messages
+ * within a second; it refuses to start without `SLACK_APP_TOKEN`, and doctor
+ * checks that token opens a connection. Polling on
+ * `service.pollIntervalSeconds.slack` runs either way.
  */
 export const slackSchema = z.strictObject({ socketMode: z.boolean() });
 
