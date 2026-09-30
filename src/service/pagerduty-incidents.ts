@@ -35,9 +35,11 @@ const triggeredSchema = z.object({
   }),
 });
 
+const eventTypeSchema = z.object({ event: z.object({ event_type: z.string() }) });
+
 /** A PagerDuty webhook payload's event type, if it names one. */
-export const pagerDutyEventType = (event: unknown): unknown =>
-  (event as { event?: { event_type?: unknown } } | null)?.event?.event_type;
+export const pagerDutyEventType = (event: unknown): string | undefined =>
+  eventTypeSchema.safeParse(event).data?.event.event_type;
 
 export interface PagerDutyIncidentsDeps {
   client?: () => PagerDutyClient;

@@ -385,11 +385,18 @@ function mountPagerDutyIngress(app: Hono): void {
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    const type = pagerDutyEventType(payload);
-    const event = `event=${typeof type === "string" ? sanitizeForLog(type) : "unknown"}`;
-    const triggers = await pushEvent("pagerduty", payload);
+    const event = `event=${sanitizeForLog(pagerDutyEventType(payload) ?? "unknown")}`;
+    let triggers: string[];
+    try {
+      triggers = await pushEvent("pagerduty", payload);
+    } catch (error) {
+      // Still a 2xx: PagerDuty switches a subscription off after repeated
+      // failures, and the poll finds the incident anyway.
+      console.log(`[ingress] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
+      return c.json({ delivered: false });
+    }
     if (triggers.length === 0) {
-      console.log(`[ingress] pagerduty ignored reason=no-new-occurrence ${event}`);
+      console.log(`[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
       return c.json({ ignored: true });
     }
     console.log(`[ingress] pagerduty accepted triggers=${triggers.join(",")} ${event}`);

@@ -1017,7 +1017,19 @@ test("a signed PagerDuty event no trigger takes is acknowledged and logged as ig
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty ignored reason=no-new-occurrence event=incident.acknowledged",
+    "[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
+  );
+});
+
+test("a push that fails is still acknowledged, so PagerDuty keeps the subscription on", async () => {
+  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
+  vi.spyOn(triggers, "pushEvent").mockRejectedValueOnce(new Error("registry unreachable"));
+  const body = incidentTriggered();
+  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
+  expect(res.status).toBe(200);
+  expect(await res.json()).toEqual({ delivered: false });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[ingress] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
   );
 });
 
