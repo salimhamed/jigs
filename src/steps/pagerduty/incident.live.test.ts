@@ -2,6 +2,7 @@ import { afterAll, describe, expect, test, vi } from "vitest";
 import type { PagerDutyIdentity } from "../../config/factory-config.ts";
 import {
   createPagerDutyClient,
+  PAGERDUTY_API_URL,
   type PagerDutyIncident,
   pagerDutyClientFor,
 } from "../../providers/pagerduty.ts";
@@ -35,9 +36,8 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
     region: env("PAGERDUTY_REGION") === "eu" ? "eu" : "us",
     from: from ?? "",
   };
-  const client = createPagerDutyClient(identity, {
-    auth: createPagerDutyAuth(identity, { env }),
-  });
+  const auth = createPagerDutyAuth(identity, { env });
+  const client = createPagerDutyClient(identity, { auth });
   vi.mocked(pagerDutyClientFor).mockReturnValue(client);
 
   const dedupKey = `jigs-live-test-${crypto.randomUUID()}`;
@@ -95,5 +95,15 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
       workflowRunId: runId,
     });
     expect(noteId).toMatch(/^P/);
+
+    const res = await fetch(`${PAGERDUTY_API_URL}/incidents/${incident.id}/notes`, {
+      headers: {
+        authorization: `Bearer ${await auth.bearer()}`,
+        accept: "application/vnd.pagerduty+json;version=2",
+      },
+    });
+    const { notes } = (await res.json()) as { notes: Array<{ id: string; content: string }> };
+    const posted = notes.find((note) => note.id === noteId);
+    expect(posted?.content).toBe(`jigs live test note.\n\njigs run ${runId}`);
   });
 });

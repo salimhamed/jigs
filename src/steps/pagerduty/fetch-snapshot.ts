@@ -6,7 +6,8 @@ import { pagerDutyClientFor } from "../../providers/pagerduty.ts";
 import { type IncidentSnapshot, toIncidentSnapshot } from "../../workflow/pagerduty/snapshot.ts";
 
 /**
- * Read the incident's title, status, urgency, service, assignees and escalation policy.
+ * Read the incident once: its number, title, status, urgency, creation time, URL, service,
+ * assignees and escalation policy.
  *
  * @group Read
  */
