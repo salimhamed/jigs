@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.80.0](https://github.com/salimhamed/jigs/compare/jigs-v0.79.0...jigs-v0.80.0) (2026-09-30)
+
+
+### ⚠ BREAKING CHANGES
+
+* start PagerDuty event triggers from webhooks ([#471](https://github.com/salimhamed/jigs/issues/471))
+
+### Features
+
+* start PagerDuty event triggers from webhooks ([#471](https://github.com/salimhamed/jigs/issues/471)) ([7b660cf](https://github.com/salimhamed/jigs/commit/7b660cff57f579977a834c25004e4e4cb357e137))
+
 ## [0.79.0](https://github.com/salimhamed/jigs/compare/jigs-v0.78.10...jigs-v0.79.0) (2026-09-30)
 
 
