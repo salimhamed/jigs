@@ -228,6 +228,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "renderChecks",
     "renderTicketSnapshot",
     "score",
+    "slack",
     "ticketInputSchema",
     "ticketReviewPrompt",
     "ticketReviewVerdictSchema",

@@ -7,7 +7,7 @@ import { parseInputs } from "../cli/commands/run.ts";
 import { hintLines } from "../cli/output.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { eventTriggerId, runIdTime } from "./runs.ts";
-import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
+import { SOURCES, type Source, type SourceOccurrence, type SourceRegistry } from "./sources.ts";
 import type { PreparedRun } from "./trigger.ts";
 import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
 import {
@@ -53,7 +53,7 @@ function fakeSource() {
       polls.push(since);
       return queued.splice(0);
     },
-    fromPush: (_params, event) => {
+    fromPush: async (_params, event) => {
       const page = (event as { page?: unknown }).page;
       return typeof page === "string" ? { inputs: { page }, at: minutes(1) } : null;
     },
@@ -1248,10 +1248,10 @@ test("a trigger whose workflow, source and inputs hold passes its check", async 
   expect(await check("pages", pagesTrigger)).toEqual({ label: "trigger pages", ok: true });
 });
 
-test("an unknown source kind fails its check; with no sources shipped, the repair says so", async () => {
-  const result = await check("pages", pagesTrigger, {});
+test("an unknown source kind fails its check, and the repair names the known kinds", async () => {
+  const result = await check("pages", pagesTrigger, SOURCES);
   expect(result.ok === false && result.repair).toBe(
-    'remove the "pages" trigger from jigs.config.ts\nthis jigs version provides no sources; upgrade jigs for the one it names',
+    "set triggers.pages.source in jigs.config.ts to one of: slack.messages, slack.mentions",
   );
 });
 

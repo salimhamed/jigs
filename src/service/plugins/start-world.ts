@@ -358,6 +358,17 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
   return true;
 }
 
+// One connection for the whole service: every Slack listener reads the same
+// message stream.
+async function startSlackSocketMode(): Promise<void> {
+  const [{ startSlackSocket }, { pushEvent }] = await Promise.all([
+    import("../slack-socket.ts"),
+    import("../triggers.ts"),
+  ]);
+  const socket = startSlackSocket({ onMessage: (event) => pushEvent("slack", event) });
+  onShutdown(() => socket.stop(), { phase: "quiesce" });
+}
+
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
 // a plain default export works.
 /** Run the ordered service startup gates, then enable readiness and reconciliation. */
@@ -421,10 +432,12 @@ export default async function startWorld() {
       import("../../config/factory-config.ts"),
       import("../../config/factory-root.ts"),
     ]);
-  const nudge = startNudges(readFactoryConfig(factoryRoot()).service.pollIntervalSeconds);
+  const config = readFactoryConfig(factoryRoot());
+  const nudge = startNudges(config.service.pollIntervalSeconds);
   onShutdown(() => {
     nudge.stop();
   });
+  if (config.slack?.socketMode) await startSlackSocketMode();
   await Promise.all([nudgeProvider("github"), nudgeProvider("linear")]);
 
   // The generated factory plugin starts automatic release after this plugin

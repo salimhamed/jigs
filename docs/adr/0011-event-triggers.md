@@ -51,6 +51,9 @@ starts a second run for an occurrence.
   ([0009](./0009-factory-identity-per-provider.md)). It holds because each
   factory has its own Slack app, which only ever acts as itself; posting as a
   person would need a table of posted ids instead.
+- The Slack source uses polling plus Socket Mode, with no Events API: Socket
+  Mode needs no public URL, and polling covers what Slack drops after about
+  6 minutes.
 - Wakes on resources a triggered run holds (`pagerduty:incident:<id>`,
   `slack:thread:<channel>:<ts>`) use the ordinary hook path, not this one.
 - Rejected: one event router that both starts and wakes (it would put the exact

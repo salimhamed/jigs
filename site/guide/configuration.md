@@ -348,6 +348,9 @@ slack: { socketMode: true },
 | --- | --- | --- |
 | `socketMode` | required | Use Socket Mode. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
 
+To start runs from Slack messages, see
+[Start runs from messages](/guide/slack#start-runs-from-messages).
+
 ## Webhooks {#webhooks}
 
 Webhooks improve latency, not correctness. Without them, the built-in GitHub
