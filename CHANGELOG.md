@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.7](https://github.com/salimhamed/jigs/compare/jigs-v0.78.6...jigs-v0.78.7) (2026-09-30)
+
+
+### Features
+
+* add Slack identity, client and checks ([#456](https://github.com/salimhamed/jigs/issues/456)) ([01a68d9](https://github.com/salimhamed/jigs/commit/01a68d993b9ceeb763e57d45e7293a837a684b77))
+
 ## [0.78.6](https://github.com/salimhamed/jigs/compare/jigs-v0.78.5...jigs-v0.78.6) (2026-09-30)
 
 
