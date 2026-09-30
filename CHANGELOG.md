@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.5](https://github.com/salimhamed/jigs/compare/jigs-v0.78.4...jigs-v0.78.5) (2026-09-30)
+
+
+### Features
+
+* start runs from event triggers ([#452](https://github.com/salimhamed/jigs/issues/452)) ([33f2910](https://github.com/salimhamed/jigs/commit/33f291044fb623753d43819e6d25ccb5ba52ecd7))
+
 ## [0.78.4](https://github.com/salimhamed/jigs/compare/jigs-v0.78.3...jigs-v0.78.4) (2026-09-29)
 
 

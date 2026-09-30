@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.4
+# @jigs-ai/jigs v0.78.5
 
 Factory and workflow definitions, harness and model descriptors, types and pure helpers.
 
@@ -32,18 +32,62 @@ its model source instead.
 
 ***
 
+### EventTrigger
+
+A trigger that starts one run per occurrence its source reports, at most
+once per occurrence. Each run gets the reference the source hands it,
+merged over the fixed `inputs`.
+
+#### Remarks
+
+A new trigger starts from the moment the service first runs it, with no
+backfill. After the service was down, it starts runs only for occurrences
+within `lookbackMinutes` and records older ones as skipped.
+
+#### Properties
+
+##### inputs?
+
+> `optional` **inputs**: `Record`\<`string`, `unknown`\>
+
+##### lookbackMinutes?
+
+> `optional` **lookbackMinutes**: `number`
+
+How far back to catch up after the service was down. Defaults to 60.
+
+##### maxActive?
+
+> `optional` **maxActive**: `number`
+
+Runs of this trigger active at once. Defaults to 3; further occurrences wait, oldest first.
+
+##### source
+
+> **source**: [`SourceDescriptor`](#sourcedescriptor)
+
+##### workflow
+
+> **workflow**: `string`
+
+***
+
 ### Factory
 
 What a factory repo hands the service: its workflows, keyed by name, and
-the schedules that fire them. A schedule is keyed by its own name rather
-than nested under a workflow. The name is what runs, status and `jigs
-doctor` refer to, and one workflow can carry several.
+the schedules and event triggers that start them. A schedule is keyed by
+its own name rather than nested under a workflow. The name is what runs,
+status and `jigs doctor` refer to, and one workflow can carry several.
 
 #### Properties
 
 ##### schedules?
 
 > `optional` **schedules**: `Record`\<`string`, [`Schedule`](#schedule)\>
+
+##### triggers?
+
+> `optional` **triggers**: `Record`\<`string`, [`EventTrigger`](#eventtrigger)\>
 
 ##### webhooks?
 
@@ -167,6 +211,10 @@ once.
 
 > `optional` **port**: `number`
 
+##### triggers?
+
+> `optional` **triggers**: `Record`\<`string`, [`EventTrigger`](#eventtrigger)\>
+
 ##### webhooks?
 
 > `optional` **webhooks**: `object`
@@ -217,6 +265,24 @@ Five fields, evaluated in the service host's local time zone.
 ##### workflow
 
 > **workflow**: `string`
+
+***
+
+### SourceDescriptor
+
+What an event trigger watches: a source kind and the provider's own query
+parameters for it. Plain data, so it can sit in `jigs.config.ts`; a source's
+constructor builds it.
+
+#### Properties
+
+##### kind
+
+> **kind**: `string`
+
+##### params
+
+> **params**: `Record`\<`string`, `unknown`\>
 
 ***
 
