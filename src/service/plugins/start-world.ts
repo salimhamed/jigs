@@ -367,7 +367,17 @@ async function startSlackSocketMode(): Promise<void> {
     import("../slack-thread-wake.ts"),
   ]);
   const socket = startSlackSocket({
-    onMessage: (event) => Promise.all([pushEvent("slack", event), wakeSlackThread(event)]),
+    onMessage: async (event) => {
+      const [pushed, woken] = await Promise.allSettled([
+        pushEvent("slack", event),
+        wakeSlackThread(event),
+      ]);
+      const where = `${event.channel}:${event.ts}`;
+      if (pushed.status === "rejected")
+        console.log(`[slack] could not start runs for ${where}: ${String(pushed.reason)}`);
+      if (woken.status === "rejected")
+        console.log(`[slack] could not wake the thread of ${where}: ${String(woken.reason)}`);
+    },
   });
   onShutdown(() => socket.stop(), { phase: "quiesce" });
 }

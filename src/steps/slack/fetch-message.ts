@@ -45,6 +45,10 @@ async function authorOf(
  * Read a Slack message, its permalink and its thread's replies, with each
  * author's name and email.
  *
+ * @remarks
+ * `ts` must be a top-level message. A reply's ts reads as gone, as a deleted
+ * message does.
+ *
  * @group Read
  */
 export async function fetchSlackMessage({

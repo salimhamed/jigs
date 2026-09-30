@@ -178,8 +178,8 @@ start runs only if Socket Mode delivered them.
 `fetchSlackMessage({ channel, ts })` reads a message, its permalink and its
 thread's replies, oldest first. Each post names its author, with their display
 name, their email, whether they are a bot, and `isOwnBot` for the factory's own
-bot. A deleted message reads as `{ gone: true }`, so the workflow can end
-quietly:
+bot. `ts` must be a top-level message; a reply's `ts` reads as gone. A deleted
+message reads as `{ gone: true }`, so the workflow can end quietly:
 
 ```ts
 import { fetchSlackMessage } from "#jigs/steps";
@@ -208,7 +208,8 @@ risk posting twice.
 
 `waitForSlackReply({ channel, threadTs, after })` parks the run until someone
 replies in the thread under `threadTs`, and returns the first reply posted
-after the message `after`, usually the question the workflow just posted. The
+after the message `after`, usually the question the workflow just posted.
+`threadTs` must be the thread's top-level message, never a reply. The
 reply comes back with its text and author:
 
 ```ts
@@ -227,7 +228,8 @@ do. The wait has no time limit: it ends with a reply, or when you cancel the run
 with `jigs cancel`. With Socket Mode on, a reply wakes the run within a second.
 The service also re-reads the thread every
 [`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
-and `jigs poke` re-reads it at once. Only one run can wait on a thread at a time.
+and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
+time. Deleting the thread's top-level message while a run waits fails the run.
 
 ## Example: answer questions in a channel
 

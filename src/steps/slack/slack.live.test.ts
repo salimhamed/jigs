@@ -13,7 +13,6 @@ const channel = "C0C5EUZ7P9Q";
 const parked = vi.hoisted(() => ({ count: 0 }));
 vi.mock("workflow", () => ({
   createHook: () => ({
-    getConflict: async () => null,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
     then: () => {
       parked.count += 1;

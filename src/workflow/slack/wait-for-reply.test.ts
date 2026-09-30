@@ -1,5 +1,4 @@
 import { beforeEach, expect, test, vi } from "vitest";
-import { ClaimConflictError } from "../linear/claim.ts";
 import type { SlackAuthor, SlackMessageSnapshot, SlackPost } from "./snapshot.ts";
 import { waitForSlackReply } from "./wait-for-reply.ts";
 
@@ -8,16 +7,14 @@ const { createHook, hook } = vi.hoisted(() => ({
   hook: {
     awaited: 0,
     disposed: 0,
-    conflict: null as { runId: string } | null,
     wake: null as (() => void) | null,
   },
 }));
 vi.mock("workflow", () => ({ createHook }));
 beforeEach(() => {
-  Object.assign(hook, { awaited: 0, disposed: 0, conflict: null, wake: null });
+  Object.assign(hook, { awaited: 0, disposed: 0, wake: null });
   createHook.mockReset();
   createHook.mockImplementation(() => ({
-    getConflict: async () => hook.conflict,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
     then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
       hook.awaited += 1;
@@ -97,18 +94,6 @@ test("replies within the same second are ordered by their microseconds", async (
   expect(
     await waitForSlackReply({ channel, threadTs, after: question }, { fetchSlackMessage }),
   ).toEqual(answer);
-});
-
-test("a thread another run waits on is a claim conflict", async () => {
-  hook.conflict = { runId: "wrun_OTHER" };
-  const fetchSlackMessage = vi.fn(async () => thread());
-  const waiting = waitForSlackReply({ channel, threadTs, after: question }, { fetchSlackMessage });
-  await expect(waiting).rejects.toBeInstanceOf(ClaimConflictError);
-  await expect(waiting).rejects.toThrow(
-    `the Slack thread ${channel}:${threadTs} is already claimed by run wrun_OTHER`,
-  );
-  expect(fetchSlackMessage).not.toHaveBeenCalled();
-  expect(hook.disposed).toBe(1);
 });
 
 test("a message deleted while the run waits fails the wait", async () => {

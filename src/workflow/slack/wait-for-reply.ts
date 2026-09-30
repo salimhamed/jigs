@@ -1,7 +1,6 @@
 import { createHook } from "workflow";
 import type { fetchSlackMessage } from "../../steps/slack/fetch-message.ts";
 import { JigsError } from "../errors.ts";
-import { ClaimConflictError } from "../linear/claim.ts";
 import type { SlackPost } from "./snapshot.ts";
 import { slackThreadToken } from "./thread-token.ts";
 
@@ -16,8 +15,8 @@ export interface SlackReplySteps {
 
 /**
  * The message a wait answers: the thread it is in, named by the ts of the
- * thread's top-level message, and the ts of the question itself. Only replies
- * posted after `after` count.
+ * thread's top-level message (never a reply's), and the ts of the question
+ * itself. Only replies posted after `after` count.
  *
  * @group Slack messages
  */
@@ -39,6 +38,13 @@ function tsValue(ts: string): bigint {
 /**
  * Wait, with no time limit, for a human to reply in a Slack thread after the
  * question, and return the first such reply.
+ *
+ * @remarks
+ * `threadTs` must be the thread's top-level message: a reply's ts reads as
+ * deleted, which fails the wait. When a human reply is already in the
+ * thread, every run waiting on it returns that reply; a second run that has
+ * to park while another waits on the thread fails with the Workflow SDK's
+ * `HookConflictError`.
  */
 export async function waitForSlackReply(
   question: SlackQuestion,
@@ -49,8 +55,6 @@ export async function waitForSlackReply(
   const token = slackThreadToken(channel, threadTs);
   const hook = createHook<unknown>({ token });
   try {
-    const conflict = await hook.getConflict();
-    if (conflict !== null) throw new ClaimConflictError(token, conflict.runId);
     const since = tsValue(after);
     while (true) {
       const thread = await fetchSlackMessage({ channel, ts: threadTs });
