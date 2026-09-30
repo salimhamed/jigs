@@ -45,6 +45,9 @@ test("a check that throws becomes a failure, not a crash", async () => {
   expect(boom).toMatchObject({ reason: expect.stringContaining("kaboom") });
   // The other failure still made it into the aggregate.
   expect(report.checks[1]).toMatchObject({ reason: "A is broken" });
+  // Told apart from a refusal, so a caller may retry what never answered.
+  expect(boom).toMatchObject({ unanswered: true });
+  expect(report.checks[1]).not.toHaveProperty("unanswered");
 });
 
 test("a check that never answers times out into a failure, not a hung report", async () => {
@@ -63,6 +66,7 @@ test("a check that never answers times out into a failure, not a hung report", a
   expect(report.checks[0]).toMatchObject({
     ok: false,
     reason: expect.stringContaining("did not answer within 20ms"),
+    unanswered: true,
   });
   expect(report.checks[1]).toMatchObject({ reason: "A is broken" });
 });

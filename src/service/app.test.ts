@@ -611,6 +611,23 @@ test("GET /api/runs answers with empty runs when nothing has launched", async ()
   expect(await res.json()).toEqual({ runs: [], schedules: [], triggers: [] });
 });
 
+test("GET /api/runs still answers with runs when the triggers cannot be read", async () => {
+  // The registry the triggers live in is unusable here.
+  const triggered = createApp({
+    ...fixture,
+    triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+  });
+  const res = await triggered.request("/api/runs");
+  expect(res.status).toBe(200);
+  const body = (await res.json()) as {
+    runs: unknown[];
+    triggers: unknown[];
+    triggersError?: string;
+  };
+  expect(body).toMatchObject({ runs: [], schedules: [], triggers: [] });
+  expect(body.triggersError).toEqual(expect.any(String));
+});
+
 test("GET /api/runs lists each run with the resources it recorded and their states", async () => {
   const at = new Date("2026-09-04T10:00:00.000Z");
   const row = (kind: string, state: "kept" | "live", reason: string | null) => ({

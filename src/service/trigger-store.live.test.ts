@@ -97,7 +97,7 @@ test("the first enable is kept, and advancing moves only the poll window", async
   expect(await store.enable("pages", at(10))).toEqual({ enabledAt: at(0), polledThrough: at(5) });
 });
 
-test("the first attempt only ever moves back, the latest follows each attempt", async () => {
+test("a row is claimed once: the loser of a race gets nothing, and a failed row adopts its late run", async () => {
   const store = triggerStore(db, "factory-e");
   await store.record({
     trigger: "pages",
@@ -107,59 +107,36 @@ test("the first attempt only ever moves back, the latest follows each attempt", 
     attribute: "attr-P1",
     occurredAt: at(0),
   });
-  await store.attempt("pages", "P1", at(10));
-  await store.attempt("pages", "P1", at(20));
-  // A clock that stepped back lowers the lookup bound.
-  await store.attempt("pages", "P1", at(4));
-  expect((await store.pending("pages"))[0]).toMatchObject({
-    firstAttemptedAt: at(4),
-    attemptedAt: at(4),
-  });
-  await store.attempt("pages", "P1", at(30));
-  expect((await store.pending("pages"))[0]).toMatchObject({
-    firstAttemptedAt: at(4),
-    attemptedAt: at(30),
-  });
-  await store.cancelling("pages", "P1", "wrun_orphan");
-  await store.cancelling("pages", "P1", "wrun_orphan2");
-  expect((await store.pending("pages"))[0]?.cancelledRunIds).toEqual([
-    "wrun_orphan",
-    "wrun_orphan2",
-  ]);
+  expect(await store.attempt("pages", "P1", at(10))).toBe(true);
+  // A second claim, from another copy that read the row as unclaimed.
+  expect(await store.attempt("pages", "P1", at(11))).toBe(false);
+  expect((await store.pending("pages"))[0]?.attemptedAt).toEqual(at(10));
   expect(await store.summary("pages", 5)).toMatchObject({ pending: 0 });
 
-  await store.started("pages", "P1", "wrun_first", at(31));
-  expect((await store.startedSince("pages", at(31))).map((row) => row.runId)).toEqual([
-    "wrun_first",
+  await store.failed("pages", "P1", report);
+  await store.adoptLate("pages", "P1", "wrun_late", at(40));
+  const [adopted] = await store.byAttribute("pages", ["attr-P1"]);
+  expect(adopted).toMatchObject({ state: "started", runId: "wrun_late", report: null });
+  expect((await store.startedSince("pages", at(40))).map((row) => row.runId)).toEqual([
+    "wrun_late",
   ]);
-  expect(await store.startedSince("pages", at(32))).toEqual([]);
-  await expect(store.attempt("pages", "P1", at(40))).rejects.toThrow("no longer pending");
+  expect(await store.startedSince("pages", at(41))).toEqual([]);
+  // A started row is never claimed again.
+  expect(await store.attempt("pages", "P1", at(50))).toBe(false);
 });
 
-test("rows are found by attribute, and a duplicate is recorded, cleared and repointed", async () => {
+test("a row never attempted is not adopted late", async () => {
   const store = triggerStore(db, "factory-f");
-  for (const occurrence of ["P1", "P2"])
-    await store.record({
-      trigger: "pages",
-      occurrence,
-      state: "pending",
-      inputs: {},
-      attribute: `attr-${occurrence}`,
-      occurredAt: at(0),
-    });
-  expect((await store.byAttribute("pages", ["attr-P2"])).map((row) => row.occurrence)).toEqual([
-    "P2",
-  ]);
+  await store.record({
+    trigger: "pages",
+    occurrence: "P2",
+    state: "pending",
+    inputs: {},
+    attribute: "attr-P2",
+    occurredAt: at(0),
+  });
+  await store.failed("pages", "P2", report);
+  await store.adoptLate("pages", "P2", "wrun_x", at(1));
+  expect((await store.byAttribute("pages", ["attr-P2"]))[0]?.state).toBe("failed");
   expect(await store.byAttribute("pages", [])).toEqual([]);
-
-  await store.attempt("pages", "P1", at(1));
-  await store.started("pages", "P1", "wrun_a", at(1));
-  await store.duplicated("pages", "P1", ["wrun_a", "wrun_b"]);
-  expect((await store.summary("pages", 5)).duplicates).toEqual([
-    { occurrence: "P1", runId: "wrun_a", runIds: ["wrun_a", "wrun_b"] },
-  ]);
-  await store.repoint("pages", "P1", "wrun_b");
-  await store.duplicated("pages", "P1", null);
-  expect((await store.summary("pages", 5)).duplicates).toEqual([]);
-  expect((await store.byAttribute("pages", ["attr-P1"]))[0]?.runId).toBe("wrun_b");
 });

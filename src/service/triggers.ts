@@ -8,9 +8,7 @@ import { createHash } from "node:crypto";
 import type { z } from "zod";
 import { type Check, type CheckReport, failedCheck, failedChecks } from "../checks/index.ts";
 import { plainHint } from "../errors.ts";
-import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { currentFactory, registrySql } from "../steps/runtime/registry.ts";
-import { finished } from "../steps/runtime/run-state.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { nudgeDelay } from "./nudge.ts";
 import { whenReady } from "./readiness.ts";
@@ -30,16 +28,15 @@ import {
   type SourceRegistry,
 } from "./sources.ts";
 import { type PreparedRun, prepareRun } from "./trigger.ts";
-
-type Ready = Extract<PreparedRun, { kind: "ready" }>;
-type Refusal = Exclude<PreparedRun, { kind: "ready" }>;
-
 import {
   type Occurrence,
   type TriggerMarker,
   type TriggerStore,
   triggerStore,
 } from "./trigger-store.ts";
+
+type Ready = Extract<PreparedRun, { kind: "ready" }>;
+type Refusal = Exclude<PreparedRun, { kind: "ready" }>;
 
 const DEFAULT_MAX_ACTIVE = 3;
 const DEFAULT_LOOKBACK_MINUTES = 60;
@@ -95,18 +92,32 @@ const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
 // The SDK mints the run ID from this process's clock just after the attempt
 // is recorded; the margin covers the clock stepping back in between.
 const LOOKUP_MARGIN_MS = 60_000;
-// How long after an attempt, or after this process started, a run of it may
-// still be created or moved on by its delivery: an idle worker takes one at
-// once, the queue's first four retries back off about 85 seconds in all, and
-// after a crash the World's restart recovery queues every pending run as it
-// boots. Only after this is a pending run cancelled, or an absent one started
-// again.
+// How long after an attempt, or after the World began delivering, an
+// unconfirmed start is waited on before jigs gives up on it: an idle worker
+// takes a delivery at once, the queue's first four retries back off about 85
+// seconds in all, and after a crash the World's restart recovery queues every
+// pending run as it boots.
 const DELIVERY_SETTLE_MS = 5 * 60_000;
 // How long a started run the World does not hold yet keeps its slot: a
 // resilient start returns before its delivery creates the run. Not a bound on
 // how late a delivery can be; a run is counted whenever it is live.
+// A resilient run delivered later than this is live but on no row the cap
+// counts, so it can take the trigger one past maxActive, with no warning.
 const LATE_DELIVERY_MS = 60 * 60_000;
 const START_WRITE_TRIES = 3;
+
+/** One `--input` value as `jigs run` reads it back: raw unless it would parse as JSON. */
+function inputValue(value: unknown): string {
+  if (typeof value !== "string") return JSON.stringify(value);
+  try {
+    JSON.parse(value);
+    return JSON.stringify(value);
+  } catch {
+    return value;
+  }
+}
+
+const shellQuote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 
 /** The value an occurrence's runs carry as their occurrence attribute. */
 function occurrenceAttribute(factorySlug: string, trigger: string, occurrence: string): string {
@@ -137,10 +148,12 @@ async function tally(
     store.startedSince(trigger, recentSince),
   ]);
   const rows = new Map<string, Occurrence>();
-  for (const row of [...withRuns, ...pending.filter((p) => p.firstAttemptedAt !== null), ...recent])
+  for (const row of [...withRuns, ...pending.filter((p) => p.attemptedAt !== null), ...recent])
     rows.set(row.occurrence, row);
   const liveIds = new Set([...live.values()].flat().map((run) => run.runId));
   const unseen = recent.flatMap((row) => (row.runId && !liveIds.has(row.runId) ? [row.runId] : []));
+  // A resilient run created between the listing above and this read is held
+  // but not in the listing, so it counts nowhere this once: one over the cap.
   const held = await statuses(unseen);
   let active = 0;
   const counted = [...rows.values()].map((row) => {
@@ -175,8 +188,9 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   const findRuns = deps.findRunsByAttribute ?? findRunsByAttribute;
   const cancel = deps.cancelRun ?? cancelRun;
   const liveRuns = deps.liveRunsByAttribute ?? liveRunsByAttribute;
-  // After a crash the World delivered nothing until this process booted it.
-  const bootedAt = now();
+  // When the World began delivering: set on arm, after the service's readiness
+  // gates. Until then no uncertain row is settled.
+  let bootedAt: Date | undefined;
   const slug = deps.factorySlug ?? currentFactory;
   let opened: TriggerStore | undefined = deps.store;
   const store = () => (opened ??= triggerStore(registrySql(), slug()));
@@ -199,6 +213,9 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   // A run whose `started` write failed, held until written. A crash loses it,
   // and the lookup finds the run again.
   const unrecorded = new Map<string, string>();
+  // Rows whose start this process saw throw: a pending run of one may be a
+  // run the queue never took.
+  const threw = new Set<string>();
   const rowKey = (entry: Armed, occurrence: string) => `${entry.name}\0${occurrence}`;
 
   // Polls and pushes wait on this alone, never on a drain: a restart with a
@@ -235,7 +252,24 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     return recorded && !stale;
   }
 
+  // A preflight check that threw or did not answer is no verdict: a blip in
+  // reaching a provider must not end the occurrence. Nothing was started, so
+  // the row is retried as it stands; a real refusal marks it failed.
+  const unanswered = (refusal: Refusal) =>
+    refusal.kind === "preflight-failed" &&
+    failedChecks(refusal.report).every((check) => check.unanswered === true);
+
   async function refuse(entry: Armed, row: Occurrence, refusal: Refusal): Promise<void> {
+    if (unanswered(refusal)) {
+      log(
+        `[trigger] ${entry.name} ${row.occurrence} waits: preflight did not answer: ${failedChecks(
+          (refusal as { report: CheckReport }).report,
+        )
+          .map((check) => `${check.label}: ${check.reason}`)
+          .join("; ")}`,
+      );
+      return;
+    }
     const report = failureReport(entry.name, refusal);
     await store().failed(entry.name, row.occurrence, report);
     log(
@@ -248,19 +282,15 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   const prepareFor = (entry: Armed, row: Occurrence) =>
     prepare(factory, entry.trigger.workflow, { ...entry.trigger.inputs, ...row.inputs });
 
-  // Every run of this row's occurrence minted since its earliest attempt,
-  // newest first, statuses fresh. A run the engine cancelled is not one.
-  const runsOf = async (entry: Armed, row: Occurrence) => {
-    const ours = new Set(row.cancelledRunIds ?? []);
-    return (
-      await findRuns({
-        ...(entry.workflowName === undefined ? {} : { workflowName: entry.workflowName }),
-        key: OCCURRENCE_ATTRIBUTE,
-        value: row.attribute,
-        since: new Date((row.firstAttemptedAt as Date).getTime() - LOOKUP_MARGIN_MS),
-      })
-    ).filter((run) => !(ours.has(run.runId) && run.status === "cancelled"));
-  };
+  // The runs of this row's occurrence minted since its attempt, newest
+  // first. Only its one start can have made them.
+  const runsOf = async (entry: Armed, row: Occurrence) =>
+    findRuns({
+      ...(entry.workflowName === undefined ? {} : { workflowName: entry.workflowName }),
+      key: OCCURRENCE_ATTRIBUTE,
+      value: row.attribute,
+      since: new Date((row.attemptedAt as Date).getTime() - LOOKUP_MARGIN_MS),
+    });
 
   async function markStarted(entry: Armed, occurrence: string, runId: string): Promise<void> {
     for (let attempt = 1; ; attempt += 1) {
@@ -280,95 +310,123 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }
   }
 
-  // Whatever happens after the attempt is recorded, the row stays attempted
-  // until a later drain finds how it ended; a throw is only logged.
-  async function launch(entry: Armed, row: Occurrence, prepared: Ready): Promise<void> {
-    await store().attempt(entry.name, row.occurrence, now());
+  // The row's one launch. The claim is a compare-and-set, so of two copies of
+  // the service only one gets here; nothing ever launches the row again.
+  async function launch(entry: Armed, row: Occurrence, prepared: Ready): Promise<boolean> {
+    if (!(await store().attempt(entry.name, row.occurrence, now()))) {
+      log(`[trigger] ${entry.name} ${row.occurrence}: claimed by another start`);
+      return false;
+    }
     let runId: string;
     try {
       runId = await prepared.launch(eventTriggerId(entry.name, row.occurrence), {
         [OCCURRENCE_ATTRIBUTE]: row.attribute,
       });
     } catch (error) {
+      threw.add(rowKey(entry, row.occurrence));
       log(`[trigger] ${entry.name} ${row.occurrence} start failed: ${String(error)}`);
-      return;
+      return true;
     }
     await markStarted(entry, row.occurrence, runId);
+    return true;
   }
 
-  // One path for every attempted row not yet started, whether its start
-  // threw, the process died, or a write failed. A start that threw may have
-  // created a run its queue rejected, or queued one whose creation failed and
-  // that its delivery will create.
+  // An attempted row not yet started: its start threw, the process died, or a
+  // write failed. Its run is adopted if it can be found; otherwise, after the
+  // settle period, the row is failed for the operator to decide. It is never
+  // launched again.
   async function resolve(entry: Armed, row: Occurrence): Promise<void> {
-    const held = unrecorded.get(rowKey(entry, row.occurrence));
+    const key = rowKey(entry, row.occurrence);
+    const held = unrecorded.get(key);
     if (held !== undefined) return markStarted(entry, row.occurrence, held);
     const found = await runsOf(entry, row);
     const moved = found.filter((run) => run.status !== "pending").at(-1);
     if (moved !== undefined) return markStarted(entry, row.occurrence, moved.runId);
+    if (bootedAt === undefined) return;
     const since = Math.max((row.attemptedAt as Date).getTime(), bootedAt.getTime());
     if (now().getTime() - since < DELIVERY_SETTLE_MS) return;
-    if (found.length === 0) return startAgain(entry, row);
-    // Past the settle period a pending run is one no queued delivery will
-    // move. The intent is recorded first, so a cancel the World made but did
-    // not answer is still known to be the engine's own.
+    const pending = found.at(-1);
+    // After a crash the World's restart recovery queues a pending run, so it
+    // is adopted. One this process saw start() throw on was created but never
+    // queued: nothing will run it, so it is cancelled. (A cancel that races
+    // its delivery can still stop a run that just began; the row fails either
+    // way.)
+    if (pending !== undefined && !threw.has(key))
+      return markStarted(entry, row.occurrence, pending.runId);
     for (const run of found) {
-      const status = (await statusesOf([run.runId])).get(run.runId);
-      if (status !== undefined && status !== "pending")
-        return markStarted(entry, row.occurrence, run.runId);
-      await store().cancelling(entry.name, row.occurrence, run.runId);
       try {
         await cancel(run.runId);
-        log(
-          `[trigger] ${entry.name} ${row.occurrence}: cancelled run ${run.runId}, which nothing queued`,
-        );
       } catch (error) {
         log(
           `[trigger] ${entry.name} ${row.occurrence}: could not cancel run ${run.runId}: ${String(error)}`,
         );
       }
     }
+    await store().failed(entry.name, row.occurrence, unconfirmedReport(entry, row, pending?.runId));
+    threw.delete(key);
+    log(`[trigger] ${entry.name} ${row.occurrence} failed: its start could not be confirmed`);
   }
 
-  async function startAgain(entry: Armed, row: Occurrence): Promise<void> {
-    const prepared = await prepareFor(entry, row);
-    if (prepared.kind !== "ready") return refuse(entry, row, prepared);
-    await launch(entry, row, prepared);
+  function unconfirmedReport(entry: Armed, row: Occurrence, cancelled?: string): CheckReport {
+    const workflow = entry.trigger.workflow;
+    const inputs = Object.entries({ ...entry.trigger.inputs, ...row.inputs })
+      .map(([key, value]) => ` --input ${shellQuote(`${key}=${inputValue(value)}`)}`)
+      .join("");
+    const run = `\`pnpm exec jigs run ${workflow}${inputs}\``;
+    return {
+      ok: false,
+      checks: [
+        {
+          id: `trigger.${entry.name}`,
+          label: `trigger ${entry.name}`,
+          ok: false,
+          ...(cancelled === undefined
+            ? {
+                reason: `its start could not be confirmed: no run of ${workflow} appeared`,
+                repair: `check \`pnpm exec jigs status\` for a run of ${workflow} started around ${(row.attemptedAt as Date).toISOString()}\nif there is none, start it:\n${run}\njigs adopts the run if one appears later`,
+              }
+            : {
+                reason: `its run ${cancelled} was created but never queued, and was cancelled`,
+                repair: `start it:\n${run}`,
+              }),
+        },
+      ],
+    };
   }
 
-  // Counting and flagging from the runs that are live now, so a late run is
-  // seen whenever it runs. Each live run of an occurrence counts.
+  // Counting from the runs that are live now. A live run of a row that failed
+  // after its attempt is that attempt's run, late: only the row's one launch
+  // can carry its attribute, so the row is marked started by it.
   async function reconcile(entry: Armed): Promise<number> {
     const live = await liveRuns(entry.workflowName, OCCURRENCE_ATTRIBUTE);
     const { active, rows } = await tally(store(), entry.name, live, statusesOf, now());
     for (const { row, runs } of rows) {
-      const ids = runs.map((run) => run.runId).reverse();
-      // A failed row has no run of its own, so any live run is extra; others
-      // expect one.
-      const extra = row.state === "failed" ? ids.length > 0 : ids.length > 1;
-      const flagged = extra ? ids : null;
-      if (row.state === "started" && ids.length === 1 && ids[0] !== row.runId)
-        await store().repoint(entry.name, row.occurrence, ids[0] as string);
-      if (JSON.stringify(flagged) !== JSON.stringify(row.duplicateRunIds)) {
-        await store().duplicated(entry.name, row.occurrence, flagged);
-        if (flagged !== null)
-          log(
-            `[trigger] ${entry.name} ${row.occurrence}: ${ids.length} live runs: ${ids.join(", ")}`,
-          );
+      const late = runs.at(-1);
+      if (row.state === "failed" && row.attemptedAt !== null && late !== undefined) {
+        await store().adoptLate(entry.name, row.occurrence, late.runId, now());
+        log(`[trigger] ${entry.name} ${row.occurrence}: run ${late.runId} appeared after all`);
       }
     }
     return active;
   }
 
-  // Attempted rows resolve first, so no fresh occurrence can take the slot of
-  // a run that may be live.
+  // Each row on its own, so one that throws every drain cannot hold up the
+  // rest of its trigger; an attempted row that throws still holds its slot.
+  const isolated = async (entry: Armed, row: Occurrence, work: () => Promise<void>) => {
+    try {
+      await work();
+    } catch (error) {
+      log(`[trigger] ${entry.name} ${row.occurrence} could not start: ${String(error)}`);
+    }
+  };
+
   async function startWaiting(entry: Armed, rows: Occurrence[]) {
     for (const row of rows) {
       if (stopped) return;
-      if (row.firstAttemptedAt !== null) await resolve(entry, row);
+      if (row.attemptedAt !== null) await isolated(entry, row, () => resolve(entry, row));
     }
     let active = await reconcile(entry);
-    const fresh = rows.filter((row) => row.firstAttemptedAt === null);
+    const fresh = rows.filter((row) => row.attemptedAt === null);
     for (const [index, row] of fresh.entries()) {
       if (stopped) return;
       if (active >= entry.maxActive) {
@@ -379,13 +437,13 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       }
       // Recorded only once preflight passed and the World is next: a failure
       // before it keeps its own report and is retried as a fresh row.
-      const prepared = await prepareFor(entry, row);
-      if (prepared.kind !== "ready") {
-        await refuse(entry, row, prepared);
-        continue;
-      }
-      await launch(entry, row, prepared);
-      active += 1;
+      let launched = false;
+      await isolated(entry, row, async () => {
+        const prepared = await prepareFor(entry, row);
+        if (prepared.kind !== "ready") return refuse(entry, row, prepared);
+        launched = await launch(entry, row, prepared);
+      });
+      if (launched) active += 1;
     }
   }
 
@@ -412,6 +470,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
     async arm() {
       await markers();
+      bootedAt ??= now();
       void drain();
     },
     drain,
@@ -606,8 +665,6 @@ export interface TriggerView {
   failed: number;
   /** The most recent failures, newest first. */
   failures: TriggerFailure[];
-  /** Occurrences more than one run was started for, with the run each row recorded. */
-  duplicates: Array<{ occurrence: string; runId: string | null; runIds: string[] }>;
 }
 
 /** Injectable storage, run reads and clock used by the trigger listing. */
@@ -630,10 +687,16 @@ export async function listTriggers(
   const now = (deps.now ?? (() => new Date()))();
   return Promise.all(
     declared.map(async ([name, trigger]) => {
-      const workflow = factory.workflows[trigger.workflow]?.workflow as
-        | { workflowId?: string }
-        | undefined;
-      const live = await liveRuns(workflow?.workflowId, OCCURRENCE_ATTRIBUTE);
+      const entry = factory.workflows[trigger.workflow];
+      // A trigger naming no workflow of this factory has no runs to list; an
+      // unfiltered listing would read every live run in the World.
+      const live =
+        entry === undefined
+          ? new Map()
+          : await liveRuns(
+              (entry.workflow as { workflowId?: string }).workflowId,
+              OCCURRENCE_ATTRIBUTE,
+            );
       const [summary, { active }] = await Promise.all([
         store.summary(name, FAILURES_SHOWN),
         tally(store, name, live, deps.runStatuses ?? runStatuses, now),
@@ -651,21 +714,51 @@ export async function listTriggers(
           at: row.updatedAt.toISOString(),
           checks: row.report === null ? [] : failedChecks(row.report),
         })),
-        duplicates: summary.duplicates,
       };
     }),
   );
 }
 
-/** Doctor's half: the same validations the engine refuses a trigger on, one check per trigger. */
-export function triggerChecks(factory: Factory, sources: SourceRegistry = SOURCES): Check[] {
-  return Object.entries(factory.triggers ?? {}).map(([name, trigger]) => {
+/**
+ * Doctor's half: the same validations the engine refuses a trigger on, and for a valid trigger its
+ * recent failed occurrences with their repairs.
+ */
+export function triggerChecks(
+  factory: Factory,
+  sources: SourceRegistry = SOURCES,
+  deps: { store?: TriggerStore } = {},
+): Check[] {
+  return Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]): Check[] => {
     const id = `trigger.${name}`;
     const label = `trigger ${name}`;
     const resolved = resolveTrigger(factory, name, trigger, sources);
-    return "reason" in resolved
-      ? failedCheck(id, label, resolved.reason, resolved.repair)
-      : { id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) };
+    if ("reason" in resolved) return [failedCheck(id, label, resolved.reason, resolved.repair)];
+    return [
+      { id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) },
+      {
+        id: `${id}.failed`,
+        label: `trigger ${name} occurrences`,
+        // A note, not a failure: each failed occurrence waits on the operator,
+        // and `jigs up`, which ends with doctor, must not refuse over one.
+        run: async () => {
+          const store = deps.store ?? triggerStore(registrySql(), currentFactory());
+          const summary = await store.summary(name, FAILURES_SHOWN);
+          if (summary.failed === 0) return { ok: true };
+          return {
+            ok: true,
+            detail: [
+              `${summary.failed} failed, each waiting on the operator`,
+              ...summary.failures.flatMap((row) =>
+                (row.report === null ? [] : failedChecks(row.report)).flatMap((check) => [
+                  `${row.occurrence}: ${check.reason}`,
+                  ...check.repair.split("\n").map((line) => `  ${line}`),
+                ]),
+              ),
+            ].join("\n"),
+          };
+        },
+      },
+    ];
   });
 }
 
@@ -726,6 +819,13 @@ function resolveTrigger(
     return {
       reason: `lookbackMinutes ${lookbackMinutes} is not a positive number of minutes`,
       repair: `set ${at}.lookbackMinutes in jigs.config.ts above 0, or remove it for the default of ${DEFAULT_LOOKBACK_MINUTES}`,
+    };
+  }
+  const clash = Object.keys(trigger.inputs ?? {}).filter((key) => key in source.sampleInputs);
+  if (clash.length > 0) {
+    return {
+      reason: `inputs ${clash.join(", ")} ${clash.length === 1 ? "is" : "are"} also provided by the ${trigger.source.kind} source for each occurrence`,
+      repair: `remove ${clash.join(", ")} from ${at}.inputs in jigs.config.ts\nthe source sets ${clash.length === 1 ? "it" : "them"} for each occurrence`,
     };
   }
   const inputs = entry.inputs.safeParse({ ...trigger.inputs, ...source.sampleInputs });

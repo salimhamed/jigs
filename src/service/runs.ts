@@ -121,9 +121,10 @@ export async function findRunsByAttribute(query: {
       pagination: { limit: 100, sortOrder: "desc", ...(cursor === undefined ? {} : { cursor }) },
     });
     for (const run of page.data) {
-      // The listing is ordered by run ID, whose time this process's clock
-      // minted. world-postgres' created_at is a zone-less timestamp that reads
-      // back hours off on a server not set to UTC.
+      // Stops early on two assumptions: world-postgres lists by run ID, newest
+      // first, and a run ID is a ULID minted on this process's clock. An ID
+      // that does not decode never stops the scan. (created_at is no help: a
+      // zone-less timestamp that reads back hours off on a server not in UTC.)
       const minted = runIdTime(run.runId);
       if (minted !== null && minted < query.since.getTime()) return found;
       if (run.attributes?.[query.key] === query.value)

@@ -170,7 +170,6 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
             ],
           },
         ],
-        duplicates: [{ occurrence: "PDEF", runId: "wrun_B", runIds: ["wrun_A", "wrun_B"] }],
       },
     ],
   });
@@ -180,10 +179,13 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
     "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
     "FAIL pages PABC: GitHub identity: GITHUB_TOKEN is not set",
     "  set GITHUB_TOKEN in the factory repo's .env",
-    "FAIL pages PDEF: 2 runs started for this occurrence: wrun_A, wrun_B",
-    "  if both are working it, cancel one:",
-    "    pnpm exec jigs cancel wrun_A",
   ]);
+});
+
+test("a service that cannot read its triggers still shows runs, with the triggers' error", async () => {
+  respond({ runs: [], schedules: [], triggers: [], triggersError: "Error: registry unreachable" });
+  await showRuns(deps(), { now: NOW });
+  expect(lines).toEqual(["no runs", "", "FAIL triggers unavailable: Error: registry unreachable"]);
 });
 
 test("a resource release kept is shown with its reason", async () => {

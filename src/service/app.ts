@@ -170,8 +170,12 @@ export function createApp(factory: Factory): Hono {
     const schedules = await listSchedules(factory, {
       listRuns: async () => runs,
     });
-    const triggers = await listTriggers(factory);
-    return c.json({ runs, schedules, triggers });
+    // A registry error costs the triggers section, never the runs above it.
+    const triggers = await listTriggers(factory).then(
+      (views) => ({ triggers: views }),
+      (error: unknown) => ({ triggers: [], triggersError: String(error) }),
+    );
+    return c.json({ runs, schedules, ...triggers });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum

@@ -18,10 +18,9 @@ every occurrence gets a row in a `jigs_triggers` table, keyed by trigger name
 and occurrence. The row is written `pending`, the run is started through the
 ordinary trigger path, and then the row is marked `started`. Startup starts any
 leftover `pending` row. After a crash, startup finds the run by its occurrence
-attribute and adopts it. A duplicate is possible only if the service dies
-mid-start while the SDK has queued a run it hasn't recorded yet, or if a start
-fails after its run was queued and that run appears more than five minutes
-later; jigs status flags it, and nothing cancels it automatically.
+attribute and adopts it. An uncertain start is never retried: if its run isn't
+found, the occurrence is recorded `failed` for the operator, so a trigger never
+starts a second run for an occurrence.
 
 - **The source defines an occurrence, and jigs enforces it.** A workflow
   cannot, because the decision comes before any run exists. A PagerDuty
