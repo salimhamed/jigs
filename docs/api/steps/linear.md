@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.5
+# @jigs-ai/jigs v0.78.6
 
 Low-level Linear operations for factory-owned steps. Workflow code calls their
 `#jigs/steps` wrappers; higher-level waiting such as `haltForHuman` comes from

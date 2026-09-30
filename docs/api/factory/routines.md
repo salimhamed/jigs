@@ -1,4 +1,4 @@
-# @jigs-ai/jigs v0.78.5
+# @jigs-ai/jigs v0.78.6
 
 Workflow operations bound to your factory's durable step wrappers.
 Routines compose recorded steps and waits; they have no recorded result of their own.
