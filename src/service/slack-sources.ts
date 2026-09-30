@@ -3,7 +3,7 @@
 // through the same rule, so a polled and a pushed message never disagree.
 
 import { z } from "zod";
-import { JigsError } from "../errors.ts";
+import { plainHint } from "../errors.ts";
 import { type SlackAuth, type SlackMessage, slackBot, slackHistory } from "../providers/slack.ts";
 import type { SlackMessageEvent } from "./slack-socket.ts";
 import type { Source, SourceOccurrence } from "./sources.ts";
@@ -20,7 +20,7 @@ const CHANNEL_TYPES = new Set(["channel", "group"]);
 
 // The bot's own posts are skipped by author, which ADR 0011 allows because
 // the factory's app only ever acts as itself.
-function counts(message: SlackMessage, bot: SlackAuth, mentionsOnly: boolean): boolean {
+function startsRun(message: SlackMessage, bot: SlackAuth, mentionsOnly: boolean): boolean {
   if (message.subtype !== undefined) return false;
   if (message.thread_ts !== undefined && message.thread_ts !== message.ts) return false;
   if (message.user === bot.userId || message.bot_id === bot.botId) return false;
@@ -51,12 +51,19 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
         try {
           messages = await slackHistory(channel, { oldest });
         } catch (error) {
-          throw new JigsError(
-            `channel ${channel}: ${error instanceof Error ? error.message : String(error)}`,
+          // Skipped, not retried: the window still advances, so this channel's
+          // messages from this poll are only seen if Socket Mode delivers them.
+          const why = error instanceof Error ? error.message : String(error);
+          console.log(`[slack] could not poll channel ${channel}: ${why}`);
+          console.log(
+            plainHint(
+              `invite @${bot.user} to ${channel} again, or remove ${channel} from the trigger`,
+            ),
           );
+          continue;
         }
         for (const message of messages)
-          if (counts(message, bot, mentionsOnly)) found.push(occurred(channel, message.ts));
+          if (startsRun(message, bot, mentionsOnly)) found.push(occurred(channel, message.ts));
       }
       return found;
     },
@@ -64,7 +71,7 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
       const message = event as SlackMessageEvent;
       if (!channels.includes(message.channel)) return null;
       if (!CHANNEL_TYPES.has(message.channel_type ?? "")) return null;
-      return counts(message, await slackBot(), mentionsOnly)
+      return startsRun(message, await slackBot(), mentionsOnly)
         ? occurred(message.channel, message.ts)
         : null;
     },

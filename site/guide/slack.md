@@ -167,11 +167,11 @@ trigger's `lookbackMinutes` to change that. At most 3 of a trigger's runs are
 active at once, and later messages wait their turn; set `maxActive` to change
 that.
 
-A trigger polls all its channels together. While any one of them fails, for
-example because the bot was removed from it, the trigger's polling stops, and
-the service log names the channel; Socket Mode still delivers from the rest.
-Invite the bot back or remove the channel from the trigger, and polling
-resumes where it stopped, skipping messages older than the lookback.
+When a channel cannot be read, for example because the bot was removed from
+it, polling skips that channel and keeps reading the trigger's other channels.
+The service log names the channel and how to fix it: invite the bot back or
+remove the channel from the trigger. Messages posted there while it was skipped
+start runs only if Socket Mode delivered them.
 
 ## Checks
 

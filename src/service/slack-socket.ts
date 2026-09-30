@@ -17,6 +17,9 @@ export interface SlackMessageEvent extends SlackMessage {
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 60_000;
+// A connection that says hello and then drops keeps backing off until one
+// stays up this long.
+const HEALTHY_AFTER_MS = 30_000;
 const REFRESH_REASONS = new Set(["warning", "refresh_requested"]);
 
 /** The part of a WebSocket the connection uses. */
@@ -103,9 +106,11 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
     }
     current = socket;
     let ended = false;
+    let healthyTimer: ReturnType<typeof setTimeout> | undefined;
     const end = (why: string, next: () => void) => {
       if (ended) return;
       ended = true;
+      clearTimeout(healthyTimer);
       if (current === socket) current = undefined;
       socket.close();
       log(`[slack] Socket Mode connection ${why}`);
@@ -124,7 +129,11 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
       if (typeof envelope.envelope_id === "string")
         socket.send(JSON.stringify({ envelope_id: envelope.envelope_id }));
       if (envelope.type === "hello") {
-        failures = 0;
+        clearTimeout(healthyTimer);
+        healthyTimer = setTimeout(() => {
+          failures = 0;
+        }, HEALTHY_AFTER_MS);
+        healthyTimer.unref?.();
         log("[slack] Socket Mode connected");
       } else if (envelope.type === "disconnect") {
         const reason = String(envelope.reason);

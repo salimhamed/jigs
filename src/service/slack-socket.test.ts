@@ -200,7 +200,7 @@ test("any other disconnect reason reconnects with backoff, like a close", async 
   expect(opens()).toBe(2);
 });
 
-test("a dropped connection reconnects with backoff, reset once Slack says hello", async () => {
+test("a dropped connection reconnects with backoff, reset once a connection stays up 30s", async () => {
   const { sockets, waits, opens } = harness();
   await settle();
   sockets[0]?.emit("close");
@@ -208,9 +208,22 @@ test("a dropped connection reconnects with backoff, reset once Slack says hello"
   sockets[1]?.emit("error");
   await vi.advanceTimersByTimeAsync(2_000);
   sockets[2]?.emit("message", HELLO);
+  await vi.advanceTimersByTimeAsync(30_000);
   sockets[2]?.emit("close");
   expect(waits()).toEqual([1, 2, 1]);
   expect(opens()).toBe(3);
+});
+
+test("a connection that says hello and then drops keeps backing off", async () => {
+  const { sockets, waits } = harness();
+  await settle();
+  for (const [i, wait] of [1, 2, 4, 8].entries()) {
+    sockets[i]?.emit("message", HELLO);
+    await vi.advanceTimersByTimeAsync(500);
+    sockets[i]?.emit("close");
+    await vi.advanceTimersByTimeAsync(wait * 1_000);
+  }
+  expect(waits()).toEqual([1, 2, 4, 8]);
 });
 
 test("a connection that cannot be opened is retried with growing waits, capped at a minute", async () => {
