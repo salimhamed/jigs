@@ -107,6 +107,8 @@ const inputValue = (value: unknown): string => JSON.stringify(value).replaceAll(
 
 const shellQuote = (text: string) => `'${text.replaceAll("'", "'\\''")}'`;
 
+const floorToSecond = (at: Date) => Math.floor(at.getTime() / 1000) * 1000;
+
 /** The value an occurrence's runs carry as their occurrence attribute. */
 function occurrenceAttribute(factorySlug: string, trigger: string, occurrence: string): string {
   return createHash("sha256")
@@ -215,13 +217,15 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   // Occurrences before the trigger was first enabled are not its business at
   // all; ones older than the lookback are recorded so they are never started.
+  // The comparison is by whole second, since some providers stamp only seconds
+  // and an occurrence in the second of enabling must not read as before it.
   async function observe(
     entry: Armed,
     seen: SourceOccurrence,
     occurrence: string,
   ): Promise<boolean> {
     const enabledAt = entry.marker?.enabledAt;
-    if (enabledAt === undefined || seen.at < enabledAt) return false;
+    if (enabledAt === undefined || seen.at.getTime() < floorToSecond(enabledAt)) return false;
     const stale = seen.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
     const state = stale ? "skipped" : "pending";
     const recorded = await store().record({
@@ -752,6 +756,19 @@ export function triggerChecks(
       },
     ];
   });
+}
+
+/** Each declared trigger whose source this jigs version provides, with the provider it polls. */
+export function triggerProviders(
+  factory: Factory,
+  sources: SourceRegistry = SOURCES,
+): Record<string, SourceProvider> {
+  return Object.fromEntries(
+    Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
+      const source = sources[trigger.source.kind];
+      return source === undefined ? [] : [[name, source.provider]];
+    }),
+  );
 }
 
 interface TriggerProblem {

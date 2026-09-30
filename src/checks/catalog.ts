@@ -109,21 +109,33 @@ export function requirementUsers<K extends string>(
   return users;
 }
 
-export function neededBy(workflows: readonly string[]): string {
-  return `needed by ${workflows.length === 1 ? "workflow" : "workflows"} ${workflows.join(", ")}`;
+export function neededBy(workflows: readonly string[], triggers: readonly string[] = []): string {
+  const users = [
+    ...(workflows.length > 0
+      ? [`${workflows.length === 1 ? "workflow" : "workflows"} ${workflows.join(", ")}`]
+      : []),
+    ...(triggers.length > 0
+      ? [`${triggers.length === 1 ? "trigger" : "triggers"} ${triggers.join(", ")}`]
+      : []),
+  ];
+  return `needed by ${users.join(" and ")}`;
 }
 
-// With no workflows, the factory configuration asked for these checks itself,
+// With no users, the factory configuration asked for these checks itself,
 // and each check's own reason already says so.
-export function neededByWorkflows(checks: Check[], workflows: readonly string[]): Check[] {
-  if (workflows.length === 0) return checks;
+export function neededByUsers(
+  checks: Check[],
+  workflows: readonly string[],
+  triggers: readonly string[] = [],
+): Check[] {
+  if (workflows.length === 0 && triggers.length === 0) return checks;
   return checks.map((check) => ({
     ...check,
     run: async () => {
       const result = await check.run();
       return result.ok
         ? result
-        : { ...result, reason: `${result.reason} (${neededBy(workflows)})` };
+        : { ...result, reason: `${result.reason} (${neededBy(workflows, triggers)})` };
     },
   }));
 }

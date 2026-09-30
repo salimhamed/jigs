@@ -102,6 +102,7 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
 | `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
 | `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels. Minimum 30. |
+| `pollIntervalSeconds.pagerduty` | `300` | How often [event triggers](#triggers) on PagerDuty look for new incidents. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine
 rarely clash.
@@ -135,6 +136,76 @@ schedules: {
 - Missed ticks while the service was down are not replayed.
 
 `jigs status` lists schedules. Their runs show `schedule:<name>` as the trigger.
+
+## `triggers` {#triggers}
+
+An event trigger starts a run for each new occurrence its source reports, such
+as each new PagerDuty incident. Its workflow accepts the
+source's inputs next to its own:
+
+```ts
+// workflows/respond/respond.ts
+import { defineWorkflow } from "@jigs-ai/jigs";
+import { z } from "zod";
+
+export default defineWorkflow({
+  inputs: z.object({ incident: z.string(), team: z.string() }),
+  requires: { integrations: ["pagerduty"] },
+  workflow: async ({ incident, team }) => `${team} takes ${incident}`,
+});
+```
+
+This trigger starts `respond` for every high-urgency incident on one service:
+
+```ts
+// jigs.config.ts
+import { defineFactory, pagerduty } from "@jigs-ai/jigs";
+
+export default defineFactory({
+  service: { port: 8990, dashboardPort: 9090 },
+  pagerduty: {
+    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
+  },
+  workflows: {
+    respond: () => import("./workflows/respond/respond.ts"),
+  },
+  triggers: {
+    "checkout-pages": {
+      workflow: "respond",
+      source: pagerduty.incidents({ service_ids: ["PABC123"], urgencies: ["high"] }),
+      inputs: { team: "payments" },
+      maxActive: 2,
+    },
+  },
+});
+```
+
+- `source` takes the provider's own query parameters under the provider's own
+  names. jigs adds no filter syntax; any finer judgement belongs in the run.
+- Each run's inputs are the source's reference, such as `{ incident: "Q1ABC" }`,
+  merged over the fixed `inputs`. The run reads the rest itself.
+- An occurrence starts at most one run, ever, even if the run decides to do
+  nothing or ends while the incident is still open.
+- The service polls each source on its provider's
+  [`pollIntervalSeconds`](#service).
+- A new trigger starts from the moment the service first runs it, with no
+  backfill. After the service was down, it catches up on occurrences within
+  `lookbackMinutes` (default 60) and records older ones as skipped.
+- At most `maxActive` runs of the trigger are active at once (default 3).
+  Further occurrences wait and start oldest first.
+- A start that fails validation or preflight is recorded as failed and not
+  retried. A preflight check that could not reach its provider is tried again
+  for up to five minutes first. `jigs status` and `jigs doctor` show a failed
+  start with its repair.
+
+| Source | Occurrence | Inputs | Parameters |
+| --- | --- | --- | --- |
+| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
+
+A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
+for `pagerduty.incidents`. `jigs doctor` checks that provider for every trigger
+that uses it. `jigs status` lists each trigger with its waiting, active and
+failed occurrences. Its runs show `trigger:<name>` as the trigger.
 
 ## `release` {#release}
 

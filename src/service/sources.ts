@@ -4,6 +4,8 @@
 
 import type { z } from "zod";
 import type { FactoryConfig } from "../config/factory-config.ts";
+import { PAGERDUTY_INCIDENTS_SOURCE } from "../workflow/pagerduty/source.ts";
+import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "./slack-sources.ts";
 
 /** A provider with its own `service.pollIntervalSeconds` entry. */
@@ -33,4 +35,7 @@ export interface Source<P = unknown> {
 // biome-ignore lint/suspicious/noExplicitAny: each kind has its own params
 export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 
-export const SOURCES: SourceRegistry = { ...SLACK_SOURCES };
+export const SOURCES: SourceRegistry = {
+  ...SLACK_SOURCES,
+  [PAGERDUTY_INCIDENTS_SOURCE]: pagerDutyIncidents(),
+};

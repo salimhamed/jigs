@@ -419,3 +419,16 @@ test("doctor checks PagerDuty when the factory configures it, and not otherwise"
   factoryWith("{ service: { dashboardPort: 9090 } }");
   expect(ids().filter((id) => id.startsWith("pagerduty."))).toEqual([]);
 });
+
+test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", async () => {
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  const checks = doctorChecks({ hello: {} }, { pages: "pagerduty" });
+  expect(checks.map((check) => check.id).filter((id) => id.startsWith("pagerduty."))).toEqual([
+    "pagerduty.identity",
+  ]);
+  const report = await runChecks(checks.filter((check) => check.id === "pagerduty.identity"));
+  expect(report.checks[0]).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("(needed by trigger pages)"),
+  });
+});

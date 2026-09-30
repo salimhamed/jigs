@@ -126,14 +126,43 @@ so the token needs no [`agents.env`](/guide/configuration#agents-env) entry.
 An account on the EU service region also maps `PAGERDUTY_API_HOST` to a
 variable set to `https://api.eu.pagerduty.com`.
 
-### Run it
+### Start it from each new incident
 
-[Register `incident-triage` in the factory](/guide/build-a-workflow#_3-register-the-workflow),
-then rebuild and start a run with the incident's id, the part of its URL after
-`/incidents/`:
+[Register `incident-triage` in the factory](/guide/build-a-workflow#_3-register-the-workflow)
+and give it an
+[event trigger](/guide/configuration#triggers) on the `pagerduty.incidents`
+source, which starts one run for each new incident on the services you name:
+
+```ts
+// jigs.config.ts
+import { defineFactory, pagerduty } from "@jigs-ai/jigs";
+
+export default defineFactory({
+  service: { port: 8990, dashboardPort: 9090 },
+  pagerduty: {
+    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
+  },
+  workflows: {
+    "incident-triage": () => import("./workflows/incident-triage/incident-triage.ts"),
+  },
+  triggers: {
+    "triage-checkout": {
+      workflow: "incident-triage",
+      source: pagerduty.incidents({ service_ids: ["PABC123"] }),
+    },
+  },
+});
+```
+
+Each run gets the incident's id as `incident`. Every new incident starts a run,
+even one acknowledged or resolved before the service saw it, which is why the
+workflow checks the status in its snapshot and skips one that is already
+resolved. Rebuild and start the service with `pnpm exec jigs up`.
+
+To try the workflow by hand, start a run with an incident's id, the part of its
+URL after `/incidents/`:
 
 ```sh
-pnpm exec jigs up
 pnpm exec jigs run incident-triage --input incident=Q1ABCDEFGHIJKL
 ```
 

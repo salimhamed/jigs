@@ -361,12 +361,13 @@ export interface FactoryDefinition {
     port?: number;
     dashboardPort: number;
     /**
-     * Seconds between the service's re-reads of each parked run, per
+     * Seconds between the service's reads of each provider: re-reading
+     * parked runs, and polling the event triggers whose source is on that
      * provider. Each defaults to 300 and may not go below 30. Up to a tenth
      * of the interval is taken off at random so services do not all poll at
      * once.
      */
-    pollIntervalSeconds?: { github?: number; linear?: number; slack?: number };
+    pollIntervalSeconds?: { github?: number; linear?: number; slack?: number; pagerduty?: number };
   };
   agents?: AgentsDefinition;
   webhooks?: WebhooksDefinition;
