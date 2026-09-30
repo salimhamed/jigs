@@ -284,7 +284,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "replyToPullRequestReviewThread",
     "reviewPullRequest",
   ],
-  "steps/slack/index.ts": ["fetchSlackMessage", "postSlackMessage"],
+  "steps/slack/index.ts": ["SlackApiError", "callSlack", "fetchSlackMessage", "postSlackMessage"],
   "steps/index.ts": ["AgentSessionError", "createAgentRunner"],
   "steps/agents/index.ts": ["executeAgent", "executeJev", "executeModel"],
   "steps/runtime/index.ts": [

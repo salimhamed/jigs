@@ -22,9 +22,9 @@ const env =
     values[name];
 const BOTH = env({ SLACK_BOT_TOKEN: "xoxb-1", SLACK_APP_TOKEN: "xapp-1" });
 
-async function run(socketMode: boolean, p: SlackProbes, lookup = BOTH) {
+async function run(socketMode: boolean, p: SlackProbes, lookup = BOTH, scopes: string[] = []) {
   const checks = [
-    ...slackIdentityChecks(p, lookup),
+    ...slackIdentityChecks(p, scopes, lookup),
     ...slackSocketModeChecks({ socketMode }, p, lookup),
   ];
   return Promise.all(
@@ -92,6 +92,22 @@ test("missing scopes are each named in the reason and the repair", async () => {
     "repair",
     expect.stringContaining("add users:read and users:read.email to the Bot Token Scopes"),
   );
+});
+
+test("a scope the factory declares in slack.scopes is checked like jigs' own", async () => {
+  const [identity] = await run(false, probes(), BOTH, ["reactions:write", "chat:write"]);
+  expect(identity).toMatchObject({ ok: false, reason: "the bot token lacks reactions:write" });
+  expect(identity).toHaveProperty(
+    "repair",
+    expect.stringContaining("add reactions:write to the Bot Token Scopes"),
+  );
+  const [granted] = await run(
+    false,
+    probes({ authTest: async () => ({ ...AUTH, scopes: [...AUTH.scopes, "reactions:write"] }) }),
+    BOTH,
+    ["reactions:write"],
+  );
+  expect(granted).toMatchObject({ ok: true });
 });
 
 test("an unreachable Slack is not blamed on the token", async () => {

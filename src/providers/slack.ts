@@ -1,11 +1,13 @@
-// Every Slack Web API call jigs makes. A factory's Slack app always acts as
-// itself: the bot token for the Web API, the app-level token only to open a
-// Socket Mode connection. Reads env and hits the network, so it is reached
-// from a step, a check or the service, never from workflow code.
+// Every Slack Web API call jigs makes, and the one transport a factory's own
+// `callSlack` goes through. A factory's Slack app always acts as itself: the
+// bot token for the Web API, the app-level token only to open a Socket Mode
+// connection. Reads env and hits the network, so it is reached from a step, a
+// check or the service, never from workflow code.
 
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../checks/core.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
+import type { JsonValue } from "../workflow/human/questions.ts";
 import { credentialRoot } from "./credential-root.ts";
 
 // A test seam.
@@ -40,19 +42,32 @@ export function slackEnvValue(name: SlackToken): string | undefined {
   }
 }
 
-/** Slack answered `ok: false`. `code` is Slack's error string, such as `invalid_auth`. */
+/**
+ * Slack answered a Web API call with `ok: false`. Check `code` to handle one
+ * answer, such as `already_reacted`.
+ *
+ * @group Errors
+ */
 export class SlackApiError extends JigsError {
+  /** Slack's `error` string, such as `invalid_auth` or `already_reacted`. */
   readonly code: string;
 
   constructor(method: string, code: string, needed?: string) {
     super(`Slack ${method}: ${code}${needed === undefined ? "" : ` (needs ${needed})`}`);
+    this.name = "SlackApiError";
     this.code = code;
   }
 }
 
-type Params = Record<string, string | undefined>;
+/**
+ * Web API arguments. A value that is not a string is sent JSON-encoded, the way
+ * Slack takes `blocks`.
+ *
+ * @group Create and update
+ */
+export type SlackParams = Record<string, JsonValue | undefined>;
 
-interface SlackReply {
+export interface SlackReply {
   ok: boolean;
   error?: string;
   needed?: string;
@@ -63,9 +78,9 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 // Form-encoded, because every Web API method accepts it and not every read
 // method accepts JSON.
-async function slackCall<T extends SlackReply>(
+export async function slackCall<T extends SlackReply>(
   method: string,
-  params: Params = {},
+  params: SlackParams = {},
   token: SlackToken = "SLACK_BOT_TOKEN",
 ): Promise<{ body: T; headers: Headers }> {
   const secret = slackEnvValue(token);
@@ -76,7 +91,10 @@ async function slackCall<T extends SlackReply>(
     );
   }
   const form = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) if (value !== undefined) form.set(key, value);
+  for (const [key, value] of Object.entries(params)) {
+    if (value !== undefined)
+      form.set(key, typeof value === "string" ? value : JSON.stringify(value));
+  }
   for (let attempt = 1; ; attempt += 1) {
     const res = await fetch(`${SLACK_API_URL()}/${method}`, {
       method: "POST",
@@ -105,7 +123,7 @@ async function slackCall<T extends SlackReply>(
   }
 }
 
-async function slackPages<T>(method: string, params: Params, key: string): Promise<T[]> {
+async function slackPages<T>(method: string, params: SlackParams, key: string): Promise<T[]> {
   const all: T[] = [];
   let cursor: string | undefined;
   for (let page = 0; page < MAX_PAGES; page += 1) {

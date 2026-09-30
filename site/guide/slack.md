@@ -233,6 +233,44 @@ The service also re-reads the thread every
 and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
 time. Deleting the thread's top-level message while a run waits fails the run.
 
+## Call other Slack methods
+
+`callSlack(method, params)` calls any
+[Slack Web API method](https://api.slack.com/methods) as the factory's bot and
+returns Slack's response. Use it to react to a message, update or pin one, or
+anything else jigs has no step for. Call it from your own `"use step"`
+function. Arguments that are not strings, such as `blocks`, are sent as JSON.
+
+When Slack answers with an error, `callSlack` throws a `SlackApiError` whose
+`code` is Slack's error, such as `already_reacted`. A step can run more than
+once, so a call that is not safe to repeat should treat the error a repeat gets
+as success:
+
+```ts
+// workflows/deploys/steps.ts
+import { callSlack, SlackApiError } from "@jigs-ai/jigs/steps/slack";
+
+export async function addReaction(channel: string, timestamp: string, name: string) {
+  "use step";
+  try {
+    await callSlack("reactions.add", { channel, timestamp, name });
+  } catch (error) {
+    if (!(error instanceof SlackApiError && error.code === "already_reacted")) throw error;
+  }
+}
+```
+
+Workflow code calls it like any step: `await addReaction(channel, ts, "eyes")`.
+
+A method may need a bot scope jigs does not use, such as `reactions:write` for
+`reactions.add`. Add it to the manifest's `bot` scopes, reinstall the app, and
+list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
+
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+slack: { socketMode: true, scopes: ["reactions:write"] },
+```
+
 ## Example: answer questions in a channel
 
 This workflow starts for each message that mentions the bot. A Jev decision
@@ -303,9 +341,9 @@ Register it with the `slack.mentions` trigger from
 ## Checks
 
 `jigs doctor`, and `jigs up`, check that Slack accepts `SLACK_BOT_TOKEN` and
-that the bot holds every scope above. With `socketMode` on, they also check
-that `SLACK_APP_TOKEN` can open a Socket Mode connection. Each failure names the
-missing scope or `.env` key. Before every run of a workflow that requires
+that the bot holds every scope above, plus any listed in `slack.scopes`. With
+`socketMode` on, they also check that `SLACK_APP_TOKEN` can open a Socket Mode
+connection. Each failure names the missing scope or `.env` key. Before every run of a workflow that requires
 `slack`, preflight checks the bot token and its scopes.
 
 With `socketMode` on and `SLACK_APP_TOKEN` empty, the service refuses to start.

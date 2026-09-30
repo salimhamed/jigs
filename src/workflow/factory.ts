@@ -281,7 +281,8 @@ export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
  * service also receives messages over Socket Mode as they are posted, and needs
  * the app-level token in `SLACK_APP_TOKEN`; the service refuses to start
  * without it. Polling runs either way, every `service.pollIntervalSeconds.slack`
- * seconds.
+ * seconds. `scopes` lists extra bot scopes the factory's own Slack calls need,
+ * such as `reactions:write`, so `jigs doctor` checks the bot holds them.
  *
  * @example
  * Use this value for `slack` in `jigs.config.ts`.

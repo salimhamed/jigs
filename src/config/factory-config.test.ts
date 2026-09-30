@@ -147,7 +147,7 @@ test("without a slack section the factory has no Slack app", () => {
   expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).slack).toBeUndefined();
   expect(
     parseFactoryConfig({ service: { dashboardPort: 3456 }, slack: { socketMode: true } }).slack,
-  ).toEqual({ socketMode: true });
+  ).toEqual({ socketMode: true, scopes: [] });
 });
 
 test("without a webhooks section no provider sends webhooks", () => {

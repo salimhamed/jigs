@@ -31,8 +31,16 @@ const SOCKET_MODE_FIX: Record<string, string> = {
   not_allowed_token_type: `SLACK_APP_TOKEN must be an app-level token (xapp-), not the bot token; ${createAppToken}`,
 };
 
-/** Whether the bot token is set, accepted by Slack and granted every scope jigs uses. */
-export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackEnvValue): Check[] {
+/**
+ * Whether the bot token is set, accepted by Slack and granted every scope jigs
+ * uses, plus the factory's own `slack.scopes`.
+ */
+export function slackIdentityChecks(
+  probes: SlackProbes,
+  extraScopes: readonly string[] = [],
+  env: EnvLookup = slackEnvValue,
+): Check[] {
+  const scopes = [...new Set([...SLACK_BOT_SCOPES, ...extraScopes])];
   return [
     {
       id: "slack.identity",
@@ -65,7 +73,7 @@ export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackE
           };
         }
         const granted = new Set(auth.scopes);
-        const missing = SLACK_BOT_SCOPES.filter((scope) => !granted.has(scope));
+        const missing = scopes.filter((scope) => !granted.has(scope));
         if (missing.length > 0) {
           return {
             ok: false,
@@ -84,7 +92,7 @@ export function slackIdentityChecks(probes: SlackProbes, env: EnvLookup = slackE
 // per-run preflight does.
 /** With Socket Mode on, whether the app-level token opens a connection. */
 export function slackSocketModeChecks(
-  slack: SlackConfig,
+  slack: Pick<SlackConfig, "socketMode">,
   probes: SlackProbes,
   env: EnvLookup = slackEnvValue,
 ): Check[] {
