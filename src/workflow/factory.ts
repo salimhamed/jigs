@@ -8,6 +8,7 @@ import type {
   bindingSchema,
   githubSchema,
   linearSchema,
+  pagerDutySchema,
   slackSchema,
   webhooksSchema,
 } from "../config/factory-config.ts";
@@ -246,6 +247,33 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
 export type LinearDefinition = z.input<typeof linearSchema>;
 
 /**
+ * Who jigs is on PagerDuty: a scoped OAuth application acting on one account.
+ *
+ * @remarks
+ * `identity.mode` is `app`, the only mode: jigs mints its own token from
+ * `PAGERDUTY_CLIENT_ID` and `PAGERDUTY_CLIENT_SECRET` in `.env`. `subdomain`
+ * and `region` name the account, as in `acme.pagerduty.com` on the `us`
+ * service region.
+ *
+ * `from` is required: the email of a real PagerDuty user. PagerDuty refuses a
+ * write that names no user, so every note jigs adds is attributed to them.
+ * `jigs doctor` fails when no PagerDuty user has the email.
+ *
+ * @example
+ * Use this value for `pagerduty` in `jigs.config.ts`.
+ * ```ts
+ * import type { PagerDutyDefinition } from "@jigs-ai/jigs";
+ *
+ * const pagerduty = {
+ *   identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
+ * } satisfies PagerDutyDefinition;
+ * ```
+ *
+ * @group Factory and workflows
+ */
+export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
+
+/**
  * The factory's Slack app, which posts as its own bot.
  *
  * @remarks
@@ -342,6 +370,7 @@ export interface FactoryDefinition {
   webhooks?: WebhooksDefinition;
   github?: GitHubDefinition;
   linear?: LinearDefinition;
+  pagerduty?: PagerDutyDefinition;
   slack?: SlackDefinition;
   release?: ReleasePolicy;
   bindings?: Record<string, BindingDefinition>;

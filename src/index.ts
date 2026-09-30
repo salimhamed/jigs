@@ -95,6 +95,7 @@ export {
   type FactoryDefinition,
   type GitHubDefinition,
   type LinearDefinition,
+  type PagerDutyDefinition,
   type Schedule,
   type SlackDefinition,
   type SourceDescriptor,

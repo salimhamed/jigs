@@ -329,6 +329,11 @@ When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
 out, logs a warning and posts the comment anyway. A mention never stops a run.
 
+## PagerDuty
+
+The `pagerduty` section says which PagerDuty account jigs works on and which
+user its notes are attributed to. See [PagerDuty](/guide/pagerduty) for setup.
+
 ## Slack {#slack}
 
 `slack` connects the factory's own Slack app. Set it up by following
@@ -388,6 +393,7 @@ is missing, and lists the credentials still empty.
 | `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
 | `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
+| `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
 | `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |

@@ -19,6 +19,7 @@ import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
 import { credentialRoot, setCredentialRoot } from "./credential-root.ts";
 import { resetLinearAuth } from "./linear-auth.ts";
+import { resetPagerDutyAuth } from "./pagerduty-auth.ts";
 
 export const GITHUB_API_BASE = (): string => process.env.GITHUB_API_URL ?? "https://api.github.com";
 
@@ -233,6 +234,7 @@ function environmentPat(): string | undefined {
 export function useFactoryRoot(root: string): void {
   resetGithubAuth();
   resetLinearAuth();
+  resetPagerDutyAuth();
   setCredentialRoot(root);
 }
 

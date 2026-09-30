@@ -177,6 +177,32 @@ export const linearSchema = z.strictObject({
 });
 
 /**
+ * Who jigs is on PagerDuty: a scoped OAuth application acting on one account,
+ * which mints its own token from a client id and secret.
+ *
+ * @remarks
+ * `subdomain` and `region` name the account, as in `acme.pagerduty.com` on the
+ * `us` service region. `from` is the email of a real PagerDuty user: PagerDuty
+ * refuses a write without one, and notes jigs adds are attributed to them. The
+ * secrets live in the factory's `.env`: `PAGERDUTY_CLIENT_ID` and
+ * `PAGERDUTY_CLIENT_SECRET`.
+ */
+export const pagerDutyIdentitySchema = z.strictObject({
+  mode: z.literal("app"),
+  subdomain: z
+    .string()
+    .regex(
+      /^[a-z0-9-]+$/,
+      "the account subdomain alone, in lowercase, such as acme for acme.pagerduty.com",
+    ),
+  region: z.enum(["us", "eu"]),
+  from: z.email(),
+});
+
+/** A factory's PagerDuty settings: exactly one PagerDuty identity. */
+export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchema });
+
+/**
  * A factory's Slack app. The app always acts as itself, so there is no identity
  * mode; `SLACK_BOT_TOKEN` in `.env` is its credential. With `socketMode` on,
  * the service refuses to start without `SLACK_APP_TOKEN`, and doctor checks
@@ -217,6 +243,7 @@ const factoryConfigSchema = z.looseObject({
   // Which GitHub credential jigs uses, and how the operator approves a merge.
   github: z.preprocess((section) => section ?? {}, githubSchema),
   linear: z.preprocess((section) => section ?? {}, linearSchema),
+  pagerduty: pagerDutySchema.optional(),
   // Absent, the factory has no Slack app. Socket Mode is stated outright for
   // the same reason each webhook provider is.
   slack: slackSchema.optional(),
@@ -234,6 +261,8 @@ export type SlackConfig = z.output<typeof slackSchema>;
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 /** Who jigs is on Linear: a personal API key, or an OAuth application acting as itself. */
 export type LinearIdentity = z.output<typeof linearIdentitySchema>;
+/** Who jigs is on PagerDuty: a scoped OAuth application acting on one account. */
+export type PagerDutyIdentity = z.output<typeof pagerDutyIdentitySchema>;
 export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
 /** Credentials selected for one installation, after resolving the configured account map. */
 export type ResolvedAppIdentity = Omit<AppIdentity, "installations"> & {
