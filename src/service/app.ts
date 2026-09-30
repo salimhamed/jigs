@@ -26,6 +26,7 @@ import {
   verifyLinearSignature,
   verifyPagerDutySignature,
 } from "./ingress.ts";
+import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
@@ -138,7 +139,7 @@ export function createApp(factory: Factory): Hono {
   // stray delivery is a 404 rather than work.
   if (factory.webhooks?.github.enabled) mountGithubIngress(app);
   if (factory.webhooks?.linear.enabled) mountLinearIngress(app);
-  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app);
+  if (factory.webhooks?.pagerduty.enabled) mountPagerDutyIngress(app);
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
@@ -384,7 +385,7 @@ function mountPagerDutyIngress(app: Hono): void {
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    const type = (payload as { event?: { event_type?: unknown } } | null)?.event?.event_type;
+    const type = pagerDutyEventType(payload);
     const event = `event=${typeof type === "string" ? sanitizeForLog(type) : "unknown"}`;
     const triggers = await pushEvent("pagerduty", payload);
     if (triggers.length === 0) {

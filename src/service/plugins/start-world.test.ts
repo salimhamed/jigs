@@ -458,6 +458,7 @@ const WEBHOOKS = {
   url: "https://factory.example.ts.net",
   github: { enabled: true },
   linear: { enabled: false },
+  pagerduty: { enabled: false },
 };
 
 test("an enabled provider without its secret refuses the boot and names the variable", async () => {

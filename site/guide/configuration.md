@@ -445,8 +445,6 @@ webhooks: {
 },
 ```
 
-`pagerduty` may be left out, which is the same as switched off.
-
 1. **Expose the service port** with a tunnel, for example
    `tailscale funnel --bg <servicePort>` or
    `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is

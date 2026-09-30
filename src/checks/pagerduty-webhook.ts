@@ -30,7 +30,7 @@ export function pagerDutyWebhookChecks(options: {
     return [];
   }
   // Off, incidents are polled and there is no subscription to have.
-  if (webhooks === undefined || !webhooks.pagerduty?.enabled) return [];
+  if (webhooks === undefined || !webhooks.pagerduty.enabled) return [];
 
   const url = `${webhooks.url.replace(/\/+$/, "")}/ingress/pagerduty`;
   return [

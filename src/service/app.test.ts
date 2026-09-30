@@ -58,6 +58,7 @@ const fixture = {
     url: "https://factory.example.ts.net",
     github: { enabled: true },
     linear: { enabled: true },
+    pagerduty: { enabled: false },
   },
 } satisfies Factory;
 
@@ -169,6 +170,7 @@ test.each([
       url: "https://factory.example.ts.net",
       github: { enabled: false },
       linear: { enabled: false },
+      pagerduty: { enabled: false },
     },
   ],
 ])("with %s, neither ingress route exists", async (_name, webhooks) => {
@@ -191,7 +193,12 @@ test.each([
 test("one provider switched on mounts only its own route", async () => {
   const githubOnly = createApp({
     workflows: fixture.workflows,
-    webhooks: { url: "https://f.test", github: { enabled: true }, linear: { enabled: false } },
+    webhooks: {
+      url: "https://f.test",
+      github: { enabled: true },
+      linear: { enabled: false },
+      pagerduty: { enabled: false },
+    },
   });
   const body = commentPayload();
   expect(

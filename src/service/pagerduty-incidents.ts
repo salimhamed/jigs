@@ -35,7 +35,8 @@ const triggeredSchema = z.object({
   }),
 });
 
-const eventType = (event: unknown): unknown =>
+/** A PagerDuty webhook payload's event type, if it names one. */
+export const pagerDutyEventType = (event: unknown): unknown =>
   (event as { event?: { event_type?: unknown } } | null)?.event?.event_type;
 
 export interface PagerDutyIncidentsDeps {
@@ -80,7 +81,7 @@ export function pagerDutyIncidents(
     // incident is read only to key it and to apply the same filters the poll
     // hands PagerDuty.
     async fromPush(params, event) {
-      if (eventType(event) !== "incident.triggered") return null;
+      if (pagerDutyEventType(event) !== "incident.triggered") return null;
       const { data } = triggeredSchema.parse(event).event;
       const matches = (values: readonly string[] | undefined, ...found: string[]) =>
         values === undefined || found.some((value) => values.includes(value));

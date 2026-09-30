@@ -256,9 +256,9 @@ export function preflightChecks(
 
 // Beyond what a workflow requires, the configuration can ask for a provider
 // itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
-// Linear, a PagerDuty webhook needs PagerDuty, and an App identity, a pagerduty section or a slack section is set up
-// on purpose. The key and PAT identities are what every scaffold states, so they
-// ask for nothing. An unreadable config asks for nothing either: the binding
+// Linear, a PagerDuty webhook needs PagerDuty, and an App identity, a pagerduty
+// section or a slack section is set up on purpose. The key and PAT identities
+// are what every scaffold states, so they ask for nothing. An unreadable config asks for nothing either: the binding
 // checks report it.
 function configuredProviders(): Record<Integration, boolean> {
   try {
@@ -274,7 +274,7 @@ function configuredProviders(): Record<Integration, boolean> {
         (webhooks?.linear.enabled ?? false) ||
         linear.identity.mode === "app" ||
         linear.operator !== undefined,
-      pagerduty: pagerduty !== undefined || (webhooks?.pagerduty?.enabled ?? false),
+      pagerduty: pagerduty !== undefined || (webhooks?.pagerduty.enabled ?? false),
       slack: slack !== undefined,
     };
   } catch {

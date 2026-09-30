@@ -103,14 +103,24 @@ test.each([
   [
     {
       service: { dashboardPort: 9090 },
-      webhooks: { url: "https://f.test", github: {}, linear: { enabled: false } },
+      webhooks: {
+        url: "https://f.test",
+        github: {},
+        linear: { enabled: false },
+        pagerduty: { enabled: false },
+      },
     },
     "enabled",
   ],
   [
     {
       service: { dashboardPort: 9090 },
-      webhooks: { url: "not a url", github: { enabled: true }, linear: { enabled: false } },
+      webhooks: {
+        url: "not a url",
+        github: { enabled: true },
+        linear: { enabled: false },
+        pagerduty: { enabled: false },
+      },
     },
     "url",
   ],

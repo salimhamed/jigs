@@ -20,7 +20,7 @@ function factoryWith(pagerduty: unknown): string {
     url: "https://factory.example.test/",
     github: { enabled: false },
     linear: { enabled: false },
-    ...(pagerduty === null ? {} : { pagerduty }),
+    pagerduty,
   };
   writeFileSync(
     path.join(root, "jigs.config.ts"),
@@ -55,8 +55,7 @@ const run = (...args: Parameters<typeof checks>) =>
     .find((check) => check.id === "pagerduty.webhook")
     ?.run();
 
-test("off or absent, there is nothing to check", () => {
-  expect(checks(async () => [], null)).toEqual([]);
+test("off, there is nothing to check", () => {
   expect(checks(async () => [], { enabled: false })).toEqual([]);
 });
 
