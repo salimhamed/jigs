@@ -5,4 +5,4 @@
 export const SERVICE_ENV_FILE = "the factory repo's .env";
 export const RESTART_SERVICE = "pnpm exec jigs service restart";
 
-export type Integration = "linear" | "github";
+export type Integration = "linear" | "github" | "pagerduty";

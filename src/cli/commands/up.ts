@@ -3,6 +3,7 @@ import path from "node:path";
 import {
   type GithubIdentity,
   type LinearIdentity,
+  type PagerDutyIdentity,
   type ResolvedService,
   readFactoryConfig,
   resolveService,
@@ -11,6 +12,7 @@ import { readFactoryEnv } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
+import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
@@ -83,9 +85,14 @@ export interface UpOptions {
 
 // Read by the suspension primitives; empty slots are the expected state of a
 // freshly copied .env, so they are reported, not refused.
-const credentialSlots = (linear: LinearIdentity, github: GithubIdentity[]): string[] => [
+const credentialSlots = (
+  linear: LinearIdentity,
+  github: GithubIdentity[],
+  pagerduty: PagerDutyIdentity | undefined,
+): string[] => [
   ...LINEAR_IDENTITY_VARIABLES[linear.mode],
   ...(github.some((identity) => identity.mode === "pat") ? ["GITHUB_TOKEN"] : []),
+  ...(pagerduty !== undefined ? PAGERDUTY_IDENTITY_VARIABLES : []),
 ];
 
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
@@ -94,11 +101,14 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service, linear, github } = await runner.run("locate", (note) => {
-      const located = locate(deps.cwd);
-      note(located.factoryRoot);
-      return located;
-    });
+    const { factoryRoot, service, linear, github, pagerduty } = await runner.run(
+      "locate",
+      (note) => {
+        const located = locate(deps.cwd);
+        note(located.factoryRoot);
+        return located;
+      },
+    );
     result.factoryRoot = factoryRoot;
     result.serviceUrl = service.serviceUrl;
     result.dashboardUrl = service.dashboardUrl;
@@ -110,7 +120,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", () => ensureEnv(factoryRoot));
-    reportEmptyCredentials(env, credentialSlots(linear, github), deps.out);
+    reportEmptyCredentials(env, credentialSlots(linear, github, pagerduty), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -198,6 +208,7 @@ function locate(cwd: string): {
   service: ResolvedService;
   linear: LinearIdentity;
   github: GithubIdentity[];
+  pagerduty: PagerDutyIdentity | undefined;
 } {
   const factoryRoot = locateFactoryRoot(cwd);
   const service = resolveService(factoryRoot);
@@ -207,6 +218,7 @@ function locate(cwd: string): {
     service,
     linear: config.linear.identity,
     github: config.github.identities,
+    pagerduty: config.pagerduty?.identity,
   };
 }
 

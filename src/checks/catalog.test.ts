@@ -355,3 +355,44 @@ test("doctor checks each required harness and names the workflows that need it",
     reason: "claude not found on PATH (needed by workflows review, ship)",
   });
 });
+
+const PAGERDUTY =
+  'pagerduty: { identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" } }';
+
+test("a workflow requiring PagerDuty in a factory without a pagerduty section fails preflight with the section to add", async () => {
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  const report = await runChecks(preflightChecks({ integrations: ["pagerduty"] }));
+  expect(report.checks).toEqual([
+    expect.objectContaining({
+      id: "pagerduty.identity",
+      ok: false,
+      reason: "jigs.config.ts has no pagerduty section",
+      repair: expect.stringContaining('add pagerduty: { identity: { mode: "app"'),
+    }),
+  ]);
+});
+
+test("preflight checks the PagerDuty identity only, doctor adds the from user", async () => {
+  factoryWith(`{ service: { dashboardPort: 9090 }, ${PAGERDUTY} }`);
+  vi.stubEnv("PAGERDUTY_CLIENT_ID", "");
+  vi.stubEnv("PAGERDUTY_CLIENT_SECRET", "");
+  const pagerduty = { integrations: ["pagerduty" as const] };
+  expect(preflightIds(pagerduty)).toEqual(["pagerduty.identity"]);
+  expect(doctorChecks({ triage: { requires: pagerduty } }).map((check) => check.id)).toEqual([
+    "pagerduty.identity",
+    "pagerduty.from",
+  ]);
+  const report = await runChecks(preflightChecks(pagerduty));
+  expect(report.checks[0]).toMatchObject({
+    ok: false,
+    reason: "PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET are not set",
+  });
+});
+
+test("doctor checks PagerDuty when the factory configures it, and not otherwise", () => {
+  const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
+  factoryWith(`{ service: { dashboardPort: 9090 }, ${PAGERDUTY} }`);
+  expect(ids()).toEqual(["pagerduty.identity", "pagerduty.from"]);
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  expect(ids().filter((id) => id.startsWith("pagerduty."))).toEqual([]);
+});
