@@ -122,22 +122,38 @@ test("a snapshot is the message, its permalink and its replies in order, with ea
   expect(calls("users.info")).toBe(1);
 });
 
-test("another app's post reads as a bot, named by its profile", async () => {
-  // A Workflow Builder post: bot_message, with no user.
+test.each([
+  [
+    "a Workflow Builder post reads as a bot, named by its profile",
+    {
+      subtype: "bot_message",
+      bot_id: "B0DEPLOYS01",
+      bot_profile: { id: "B0DEPLOYS01", name: "Deploy announcer" },
+    },
+    "B0DEPLOYS01",
+  ],
+  [
+    "an app's post with a user reads as a bot, named by its profile",
+    {
+      user: "U0DEPLOYS01",
+      bot_id: "B0DEPLOYS02",
+      bot_profile: { id: "B0DEPLOYS02", name: "Deploy announcer" },
+    },
+    "U0DEPLOYS01",
+  ],
+])("%s", async (_name, fields, id) => {
   const announcement = {
     type: "message",
-    subtype: "bot_message",
-    bot_id: "B0DEPLOYS01",
-    bot_profile: { id: "B0DEPLOYS01", name: "Deploy announcer" },
     ts: "1790723400.000100",
     text: "checkout-api v42 deployed to production",
+    ...fields,
   };
   routes["conversations.replies"] = () => ({ ok: true, messages: [announcement] });
   const snapshot = await fetchSlackMessage({ channel: CHANNEL, ts: announcement.ts });
   expect(snapshot).toMatchObject({
     gone: false,
     text: announcement.text,
-    author: { id: "B0DEPLOYS01", name: "Deploy announcer", bot: true, isOwnBot: false },
+    author: { id, name: "Deploy announcer", bot: true, isOwnBot: false },
   });
   expect(calls("users.info")).toBe(0);
 });
