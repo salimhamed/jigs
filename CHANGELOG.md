@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.78.9](https://github.com/salimhamed/jigs/compare/jigs-v0.78.8...jigs-v0.78.9) (2026-09-30)
+
+
+### Features
+
+* add a PagerDuty incident trigger source ([#465](https://github.com/salimhamed/jigs/issues/465)) ([4abf446](https://github.com/salimhamed/jigs/commit/4abf446eeffc40cfc211ba3bc94d6dc8440562c7))
+
 ## [0.78.8](https://github.com/salimhamed/jigs/compare/jigs-v0.78.7...jigs-v0.78.8) (2026-09-30)
 
 
