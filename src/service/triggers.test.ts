@@ -7,7 +7,7 @@ import { parseInputs } from "../cli/commands/run.ts";
 import { hintLines } from "../cli/output.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { eventTriggerId, runIdTime } from "./runs.ts";
-import { SOURCES, type Source, type SourceOccurrence, type SourceRegistry } from "./sources.ts";
+import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
 import type { PreparedRun } from "./trigger.ts";
 import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
 import {
@@ -1249,9 +1249,9 @@ test("a trigger whose workflow, source and inputs hold passes its check", async 
 });
 
 test("an unknown source kind fails its check, and the repair names the known kinds", async () => {
-  const result = await check("pages", pagesTrigger, SOURCES);
+  const result = await check("pages", pagesTrigger, { "fake.other": fakeSource().source });
   expect(result.ok === false && result.repair).toBe(
-    "set triggers.pages.source in jigs.config.ts to one of: slack.messages, slack.mentions",
+    "set triggers.pages.source in jigs.config.ts to one of: fake.other",
   );
 });
 

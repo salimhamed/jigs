@@ -44,6 +44,10 @@ settings:
 | `users:read` | Looking up the names of the people who wrote a message. |
 | `users:read.email` | Looking up their email addresses. |
 
+The bot events `message.channels` and `message.groups` are what Socket Mode
+delivers. Socket Mode needs no public URL: the factory's service opens the
+connection to Slack itself.
+
 Some workspaces require an admin to approve new apps. If yours does, Slack asks
 for approval when you install.
 
@@ -81,7 +85,11 @@ Add a `slack` section to `jigs.config.ts`:
 slack: { socketMode: true },
 ```
 
-With `socketMode: false`, `SLACK_APP_TOKEN` is not needed.
+With `socketMode: true`, the service holds a Socket Mode connection and sees a
+message within a second of it being posted. It still polls every
+[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds
+underneath, so a message posted while the service is down is still found. With
+`socketMode: false`, jigs only polls, and `SLACK_APP_TOKEN` is not needed.
 
 A workflow that uses Slack declares it:
 
@@ -159,6 +167,12 @@ down, it starts runs only for messages from the last 60 minutes; set the
 trigger's `lookbackMinutes` to change that. At most 3 of a trigger's runs are
 active at once, and later messages wait their turn; set `maxActive` to change
 that.
+
+A trigger polls all its channels together. While any one of them fails, for
+example because the bot was removed from it, the trigger's polling stops, and
+the service log names the channel; Socket Mode still delivers from the rest.
+Invite the bot back or remove the channel from the trigger, and polling
+resumes where it stopped, skipping messages older than the lookback.
 
 ## Checks
 

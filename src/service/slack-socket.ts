@@ -4,6 +4,7 @@
 // underneath: Slack redelivers an unacked event for about six minutes and
 // then drops it.
 
+import { JigsError } from "../errors.ts";
 import { type SlackMessage, slackOpenConnection } from "../providers/slack.ts";
 
 /** A channel message event as Socket Mode delivers it: the message, and where it was posted. */
@@ -16,6 +17,7 @@ export interface SlackMessageEvent extends SlackMessage {
 
 const FIRST_RETRY_MS = 1_000;
 const MAX_RETRY_MS = 60_000;
+const REFRESH_REASONS = new Set(["warning", "refresh_requested"]);
 
 /** The part of a WebSocket the connection uses. */
 export interface SlackSocketLike {
@@ -30,14 +32,12 @@ export interface SlackSocketDeps {
   /** Returns a fresh connection URL from `apps.connections.open`. */
   open?: () => Promise<string>;
   connect?: (url: string) => SlackSocketLike;
-  /** Schedules one call and returns its canceller. */
-  setTimer?: (fire: () => void, ms: number) => () => void;
   log?: (line: string) => void;
 }
 
 export interface SlackSocket {
-  /** Close the connection, open no other, and settle once the events in hand are. */
-  stop(): Promise<void>;
+  /** Close the connection and open no other. */
+  stop(): void;
 }
 
 interface Envelope {
@@ -64,50 +64,43 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
   const open = deps.open ?? slackOpenConnection;
   const connectTo = deps.connect ?? ((url: string): SlackSocketLike => new WebSocket(url));
   const log = deps.log ?? console.log;
-  const setTimer =
-    deps.setTimer ??
-    ((fire: () => void, ms: number) => {
-      const timer = setTimeout(fire, ms);
-      timer.unref?.();
-      return () => clearTimeout(timer);
-    });
 
   let stopped = false;
   let current: SlackSocketLike | undefined;
-  let cancelRetry: (() => void) | undefined;
+  let retryTimer: ReturnType<typeof setTimeout> | undefined;
   let failures = 0;
-  const inFlight = new Set<Promise<void>>();
 
   const retry = () => {
     if (stopped) return;
     const ms = Math.min(MAX_RETRY_MS, FIRST_RETRY_MS * 2 ** failures);
     failures += 1;
     log(`[slack] reconnecting in ${ms / 1000}s`);
-    cancelRetry = setTimer(() => void connect(), ms);
+    retryTimer = setTimeout(() => void connect(), ms);
+    retryTimer.unref?.();
   };
 
-  const deliver = (event: SlackMessageEvent) => {
-    const delivery = (async () => {
-      try {
-        await deps.onMessage(event);
-      } catch (error) {
-        log(`[slack] could not handle message ${event.channel}:${event.ts}: ${String(error)}`);
-      }
-    })();
-    inFlight.add(delivery);
-    void delivery.finally(() => inFlight.delete(delivery));
+  const deliver = async (event: SlackMessageEvent) => {
+    try {
+      await deps.onMessage(event);
+    } catch (error) {
+      log(`[slack] could not handle message ${event.channel}:${event.ts}: ${String(error)}`);
+    }
   };
 
   async function connect(): Promise<void> {
-    let url: string;
+    if (stopped) return;
+    let socket: SlackSocketLike;
     try {
-      url = await open();
+      const url = await open();
+      if (stopped) return;
+      socket = connectTo(url);
     } catch (error) {
-      log(`[slack] could not open a Socket Mode connection: ${String(error)}`);
+      // Only the name: a WebSocket's error can quote the connection URL, which
+      // carries a ticket.
+      const why = error instanceof JigsError ? error.message : (error as Error)?.name;
+      log(`[slack] could not open a Socket Mode connection: ${why}`);
       return retry();
     }
-    if (stopped) return;
-    const socket = connectTo(url);
     current = socket;
     let ended = false;
     const end = (why: string, next: () => void) => {
@@ -134,12 +127,15 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
         failures = 0;
         log("[slack] Socket Mode connected");
       } else if (envelope.type === "disconnect") {
-        end(`refreshed by Slack (${String(envelope.reason)})`, () => {
-          if (!stopped) void connect();
-        });
+        const reason = String(envelope.reason);
+        // Any other reason, such as Socket Mode switched off, would refuse a
+        // reconnect at once too.
+        if (REFRESH_REASONS.has(reason))
+          end(`refreshed by Slack (${reason})`, () => void connect());
+        else end(`ended by Slack (${reason})`, retry);
       } else if (envelope.type === "events_api") {
         const event = envelope.payload?.event;
-        if (isMessageEvent(event)) deliver(event);
+        if (isMessageEvent(event)) void deliver(event);
       }
     });
     socket.addEventListener("close", () => end("closed", retry));
@@ -148,12 +144,11 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
 
   void connect();
   return {
-    async stop() {
+    stop() {
       stopped = true;
-      cancelRetry?.();
+      clearTimeout(retryTimer);
       current?.close();
       current = undefined;
-      await Promise.all(inFlight);
     },
   };
 }

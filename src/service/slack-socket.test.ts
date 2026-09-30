@@ -1,4 +1,5 @@
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { SlackApiError } from "../providers/slack.ts";
 import { type SlackMessageEvent, type SlackSocketLike, startSlackSocket } from "./slack-socket.ts";
 
 // Recorded from Socket Mode on the test app, trimmed to what jigs reads.
@@ -65,14 +66,25 @@ class FakeSocket implements SlackSocketLike {
   }
 }
 
-const settle = () => new Promise((resolve) => setImmediate(resolve));
+beforeEach(() => {
+  vi.useFakeTimers();
+});
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const settle = () => vi.advanceTimersByTimeAsync(0);
 
 function harness(
-  opts: { failOpens?: number; onMessage?: (event: SlackMessageEvent) => unknown } = {},
+  opts: {
+    failOpens?: number;
+    connect?: (url: string) => SlackSocketLike;
+    onMessage?: (event: SlackMessageEvent) => unknown;
+  } = {},
 ) {
   const journal: string[] = [];
   const sockets: FakeSocket[] = [];
-  const timers: Array<{ fire: () => void; ms: number; cancelled: boolean }> = [];
+  const logs: string[] = [];
   const delivered: SlackMessageEvent[] = [];
   let opens = 0;
   const socket = startSlackSocket({
@@ -85,24 +97,21 @@ function harness(
     open: async () => {
       opens += 1;
       if (opens <= (opts.failOpens ?? 0))
-        throw new Error("Slack apps.connections.open: ratelimited");
+        throw new SlackApiError("apps.connections.open", "ratelimited");
       return `wss://wss-primary.slack.com/link/?ticket=${opens}`;
     },
-    connect: (url) => {
-      const fake = new FakeSocket(url, journal);
-      sockets.push(fake);
-      return fake;
-    },
-    setTimer: (fire, ms) => {
-      const timer = { fire, ms, cancelled: false };
-      timers.push(timer);
-      return () => {
-        timer.cancelled = true;
-      };
-    },
-    log: () => {},
+    connect:
+      opts.connect ??
+      ((url) => {
+        const fake = new FakeSocket(url, journal);
+        sockets.push(fake);
+        return fake;
+      }),
+    log: (line) => logs.push(line),
   });
-  return { socket, journal, sockets, timers, delivered, opens: () => opens };
+  const waits = () =>
+    logs.flatMap((line) => /reconnecting in (\d+)s/.exec(line)?.[1] ?? []).map(Number);
+  return { socket, journal, sockets, logs, waits, delivered, opens: () => opens };
 }
 
 test("each envelope is acked before its event is handed on", async () => {
@@ -145,7 +154,7 @@ test("a non-message event is acked and not handed on", async () => {
 
 test("a listener that throws is logged, and the next event still arrives", async () => {
   let calls = 0;
-  const { sockets } = harness({
+  const { sockets, logs } = harness({
     onMessage: () => {
       calls += 1;
       if (calls === 1) throw new Error("registry down");
@@ -156,79 +165,83 @@ test("a listener that throws is logged, and the next event still arrives", async
   sockets[0]?.emit("message", envelope("env-2"));
   await settle();
   expect(calls).toBe(2);
+  expect(logs).toContain(
+    "[slack] could not handle message C0C5EUZ7P9Q:1790723463.853679: Error: registry down",
+  );
 });
 
-test("a disconnect from Slack reconnects at once on a fresh URL", async () => {
-  const { sockets, timers, opens } = harness();
+test.each(["warning", "refresh_requested"])(
+  "a %s disconnect reconnects at once on a fresh URL",
+  async (reason) => {
+    const { sockets, waits, opens } = harness();
+    await settle();
+    sockets[0]?.emit("message", { ...DISCONNECT, reason });
+    await settle();
+    expect(sockets[0]?.closed).toBe(true);
+    expect(opens()).toBe(2);
+    expect(sockets[1]?.url).toContain("ticket=2");
+    // The old socket's own close event after that opens nothing more.
+    sockets[0]?.emit("close");
+    await vi.runAllTimersAsync();
+    expect(opens()).toBe(2);
+    expect(waits()).toEqual([]);
+  },
+);
+
+test("any other disconnect reason reconnects with backoff, like a close", async () => {
+  const { sockets, waits, opens } = harness();
   await settle();
-  sockets[0]?.emit("message", { ...DISCONNECT, reason: "warning" });
+  sockets[0]?.emit("message", { ...DISCONNECT, reason: "link_disabled" });
   await settle();
   expect(sockets[0]?.closed).toBe(true);
+  expect(opens()).toBe(1);
+  expect(waits()).toEqual([1]);
+  await vi.advanceTimersByTimeAsync(1_000);
   expect(opens()).toBe(2);
-  expect(sockets[1]?.url).toContain("ticket=2");
-  // The old socket's own close event after that opens nothing more.
-  sockets[0]?.emit("close");
-  sockets[1]?.emit("message", DISCONNECT);
-  await settle();
-  expect(opens()).toBe(3);
-  expect(timers).toEqual([]);
 });
 
 test("a dropped connection reconnects with backoff, reset once Slack says hello", async () => {
-  const { sockets, timers, opens } = harness({ failOpens: 0 });
+  const { sockets, waits, opens } = harness();
   await settle();
   sockets[0]?.emit("close");
-  expect(timers.map((t) => t.ms)).toEqual([1_000]);
-  timers[0]?.fire();
-  await settle();
+  await vi.advanceTimersByTimeAsync(1_000);
   sockets[1]?.emit("error");
-  expect(timers.map((t) => t.ms)).toEqual([1_000, 2_000]);
-  timers[1]?.fire();
-  await settle();
+  await vi.advanceTimersByTimeAsync(2_000);
   sockets[2]?.emit("message", HELLO);
   sockets[2]?.emit("close");
-  expect(timers.map((t) => t.ms)).toEqual([1_000, 2_000, 1_000]);
+  expect(waits()).toEqual([1, 2, 1]);
   expect(opens()).toBe(3);
 });
 
 test("a connection that cannot be opened is retried with growing waits, capped at a minute", async () => {
-  const { timers, opens } = harness({ failOpens: 10 });
-  for (let i = 0; i < 8; i += 1) {
-    await settle();
-    timers.at(-1)?.fire();
-  }
-  await settle();
-  expect(timers.map((t) => t.ms)).toEqual([
-    1_000, 2_000, 4_000, 8_000, 16_000, 32_000, 60_000, 60_000, 60_000,
-  ]);
+  const { waits, opens } = harness({ failOpens: 8 });
+  await vi.advanceTimersByTimeAsync(10 * 60_000);
+  expect(waits()).toEqual([1, 2, 4, 8, 16, 32, 60, 60]);
   expect(opens()).toBe(9);
 });
 
-test("stop closes the connection, opens no other, and waits for events in hand", async () => {
-  let release: () => void = () => {};
-  const handled: string[] = [];
-  const { socket, sockets, timers, opens } = harness({
-    onMessage: (event) =>
-      new Promise<void>((resolve) => {
-        release = () => {
-          handled.push(event.ts);
-          resolve();
-        };
-      }),
+test("a socket that throws on construction is retried, and its error never reaches the log", async () => {
+  let attempts = 0;
+  const journal: string[] = [];
+  const { logs, opens } = harness({
+    connect: (url) => {
+      attempts += 1;
+      if (attempts === 1) throw new SyntaxError(`Invalid URL: ${url}`);
+      return new FakeSocket(url, journal);
+    },
   });
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(opens()).toBe(2);
+  expect(logs.join("\n")).not.toContain("ticket=");
+  expect(logs).toContain("[slack] could not open a Socket Mode connection: SyntaxError");
+});
+
+test("stop closes the connection and opens no other", async () => {
+  const { socket, sockets, opens } = harness();
   await settle();
-  sockets[0]?.emit("message", envelope("env-1"));
-  let stopped = false;
-  const stopping = socket.stop().then(() => {
-    stopped = true;
-  });
+  socket.stop();
   expect(sockets[0]?.closed).toBe(true);
   sockets[0]?.emit("close");
-  await settle();
-  expect(stopped).toBe(false);
-  release();
-  await stopping;
-  expect(handled).toEqual(["1790723463.853679"]);
-  expect(timers).toEqual([]);
+  await vi.runAllTimersAsync();
   expect(opens()).toBe(1);
 });

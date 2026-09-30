@@ -17,34 +17,37 @@ const until = async (condition: () => boolean, ms: number) => {
   return condition();
 };
 
+// A message posted before the connection is up arrives only as Slack's late
+// redelivery, so another is posted until one comes through.
 test.skipIf(!configured)("a posted message arrives over Socket Mode and in history", async () => {
   const messages = SOURCES["slack.messages"];
   if (messages === undefined) throw new Error("no slack.messages source");
   const seen: SlackMessageEvent[] = [];
-  let connected = false;
   const socket = startSlackSocket({
     onMessage: (event) => {
       seen.push(event);
     },
-    log: (line) => {
-      if (line.endsWith("connected")) connected = true;
-    },
   });
   try {
-    expect(await until(() => connected, 20_000)).toBe(true);
     const since = new Date(Date.now() - 5_000);
-    const ts = await slackPostMessage({ channel, text: "jigs live test: Socket Mode and history" });
-
-    expect(await until(() => seen.some((event) => event.ts === ts), 20_000)).toBe(true);
-    const event = seen.find((pushed) => pushed.ts === ts) as SlackMessageEvent;
+    let event: SlackMessageEvent | undefined;
+    for (let attempt = 1; attempt <= 3 && event === undefined; attempt += 1) {
+      const ts = await slackPostMessage({
+        channel,
+        text: `jigs live test: Socket Mode and history (${attempt})`,
+      });
+      await until(() => seen.some((pushed) => pushed.ts === ts), 10_000);
+      event = seen.find((pushed) => pushed.ts === ts);
+    }
+    if (event === undefined) throw new Error("no posted message arrived over Socket Mode");
     expect(event).toMatchObject({ type: "message", channel, channel_type: "channel" });
     expect(await messages.fromPush(params, event)).toBeNull();
 
     const history = await slackHistory(channel, { oldest: (since.getTime() / 1000).toFixed(6) });
-    expect(history.map((message) => message.ts)).toContain(ts);
+    expect(history.map((message) => message.ts)).toContain(event.ts);
     const polled = await messages.poll(params, since);
-    expect(polled.map((occurrence) => occurrence.inputs.ts)).not.toContain(ts);
+    expect(polled.map((occurrence) => occurrence.inputs.ts)).not.toContain(event.ts);
   } finally {
-    await socket.stop();
+    socket.stop();
   }
 });

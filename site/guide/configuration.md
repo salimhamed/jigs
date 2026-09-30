@@ -346,7 +346,11 @@ slack: { socketMode: true },
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `socketMode` | required | Use Socket Mode. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
+| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
+
+The service polls the channels its Slack triggers watch every
+[`service.pollIntervalSeconds.slack`](#service) seconds, with Socket Mode on or
+off.
 
 To start runs from Slack messages, see
 [Start runs from messages](/guide/slack#start-runs-from-messages).
