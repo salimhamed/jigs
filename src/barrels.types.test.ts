@@ -29,6 +29,8 @@ import type {
   Harness,
   HarnessKind,
   HumanReply,
+  IncidentRef,
+  IncidentSnapshot,
   JsonValue,
   McpHttpServerConfig,
   McpServerConfig,
@@ -101,6 +103,8 @@ type RootTypeSurface = {
   harness: Harness;
   harnessKind: HarnessKind;
   humanReply: HumanReply;
+  incidentRef: IncidentRef;
+  incidentSnapshot: IncidentSnapshot;
   jsonValue: JsonValue;
   mcpHttpServer: McpHttpServerConfig;
   mcpServer: McpServerConfig;

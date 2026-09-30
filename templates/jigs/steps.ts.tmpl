@@ -23,6 +23,7 @@ import type {
 import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
 import * as gitOperations from "@jigs-ai/jigs/steps/git";
 import * as linearOperations from "@jigs-ai/jigs/steps/linear";
+import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
 import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
 import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
@@ -172,6 +173,30 @@ export async function resolveLinearIssue(reference: string) {
   "use step";
   return linearOperations.resolveLinearIssue(reference);
 }
+
+/**
+ * Read a snapshot of the PagerDuty incident.
+ *
+ * @group PagerDuty incidents
+ */
+export async function fetchIncidentSnapshot(incidentId: string) {
+  "use step";
+  return pagerDutyOperations.fetchIncidentSnapshot(incidentId);
+}
+
+/**
+ * Add a plain-text note to the PagerDuty incident, ending in a line that names this run.
+ *
+ * @group PagerDuty incidents
+ */
+export async function postIncidentNote(incidentId: string, content: string) {
+  "use step";
+  return pagerDutyOperations.postIncidentNote(incidentId, content, getWorkflowMetadata());
+}
+
+// One attempt: a lost POST response may already have added the note, and
+// nothing on the incident tells a retry. A missed note beats a doubled one.
+postIncidentNote.maxRetries = 0;
 
 /**
  * Prepare this run's scratch directory, preserving it when the run resumes.

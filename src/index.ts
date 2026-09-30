@@ -141,6 +141,8 @@ export {
   ticketReviewPrompt,
 } from "./workflow/linear/ticket-review.prompt.ts";
 
+export type { IncidentRef, IncidentSnapshot } from "./workflow/pagerduty/snapshot.ts";
+
 export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
 export {
   type PullRequestMarker,

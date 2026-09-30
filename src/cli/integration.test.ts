@@ -37,11 +37,12 @@ test("generation is repeatable and build validation never overwrites drift", () 
 // the step function, so the property has to survive into the factory's own
 // file — a generated wrapper without it retries a POST that may already have
 // posted.
-test("the pull request POST wrappers are generated single-attempt", () => {
+test("the pull request and incident note POST wrappers are generated single-attempt", () => {
   const [steps] = generateFactoryIntegration(factory()) as [string, string];
   const generated = readFileSync(steps, "utf8");
   expect(generated).toContain("replyToPullRequestReviewThread.maxRetries = 0;");
   expect(generated).toContain("commentOnPullRequest.maxRetries = 0;");
+  expect(generated).toContain("postIncidentNote.maxRetries = 0;");
 });
 
 test("steps.ts holds every step directive, and routines.ts holds none", () => {

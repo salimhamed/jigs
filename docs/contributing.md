@@ -43,7 +43,7 @@ src/
               built-ins, env or network
   steps/      code that runs in steps, called by factory "use step" wrappers
               (both split by topic: agents, git, human, linear,
-               pull-requests, runtime, workspaces)
+               pagerduty, pull-requests, runtime, workspaces)
   service/    the long-running process: routes, ingress, schedules, release
   cli/        commands
   checks/     preflight, doctor and just-in-time checks

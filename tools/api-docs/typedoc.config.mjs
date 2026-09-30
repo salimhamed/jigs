@@ -13,6 +13,7 @@ export const sharedOptions = {
     "Human input",
     "Linear tickets",
     "Linear and human input",
+    "PagerDuty incidents",
     "Pull requests",
     "Git/change data",
     "Git changes",
