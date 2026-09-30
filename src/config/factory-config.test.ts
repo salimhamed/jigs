@@ -436,6 +436,57 @@ test("a Linear operator is optional and must be an email", () => {
   expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");
 });
 
+const PAGERDUTY_IDENTITY = {
+  mode: "app",
+  subdomain: "acme",
+  region: "us",
+  from: "oncall@example.com",
+};
+
+test("a factory without a pagerduty section has no PagerDuty identity", () => {
+  expect(withSettings({}).pagerduty).toBeUndefined();
+});
+
+test("a PagerDuty identity is an app with a subdomain, a region and a from email", () => {
+  expect(withSettings({ pagerduty: { identity: PAGERDUTY_IDENTITY } }).pagerduty).toEqual({
+    identity: PAGERDUTY_IDENTITY,
+  });
+  expect(
+    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "eu" } } }).pagerduty
+      ?.identity.region,
+  ).toBe("eu");
+  for (const missing of ["subdomain", "region", "from"]) {
+    const { [missing as keyof typeof PAGERDUTY_IDENTITY]: _dropped, ...rest } = PAGERDUTY_IDENTITY;
+    expect(() => withSettings({ pagerduty: { identity: rest } })).toThrow(
+      `pagerduty.identity.${missing}`,
+    );
+  }
+  expect(() => withSettings({ pagerduty: {} })).toThrow("pagerduty.identity");
+  expect(() =>
+    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, mode: "key" } } }),
+  ).toThrow("pagerduty.identity.mode");
+  expect(() =>
+    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "ap" } } }),
+  ).toThrow("pagerduty.identity.region");
+  expect(() =>
+    withSettings({
+      pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "acme.pagerduty.com" } },
+    }),
+  ).toThrow("pagerduty.identity.subdomain");
+  // Secrets live in .env, so a client id in config is refused, not ignored.
+  expect(() =>
+    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, clientId: "abc" } } }),
+  ).toThrow("clientId");
+});
+
+test("a PagerDuty from must be an email", () => {
+  for (const from of ["oncall", ""]) {
+    expect(() =>
+      withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, from } } }),
+    ).toThrow("pagerduty.identity.from");
+  }
+});
+
 const APP_IDENTITY = {
   mode: "app",
   appId: 1,

@@ -137,6 +137,16 @@ test("an app Linear identity names its client variables as the empty slots", asy
   );
 });
 
+test("a pagerduty section names its client variables as empty slots", async () => {
+  const port = await fakeService();
+  const root = factory({ port, pagerduty: true });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  expect((await up(root, io)).ok).toBe(true);
+  expect(lines.join("\n")).toContain(
+    "LINEAR_API_KEY, GITHUB_TOKEN, PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env",
+  );
+});
+
 test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async () => {
   const port = await fakeService();
   const root = factory({

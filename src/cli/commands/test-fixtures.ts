@@ -24,6 +24,7 @@ export interface FactoryShape {
   config?: boolean;
   linearIdentity?: "key" | "app";
   githubIdentity?: "pat" | "app";
+  pagerduty?: boolean;
   bins?: string[];
 }
 
@@ -48,9 +49,12 @@ export function factory(tmp: string, shape: FactoryShape): string {
       shape.githubIdentity === "app"
         ? `github: {identities: [{mode: "app", appId: 1, installations: {acme: 2}, privateKeyPath: "app.pem", operator: "octocat"}]}, `
         : "";
+    const pagerduty = shape.pagerduty
+      ? `pagerduty: {identity: {mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com"}}, `
+      : "";
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}workflows: {}};\n`,
+      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}${pagerduty}workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");

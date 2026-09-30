@@ -1,13 +1,17 @@
 import {
   FACTORY_CONFIG_FILE,
   type LinearIdentity,
+  type PagerDutyIdentity,
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
+import { JigsError } from "../errors.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { findUserByEmail, getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
+import { pagerDutyClientFor } from "../providers/pagerduty.ts";
+import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import type {
   AskableModelSource,
@@ -45,6 +49,11 @@ import {
 } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
+import {
+  type PagerDutyIdentityProbes,
+  pagerDutyFromChecks,
+  pagerDutyIdentityChecks,
+} from "./pagerduty-identity.ts";
 import { webhookChecks } from "./webhooks.ts";
 
 export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
@@ -87,6 +96,12 @@ export {
   linearOperatorChecks,
 } from "./linear-identity.ts";
 export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
+export {
+  type PagerDutyIdentityProbes,
+  type PagerDutyUserProbes,
+  pagerDutyFromChecks,
+  pagerDutyIdentityChecks,
+} from "./pagerduty-identity.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
 // A workflow's declared requirements — the manifest side of the computed check
@@ -103,6 +118,12 @@ export interface WorkflowRequires {
 // requirements. Substituting a probe stays a seam on each check factory.
 const linearProbes: LinearIdentityProbes = { viewer: getViewer };
 const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthenticatedUser);
+const pagerDutyProbes: PagerDutyIdentityProbes = {
+  token: async () => {
+    await pagerDutyAuthFor().bearer();
+  },
+  read: () => pagerDutyClientFor().verifyAccess(),
+};
 
 // Which credential jigs holds and what it is allowed to do with it. Both come
 // from `jigs.config.ts`; where there is none to read, the defaults are what a
@@ -156,6 +177,40 @@ function linearOperatorDoctorChecks(): Check[] {
   });
 }
 
+// A missing or unreadable pagerduty section fails as itself, with the section
+// to add, rather than as a credential PagerDuty rejected.
+function pagerDutyChecks(): Check[] {
+  let identity: PagerDutyIdentity;
+  try {
+    identity = resolvePagerDutyIdentity();
+  } catch (err) {
+    return [
+      failedCheck(
+        "pagerduty.identity",
+        "PagerDuty identity",
+        err instanceof Error ? err.message : String(err),
+        err instanceof JigsError && err.hint !== undefined
+          ? err.hint
+          : `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
+      ),
+    ];
+  }
+  return pagerDutyIdentityChecks(identity, pagerDutyProbes);
+}
+
+// An unreadable config is the identity check's diagnosis, so it adds nothing here.
+function pagerDutyFromDoctorChecks(): Check[] {
+  let identity: PagerDutyIdentity;
+  try {
+    identity = resolvePagerDutyIdentity();
+  } catch {
+    return [];
+  }
+  return pagerDutyFromChecks(identity, {
+    userByEmail: (email) => pagerDutyClientFor().findUserByEmail(email),
+  });
+}
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
@@ -169,6 +224,7 @@ export function preflightChecks(
   return [
     ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
+    ...(integrations.includes("pagerduty") ? pagerDutyChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
     ...(requires.models ?? []).flatMap((source) => {
@@ -182,12 +238,12 @@ export function preflightChecks(
 
 // Beyond what a workflow requires, the configuration can ask for a provider
 // itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
-// Linear, and an App identity is set up on purpose. The key and PAT identities
+// Linear, and an App identity or a pagerduty section is set up on purpose. The key and PAT identities
 // are what every scaffold states, so they ask for nothing. An unreadable config
 // asks for nothing either: the binding checks report it.
 function configuredProviders(): Record<Integration, boolean> {
   try {
-    const { bindings, webhooks, github, linear } = readFactoryConfig(factoryRoot());
+    const { bindings, webhooks, github, linear, pagerduty } = readFactoryConfig(factoryRoot());
     return {
       github:
         Object.keys(bindings).length > 0 ||
@@ -197,9 +253,10 @@ function configuredProviders(): Record<Integration, boolean> {
         (webhooks?.linear.enabled ?? false) ||
         linear.identity.mode === "app" ||
         linear.operator !== undefined,
+      pagerduty: pagerduty !== undefined,
     };
   } catch {
-    return { github: false, linear: false };
+    return { github: false, linear: false, pagerduty: false };
   }
 }
 
@@ -219,6 +276,7 @@ export function doctorChecks(workflows: WorkflowManifests): Check[] {
   return [
     ...provider("linear", () => [...linearChecks(), ...linearOperatorDoctorChecks()]),
     ...provider("github", githubChecks),
+    ...provider("pagerduty", () => [...pagerDutyChecks(), ...pagerDutyFromDoctorChecks()]),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),

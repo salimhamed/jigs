@@ -51,6 +51,7 @@ export default {
           { text: "Recipes", link: "/guide/recipes" },
           { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },
+          { text: "PagerDuty", link: "/guide/pagerduty" },
           { text: "CLI commands", link: "/guide/cli" },
           { text: "Troubleshooting", link: "/guide/troubleshooting" },
         ],
