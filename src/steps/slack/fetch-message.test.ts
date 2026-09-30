@@ -122,6 +122,26 @@ test("a snapshot is the message, its permalink and its replies in order, with ea
   expect(calls("users.info")).toBe(1);
 });
 
+test("another app's post reads as a bot, named by its profile", async () => {
+  // A Workflow Builder post: bot_message, with no user.
+  const announcement = {
+    type: "message",
+    subtype: "bot_message",
+    bot_id: "B0DEPLOYS01",
+    bot_profile: { id: "B0DEPLOYS01", name: "Deploy announcer" },
+    ts: "1790723400.000100",
+    text: "checkout-api v42 deployed to production",
+  };
+  routes["conversations.replies"] = () => ({ ok: true, messages: [announcement] });
+  const snapshot = await fetchSlackMessage({ channel: CHANNEL, ts: announcement.ts });
+  expect(snapshot).toMatchObject({
+    gone: false,
+    text: announcement.text,
+    author: { id: "B0DEPLOYS01", name: "Deploy announcer", bot: true, isOwnBot: false },
+  });
+  expect(calls("users.info")).toBe(0);
+});
+
 test("an author is looked up again on the next snapshot", async () => {
   routes["conversations.replies"] = () => ({ ok: true, messages: [human] });
   await fetchSlackMessage({ channel: CHANNEL, ts: human.ts });

@@ -155,9 +155,11 @@ export default defineWorkflow({
 });
 ```
 
-Only top-level messages count. Thread replies, edits, deletes, channel joins
-and any other message with a subtype never start a run, and neither do the
-bot's own posts. Direct messages are never read.
+Every new top-level post counts: from a person, from another bot or app (such
+as a Workflow Builder announcement), with or without files. The factory's own
+posts never start a run, and neither do thread replies (even one also sent to
+the channel), edits, deletes, joins, topic changes or other channel events.
+Direct messages are never read.
 
 Each message starts at most one run, whether it arrives over Socket Mode, by
 polling or both, and however often Slack sends it again. A new trigger starts
