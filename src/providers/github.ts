@@ -11,7 +11,7 @@ import type {
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
 
-import { GithubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
+import { GitHubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 
 export type {
   CheckRun,
@@ -389,7 +389,7 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
     pr.owner,
   );
   if (result.errors !== undefined && result.errors.length > 0) {
-    throw new GithubApiError(
+    throw new GitHubApiError(
       200,
       "/graphql",
       result.errors.map(({ message }) => message).join("; "),

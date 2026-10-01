@@ -344,6 +344,57 @@ checks again later. A label cannot satisfy a branch rule that requires approving
 reviews, so label approval only works on repositories without that rule. jigs
 never changes branch protection.
 
+### Call other GitHub endpoints {#call-github}
+
+`callGitHub(method, path, options)` calls any
+[GitHub REST endpoint](https://docs.github.com/en/rest) as the factory's
+[identity](#github-identity) and returns GitHub's parsed JSON, or `undefined`
+when GitHub answers with no content. Use it for anything jigs has no step for,
+such as requesting reviewers or finding a commit's author. Call it from your
+own `"use step"` function.
+
+A path under `/repos/{owner}/{repo}` uses that owner's installation. For any
+other path, such as `/orgs/acme/teams`, pass `account` to name the owner.
+`body` is sent as JSON, and the query string goes in the path.
+
+When GitHub answers with an error, `callGitHub` throws a `GitHubApiError` with
+the HTTP `status` and GitHub's message as `githubMessage`. A step can run more
+than once, so a call should be safe to repeat:
+
+```ts
+// workflows/review/steps.ts
+import { callGitHub, GitHubApiError } from "@jigs-ai/jigs/steps/pull-requests";
+
+// GitHub refuses the whole request if any one login cannot review, so ask for
+// each login on its own and skip the ones GitHub refuses with a 422.
+export async function requestReviewers(repo: string, pr: number, logins: string[]) {
+  "use step";
+  for (const login of logins) {
+    try {
+      await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
+        body: { reviewers: [login] },
+      });
+    } catch (error) {
+      if (!(error instanceof GitHubApiError && error.status === 422)) throw error;
+      console.log(`skipped reviewer ${login}: ${error.githubMessage}`);
+    }
+  }
+}
+
+export async function commitAuthorLogin(repo: string, email: string) {
+  "use step";
+  const commits = await callGitHub<{ author: { login: string } | null }[]>(
+    "GET",
+    `/repos/${repo}/commits?author=${encodeURIComponent(email)}&per_page=1`,
+  );
+  return commits[0]?.author?.login ?? null;
+}
+```
+
+Workflow code calls these like any step. With an App, the App needs whatever
+permission the endpoint asks for, such as Members read for an organization's
+teams.
+
 ## Linear
 
 ### Identity {#linear-identity}

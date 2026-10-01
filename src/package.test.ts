@@ -276,6 +276,8 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   ],
   "steps/pagerduty/index.ts": ["fetchIncidentSnapshot", "postIncidentNote"],
   "steps/pull-requests/index.ts": [
+    "GitHubApiError",
+    "callGitHub",
     "fetchPullRequestState",
     "commentOnPullRequest",
     "markPullRequestReady",

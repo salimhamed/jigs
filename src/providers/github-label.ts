@@ -1,5 +1,5 @@
 import { APPROVED_LABEL } from "../workflow/pull-requests/policy.ts";
-import { GithubApiError, githubGet, githubRequest } from "./github-api.ts";
+import { GitHubApiError, githubGet, githubRequest } from "./github-api.ts";
 
 /** A label jigs creates on every GitHub repository it is bound to. */
 export interface JigsLabel {
@@ -31,7 +31,7 @@ export async function ensureRepoLabel({
     await githubGet(labelPath);
     return "verified";
   } catch (err) {
-    if (!(err instanceof GithubApiError) || err.status !== 404) throw err;
+    if (!(err instanceof GitHubApiError) || err.status !== 404) throw err;
   }
 
   await githubRequest("POST", `/repos/${owner}/${repo}/labels`, label);

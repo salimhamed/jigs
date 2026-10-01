@@ -13,7 +13,7 @@ import {
   mergePr,
   postPullRequestReview,
 } from "../../providers/github.ts";
-import { GithubApiError } from "../../providers/github-api.ts";
+import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import {
@@ -121,7 +121,7 @@ test("reviewPullRequest returns the provider's review id", async () => {
 });
 
 test("reviewPullRequest surfaces a GitHub error unchanged", async () => {
-  const error = new GithubApiError(422, "/reviews", "Review cannot approve its own pull request");
+  const error = new GitHubApiError(422, "/reviews", "Review cannot approve its own pull request");
   vi.mocked(postPullRequestReview).mockRejectedValue(error);
 
   await expect(reviewPullRequest(pr, { event: "approve", body: "Approved" })).rejects.toBe(error);
@@ -179,7 +179,7 @@ test("a pull request GitHub already merged is merged, not re-merged", async () =
 
 test.each([405, 409])("a %i is state that changed, re-read rather than failed", async (status) => {
   vi.mocked(mergePr).mockRejectedValue(
-    new GithubApiError(status, "/merge", "Head branch was modified"),
+    new GitHubApiError(status, "/merge", "Head branch was modified"),
   );
   // The re-read is what names the change, and a moved head is one the next
   // wake reads again.
@@ -199,7 +199,7 @@ test("a refusal nothing in the snapshot explains is not tried again", async () =
   // not express in `mergeable_state`: the pull request still reads clean, and
   // no later wake would read it differently.
   vi.mocked(mergePr).mockRejectedValue(
-    new GithubApiError(405, "/merge", "Merge method not allowed"),
+    new GitHubApiError(405, "/merge", "Merge method not allowed"),
   );
   expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({
     merged: false,
@@ -209,7 +209,7 @@ test("a refusal nothing in the snapshot explains is not tried again", async () =
 
 test("a refusal that GitHub then reports as merged is a merge", async () => {
   vi.mocked(mergePr).mockRejectedValue(
-    new GithubApiError(409, "/merge", "Head branch was modified"),
+    new GitHubApiError(409, "/merge", "Head branch was modified"),
   );
   vi.mocked(fetchPrSnapshot)
     .mockResolvedValueOnce(snapshot)
@@ -221,7 +221,7 @@ test("a refusal that GitHub then reports as merged is a merge", async () => {
 });
 
 test("any other GitHub error is a real failure", async () => {
-  vi.mocked(mergePr).mockRejectedValue(new GithubApiError(500, "/merge", "boom"));
+  vi.mocked(mergePr).mockRejectedValue(new GitHubApiError(500, "/merge", "boom"));
   await expect(mergePullRequest(worktree, pr, "head")).rejects.toThrow("500");
 });
 
@@ -326,7 +326,7 @@ test("an open pull request for the branch is adopted instead of created again", 
 
 test("a failed assignment is not swallowed", async () => {
   asApp();
-  vi.mocked(assignPullRequest).mockRejectedValue(new GithubApiError(403, "/assignees", "no"));
+  vi.mocked(assignPullRequest).mockRejectedValue(new GitHubApiError(403, "/assignees", "no"));
 
   await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).rejects.toThrow(
     "no",
@@ -345,7 +345,7 @@ test("markPullRequestReady mutates before returning a fresh snapshot", async () 
 });
 
 test("markPullRequestReady does not read success after a mutation failure", async () => {
-  vi.mocked(markPrReady).mockRejectedValue(new GithubApiError(200, "/graphql", "not ready"));
+  vi.mocked(markPrReady).mockRejectedValue(new GitHubApiError(200, "/graphql", "not ready"));
   await expect(markPullRequestReady(pr)).rejects.toThrow("not ready");
   expect(fetchPrSnapshot).not.toHaveBeenCalled();
 });

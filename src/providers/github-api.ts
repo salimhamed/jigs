@@ -4,17 +4,38 @@
 import { JigsError } from "../errors.ts";
 import { GITHUB_API_BASE, githubAuthFor } from "./github-auth.ts";
 
-// Carries the status and body so a caller can tell a rejected token from an
-// unreachable repo, a rate limit, or a merge GitHub currently refuses.
-export class GithubApiError extends JigsError {
+/**
+ * GitHub answered a REST call with an error status. Check `status` to handle
+ * one answer, such as 422 when GitHub refuses a request it understood.
+ *
+ * @group Errors
+ */
+export class GitHubApiError extends JigsError {
+  /** The HTTP status, such as 404 or 422. */
   readonly status: number;
+  /** GitHub's `message`, or the whole response body when it has none. */
+  readonly githubMessage: string;
+  /** The response body as GitHub sent it. */
   readonly body: string;
 
   constructor(status: number, apiPath: string, body: string) {
     super(`GitHub API ${status} on ${apiPath}: ${body}`);
+    this.name = "GitHubApiError";
     this.status = status;
+    this.githubMessage = messageOf(body);
     this.body = body;
   }
+}
+
+function messageOf(body: string): string {
+  try {
+    const parsed: unknown = JSON.parse(body);
+    if (typeof parsed === "object" && parsed !== null && "message" in parsed) {
+      const { message } = parsed;
+      if (typeof message === "string") return message;
+    }
+  } catch {}
+  return body;
 }
 
 export async function githubRequest<T>(
@@ -42,7 +63,7 @@ export async function githubRequest<T>(
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   if (!res.ok) {
-    throw new GithubApiError(res.status, apiPath, await res.text());
+    throw new GitHubApiError(res.status, apiPath, await res.text());
   }
   // 204 on a POST that adds nothing to say — assignees and labels do this.
   return (res.status === 204 ? undefined : await res.json()) as T;
