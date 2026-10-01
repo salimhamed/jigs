@@ -1,5 +1,5 @@
-// Every GitHub REST call jigs makes, a factory's own `callGitHub` included,
-// goes through here, so the credential is decided in exactly one place. GITHUB_API_URL override is a test seam.
+// Every GitHub REST call jigs makes goes through here, so the credential is
+// decided in exactly one place. GITHUB_API_URL override is a test seam.
 
 import { JigsError } from "../errors.ts";
 import { GITHUB_API_BASE, githubAuthFor } from "./github-auth.ts";

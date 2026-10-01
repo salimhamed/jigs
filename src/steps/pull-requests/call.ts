@@ -1,3 +1,4 @@
+import { JigsError } from "../../errors.ts";
 import { githubRequest } from "../../providers/github-api.ts";
 import type { JsonValue } from "../../workflow/human/questions.ts";
 
@@ -6,7 +7,7 @@ import type { JsonValue } from "../../workflow/human/questions.ts";
  * GitHub's parsed JSON response. Wrap it in your own `"use step"` function.
  *
  * @remarks
- * `path` is the endpoint's path with its query string, such as
+ * `path` starts with `/` and is the endpoint's path with its query string, such as
  * `/repos/acme/app/commits?author=dev@acme.com`. A path under
  * `/repos/{owner}/{repo}` authenticates for that owner: with a GitHub App, the
  * installation configured for it. Any other path, such as `/orgs/acme/teams`,
@@ -23,21 +24,20 @@ import type { JsonValue } from "../../workflow/human/questions.ts";
  * // workflows/review/steps.ts
  * import { callGitHub } from "@jigs-ai/jigs/steps/pull-requests";
  *
- * export async function requestReviewers(repo: string, pr: number, reviewers: string[]) {
+ * export async function closeIssue(repo: string, issue: number) {
  *   "use step";
- *   await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
- *     body: { reviewers },
- *   });
+ *   await callGitHub("PATCH", `/repos/${repo}/issues/${issue}`, { body: { state: "closed" } });
  * }
  * ```
  *
  * @group Any REST endpoint
  */
 export async function callGitHub<T = unknown>(
-  method: string,
+  method: "GET" | "POST" | "PUT" | "PATCH" | "DELETE",
   path: string,
   options: { body?: JsonValue; account?: string } = {},
 ): Promise<T> {
+  if (!path.startsWith("/")) throw new JigsError(`GitHub path ${path} must start with /`);
   const response = await githubRequest<T>(method, path, options.body, options.account);
   console.log(`[github] called ${method} ${path.split("?")[0]}`);
   return response;

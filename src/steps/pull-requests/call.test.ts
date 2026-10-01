@@ -66,3 +66,10 @@ test("a GitHub error carries the status and GitHub's message", async () => {
     githubMessage: "Reviews may only be requested from collaborators.",
   });
 });
+
+test("a path without a leading slash is refused before any request", async () => {
+  await expect(callGitHub("GET", "repos/acme/app/pulls")).rejects.toThrow(
+    "GitHub path repos/acme/app/pulls must start with /",
+  );
+  expect(fetchMock).not.toHaveBeenCalled();
+});

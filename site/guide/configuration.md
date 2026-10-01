@@ -359,22 +359,25 @@ other path, such as `/orgs/acme/teams`, pass `account` to name the owner.
 
 When GitHub answers with an error, `callGitHub` throws a `GitHubApiError` with
 the HTTP `status` and GitHub's message as `githubMessage`. A step can run more
-than once, so decide what a repeat should do:
+than once, so a call should be safe to repeat:
 
 ```ts
 // workflows/review/steps.ts
 import { callGitHub, GitHubApiError } from "@jigs-ai/jigs/steps/pull-requests";
 
-export async function requestReviewers(repo: string, pr: number, reviewers: string[]) {
+// GitHub refuses the whole request if any one login cannot review, so ask for
+// each login on its own and skip the ones GitHub refuses with a 422.
+export async function requestReviewers(repo: string, pr: number, logins: string[]) {
   "use step";
-  try {
-    await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
-      body: { reviewers },
-    });
-  } catch (error) {
-    // 422: GitHub refused a reviewer, such as one who is not a collaborator.
-    if (!(error instanceof GitHubApiError && error.status === 422)) throw error;
-    console.log(`reviewers not requested: ${error.githubMessage}`);
+  for (const login of logins) {
+    try {
+      await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
+        body: { reviewers: [login] },
+      });
+    } catch (error) {
+      if (!(error instanceof GitHubApiError && error.status === 422)) throw error;
+      console.log(`skipped reviewer ${login}: ${error.githubMessage}`);
+    }
   }
 }
 
