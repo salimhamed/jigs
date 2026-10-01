@@ -62,8 +62,11 @@ Edit `workflows/linear-ticket-to-pr/` to change the builder/reviewer harnesses,
 prompts, review budgets or delivery behavior. The agent names above select
 entries defined in that source, rather than accepting a model name at runtime.
 
-`mergedBy` chooses who merges: `"human"` by default, or `"jigs"` after the
-builder reports finished and jigs verifies approval, CI and mergeability.
+`mergedBy` chooses who merges: `"human"` by default, or `"jigs"` once jigs
+verifies approval, CI, mergeability and that the builder's local work is
+published. When the pull request needs a person, the recipe notes it on the
+ticket, leaves the ticket In Review and keeps watching; only closing the pull
+request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a
 restriction on its GitHub tools. See [merging configuration](/guide/configuration#merging).
 

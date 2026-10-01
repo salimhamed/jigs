@@ -8,7 +8,7 @@ import {
   isPullRequestMergeReady,
   JigsError,
   type PullRequestRef,
-  pullRequestSnapshotKey,
+  type PullRequestSnapshot,
   type TicketNote,
   type Worktree,
 } from "@jigs-ai/jigs";
@@ -35,6 +35,7 @@ import {
   reviewerNotes,
   reviewVerdict,
 } from "./review.ts";
+import { builderWakeFacts, commentFacts } from "./wake.ts";
 
 /** The requirements to deliver. Add fields here and they reach every prompt. */
 export interface WorkItem {
@@ -196,110 +197,64 @@ export async function publish(
 
 // ---- phase 3: follow the pull request until it merges -------------------------
 
+export interface Maintenance {
+  /**
+   * Tell a person that the pull request needs them. Maintenance keeps watching
+   * afterwards: the next change to the pull request picks the work back up.
+   */
+  onNeedsHuman: (note: TicketNote) => Promise<void>;
+}
+
+const MERGE_TRIES = 10;
+
+type LocalState = { dirty: boolean; headSha: string };
+
+/** What one pull request's maintenance remembers between watcher yields. */
+interface Following extends Maintenance {
+  delivery: Delivery;
+  pr: PullRequestRef;
+  builder: BuilderSession;
+  /** Wake facts the builder has already been shown. */
+  seen: Set<string>;
+  /** Every head the pull request has had, as read from GitHub. */
+  prHeads: Set<string>;
+  lastNote?: string;
+  /** Unpublished local state recovery gave up on; only a change to it wakes the builder again. */
+  heldLocal?: string | undefined;
+}
+
 export async function followPullRequest(
   delivery: Delivery,
   pr: PullRequestRef,
   builder: BuilderSession,
+  { onNeedsHuman }: Maintenance,
 ): Promise<void> {
-  const { task, worktree, budget } = delivery;
-  let lastAssessed: string | undefined;
+  const following: Following = {
+    delivery,
+    pr,
+    builder,
+    onNeedsHuman,
+    seen: new Set(),
+    prHeads: new Set(),
+  };
   for await (const snapshot of watchPullRequest(pr)) {
-    if (snapshot.state === "closed") {
-      if (snapshot.merged) return;
-      return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
+    let current = observe(following, snapshot);
+    if (current.state === "open") {
+      const local = await readBranchState(delivery.worktree);
+      const recover = !isPublished(following, local) && following.heldLocal !== localKey(local);
+      if (recover || hasUnseenFacts(following, current)) {
+        current = await maintain(following, current, local);
+        // A newly pushed head is merged only from its own watcher yield.
+        if (current.state === "open" && current.headSha !== snapshot.headSha) continue;
+      }
     }
-
-    if (pullRequestSnapshotKey(snapshot) === lastAssessed) continue;
-
-    let assessed = snapshot;
-    let recovery: string | undefined;
-    for (let attempt = 1; attempt <= budget.attemptsPerUpdate; attempt++) {
-      const report = await builder.run({
-        output: maintenanceReport,
-        resume: prompts.maintenance.resume(pr, assessed, recovery),
-        fresh: async () =>
-          prompts.maintenance.fresh(
-            task,
-            worktree,
-            await readWorktreeDiff(worktree),
-            pr,
-            assessed,
-            recovery,
-          ),
-      });
-      let local = await readBranchState(worktree);
-      let current = await fetchPullRequestState(pr);
-      if (current.state === "closed") {
-        if (current.merged) return;
-        return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
-      }
-      if (report.status === "needs-human") {
-        return maintenanceStopped(
-          delivery,
-          pr,
-          `The builder needs human attention: ${report.summary}`,
-        );
-      }
-
-      // A successful push may reach GitHub's PR reader shortly afterward.
-      // These two durable waits do not consume another builder attempt.
-      for (
-        let recheck = 0;
-        !local.dirty && local.headSha !== current.headSha && recheck < 2;
-        recheck++
-      ) {
-        await sleep("2s");
-        current = await fetchPullRequestState(pr);
-        local = await readBranchState(worktree);
-        if (current.state === "closed") {
-          if (current.merged) return;
-          return maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
-        }
-      }
-
-      if (local.dirty || local.headSha !== current.headSha) {
-        recovery = [
-          `The worktree is ${local.dirty ? "dirty (uncommitted changes remain)" : "clean"}.`,
-          `Local HEAD: ${local.headSha}. Published PR head: ${current.headSha}.`,
-          "Inspect these facts and safely finish, commit, push, or synchronize the work as needed. Do not discard work or force-push.",
-        ].join(" ");
-        if (attempt === budget.attemptsPerUpdate) {
-          return maintenanceStopped(
-            delivery,
-            pr,
-            `Exhausted ${budget.attemptsPerUpdate} attempts for this pull request update. ${recovery}`,
-          );
-        }
-        // Recovery is local work, not an external event: retry without waiting
-        // for a new watcher yield, even if GitHub has not changed at all.
-        assessed = current;
-        continue;
-      }
-
-      // Recovery may have assessed facts the watcher has not yielded yet.
-      // Remember only what the builder saw, never a newer post-turn read.
-      lastAssessed = pullRequestSnapshotKey(assessed);
-
-      // Pending means the builder is waiting for an external event. A newly
-      // published head or changed discussion is assessed on the next watch yield.
-      if (
-        report.status !== "finished" ||
-        delivery.mergedBy === "human" ||
-        pullRequestSnapshotKey(current) !== pullRequestSnapshotKey(assessed) ||
-        !isPullRequestMergeReady(current)
-      )
-        break;
-
-      const result = await mergePullRequest(worktree, pr, current.headSha).catch(
-        (error: unknown) => ({
-          merged: false as const,
-          reason: String(error),
-          transient: true,
-        }),
-      );
-      if (result.merged) return;
-      return maintenanceStopped(delivery, pr, `Could not merge the pull request: ${result.reason}`);
+    if (current.state === "closed") {
+      if (current.merged) return;
+      throw maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
     }
+    // Checked after every yield and every builder turn: a turn that changes
+    // nothing on GitHub produces no new yield to merge on.
+    if (await mergeIfReady(following, current)) return;
   }
 
   throw new JigsError(
@@ -307,14 +262,176 @@ export async function followPullRequest(
   );
 }
 
+function observe(following: Following, snapshot: PullRequestSnapshot) {
+  following.prHeads.add(snapshot.headSha);
+  return snapshot;
+}
+
+const hasUnseenFacts = (following: Following, snapshot: PullRequestSnapshot) =>
+  builderWakeFacts(snapshot).some((fact) => !following.seen.has(fact));
+
+// Local work behind the PR is fine (a person pushed); work the PR never had is not.
+const isPublished = (following: Following, local: LocalState) =>
+  !local.dirty && following.prHeads.has(local.headSha);
+
+const localKey = (local: LocalState) => `${local.dirty}:${local.headSha}`;
+
+const recoveryFacts = (local: LocalState, current: PullRequestSnapshot) =>
+  [
+    `The worktree is ${local.dirty ? "dirty (uncommitted changes remain)" : "clean"}.`,
+    `Local HEAD: ${local.headSha}. Published PR head: ${current.headSha}.`,
+    "Inspect these facts and safely finish, commit, push, or synchronize the work as needed. Do not discard work or force-push.",
+  ].join(" ");
+
+const HELD =
+  " Local work that is not on the pull request holds back the merge until the worktree is clean and its HEAD is a commit the pull request has had.";
+
+// Returns what to add to a note when local work holds back the merge.
+function holdUnpublished(following: Following, local: LocalState): string {
+  const held = !isPublished(following, local);
+  following.heldLocal = held ? localKey(local) : undefined;
+  return held ? HELD : "";
+}
+
+async function needsHuman(following: Following, reason: string) {
+  if (reason === following.lastNote) return;
+  following.lastNote = reason;
+  await following.onNeedsHuman(maintenanceNote(following.delivery, following.pr, reason));
+}
+
+// The builder posts as the operator, so its comments cannot be told apart by
+// author. Comments that appear during its turn count as its own; a human
+// comment landing in that window is absorbed too. It never submits reviews.
+async function readAfterTurn(following: Following): Promise<PullRequestSnapshot> {
+  const current = observe(following, await fetchPullRequestState(following.pr));
+  for (const fact of commentFacts(current)) following.seen.add(fact);
+  return current;
+}
+
+// Builder turns for one update, until local work is published or the attempts
+// run out.
+async function maintain(
+  following: Following,
+  snapshot: PullRequestSnapshot,
+  before: LocalState,
+): Promise<PullRequestSnapshot> {
+  const { delivery, pr, builder } = following;
+  const { task, worktree, budget } = delivery;
+  let assessed = snapshot;
+  let current = snapshot;
+  let recovery = isPublished(following, before) ? undefined : recoveryFacts(before, snapshot);
+  for (let attempt = 1; attempt <= budget.attemptsPerUpdate; attempt++) {
+    const report = await builder.run({
+      output: maintenanceReport,
+      resume: prompts.maintenance.resume(pr, assessed, recovery),
+      fresh: async () =>
+        prompts.maintenance.fresh(
+          task,
+          worktree,
+          await readWorktreeDiff(worktree),
+          pr,
+          assessed,
+          recovery,
+        ),
+    });
+    // Remember only what the builder saw, never a newer post-turn read.
+    for (const fact of builderWakeFacts(assessed)) following.seen.add(fact);
+    let local = await readBranchState(worktree);
+    current = await readAfterTurn(following);
+    if (current.state === "closed") return current;
+    if (report.status === "needs-human") {
+      const held = holdUnpublished(following, local);
+      await needsHuman(following, `The builder needs a person: ${report.summary}${held}`);
+      return current;
+    }
+
+    // A successful push may reach GitHub's PR reader shortly afterward.
+    // These two durable waits do not consume another builder attempt.
+    for (
+      let recheck = 0;
+      !local.dirty && !isPublished(following, local) && recheck < 2;
+      recheck++
+    ) {
+      await sleep("2s");
+      current = await readAfterTurn(following);
+      local = await readBranchState(worktree);
+      if (current.state === "closed") return current;
+    }
+
+    if (holdUnpublished(following, local) === "") return current;
+    recovery = recoveryFacts(local, current);
+    // Recovery is local work, not an external event: retry without waiting
+    // for a new watcher yield, even if GitHub has not changed at all.
+    assessed = current;
+  }
+  await needsHuman(
+    following,
+    `Exhausted ${budget.attemptsPerUpdate} attempts for this pull request update. ${recovery}${HELD}`,
+  );
+  return current;
+}
+
+// Readiness is GitHub's to decide, not the builder's: an approved, green,
+// clean head merges whatever the builder last reported.
+async function mergeIfReady(following: Following, snapshot: PullRequestSnapshot) {
+  const { delivery, pr } = following;
+  if (delivery.mergedBy !== "jigs") return false;
+  let current = snapshot;
+  let reason = "";
+  for (let attempt = 1; attempt <= MERGE_TRIES; attempt++) {
+    if (attempt > 1) {
+      await sleep("30s");
+      current = observe(following, await fetchPullRequestState(pr));
+    }
+    if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
+    if (!isPullRequestMergeReady(current)) {
+      // After a refusal, keep polling: GitHub settling back to the yielded
+      // state matches the watcher's last key, so the watcher would never yield it.
+      if (attempt > 1) continue;
+      return false;
+    }
+    if (!isPublished(following, await readBranchState(delivery.worktree))) return false;
+    const result = await mergePullRequest(delivery.worktree, pr, current.headSha).catch(
+      (error: unknown) => ({ merged: false as const, reason: String(error), transient: true }),
+    );
+    if (result.merged) return true;
+    if (!result.transient) {
+      await needsHuman(following, `Could not merge the pull request: ${result.reason}`);
+      return false;
+    }
+    reason = result.reason;
+  }
+  await needsHuman(
+    following,
+    `Could not merge the pull request after ${MERGE_TRIES} tries: ${reason}`,
+  );
+  return false;
+}
+
+const prUrl = (pr: PullRequestRef) => `https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`;
+
+function maintenanceNote(delivery: Delivery, pr: PullRequestRef, reason: string): TicketNote {
+  const { task, worktree } = delivery;
+  return {
+    headline: `jigs needs a person to move the pull request for ${task.key} forward.`,
+    notes: [
+      reason,
+      `Pull request: ${prUrl(pr)}`,
+      `The work is on branch \`${worktree.branch}\`, in the worktree at \`${worktree.path}\`.`,
+    ],
+    closing:
+      "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+  };
+}
+
 // An unresolved local/publication state must never be pushed as a side effect
 // of stopping. Keep it available for the person taking over.
-function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: string): never {
-  throw new DeliveryStopped(
+function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: string) {
+  return new DeliveryStopped(
     `jigs stopped pull request maintenance for ${delivery.task.key}.`,
     [
       reason,
-      `Unfinished pull request: https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`,
+      `Unfinished pull request: ${prUrl(pr)}`,
       "Local work was retained without an automatic push.",
     ],
     delivery.worktree,
