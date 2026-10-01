@@ -72,7 +72,10 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     const approved = await implementAndReview(delivery, builder);
     const pr = await publish(delivery, approved);
     await setTicketStatus(snapshot.id, "In Review");
-    await followPullRequest(delivery, pr, builder);
+    // Only a note: the ticket stays In Review while the run keeps watching.
+    await followPullRequest(delivery, pr, builder, {
+      onNeedsHuman: (note) => noteOnTicket(claim, note),
+    });
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
   } catch (error) {

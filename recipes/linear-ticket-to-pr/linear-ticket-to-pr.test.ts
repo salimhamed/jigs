@@ -98,6 +98,22 @@ test("a run picks its builder and reviewer by name", async () => {
   ).toBe(false);
 });
 
+test("a pull request that needs a person gets a note on the ticket and stays In Review", async () => {
+  const note = {
+    headline: "jigs needs a person.",
+    notes: ["A check needs a re-run."],
+    closing: "",
+  };
+  vi.mocked(delivery.followPullRequest).mockImplementationOnce(async (_d, _pr, _b, maintenance) => {
+    await maintenance.onNeedsHuman(note);
+  });
+
+  await expect(run()).resolves.toEqual({ pr: pr.url });
+
+  expect(routines.noteOnTicket).toHaveBeenCalledWith(claim, note);
+  expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
+});
+
 test("a stopped delivery posts its note on the ticket, sets Todo, and fails the run", async () => {
   const stop = new delivery.DeliveryStopped("jigs stopped work on ABC-123.", ["open"], worktree);
   vi.mocked(delivery.followPullRequest).mockRejectedValueOnce(stop);
