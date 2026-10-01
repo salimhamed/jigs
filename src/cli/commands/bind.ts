@@ -16,7 +16,7 @@ import {
   webhookSecretRepair,
 } from "../../config/webhook-secret.ts";
 import { JigsError } from "../../errors.ts";
-import { GithubApiError } from "../../providers/github-api.ts";
+import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
 import {
   type EnsureRepoLabelOptions,
@@ -176,9 +176,9 @@ async function ensureJigsLabels(
         const repair =
           tokenMissing || tokenWasRejected(err)
             ? credentialRepair
-            : err instanceof GithubApiError && err.status === 404 && identity.mode === "app"
+            : err instanceof GitHubApiError && err.status === 404 && identity.mode === "app"
               ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: \`${reBindCommand}\``
-              : err instanceof GithubApiError && err.status === 404
+              : err instanceof GitHubApiError && err.status === 404
                 ? `check the remote, and that this token can see ${slug}, then re-run: \`${reBindCommand}\``
                 : `once that clears, re-run: \`${reBindCommand}\``;
         throw new JigsError(
@@ -285,9 +285,9 @@ async function ensureWebhook({
     if (tokenWasRejected(err)) return credentialRepair;
     // A 404 is as often a typo in the remote as a token that cannot see a
     // private repo, and neither clears on its own.
-    if (err instanceof GithubApiError && err.status === 404 && identity.mode === "app")
+    if (err instanceof GitHubApiError && err.status === 404 && identity.mode === "app")
       return `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: \`${reBindCommand}\``;
-    if (err instanceof GithubApiError && err.status === 404)
+    if (err instanceof GitHubApiError && err.status === 404)
       return `check the remote, and that this token can see ${slug}, then re-run: \`${reBindCommand}\``;
     return `once that clears, re-run: \`${reBindCommand}\``;
   };
@@ -332,6 +332,6 @@ async function ensureWebhook({
 // GitHub lays a token it will not take on 401, and one whose scopes fall short
 // on 403 — but a rate limit is a 403 too, and no re-issued token clears one.
 function tokenWasRejected(err: unknown): boolean {
-  if (!(err instanceof GithubApiError)) return false;
+  if (!(err instanceof GitHubApiError)) return false;
   return err.status === 401 || (err.status === 403 && !/rate limit/i.test(err.body));
 }

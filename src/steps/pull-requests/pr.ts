@@ -15,7 +15,7 @@ import {
   postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
-import { GithubApiError } from "../../providers/github-api.ts";
+import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
@@ -129,7 +129,7 @@ export async function commentOnPullRequest(
 /**
  * Post a pull request review and return its id. GitHub refuses an approval from
  * the pull request's own author with 422 Unprocessable Entity; Jigs lets
- * GitHub's GithubApiError surface unchanged.
+ * GitHub's GitHubApiError surface unchanged.
  *
  * @group Discuss/review
  */
@@ -203,7 +203,7 @@ export async function mergePullRequest(
     });
     if (result.merged) return { merged: true, mergeCommitSha: result.sha };
   } catch (error) {
-    if (!(error instanceof GithubApiError) || !STATE_CHANGED.has(error.status)) throw error;
+    if (!(error instanceof GitHubApiError) || !STATE_CHANGED.has(error.status)) throw error;
     console.log(
       `[merge] ${pr.owner}/${pr.repo}#${pr.number} refused with ${error.status}: ${error.body}`,
     );

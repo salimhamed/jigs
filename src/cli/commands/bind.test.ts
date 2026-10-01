@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { GithubApiError } from "../../providers/github-api.ts";
+import { GitHubApiError } from "../../providers/github-api.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
@@ -431,7 +431,7 @@ test("a label permission failure preserves the binding after ensuring the webhoo
   const ensureLabel = vi
     .fn()
     .mockRejectedValue(
-      new GithubApiError(
+      new GitHubApiError(
         403,
         "/repos/acme/Api/labels",
         "Resource not accessible by personal access token",
