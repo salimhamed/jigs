@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.3](https://github.com/salimhamed/jigs/compare/jigs-v0.81.2...jigs-v0.81.3) (2026-10-01)
+
+
+### Bug Fixes
+
+* keep watching a recipe PR that needs a person, and wake the builder only for actionable changes ([#479](https://github.com/salimhamed/jigs/issues/479)) ([8b2575d](https://github.com/salimhamed/jigs/commit/8b2575d9d469a36dc471967703bd6334a2bb2cfb))
+
 ## [0.81.2](https://github.com/salimhamed/jigs/compare/jigs-v0.81.1...jigs-v0.81.2) (2026-10-01)
 
 
