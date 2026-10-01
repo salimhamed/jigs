@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.2](https://github.com/salimhamed/jigs/compare/jigs-v0.81.1...jigs-v0.81.2) (2026-10-01)
+
+
+### Features
+
+* call any GitHub REST endpoint from a factory step ([#477](https://github.com/salimhamed/jigs/issues/477)) ([89ce54b](https://github.com/salimhamed/jigs/commit/89ce54b7f9edac85360f86daa0f4f5e0397588f4))
+
 ## [0.81.1](https://github.com/salimhamed/jigs/compare/jigs-v0.81.0...jigs-v0.81.1) (2026-09-30)
 
 
