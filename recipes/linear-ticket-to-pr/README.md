@@ -201,8 +201,8 @@ export async function deliverTicket(
   `pending` waits for an external change, such as a re-run of a check that
   failed for no visible reason; unfinished local or unpublished work is
   recovered immediately instead. `needs-human` calls `onNeedsHuman` with a note
-  and keeps watching. A workflow that wants the old hand-off, moving the ticket
-  back to `Todo`, does it inside `onNeedsHuman`.
+  and keeps watching. To move the ticket back to `Todo` as well, do it inside
+  `onNeedsHuman`.
   With `mergedBy: "human"` the recipe waits for you to merge. With `"jigs"` it
   checks merge readiness after every watcher yield and every builder turn,
   whatever the builder last reported: the configured GitHub approval, green CI,
