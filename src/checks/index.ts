@@ -15,6 +15,7 @@ import { pagerDutyClientFor } from "../providers/pagerduty.ts";
 import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
 import { slackAuthTest, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
+import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -288,6 +289,45 @@ function configuredProviders(): Record<Integration, boolean> {
   }
 }
 
+// A step proves its agent's MCP servers in its worktree when the agent starts.
+// Doctor has no worktree, so it proves them from the factory root, under the
+// environment a step would hand that agent. A server several workflows or
+// agents share is probed once.
+function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
+  let root: string;
+  let agentEnv: readonly string[];
+  try {
+    root = factoryRoot();
+    agentEnv = factoryAgentEnv();
+  } catch {
+    // The binding checks report a configuration that cannot be read.
+    return [];
+  }
+  const servers = new Map<string, { checks: Check[]; workflows: string[] }>();
+  for (const [workflow, { requires }] of Object.entries(workflows)) {
+    for (const harness of Object.values(requires?.agents ?? {})) {
+      // A kind with no driver is the harness checks' diagnosis.
+      const driver = driverFor(harness.kind);
+      if (driver === undefined) continue;
+      for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
+        const key = JSON.stringify([harness.kind, name, server]);
+        const entry = servers.get(key) ?? {
+          checks: mcpServerChecks(
+            { [name]: server },
+            root,
+            harnessEnv([...driver.envAllowlist({ harness, cwd: root }), ...agentEnv]),
+            { inherit: harness.kind !== "pi" },
+          ),
+          workflows: [],
+        };
+        if (!entry.workflows.includes(workflow)) entry.workflows.push(workflow);
+        servers.set(key, entry);
+      }
+    }
+  }
+  return [...servers.values()].flatMap(({ checks, workflows }) => neededByUsers(checks, workflows));
+}
+
 // Every check follows the factory: its workflows' manifests, the providers its
 // event triggers poll, and its configuration. A provider, harness or AWS
 // profile nothing uses is not checked. `triggers` maps each trigger to the
@@ -327,6 +367,7 @@ export function doctorChecks(
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),
+    ...requiredMcpServerChecks(workflows),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
   ];
 }

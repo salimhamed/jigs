@@ -16,9 +16,10 @@ import type {
 import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
-// MCP checks are JIT-only by design: a step's servers are built inside the
-// workflow body, so there is nothing to preflight — and an agent's
-// self-enumeration is not evidence, hence the real tool call below.
+// A step runs these when its agent starts, and doctor runs them for the agents
+// a workflow declares under `requires.agents`. Preflight does not: a step can
+// build its servers inside the workflow body. An agent's self-enumeration is
+// not evidence, hence the real tool call below.
 
 const DECLARED_PER_STEP =
   "MCP servers are declared per step in the workflow body, never repo-owned";
@@ -33,9 +34,9 @@ function transportFor(
       command: server.command,
       ...(server.args !== undefined ? { args: server.args } : {}),
       env: { ...inherited, ...server.env },
-      // The worktree, for the same reason: a server whose command or args
-      // resolve relative to the working tree is otherwise proven somewhere it
-      // will never run.
+      // The step's worktree, so a server whose command or args resolve
+      // relative to it is proven where it will run. Doctor has no worktree
+      // and starts it from the factory root.
       cwd,
       stderr: "ignore",
     });

@@ -1,5 +1,6 @@
-import { writeFileSync } from "node:fs";
+import { copyFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { harnesses, models } from "../workflow/agents/harness-config.ts";
@@ -223,11 +224,12 @@ test("workflows check only explicitly declared integrations", async () => {
   expect(report.checks).toHaveLength(2);
 });
 
-function factoryWith(config: string): void {
+function factoryWith(config: string): string {
   const factory = makeTmpDir();
   onTestFinished(() => removeTmpDir(factory));
   writeFileSync(path.join(factory, "jigs.config.ts"), `export default ${config}`);
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  return factory;
 }
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
@@ -431,4 +433,57 @@ test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", 
     ok: false,
     reason: expect.stringContaining("(needed by trigger pages)"),
   });
+});
+
+const PROBE_SERVER = fileURLToPath(
+  new URL("../steps/agents/harnesses/live/fixtures/mcp-probe-server.mjs", import.meta.url),
+);
+
+// A relative path, so the probe passes only where doctor starts the server
+// from the factory root.
+const probeServer = (credential: string) => ({
+  command: "node",
+  args: ["./mcp-probe-server.mjs"],
+  env: { PROBE_TOKEN: credential },
+  probe: { tool: "get_probe_token" },
+});
+
+test("doctor probes each MCP server a required agent declares, from the factory root", async () => {
+  const factory = factoryWith("{ service: { dashboardPort: 9090 } }");
+  copyFileSync(PROBE_SERVER, path.join(factory, "mcp-probe-server.mjs"));
+  vi.stubEnv("PROBE_SOURCE", "from-factory");
+  const builder = harnesses.claude({
+    model: "opus",
+    mcpServers: { probe: probeServer("PROBE_SOURCE") },
+  });
+  const report = await runChecks(
+    doctorChecks({ ship: { requires: { agents: { builder } } } }).filter((check) =>
+      check.id.startsWith("mcp."),
+    ),
+  );
+  expect(report.checks).toEqual([{ id: "mcp.probe", label: "MCP server probe", ok: true }]);
+});
+
+test("doctor names the workflows whose agents declare a failing MCP server", async () => {
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  const builder = harnesses.claude({
+    model: "opus",
+    mcpServers: { github: probeServer("MISSING_PROBE_TOKEN") },
+  });
+  const report = await runChecks(
+    doctorChecks({
+      hello: {},
+      ship: { requires: { agents: { builder } } },
+      fix: { requires: { agents: { builder, reviewer: builder } } },
+    }).filter((check) => check.id.startsWith("mcp.")),
+  );
+  expect(report.checks).toEqual([
+    {
+      id: "mcp.github",
+      label: "MCP server github",
+      ok: false,
+      reason: expect.stringMatching(/MISSING_PROBE_TOKEN.*\(needed by workflows ship, fix\)$/),
+      repair: expect.stringContaining("set MISSING_PROBE_TOKEN in"),
+    },
+  ]);
 });
