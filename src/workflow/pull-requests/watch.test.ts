@@ -65,7 +65,7 @@ test("reads immediately and releases the existing PR token on early exit", async
     break;
   }
   expect(createHook).toHaveBeenCalledWith({ token: "github:pr:acme/app#7" });
-  expect(fetch).toHaveBeenCalledExactlyOnceWith(pr);
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(pr, undefined);
   expect(hook.awaited).toBe(0);
   expect(hook.disposed).toBe(1);
 });

@@ -1046,3 +1046,23 @@ test("every pull request read and the merge count approvals as the workflow chos
   expect(steps.fetchPullRequestState).toHaveBeenCalledWith(pr, covers);
   expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", covers);
 });
+
+test("under any-commit, a builder push after an approval merges without asking anyone", async () => {
+  mergesBy("jigs");
+  const anyCommit = { ...delivery, approvalCovers: "any-commit" as const };
+  // The approval names h1; read with any-commit, it still covers h2.
+  const pushed = { ...snapshot, headSha: "h2" };
+  answer(maintenanceReport, () => {
+    at("h2");
+    return finished;
+  });
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(pushed);
+  vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
+  watch(commented, pushed);
+  await follow(anyCommit);
+  expect(notes()).toHaveLength(0);
+  expect(steps.mergePullRequest).toHaveBeenCalledOnce();
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h2", {
+    approvalCovers: "any-commit",
+  });
+});

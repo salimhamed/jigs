@@ -331,13 +331,13 @@ These are three independent decisions:
 - **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
   `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
   repository can differ. `"latest-commit"`, the default, counts a review only
-  on the commit it approved, so a push needs a new approval. `"any-commit"`
-  keeps a person's approval counting through later pushes, such as a merge of
-  the base branch or a fix asked for in the same review, until a later review
-  requests changes or the approval is dismissed. Under `"any-commit"`, approvals
-  by a bot or by your own GitHub account are ignored: the builder agent acts
-  with your token, so an approval in your name might be the agent's. It does
-  not change label approval.
+  on the commit it approved. `"any-commit"` keeps a person's approval counting
+  through later pushes, even a force-push that drops the approved commit, until
+  a later review requests changes or the approval is dismissed. Approvals by
+  bots never count under `"any-commit"`. With an App identity, approvals by the
+  configured `operator` account don't count either, because the builder may act
+  as that account, so someone else must approve. Changes requested from that
+  account still block. This applies in App mode only.
 - **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
   GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
   becomes the commit title. With `rebase`, each commit is rewritten and loses

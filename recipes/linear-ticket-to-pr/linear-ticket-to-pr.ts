@@ -29,10 +29,7 @@ const agentName = z.enum(["builder", "reviewer"]);
 // "jigs" merges it, "human" leaves the merge to you.
 const mergedBy: "jigs" | "human" = "human";
 
-// Which commits a person's approving review covers when jigs merges:
-// "latest-commit" only the one it names, so a push needs a new approval;
-// "any-commit" later pushes too, until a review requests changes or the
-// approval is dismissed. A jigs:approved label already survives pushes.
+// "any-commit" lets a person's approving review also cover later pushes.
 const approvalCovers: ApprovalCoverage = "latest-commit";
 
 const inputs = z.object({

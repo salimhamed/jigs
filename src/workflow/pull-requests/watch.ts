@@ -31,8 +31,7 @@ export async function* watchPullRequest(
     if (conflict !== null) throw new ClaimConflictError(token, conflict.runId);
     let previous: string | undefined;
     while (true) {
-      // The default read keeps the step input it always had.
-      const snapshot = await (options === undefined ? fetchState(pr) : fetchState(pr, options));
+      const snapshot = await fetchState(pr, options);
       // Capture before yielding so consumer mutations cannot change the previous facts.
       const current = pullRequestSnapshotKey(snapshot);
       const closed = snapshot.state === "closed";
