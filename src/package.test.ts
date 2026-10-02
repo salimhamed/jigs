@@ -219,6 +219,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "ClaimConflictError",
     "JigsError",
     "JitCheckError",
+    "blockedMergeNote",
     "choice",
     "defaultPullRequestScope",
     "describeHarness",

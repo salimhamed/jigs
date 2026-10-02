@@ -1,20 +1,23 @@
-import type { PullRequestSnapshot } from "@jigs-ai/jigs";
+import { type PullRequestSnapshot, parseMarkers } from "@jigs-ai/jigs";
 
 // A bot edits its sticky comment on every push; only its new comments are news.
 const edition = (comment: { id: number; updatedAt: string }, bot: boolean) =>
   bot ? `${comment.id}` : `${comment.id}:${comment.updatedAt}`;
 
+// A note jigs posted itself is never something for the builder to answer.
+const fromJigs = (comment: { body: string }) => parseMarkers(comment.body).length > 0;
+
 /** New or edited comments, one string each. */
 export function commentFacts(snapshot: PullRequestSnapshot): string[] {
   return [
     ...snapshot.reviewThreads.flatMap((thread) =>
-      thread.comments.map(
-        (comment) => `thread-comment:${edition(comment, comment.user.endsWith("[bot]"))}`,
-      ),
+      thread.comments
+        .filter((comment) => !fromJigs(comment))
+        .map((comment) => `thread-comment:${edition(comment, comment.user.endsWith("[bot]"))}`),
     ),
-    ...snapshot.conversationComments.map(
-      (comment) => `comment:${edition(comment, comment.userType === "Bot")}`,
-    ),
+    ...snapshot.conversationComments
+      .filter((comment) => !fromJigs(comment))
+      .map((comment) => `comment:${edition(comment, comment.userType === "Bot")}`),
   ];
 }
 

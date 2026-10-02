@@ -1,5 +1,10 @@
 import { describe, expect, test } from "vitest";
-import { approvalState, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
+import {
+  approvalState,
+  blockedMergeNote,
+  isPullRequestMergeReady,
+  mergeRefusal,
+} from "./merge-ready.ts";
 import type { MergeApproval } from "./policy.ts";
 import type { PullRequestReview, PullRequestSnapshot } from "./snapshot.ts";
 
@@ -204,4 +209,18 @@ describe("an approval that covers any commit", () => {
       approvalState({ ...facts, ...labelled }, "label", { covers: "any-commit", builder: "x" }),
     ).toBe("approved");
   });
+});
+
+test("an approved, green pull request GitHub still blocks says why jigs is waiting", () => {
+  const blocked = read({ mergeState: "blocked" });
+  const note = blockedMergeNote(blocked);
+  expect(note).toMatch(/approved and CI is green.*branch rule.*push restrictions/s);
+  // The same words reach `jigs status`, and jigs keeps waiting.
+  expect(mergeRefusal(blocked, "new")).toEqual({ reason: note, transient: true });
+
+  // Blocked for a reason jigs already names is not this case.
+  expect(blockedMergeNote(read({ mergeState: "blocked", ci: "pending" }))).toBeNull();
+  expect(blockedMergeNote(read({ mergeState: "blocked", reviews: [] }))).toBeNull();
+  expect(blockedMergeNote(read({ mergeState: "unstable" }))).toBeNull();
+  expect(blockedMergeNote(snapshot)).toBeNull();
 });

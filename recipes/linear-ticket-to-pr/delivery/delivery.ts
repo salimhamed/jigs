@@ -5,6 +5,8 @@
 
 import {
   type ApprovalCoverage,
+  blockedMergeNote,
+  defaultPullRequestScope,
   type Harness,
   isPullRequestMergeReady,
   JigsError,
@@ -15,7 +17,13 @@ import {
 } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
 import { z } from "zod";
-import { agentSession, committedWork, runAgent, watchPullRequest } from "#jigs/routines";
+import {
+  agentSession,
+  committedWork,
+  postPullRequestNote,
+  runAgent,
+  watchPullRequest,
+} from "#jigs/routines";
 import {
   fetchPullRequestState,
   mergePullRequest,
@@ -395,6 +403,7 @@ async function mergeIfReady(following: Following, snapshot: PullRequestSnapshot)
     }
     if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
     if (!isPullRequestMergeReady(current)) {
+      await noteBlockedMerge(following, current);
       // After a refusal, keep polling: GitHub settling back to the yielded
       // state matches the watcher's last key, so the watcher would never yield it.
       if (attempt > 1) continue;
@@ -420,6 +429,19 @@ async function mergeIfReady(following: Following, snapshot: PullRequestSnapshot)
     `Could not merge the pull request after ${MERGE_TRIES} tries: ${reason}`,
   );
   return false;
+}
+
+// The note's marker keeps it to one per head, across wakes and runs.
+async function noteBlockedMerge(following: Following, snapshot: PullRequestSnapshot) {
+  const body = blockedMergeNote(snapshot);
+  if (body === null) return;
+  await postPullRequestNote({
+    pr: following.pr,
+    scope: defaultPullRequestScope(following.delivery.task.key),
+    headSha: snapshot.headSha,
+    reason: "merge-retry",
+    body,
+  });
 }
 
 const prUrl = (pr: PullRequestRef) => `https://github.com/${pr.owner}/${pr.repo}/pull/${pr.number}`;

@@ -59,6 +59,9 @@ function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha
     : "no approving review yet";
 }
 
+const BLOCKED =
+  "GitHub blocks the merge although the pull request is approved and CI is green. Most likely the account jigs merges as does not meet a branch rule: push restrictions that leave it out, or a required check or reviewer still missing. Add the account to the rule, or merge by hand; jigs keeps watching.";
+
 /** Why a merge did not happen, and whether a later wake could change it. */
 export interface MergeRefusal {
   /** A human-readable explanation of the state that prevented the merge. */
@@ -117,6 +120,12 @@ export function mergeRefusal(
   if (snapshot.approval.state !== "approved") {
     return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
+  // GitHub says only `blocked`, never which rule, and the account jigs merges
+  // as may meet a rule the operator does not. Transient: changing the rule
+  // unblocks this same commit.
+  if (snapshot.mergeState === "blocked" && snapshot.ci === "green") {
+    return { reason: BLOCKED, transient: true };
+  }
   if (snapshot.mergeState !== "clean") {
     return { reason: `GitHub reports the merge state as ${snapshot.mergeState}`, transient: true };
   }
@@ -141,4 +150,18 @@ export function mergeRefusal(
  */
 export function isPullRequestMergeReady(snapshot: PullRequestSnapshot): boolean {
   return mergeRefusal(snapshot, snapshot.headSha) === null;
+}
+
+/**
+ * The note to leave on a pull request that is approved and green but that GitHub
+ * blocks from merging, or `null` when that is not why it waits.
+ *
+ * @remarks
+ * GitHub does not say which branch rule blocks the merge, so without a note
+ * jigs would wait in silence. `jigs status` shows the same text.
+ *
+ * @group Pull requests
+ */
+export function blockedMergeNote(snapshot: PullRequestSnapshot): string | null {
+  return mergeRefusal(snapshot, snapshot.headSha)?.reason === BLOCKED ? BLOCKED : null;
 }

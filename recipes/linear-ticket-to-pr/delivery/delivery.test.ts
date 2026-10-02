@@ -3,6 +3,7 @@ import {
   type Harness,
   harnesses,
   type PullRequestSnapshot,
+  parseMarkers,
   type TicketNote,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -34,6 +35,7 @@ vi.mock("#jigs/routines", async (importOriginal) => {
 });
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
+  commentOnPullRequest: vi.fn(),
   fetchPullRequestState: vi.fn(),
   mergePullRequest: vi.fn(),
   openPullRequest: vi.fn(),
@@ -520,6 +522,48 @@ test("a successful push aligning local and published heads defers merging the ne
   expect(calls).toHaveLength(1);
   expect(sleep).not.toHaveBeenCalled();
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
+});
+
+test("an approved green PR GitHub blocks gets one note per head and no builder turn", async () => {
+  mergesBy("jigs");
+  const posted: string[] = [];
+  vi.mocked(steps.commentOnPullRequest).mockImplementation(async (_pr, body) => {
+    posted.push(body);
+    return { id: 100 + posted.length };
+  });
+  // GitHub as it stands: the head, and every note jigs has posted so far.
+  let headSha = "h1";
+  const blocked = (): PullRequestSnapshot => ({
+    ...snapshot,
+    headSha,
+    mergeState: "blocked",
+    reviews: snapshot.reviews.map((review) => ({ ...review, commitSha: headSha })),
+    conversationComments: posted.map((body, i) => ({ ...comment(100 + i, body), userType: "Bot" })),
+  });
+  vi.mocked(steps.fetchPullRequestState).mockImplementation(async () => blocked());
+  vi.mocked(routines.watchPullRequest).mockImplementation(async function* () {
+    yield blocked();
+    yield blocked();
+    headSha = "h2";
+    yield blocked();
+    yield blocked();
+    yield closed;
+  });
+  await follow();
+  expect(calls).toHaveLength(0);
+  expect(steps.mergePullRequest).not.toHaveBeenCalled();
+  expect(posted).toHaveLength(2);
+  expect(posted[0]).toMatch(/approved and CI is green.*keeps watching/s);
+  expect(posted.flatMap(parseMarkers)).toEqual(
+    ["h1", "h2"].map((source) =>
+      expect.objectContaining({
+        scope: "linearTicketToPr/ABC-1",
+        kind: "status",
+        reason: "merge-retry",
+        source,
+      }),
+    ),
+  );
 });
 
 test("the builder's own reply during its turn wakes nothing, and an approved green PR then merges", async () => {
