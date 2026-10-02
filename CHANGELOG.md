@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.7](https://github.com/salimhamed/jigs/compare/jigs-v0.81.6...jigs-v0.81.7) (2026-10-02)
+
+
+### Features
+
+* let workflow code keep a pull request approval across later pushes ([#491](https://github.com/salimhamed/jigs/issues/491)) ([c52e9b9](https://github.com/salimhamed/jigs/commit/c52e9b9423fa925b7236db23876fbc8da759f215))
+
 ## [0.81.6](https://github.com/salimhamed/jigs/compare/jigs-v0.81.5...jigs-v0.81.6) (2026-10-02)
 
 
