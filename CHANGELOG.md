@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.81.4](https://github.com/salimhamed/jigs/compare/jigs-v0.81.3...jigs-v0.81.4) (2026-10-02)
+
+
+### Bug Fixes
+
+* keep a jigs run input as text when the workflow types it as a string ([#481](https://github.com/salimhamed/jigs/issues/481)) ([82af095](https://github.com/salimhamed/jigs/commit/82af095a625ed690a5d674ea73c8d019a7a3f6b4))
+* publish a factory's Postgres on localhost only ([#483](https://github.com/salimhamed/jigs/issues/483)) ([ceb6dc5](https://github.com/salimhamed/jigs/commit/ceb6dc55b0870b6a3c02d67796ab77f722201458))
+* treat a webhook provider left out of webhooks as disabled ([#482](https://github.com/salimhamed/jigs/issues/482)) ([decd31d](https://github.com/salimhamed/jigs/commit/decd31d4732ec32c143781bf38f2db32c37ce263))
+
 ## [0.81.3](https://github.com/salimhamed/jigs/compare/jigs-v0.81.2...jigs-v0.81.3) (2026-10-01)
 
 
