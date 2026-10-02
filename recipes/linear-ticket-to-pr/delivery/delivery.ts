@@ -80,6 +80,15 @@ export interface Approved {
   ledger: ReviewRound[];
 }
 
+// Notes and findings get posted, on the ticket and wherever a caller sends
+// them, so they never carry the operator's local worktree path. The run's
+// worktree resource shows it locally, in `jigs status`.
+const withoutLocalPath = (worktree: Worktree, text: string) =>
+  text.replaceAll(worktree.path, "the run's worktree");
+
+const workLocation = (worktree: Worktree) =>
+  `The work is on branch \`${worktree.branch}\`, in the run's local worktree, which \`jigs status\` lists.`;
+
 /** Thrown when a delivery stops short; local work remains available. */
 export class DeliveryStopped extends JigsError {
   readonly findings: string[];
@@ -92,9 +101,10 @@ export class DeliveryStopped extends JigsError {
     worktree: Worktree,
     closing = "Nothing is waiting on a reply here. Another run starts over on a new branch; to keep this work, take the branch (and its pull request, if any) over by hand.",
   ) {
-    super(message, findings.length === 0 ? undefined : findings.join("\n"));
+    const posted = findings.map((finding) => withoutLocalPath(worktree, finding));
+    super(withoutLocalPath(worktree, message), posted.length === 0 ? undefined : posted.join("\n"));
     this.name = "DeliveryStopped";
-    this.findings = findings;
+    this.findings = posted;
     this.worktree = worktree;
     this.closing = closing;
   }
@@ -103,10 +113,7 @@ export class DeliveryStopped extends JigsError {
   note(): TicketNote {
     return {
       headline: this.message,
-      notes: [
-        ...this.findings,
-        `The work is on branch \`${this.worktree.branch}\`, in the worktree at \`${this.worktree.path}\`.`,
-      ],
+      notes: [...this.findings, workLocation(this.worktree)],
       closing: this.closing,
     };
   }
@@ -180,8 +187,8 @@ export async function publish(
   approved: Approved,
 ): Promise<PullRequestRef & { url: string }> {
   const { task, worktree } = delivery;
-  await pushApprovedChange(worktree, approved.reviewedCommit);
-
+  // Described before the push, so a failed description leaves no branch
+  // on the remote without a pull request.
   const { output: described } = await runAgent({
     harness: delivery.builder,
     cwd: worktree.path,
@@ -197,6 +204,7 @@ export async function publish(
       ? described.body
       : `${described.body}\n\n## Reviewer notes\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
 
+  await pushApprovedChange(worktree, approved.reviewedCommit);
   const pr = await openPullRequest({ worktree, title: described.title, body });
   await registerResource({
     kind: "pull-request",
@@ -453,9 +461,9 @@ function maintenanceNote(delivery: Delivery, pr: PullRequestRef, reason: string)
   return {
     headline: `jigs needs a person to move the pull request for ${task.key} forward.`,
     notes: [
-      reason,
+      withoutLocalPath(worktree, reason),
       `Pull request: ${prUrl(pr)}`,
-      `The work is on branch \`${worktree.branch}\`, in the worktree at \`${worktree.path}\`.`,
+      workLocation(worktree),
     ],
     closing:
       "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
@@ -482,9 +490,7 @@ function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: stri
 async function stop(delivery: Delivery, reason: string, findings: string[]): Promise<never> {
   const retained = [...findings];
   await pushBranch(delivery.worktree).catch((error: unknown) => {
-    retained.push(
-      `Could not push the branch: ${String(error)}. Recover the work from ${delivery.worktree.path}.`,
-    );
+    retained.push(`Could not push the branch: ${String(error)}.`);
   });
   throw new DeliveryStopped(reason, retained, delivery.worktree);
 }
