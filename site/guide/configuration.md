@@ -317,6 +317,7 @@ These are three independent decisions:
 | Concern | Controlled by |
 | --- | --- |
 | What counts as operator approval | `github.mergeApproval` |
+| Which commits an approving review covers | Workflow code (`approvalCovers`) |
 | How GitHub creates the merge | `bindings.<name>.mergeMethod` |
 | Whether and when to attempt a merge | Workflow code |
 
@@ -327,6 +328,16 @@ These are three independent decisions:
   [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
   A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
   not let you approve your own.
+- **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
+  `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
+  repository can differ. `"latest-commit"`, the default, counts a review only
+  on the commit it approved, so a push needs a new approval. `"any-commit"`
+  keeps a person's approval counting through later pushes, such as a merge of
+  the base branch or a fix asked for in the same review, until a later review
+  requests changes or the approval is dismissed. Under `"any-commit"`, approvals
+  by a bot or by your own GitHub account are ignored: the builder agent acts
+  with your token, so an approval in your name might be the agent's. It does
+  not change label approval.
 - **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
   GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
   becomes the commit title. With `rebase`, each commit is rewritten and loses
@@ -336,7 +347,8 @@ These are three independent decisions:
 binds, whichever approval you use.
 
 Workflow code calls `mergePullRequest` when its policy says to merge. That step
-rereads GitHub and enforces readiness and approval. `watchPullRequest` only
+rereads GitHub and enforces readiness and approval, read with the
+`approvalCovers` it is given. `watchPullRequest` only
 reports facts. These checks do not restrict an agent using its own GitHub tools.
 
 jigs merges only when the approval is present, GitHub reports the pull request

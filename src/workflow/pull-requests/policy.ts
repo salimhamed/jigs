@@ -19,3 +19,14 @@ export const mergeApprovalSchema = z.enum(["review", "label"]) as z.ZodEnum<{
 
 /** How the operator approves a pull request for merging: a review, or the `jigs:approved` label. */
 export type MergeApproval = z.output<typeof mergeApprovalSchema>;
+
+/**
+ * Which commits an approving review covers, chosen in workflow code.
+ *
+ * @remarks
+ * `latest-commit`, the default, counts an approval only on the commit it names, so a push
+ * withdraws it. `any-commit` keeps a person's approval counting through later pushes until a
+ * later review requests changes or the approval is dismissed; approvals by a bot or by the
+ * builder's own GitHub identity never count. It changes nothing for label approval.
+ */
+export type ApprovalCoverage = "latest-commit" | "any-commit";

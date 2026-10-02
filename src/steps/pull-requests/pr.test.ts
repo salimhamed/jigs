@@ -393,3 +393,38 @@ test("opening a PR derives its repository, head and default branch from the supp
     draft: false,
   });
 });
+
+test("an approval of an earlier commit merges only when the workflow lets it cover any commit", async () => {
+  writeFileSync(
+    path.join(root, "jigs.config.ts"),
+    `export default {
+    service: { dashboardPort: 9090 },
+    github: {
+      identities: [{ mode: "app", appId: 1, installations: { owner: 2 }, privateKeyPath: "key.pem", operator: "salimhamed" }],
+      mergeApproval: "review",
+    },
+    bindings: { app: { remote: "git@github.com:owner/repo.git" } },
+  };`,
+  );
+  asApp();
+  const approvedEarlier = (user: string) => ({
+    ...snapshot,
+    labels: [],
+    reviews: [{ id: 1, user, state: "APPROVED", submittedAt: "today", body: "", commitSha: "old" }],
+  });
+  vi.mocked(fetchPrSnapshot).mockResolvedValue(approvedEarlier("person"));
+  expect(await mergePullRequest(worktree, pr, "head")).toMatchObject({
+    merged: false,
+    reason: "the approval does not cover head",
+  });
+  expect(await mergePullRequest(worktree, pr, "head", { approvalCovers: "any-commit" })).toEqual({
+    merged: true,
+    mergeCommitSha: "merged",
+  });
+
+  // The builder acts as the operator, so the operator's approval cannot carry forward.
+  vi.mocked(fetchPrSnapshot).mockResolvedValue(approvedEarlier("salimhamed"));
+  expect(
+    await mergePullRequest(worktree, pr, "head", { approvalCovers: "any-commit" }),
+  ).toMatchObject({ merged: false, reason: "no approving review yet" });
+});

@@ -164,3 +164,11 @@ test("reader failures dispose the hook", async () => {
   await expect(watcher.next()).rejects.toThrow("GitHub unavailable");
   expect(hook.disposed).toBe(1);
 });
+
+test("reads every snapshot the way the workflow asks for its approval", async () => {
+  const fetch = vi.fn(async () => snapshot({ state: "closed" }));
+  for await (const _ of watchPullRequest(pr, fetch, { approvalCovers: "any-commit" })) {
+    // drain
+  }
+  expect(fetch).toHaveBeenCalledExactlyOnceWith(pr, { approvalCovers: "any-commit" });
+});

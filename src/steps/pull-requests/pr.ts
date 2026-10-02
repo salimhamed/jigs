@@ -19,6 +19,7 @@ import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
+import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { readPullRequestSnapshot } from "./fetch-state.ts";
 
@@ -187,8 +188,9 @@ export async function mergePullRequest(
   worktree: Worktree,
   pr: PullRequestRef,
   expectedHeadSha: string,
+  options: PullRequestReadOptions = {},
 ): Promise<MergeOutcome> {
-  const before = await readPullRequestSnapshot(pr);
+  const before = await readPullRequestSnapshot(pr, options);
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
   const refusal = mergeRefusal(before, expectedHeadSha);
   if (refusal !== null) return { merged: false, ...refusal };
@@ -209,7 +211,7 @@ export async function mergePullRequest(
     );
   }
   // Ambiguous either way: GitHub is the only authority on whether it merged.
-  const after = await readPullRequestSnapshot(pr);
+  const after = await readPullRequestSnapshot(pr, options);
   if (after.merged) return { merged: true, mergeCommitSha: after.mergeCommitSha };
   // A snapshot that still reads mergeable after GitHub refused the merge is
   // one no later wake will read differently: the configured method is disabled

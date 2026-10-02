@@ -66,8 +66,10 @@ const delivery: Delivery = {
   reviewer: harnesses.claude({ model: "opus" }),
   budget: { reviewRounds: 2, attemptsPerUpdate: 3 },
   mergedBy: "human",
+  approvalCovers: "latest-commit",
 };
 const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
+const latestCommit = { approvalCovers: "latest-commit" };
 
 type Call = { harness: Harness; prompt: string; resumed: boolean; output?: unknown };
 let calls: Call[];
@@ -358,7 +360,7 @@ test("the implementation builder resumes to judge the PR and merges only after G
   expect(calls[2]?.harness).toBe(delivery.builder);
   expect(calls[2]?.resumed).toBe(true);
   expect(calls[2]?.prompt).not.toContain("THE TASK BRIEF");
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1");
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", latestCommit);
 });
 
 test("an unavailable session gets the task, local diff and PR facts in a fresh prompt", async () => {
@@ -441,7 +443,7 @@ test("an approval arriving after CI goes green merges without a builder turn", a
   await follow();
   expect(calls).toHaveLength(0);
   expect(steps.mergePullRequest).toHaveBeenCalledOnce();
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1");
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", latestCommit);
 });
 
 test("a newly failed check wakes the builder once; the same failure on the same head does not", async () => {
@@ -664,7 +666,7 @@ test("a person pushing past local work that is on the PR does not hold back a me
   watch(unapproved, pushed);
   await follow();
   expect(calls).toHaveLength(0);
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h3");
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h3", latestCommit);
 });
 
 test("local commits that never reached the PR still hold back a merge after a person pushes", async () => {
@@ -778,7 +780,7 @@ test("once the retained work is published, a ready PR merges again", async () =>
     yield published;
   });
   await follow({ ...delivery, budget: { ...delivery.budget, attemptsPerUpdate: 1 } });
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h2");
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h2", latestCommit);
 });
 
 test("a failed implementation preservation push does not hide why delivery stopped", async () => {
@@ -1030,4 +1032,17 @@ test("a needs-human note links the pull request and says jigs is still watching 
         "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
     },
   ]);
+});
+
+test("every pull request read and the merge count approvals as the workflow chose", async () => {
+  mergesBy("jigs");
+  const delivered = { ...delivery, approvalCovers: "any-commit" as const };
+  answer(maintenanceReport, finished);
+  watch(commented);
+  vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
+  await followPullRequest(delivered, pr, builder(), { onNeedsHuman });
+  const covers = { approvalCovers: "any-commit" };
+  expect(routines.watchPullRequest).toHaveBeenCalledWith(pr, covers);
+  expect(steps.fetchPullRequestState).toHaveBeenCalledWith(pr, covers);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", covers);
 });

@@ -4,6 +4,7 @@
 // throws DeliveryStopped; the workflow decides what to tell whom.
 
 import {
+  type ApprovalCoverage,
   type Harness,
   isPullRequestMergeReady,
   JigsError,
@@ -61,6 +62,8 @@ export interface Delivery {
   budget: Budget;
   /** Who merges the pull request once it is approved and CI is green. */
   mergedBy: "jigs" | "human";
+  /** Which commits a person's approving review covers when jigs merges. */
+  approvalCovers: ApprovalCoverage;
 }
 
 export interface Approved {
@@ -237,7 +240,7 @@ export async function followPullRequest(
     seen: new Set(),
     prHeads: new Set(),
   };
-  for await (const snapshot of watchPullRequest(pr)) {
+  for await (const snapshot of watchPullRequest(pr, readOptions(delivery))) {
     let current = observe(following, snapshot);
     if (current.state === "open") {
       const local = await readBranchState(delivery.worktree);
@@ -261,6 +264,8 @@ export async function followPullRequest(
     `the pull request watch for ${pr.owner}/${pr.repo}#${pr.number} ended without a close`,
   );
 }
+
+const readOptions = ({ approvalCovers }: Delivery) => ({ approvalCovers });
 
 function observe(following: Following, snapshot: PullRequestSnapshot) {
   following.prHeads.add(snapshot.headSha);
@@ -303,7 +308,10 @@ async function needsHuman(following: Following, reason: string) {
 // author. Comments that appear during its turn count as its own; a human
 // comment landing in that window is absorbed too. It never submits reviews.
 async function readAfterTurn(following: Following): Promise<PullRequestSnapshot> {
-  const current = observe(following, await fetchPullRequestState(following.pr));
+  const current = observe(
+    following,
+    await fetchPullRequestState(following.pr, readOptions(following.delivery)),
+  );
   for (const fact of commentFacts(current)) following.seen.add(fact);
   return current;
 }
@@ -381,7 +389,7 @@ async function mergeIfReady(following: Following, snapshot: PullRequestSnapshot)
   for (let attempt = 1; attempt <= MERGE_TRIES; attempt++) {
     if (attempt > 1) {
       await sleep("30s");
-      current = observe(following, await fetchPullRequestState(pr));
+      current = observe(following, await fetchPullRequestState(pr, readOptions(delivery)));
     }
     if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
     if (!isPullRequestMergeReady(current)) {
@@ -391,9 +399,16 @@ async function mergeIfReady(following: Following, snapshot: PullRequestSnapshot)
       return false;
     }
     if (!isPublished(following, await readBranchState(delivery.worktree))) return false;
-    const result = await mergePullRequest(delivery.worktree, pr, current.headSha).catch(
-      (error: unknown) => ({ merged: false as const, reason: String(error), transient: true }),
-    );
+    const result = await mergePullRequest(
+      delivery.worktree,
+      pr,
+      current.headSha,
+      readOptions(delivery),
+    ).catch((error: unknown) => ({
+      merged: false as const,
+      reason: String(error),
+      transient: true,
+    }));
     if (result.merged) return true;
     if (!result.transient) {
       await needsHuman(following, `Could not merge the pull request: ${result.reason}`);

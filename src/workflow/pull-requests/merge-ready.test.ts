@@ -1,7 +1,7 @@
-import { expect, test } from "vitest";
+import { describe, expect, test } from "vitest";
 import { approvalState, isPullRequestMergeReady, mergeRefusal } from "./merge-ready.ts";
 import type { MergeApproval } from "./policy.ts";
-import type { PullRequestSnapshot } from "./snapshot.ts";
+import type { PullRequestReview, PullRequestSnapshot } from "./snapshot.ts";
 
 type Facts = Omit<PullRequestSnapshot, "approval">;
 
@@ -148,4 +148,60 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
   // Nothing a later wake reads changes any of these on this commit.
   expect(refusal({ mergeState: "dirty" })).toMatchObject({ transient: false });
   expect(refusal({ state: "closed" })).toMatchObject({ transient: false });
+});
+
+describe("an approval that covers any commit", () => {
+  const anyCommit = (patch: Partial<Facts>) =>
+    approvalState({ ...facts, ...patch }, "review", { covers: "any-commit", builder: "operator" });
+  const approval: PullRequestReview = {
+    id: 1,
+    state: "APPROVED",
+    body: "",
+    user: "reviewer",
+    submittedAt: "1",
+    commitSha: "old",
+  };
+
+  test("carries forward to a conflict-merge push or a builder fix", () => {
+    expect(anyCommit({ reviews: [approval], headSha: "merge-of-base" })).toBe("approved");
+    expect(anyCommit({ reviews: [approval], headSha: "builder-fix" })).toBe("approved");
+    // The default reads the same reviews as stale.
+    expect(approvalState({ ...facts, reviews: [approval] }, "review")).toBe("stale");
+  });
+
+  test("is withdrawn by a later changes-requested from anyone", () => {
+    const later = { ...approval, id: 2, submittedAt: "2", commitSha: "new" };
+    expect(anyCommit({ reviews: [approval, { ...later, state: "CHANGES_REQUESTED" }] })).toBe(
+      "changes-requested",
+    );
+    expect(
+      anyCommit({ reviews: [approval, { ...later, user: "other", state: "CHANGES_REQUESTED" }] }),
+    ).toBe("changes-requested");
+  });
+
+  test("is withdrawn when dismissed", () => {
+    // GitHub rewrites a dismissed review's state, so the approval is gone from the list.
+    expect(anyCommit({ reviews: [{ ...approval, state: "DISMISSED" }] })).toBe("none");
+  });
+
+  test("ignores the builder's own approvals and a bot's", () => {
+    expect(anyCommit({ reviews: [{ ...approval, user: "operator" }] })).toBe("none");
+    expect(anyCommit({ reviews: [{ ...approval, user: "Operator" }] })).toBe("none");
+    expect(anyCommit({ reviews: [{ ...approval, user: "helper[bot]" }] })).toBe("none");
+    expect(
+      anyCommit({
+        reviews: [
+          { ...approval, user: "operator" },
+          { ...approval, id: 2 },
+        ],
+      }),
+    ).toBe("approved");
+  });
+
+  test("leaves label approval as it was", () => {
+    const labelled = { reviews: [], labels: ["jigs:approved"] };
+    expect(
+      approvalState({ ...facts, ...labelled }, "label", { covers: "any-commit", builder: "x" }),
+    ).toBe("approved");
+  });
 });
