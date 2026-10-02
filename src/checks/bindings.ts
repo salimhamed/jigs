@@ -9,7 +9,8 @@ import { JigsError } from "../errors.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
-import { cloneRepoDir } from "../steps/workspaces/layout.ts";
+import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
+import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
 import { type Check, type CheckResult, failedCheck, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -71,6 +72,9 @@ async function checkBinding(
     };
   }
 
+  const copyFailure = checkCopySources(factoryRoot, name, binding.copy);
+  if (copyFailure !== null) return copyFailure;
+
   const account = parseGithubRemote(binding.remote)?.owner;
   if (account) {
     try {
@@ -107,4 +111,22 @@ async function checkBinding(
     };
   }
   return { ok: true };
+}
+
+// Provisioning would refuse the same entries, but only after the run started.
+function checkCopySources(factoryRoot: string, name: string, copy: string[]): CheckResult | null {
+  try {
+    copySourceMatches(factoryRoot, name, copy);
+    return null;
+  } catch (err) {
+    if (err instanceof CopySourceMissingError)
+      return {
+        ok: false,
+        reason: err.message,
+        repair: `add a file matching ${err.entry} under ${bindingFilesDir(factoryRoot, name)}/, or remove the entry from ${FACTORY_CONFIG_FILE}`,
+      };
+    if (err instanceof JigsError)
+      return { ok: false, reason: err.message, repair: err.hint ?? "fix the binding's copy list" };
+    throw err;
+  }
 }

@@ -34,7 +34,9 @@ export class PostCreateFailedError extends Error {
   }
 }
 
+// `fatal` is what the SDK's FatalError.is reads: a retry finds the same folder.
 export class CopySourceMissingError extends Error {
+  readonly fatal = true;
   readonly bindingName: string;
   readonly entry: string;
 
@@ -65,22 +67,17 @@ function isInside(root: string, candidate: string): boolean {
   return resolved === resolvedRoot || resolved.startsWith(resolvedRoot + path.sep);
 }
 
-// Both ends of a copy are relative paths under their own root, so both are
-// checked: a `..` entry would otherwise write anywhere on disk, and an
-// absolute one matches nothing and would look like a forgotten file.
+// Both ends of a copy share the same relative path, so one check covers
+// both: a `..` entry would otherwise write anywhere on disk, and an absolute
+// one matches nothing and would look like a forgotten file.
 function assertInsideCopyDir(
   bindingName: string,
   copyDir: string,
   sourceDir: string,
-  worktreePath: string,
   entry: string,
   relative: string,
 ): void {
-  if (
-    path.isAbsolute(relative) ||
-    !isInside(sourceDir, relative) ||
-    !isInside(worktreePath, relative)
-  ) {
+  if (path.isAbsolute(relative) || !isInside(sourceDir, relative)) {
     throw new JigsError(
       `binding ${bindingName}: copy entry ${entry} must be a relative path inside ${copyDir}/`,
       `copy entries are relative to ${copyDir}/ in the factory repo and land at the same path in the worktree`,
@@ -88,8 +85,38 @@ function assertInsideCopyDir(
   }
 }
 
-// One glob per entry rather than one over the whole list: an entry that
-// matches nothing has to be nameable in the error.
+// Shared with doctor and preflight so they refuse exactly what provisioning
+// would. One glob per entry so an entry that matches nothing can be named.
+export function copySourceMatches(
+  factoryRoot: string,
+  bindingName: string,
+  entries: string[],
+): string[] {
+  const sourceDir = bindingFilesDir(factoryRoot, bindingName);
+  const copyDir = path.relative(factoryRoot, sourceDir);
+  return entries.flatMap((entry) => {
+    assertInsideCopyDir(bindingName, copyDir, sourceDir, entry, entry);
+    // dot:true is load-bearing — the point of `copy` is .env-class files, and
+    // most globbers skip dotfiles by default. expandDirectories:false keeps a
+    // directory a single match instead of its flattened contents.
+    const relatives = globSync([entry], {
+      cwd: sourceDir,
+      dot: true,
+      onlyFiles: false,
+      expandDirectories: false,
+    })
+      .map((match) => match.replace(/\/+$/, ""))
+      .filter((relative) => relative !== "");
+    // A factory that declared a secret and forgot to put it there must not
+    // provision a worktree quietly missing it.
+    if (relatives.length === 0) throw new CopySourceMissingError(bindingName, entry, copyDir);
+    for (const relative of relatives) {
+      assertInsideCopyDir(bindingName, copyDir, sourceDir, entry, relative);
+    }
+    return relatives;
+  });
+}
+
 function copySources(
   bindingName: string,
   factoryRoot: string,
@@ -97,30 +124,8 @@ function copySources(
   entries: string[],
 ): void {
   const sourceDir = bindingFilesDir(factoryRoot, bindingName);
-  const copyDir = path.relative(factoryRoot, sourceDir);
-  for (const entry of entries) {
-    assertInsideCopyDir(bindingName, copyDir, sourceDir, worktreePath, entry, entry);
-    // dot:true is load-bearing — the point of `copy` is .env-class files, and
-    // most globbers skip dotfiles by default. expandDirectories:false keeps a
-    // directory a single match instead of its flattened contents.
-    const matches = globSync([entry], {
-      cwd: sourceDir,
-      dot: true,
-      onlyFiles: false,
-      expandDirectories: false,
-    });
-    const relatives = matches
-      .map((match) => match.replace(/\/+$/, ""))
-      .filter((relative) => relative !== "");
-    // A factory that declared a secret and forgot to put it there must not
-    // provision a worktree quietly missing it.
-    if (relatives.length === 0) {
-      throw new CopySourceMissingError(bindingName, entry, copyDir);
-    }
-    for (const relative of relatives) {
-      assertInsideCopyDir(bindingName, copyDir, sourceDir, worktreePath, entry, relative);
-      copyOne(path.join(sourceDir, relative), path.join(worktreePath, relative));
-    }
+  for (const relative of copySourceMatches(factoryRoot, bindingName, entries)) {
+    copyOne(path.join(sourceDir, relative), path.join(worktreePath, relative));
   }
 }
 
