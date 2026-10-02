@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.82.0](https://github.com/salimhamed/jigs/compare/jigs-v0.81.9...jigs-v0.82.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* license Jigs under BSL 1.1
+
+### Features
+
+* license Jigs under BSL 1.1 ([c22f601](https://github.com/salimhamed/jigs/commit/c22f601785bd49ccf8a4acd9e0e249fe26614001))
+
 ## [0.81.9](https://github.com/salimhamed/jigs/compare/jigs-v0.81.8...jigs-v0.81.9) (2026-10-02)
 
 
