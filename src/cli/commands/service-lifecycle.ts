@@ -368,10 +368,14 @@ export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
 // dashboard's included — to the service's own workflow routes. Left unset the
 // World guesses a port the process happens to listen on, and a queue job
 // delivered to a port with no workflow route dies after three 404s.
+//
+// An empty `.env` slot is unset, as doctor reads it, so it never hides a value
+// the shell exported.
 function childEnv(factoryRoot: string, service: ResolvedService): Record<string, string> {
+  const declared = Object.entries(readFactoryEnv(factoryRoot)).filter(([, value]) => value !== "");
   return {
     ...stringEnv(process.env),
-    ...readFactoryEnv(factoryRoot),
+    ...Object.fromEntries(declared),
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
