@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.83.0](https://github.com/salimhamed/jigs/compare/jigs-v0.82.0...jigs-v0.83.0) (2026-10-02)
+
+
+### ⚠ BREAKING CHANGES
+
+* return "closed" from followPullRequest instead of throwing ([#501](https://github.com/salimhamed/jigs/issues/501))
+
+### Features
+
+* return "closed" from followPullRequest instead of throwing ([#501](https://github.com/salimhamed/jigs/issues/501)) ([beeba3e](https://github.com/salimhamed/jigs/commit/beeba3eac8575cebfb71bc04ee81daaa98a01aa8))
+
 ## [0.82.0](https://github.com/salimhamed/jigs/compare/jigs-v0.81.9...jigs-v0.82.0) (2026-10-02)
 
 
