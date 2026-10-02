@@ -177,8 +177,16 @@ export async function deliverTicket(
       onNeedsHuman: (note) => noteOnTicket(claim, note),
     });
     if (outcome === "closed") {
-      await setTicketStatus(snapshot.id, "Todo");
-      return { pr: pr.url, closed: true };
+      throw new DeliveryStopped(
+        `jigs stopped pull request maintenance for ${delivery.task.key}.`,
+        [
+          "The pull request was closed unmerged.",
+          `Unfinished pull request: ${pr.url}`,
+          "Local work was retained without an automatic push.",
+        ],
+        delivery.worktree,
+        "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
+      );
     }
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
