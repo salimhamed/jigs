@@ -199,7 +199,7 @@ test("the docker project and ports all carry the factory", async () => {
 
   const compose = readFileSync(path.join(dir, "docker-compose.yml"), "utf8");
   expect(compose).toContain("name: alpha");
-  expect(compose).toContain(`"${a.postgresPort}:5432"`);
+  expect(compose).toContain(`"127.0.0.1:${a.postgresPort}:5432"`);
   const yml = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
   expect(yml).toContain(`port: ${a.servicePort}`);
   expect(yml).toContain(`dashboardPort: ${a.dashboardPort}`);

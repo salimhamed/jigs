@@ -111,6 +111,9 @@ rarely clash.
 The Postgres port appears in both `docker-compose.yml` and
 `WORKFLOW_POSTGRES_URL` in `.env`. Change both together. The service and
 dashboard ports are separate settings in `jigs.config.ts`.
+
+`docker-compose.yml` publishes Postgres on `127.0.0.1` only, so other machines
+on your network cannot reach it. Keep that prefix if you change the port.
 :::
 
 ## `schedules` {#schedules}
