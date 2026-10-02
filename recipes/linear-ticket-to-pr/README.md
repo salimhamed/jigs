@@ -210,7 +210,9 @@ export async function deliverTicket(
   whatever the builder last reported: the configured GitHub approval (read with
   `approvalCovers`), green CI,
   a clean merge state, no unseen wake facts, and published local work. A transient merge refusal is retried after a durable wait, up
-  to ten tries.
+  to ten tries. When GitHub reports an approved, green pull request as
+  `blocked`, the recipe posts one note on the pull request for each commit and
+  keeps watching; the note's marker keeps it from waking the builder.
   The watcher never merges, and the agent is instructed not to merge or approve.
   Those instructions are not a restriction on the agent's GitHub credentials.
 
