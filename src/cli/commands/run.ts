@@ -22,7 +22,10 @@ export interface LaunchResult {
 
 // Flat on purpose: one coercion rule to hold in your head. A nested value
 // goes in as inline JSON — `--input pr={"owner":"acme","repo":"api"}`.
-export function parseInputs(pairs: string[]): Record<string, unknown> {
+export function parseInputs(
+  pairs: string[],
+  schema: z.core.JSONSchema.BaseSchema,
+): Record<string, unknown> {
   const inputs: Record<string, unknown> = {};
   for (const pair of pairs) {
     const split = pair.indexOf("=");
@@ -31,7 +34,7 @@ export function parseInputs(pairs: string[]): Record<string, unknown> {
     }
     const key = pair.slice(0, split);
     const raw = pair.slice(split + 1);
-    inputs[key] = coerce(raw);
+    inputs[key] = takesOnlyStrings(schema.properties?.[key]) ? asString(raw) : coerce(raw);
   }
   return inputs;
 }
@@ -45,6 +48,20 @@ function coerce(raw: string): unknown {
   } catch {
     return raw;
   }
+}
+
+// A string field skips the coercion, or a Slack ts would turn into a number.
+// It still takes a JSON-quoted string, the form a trigger's repair command prints.
+function asString(raw: string): string {
+  const parsed = coerce(raw);
+  return raw.startsWith('"') && typeof parsed === "string" ? parsed : raw;
+}
+
+function takesOnlyStrings(field: z.core.JSONSchema._JSONSchema | undefined): boolean {
+  if (typeof field !== "object") return false;
+  const branches = field.anyOf ?? field.oneOf;
+  if (branches !== undefined) return branches.length > 0 && branches.every(takesOnlyStrings);
+  return field.type === "string";
 }
 
 const SCHEMA_HINT = "check --input against the workflow's inputs schema";
@@ -105,7 +122,6 @@ export async function launchRun(
   pairs: string[],
   deps: LaunchDeps,
 ): Promise<LaunchResult> {
-  const inputs = parseInputs(pairs);
   // Ahead of the schema fetch: a workflow the bundle does not have and an
   // input its schema does not have are the loudest symptoms of a stale build,
   // and both are fatal below.
@@ -134,6 +150,7 @@ export async function launchRun(
   const { inputs: schema } = (await schemaRes.json()) as {
     inputs: z.core.JSONSchema.BaseSchema;
   };
+  const inputs = parseInputs(pairs, schema);
   validateInputs(schema, inputs);
 
   const res = await serviceFetch(

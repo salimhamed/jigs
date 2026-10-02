@@ -930,7 +930,11 @@ test("an unconfirmed start's command round-trips every input through the CLI's o
     .split("\0")
     .filter((arg) => arg !== "");
   const pairs = args.filter((_arg, i) => args[i - 1] === "--input");
-  expect(parseInputs(pairs)).toEqual({ team: "infra", ...inputs });
+  const stringFields = z.toJSONSchema(
+    z.looseObject({ team: z.string(), page: z.string(), uni: z.string(), number: z.string() }),
+    { io: "input" },
+  );
+  expect(parseInputs(pairs, stringFields)).toEqual({ team: "infra", ...inputs });
   // Rendered by status and doctor, the command stays on one line, printed plainly.
   const rendered = hintLines(repair);
   expect(rendered.filter((text) => text.includes("jigs run"))).toEqual([`  ${line.slice(1, -1)}`]);

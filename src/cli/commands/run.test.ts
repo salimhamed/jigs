@@ -101,13 +101,16 @@ test("a schema violation never reaches the trigger route", async () => {
 
 test("input values are coerced by JSON, with the raw string as the fallback", () => {
   expect(
-    parseInputs([
-      "stepSeconds=3",
-      "askHuman=true",
-      "ticket=AGE-123",
-      "issueId=6b1c1d2e-0000-4000-8000-000000000000",
-      'pr={"owner":"acme","repo":"api","number":41}',
-    ]),
+    parseInputs(
+      [
+        "stepSeconds=3",
+        "askHuman=true",
+        "ticket=AGE-123",
+        "issueId=6b1c1d2e-0000-4000-8000-000000000000",
+        'pr={"owner":"acme","repo":"api","number":41}',
+      ],
+      {},
+    ),
   ).toEqual({
     stepSeconds: 3,
     askHuman: true,
@@ -118,13 +121,25 @@ test("input values are coerced by JSON, with the raw string as the fallback", ()
 });
 
 test("a value containing = keeps everything after the first one", () => {
-  expect(parseInputs(["note=a=b"])).toEqual({ note: "a=b" });
+  expect(parseInputs(["note=a=b"], {})).toEqual({ note: "a=b" });
+});
+
+test("a string field takes the raw text or a JSON-quoted string, and other fields are still parsed", () => {
+  const schema = z.toJSONSchema(
+    z.object({ ts: z.string(), thread: z.string().optional(), limit: z.number() }),
+    { io: "input" },
+  );
+  expect(parseInputs(["ts=1787145691.947349", 'thread="42"', "limit=3"], schema)).toEqual({
+    ts: "1787145691.947349",
+    thread: "42",
+    limit: 3,
+  });
 });
 
 test("an --input without = fails with an example", () => {
   const thrown = (() => {
     try {
-      parseInputs(["ticket"]);
+      parseInputs(["ticket"], {});
     } catch (err) {
       return err as JigsError;
     }
@@ -212,6 +227,21 @@ test("a started run prints its id, workflow and log pointer", async () => {
   expect(trigger?.[0]).toBe("http://svc.test:8990/api/workflows/deliver-feature/runs");
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
     inputs: { ticket: "AGE-346" },
+  });
+});
+
+test("a string field keeps a value that looks like a number, such as a Slack ts", async () => {
+  const slackSchema = z.toJSONSchema(z.object({ channel: z.string(), ts: z.string() }), {
+    io: "input",
+  });
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ name: "whats-new", inputs: slackSchema })),
+  );
+  respondStarted();
+  await launchRun("whats-new", ["channel=C040SAKCZHP", "ts=1787145691.947349000001"], deps());
+  const [, trigger] = fetchMock.mock.calls;
+  expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
+    inputs: { channel: "C040SAKCZHP", ts: "1787145691.947349000001" },
   });
 });
 
