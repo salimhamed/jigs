@@ -17,13 +17,7 @@ import {
 } from "@jigs-ai/jigs";
 import { sleep } from "workflow";
 import { z } from "zod";
-import {
-  agentSession,
-  committedWork,
-  postPullRequestNote,
-  runAgent,
-  watchPullRequest,
-} from "#jigs/routines";
+import { agentSession, postPullRequestNote, runAgent, watchPullRequest } from "#jigs/routines";
 import {
   fetchPullRequestState,
   mergePullRequest,
@@ -80,9 +74,11 @@ export interface Approved {
   ledger: ReviewRound[];
 }
 
-// Notes and findings get posted, on the ticket and wherever a caller sends
-// them, so they never carry the operator's local worktree path. The run's
-// worktree resource shows it locally, in `jigs status`.
+// A stop's message and findings and a needs-human reason get posted, on the
+// ticket and wherever a caller sends them. They can quote agent text, so the
+// worktree path is replaced in them; `jigs status` shows it to the operator.
+// Raw git and library errors are never put in them, as they can name other
+// local paths.
 const withoutLocalPath = (worktree: Worktree, text: string) =>
   text.replaceAll(worktree.path, "the run's worktree");
 
@@ -146,12 +142,17 @@ export async function implementAndReview(
       fresh: async () => prompts.implementation.fresh(task, worktree, findings, await diff()),
     });
 
-    const state = await committedWork(worktree).catch((error: unknown) => {
-      if (!(error instanceof JigsError)) throw error;
+    const state = await readBranchState(worktree, worktree.baseSha);
+    const unreviewable = state.dirty
+      ? "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it)."
+      : state.commits === 0
+        ? `The builder committed nothing new on branch \`${worktree.branch}\`.`
+        : undefined;
+    if (unreviewable !== undefined) {
       return stop(delivery, `jigs stopped work on ${task.key} in review round ${round}.`, [
-        `${error.message}; ${error.hint}`,
+        unreviewable,
       ]);
-    });
+    }
 
     const current = await diff();
     const verdict = await reviewerSession.run({
@@ -489,8 +490,9 @@ function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: stri
 // throw with what is still open. Maintenance deliberately does not call this.
 async function stop(delivery: Delivery, reason: string, findings: string[]): Promise<never> {
   const retained = [...findings];
-  await pushBranch(delivery.worktree).catch((error: unknown) => {
-    retained.push(`Could not push the branch: ${String(error)}.`);
+  // The failed step's error, which can name local paths, stays in the service log.
+  await pushBranch(delivery.worktree).catch(() => {
+    retained.push("Could not push the branch; the service log has the push error.");
   });
   throw new DeliveryStopped(reason, retained, delivery.worktree);
 }

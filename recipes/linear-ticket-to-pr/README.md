@@ -93,8 +93,9 @@ remains, sets `Todo`, and fails the run. To keep the work, take over the retaine
 worktree, its branch and the pull request by hand. Another run starts over on a
 new branch and opens a new pull request. A stop during initial implementation
 still attempts to preserve committed work by pushing; a failed preservation push
-is included in the note. Notes name the branch but never the local worktree
-path, since they may be posted anywhere; `jigs status` shows the path.
+is included in the note, with its error left in the service log. Notes name the
+branch but never the local worktree path, since they may be posted anywhere;
+`jigs status` shows the path.
 
 Exhausted recovery attempts, a request for human help, and a merge that fails
 or is refused do not stop the run. The workflow posts a ticket note saying what

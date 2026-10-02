@@ -206,8 +206,9 @@ test("uncommitted work stops the delivery before any review", async () => {
 
   const error = await stopped(implementAndReview(delivery, builder()));
 
-  expect(error.findings[0]).toContain("uncommitted changes");
-  expect(error.findings[0]).toContain("git -C the run's worktree status");
+  expect(error.findings[0]).toBe(
+    "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it).",
+  );
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
   expect(calls).toHaveLength(1);
 });
@@ -219,7 +220,7 @@ test("a build round that commits nothing stops the delivery before any review", 
   const error = await stopped(implementAndReview(delivery, builder()));
 
   expect(error.message).toBe("jigs stopped work on ABC-1 in review round 1.");
-  expect(error.findings[0]).toContain("committed nothing on acme/abc-1");
+  expect(error.findings[0]).toBe("The builder committed nothing new on branch `acme/abc-1`.");
   expect(steps.readBranchState).toHaveBeenCalledWith(worktree, "base");
   expect(calls).toHaveLength(1);
 });
@@ -845,14 +846,17 @@ test("a failed implementation preservation push does not hide why delivery stopp
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
   const error = await stopped(implementAndReview(delivery, builder()));
   expect(error.message).toContain("review round 1");
-  expect(error.findings.at(-1)).toBe("Could not push the branch: Error: remote denied.");
+  expect(error.findings.at(-1)).toBe(
+    "Could not push the branch; the service log has the push error.",
+  );
+  expect(JSON.stringify(error.note())).not.toContain("remote denied");
 });
 
 test("a stopped delivery never puts the local worktree path in what gets posted", async () => {
   answer(implementationReport, { responses: [] });
   at("h1", true);
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(
-    new Error("fatal: could not read /tmp/wt/.git"),
+    new Error("fatal: could not lock /data/clones/acme/app.git/refs/heads/acme/abc-1"),
   );
 
   const error = await stopped(implementAndReview(delivery, builder()));
@@ -861,6 +865,7 @@ test("a stopped delivery never puts the local worktree path in what gets posted"
   expect(posted).toContain("uncommitted changes");
   expect(posted).toContain("Could not push the branch");
   expect(posted).not.toContain("/tmp/wt");
+  expect(posted).not.toContain("/data/clones");
   expect(error.worktree.path).toBe("/tmp/wt");
 });
 
