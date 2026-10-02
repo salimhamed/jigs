@@ -185,6 +185,22 @@ test("start runs the built entry in the factory root on the factory's port", asy
   expect(lines[0]).toContain("at http://localhost:9100");
 });
 
+test("an empty .env slot leaves the value the shell exported", async () => {
+  const root = builtFactory();
+  writeFileSync(path.join(root, ".env"), "OPENROUTER_API_KEY=\nAWS_PROFILE=\nLINEAR_API_KEY=lin\n");
+  vi.stubEnv("OPENROUTER_API_KEY", "sk-shell");
+  vi.stubEnv("AWS_PROFILE", "shell-profile");
+  vi.stubEnv("LINEAR_API_KEY", "lin-shell");
+  const io = fake();
+
+  await startService(deps(root, io));
+
+  const env = io.spawns[0]?.env;
+  expect(env?.OPENROUTER_API_KEY).toBe("sk-shell");
+  expect(env?.AWS_PROFILE).toBe("shell-profile");
+  expect(env?.LINEAR_API_KEY).toBe("lin");
+});
+
 test("the child is told where to host its dashboard and where its queue delivers", async () => {
   const root = builtFactory();
   const io = fake();

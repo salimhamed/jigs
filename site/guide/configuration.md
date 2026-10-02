@@ -544,10 +544,14 @@ is missing, and lists the credentials still empty.
 | `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
-| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. Commented out in `.env.example`, because an empty value would hide the profile your shell sets. |
+| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
 | `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
+
+Also set any variable your `jigs.config.ts` names, such as an MCP server's
+`bearerTokenEnv`. An empty value counts as unset, so a value exported in your
+shell still reaches the service.
 
 `JIGS_SERVICE_URL` is read by the CLI, not the service. Set it in your shell to
 point commands such as `jigs status` at a different service, or pass
