@@ -48,9 +48,14 @@ output.
 
 ### Input values
 
-`--input` values are read as JSON when they parse, and as plain strings
-otherwise, so `count=3` is a number and `ticket=AGE-123` is a string. A value
-the workflow's schema rejects fails before any run is created.
+`--input` values follow the workflow's inputs schema. A field typed as a string,
+nullable or not, takes the value as written, so `ts=1787145691.947349` stays a
+string; a nullable one takes `null` as null. A JSON-quoted string such as
+`--input 'ts="42"'` works too; it is the form `jigs status` and `jigs doctor`
+print when they suggest rerunning a trigger's start. Any other value is read as
+JSON when it parses, and as a plain string otherwise, so `count=3` is a number
+and `ticket=AGE-123` is a string. A value the workflow's schema rejects fails
+before any run is created.
 
 ## Repositories
 
