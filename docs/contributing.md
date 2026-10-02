@@ -1,5 +1,9 @@
 # Contributing to jigs
 
+## Licensing of contributions
+
+By opening a pull request, you confirm you have the right to submit your contribution, you keep the copyright, and you allow Salim Hamed to license it under any terms, including commercial licenses. This lets me offer commercial licenses to support Jigs; every version still becomes Apache 2.0 after four years.
+
 ## Commands
 
 Requires Node 24 or newer, pnpm and Docker.
