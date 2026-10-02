@@ -5,7 +5,7 @@ import { z } from "zod";
 import { JigsError } from "../../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
-import { launchRun, parseInputs, validateInputs } from "./run.ts";
+import { coerceInputs, launchRun, splitInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
 const fetchMock = vi.fn();
@@ -101,14 +101,14 @@ test("a schema violation never reaches the trigger route", async () => {
 
 test("input values are coerced by JSON, with the raw string as the fallback", () => {
   expect(
-    parseInputs(
-      [
+    coerceInputs(
+      splitInputs([
         "stepSeconds=3",
         "askHuman=true",
         "ticket=AGE-123",
         "issueId=6b1c1d2e-0000-4000-8000-000000000000",
         'pr={"owner":"acme","repo":"api","number":41}',
-      ],
+      ]),
       {},
     ),
   ).toEqual({
@@ -121,7 +121,7 @@ test("input values are coerced by JSON, with the raw string as the fallback", ()
 });
 
 test("a value containing = keeps everything after the first one", () => {
-  expect(parseInputs(["note=a=b"], {})).toEqual({ note: "a=b" });
+  expect(coerceInputs(splitInputs(["note=a=b"]), {})).toEqual({ note: "a=b" });
 });
 
 test("a string field takes the raw text or a JSON-quoted string, and other fields are still parsed", () => {
@@ -129,7 +129,9 @@ test("a string field takes the raw text or a JSON-quoted string, and other field
     z.object({ ts: z.string(), thread: z.string().optional(), limit: z.number() }),
     { io: "input" },
   );
-  expect(parseInputs(["ts=1787145691.947349", 'thread="42"', "limit=3"], schema)).toEqual({
+  expect(
+    coerceInputs(splitInputs(["ts=1787145691.947349", 'thread="42"', "limit=3"]), schema),
+  ).toEqual({
     ts: "1787145691.947349",
     thread: "42",
     limit: 3,
@@ -139,7 +141,7 @@ test("a string field takes the raw text or a JSON-quoted string, and other field
 test("an --input without = fails with an example", () => {
   const thrown = (() => {
     try {
-      parseInputs(["ticket"], {});
+      splitInputs(["ticket"]);
     } catch (err) {
       return err as JigsError;
     }
@@ -243,6 +245,43 @@ test("a string field keeps a value that looks like a number, such as a Slack ts"
   expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
     inputs: { channel: "C040SAKCZHP", ts: "1787145691.947349000001" },
   });
+});
+
+test("a nullable string field keeps a Slack ts as text and still takes null", async () => {
+  const schema = z.toJSONSchema(
+    z.object({
+      ts: z.string().nullable(),
+      thread: z.string().nullish(),
+      id: z.string().nullable(),
+    }),
+    { io: "input" },
+  );
+  fetchMock.mockResolvedValueOnce(
+    new Response(JSON.stringify({ name: "whats-new", inputs: schema })),
+  );
+  respondStarted();
+  await launchRun("whats-new", ["ts=1787145691.947349000001", "thread=null", 'id="null"'], deps());
+  const [, trigger] = fetchMock.mock.calls;
+  expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({
+    inputs: { ts: "1787145691.947349000001", thread: null, id: "null" },
+  });
+});
+
+test("a field that takes a string or a number still reads a number as JSON", async () => {
+  const schema = z.toJSONSchema(z.object({ ref: z.union([z.string(), z.number()]) }), {
+    io: "input",
+  });
+  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ name: "w", inputs: schema })));
+  respondStarted();
+  await launchRun("w", ["ref=42"], deps());
+  const [, trigger] = fetchMock.mock.calls;
+  expect(JSON.parse(String(trigger?.[1]?.body))).toEqual({ inputs: { ref: 42 } });
+});
+
+test("a malformed --input fails before any request to the service", async () => {
+  const err = await failure(launchRun("deliver-feature", ["ticket"], deps()));
+  expect(err?.message).toBe("--input must be key=value");
+  expect(fetchMock).not.toHaveBeenCalled();
 });
 
 test("a misspelled --input key is refused before the launch is paid for", async () => {

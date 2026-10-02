@@ -20,21 +20,31 @@ export interface LaunchResult {
   dashboard: string;
 }
 
-// Flat on purpose: one coercion rule to hold in your head. A nested value
-// goes in as inline JSON — `--input pr={"owner":"acme","repo":"api"}`.
-export function parseInputs(
-  pairs: string[],
-  schema: z.core.JSONSchema.BaseSchema,
-): Record<string, unknown> {
-  const inputs: Record<string, unknown> = {};
-  for (const pair of pairs) {
+export type InputPair = [key: string, raw: string];
+
+export function splitInputs(pairs: string[]): InputPair[] {
+  return pairs.map((pair) => {
     const split = pair.indexOf("=");
     if (split <= 0) {
       throw new JigsError("--input must be key=value", "for example: --input ticket=AGE-123");
     }
-    const key = pair.slice(0, split);
-    const raw = pair.slice(split + 1);
-    inputs[key] = takesOnlyStrings(schema.properties?.[key]) ? asString(raw) : coerce(raw);
+    return [pair.slice(0, split), pair.slice(split + 1)];
+  });
+}
+
+// A nested value goes in as inline JSON — `--input pr={"owner":"acme","repo":"api"}`.
+export function coerceInputs(
+  pairs: InputPair[],
+  schema: z.core.JSONSchema.BaseSchema,
+): Record<string, unknown> {
+  const inputs: Record<string, unknown> = {};
+  for (const [key, raw] of pairs) {
+    const types = fieldTypes(schema.properties?.[key]);
+    if (types?.has("string") && [...types].every((t) => t === "string" || t === "null")) {
+      inputs[key] = raw === "null" && types.has("null") ? null : asString(raw);
+    } else {
+      inputs[key] = coerce(raw);
+    }
   }
   return inputs;
 }
@@ -50,18 +60,30 @@ function coerce(raw: string): unknown {
   }
 }
 
-// A string field skips the coercion, or a Slack ts would turn into a number.
-// It still takes a JSON-quoted string, the form a trigger's repair command prints.
+// A string field skips the coercion, or a numeric-looking ID would turn into a
+// number. It still takes a JSON-quoted string, the form a trigger's repair
+// command prints.
 function asString(raw: string): string {
+  if (!raw.startsWith('"')) return raw;
   const parsed = coerce(raw);
-  return raw.startsWith('"') && typeof parsed === "string" ? parsed : raw;
+  return typeof parsed === "string" ? parsed : raw;
 }
 
-function takesOnlyStrings(field: z.core.JSONSchema._JSONSchema | undefined): boolean {
-  if (typeof field !== "object") return false;
+// Every JSON type a field accepts, or undefined when the schema does not say.
+function fieldTypes(field: z.core.JSONSchema._JSONSchema | undefined): Set<string> | undefined {
+  if (typeof field !== "object") return undefined;
   const branches = field.anyOf ?? field.oneOf;
-  if (branches !== undefined) return branches.length > 0 && branches.every(takesOnlyStrings);
-  return field.type === "string";
+  if (branches !== undefined) {
+    const types = new Set<string>();
+    for (const branch of branches) {
+      const inner = fieldTypes(branch);
+      if (inner === undefined) return undefined;
+      for (const t of inner) types.add(t);
+    }
+    return types.size > 0 ? types : undefined;
+  }
+  if (field.type === undefined) return undefined;
+  return new Set(Array.isArray(field.type) ? field.type : [field.type]);
 }
 
 const SCHEMA_HINT = "check --input against the workflow's inputs schema";
@@ -122,6 +144,7 @@ export async function launchRun(
   pairs: string[],
   deps: LaunchDeps,
 ): Promise<LaunchResult> {
+  const rawInputs = splitInputs(pairs);
   // Ahead of the schema fetch: a workflow the bundle does not have and an
   // input its schema does not have are the loudest symptoms of a stale build,
   // and both are fatal below.
@@ -150,7 +173,7 @@ export async function launchRun(
   const { inputs: schema } = (await schemaRes.json()) as {
     inputs: z.core.JSONSchema.BaseSchema;
   };
-  const inputs = parseInputs(pairs, schema);
+  const inputs = coerceInputs(rawInputs, schema);
   validateInputs(schema, inputs);
 
   const res = await serviceFetch(
