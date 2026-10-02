@@ -1,5 +1,6 @@
 import { readFactoryConfig } from "../../../config/factory-config.ts";
 import { factoryRoot } from "../../../config/factory-root.ts";
+import type { DriverRequest } from "../drivers/types.ts";
 
 // Every harness process gets these when the service has them, and nothing else
 // unless its driver names it or the factory declares it in jigs.config.ts.
@@ -63,4 +64,14 @@ export function harnessEnv(
 // here, so a check probes the environment its step will run under.
 export function factoryAgentEnv(): readonly string[] {
   return readFactoryConfig(factoryRoot()).agents.env;
+}
+
+// What a step hands a harness: the names its driver needs and the names the
+// factory declares. Doctor builds the same, so its probes see what a step's do.
+export function agentStepEnv(
+  driver: { envAllowlist(request: DriverRequest): readonly string[] },
+  request: DriverRequest,
+  factoryEnv: readonly string[],
+): Record<string, string> {
+  return harnessEnv([...driver.envAllowlist(request), ...factoryEnv]);
 }

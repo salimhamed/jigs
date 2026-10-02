@@ -199,8 +199,10 @@ harnesses.claude({
 
 Names use uppercase letters, digits and underscores. The agent gets the
 variables its servers name, so they need no
-[`agents.env`](/guide/configuration#agents-env) entry. If one is not set, `jigs doctor`
-reports it, and the step fails before the agent starts and names the variable. A Pi server also
+[`agents.env`](/guide/configuration#agents-env) entry. If one is not set, the
+step fails before the agent starts and names the variable. For a server
+declared in `requires.agents`, `jigs doctor` reports it first; a server built
+in the workflow body is checked only when its agent starts. A Pi server also
 lists the `tools` the model may call.
 
 The named variables are in the agent's own environment, so an agent with shell

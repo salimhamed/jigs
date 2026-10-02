@@ -11,7 +11,8 @@ pnpm exec jigs service logs
 Once the service is running, `pnpm exec jigs doctor` checks configured
 dependencies, credentials and tools against it. That includes calling the probe
 tool of each MCP server an agent in `requires.agents` declares, so an expired
-or missing MCP token fails there before a run hits it.
+or missing MCP token fails there before a run hits it. Doctor does not prove a
+Pi server that uses OAuth; Pi checks that login when the agent starts.
 
 ## The service exits before it is ready
 

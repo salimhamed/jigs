@@ -3,7 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { harnesses, models } from "../workflow/agents/harness-config.ts";
+import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
@@ -484,6 +484,32 @@ test("doctor names the workflows whose agents declare a failing MCP server", asy
       ok: false,
       reason: expect.stringMatching(/MISSING_PROBE_TOKEN.*\(needed by workflows ship, fix\)$/),
       repair: expect.stringContaining("set MISSING_PROBE_TOKEN in"),
+    },
+  ]);
+});
+
+test("doctor reports an agent whose environment cannot be planned, rather than failing", async () => {
+  factoryWith("{ service: { dashboardPort: 9090 } }");
+  // Built by hand: the harness builder would have filled in `compat`.
+  const builder = {
+    kind: "pi",
+    model: {
+      kind: "openai-compatible",
+      name: "local",
+      baseUrl: "http://127.0.0.1:1/v1",
+      model: "m",
+    },
+    mcpServers: { probe: { ...probeServer("PROBE_SOURCE"), tools: ["get_probe_token"] } },
+  } as unknown as Harness;
+  const checks = doctorChecks({ ship: { requires: { agents: { builder } } } });
+  const report = await runChecks(checks.filter((check) => check.id.startsWith("mcp.")));
+  expect(report.checks).toEqual([
+    {
+      id: "mcp.probe",
+      label: "MCP server probe",
+      ok: false,
+      reason: expect.stringMatching(/compatibility settings \(needed by workflow ship\)$/),
+      repair: expect.any(String),
     },
   ]);
 });

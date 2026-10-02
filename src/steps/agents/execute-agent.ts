@@ -10,7 +10,7 @@ import {
 } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import type { ExecutorGeneration, RunRequest } from "./drivers/index.ts";
-import { harnessEnv } from "./harnesses/env.ts";
+import { agentStepEnv } from "./harnesses/env.ts";
 import { withRunCancellation } from "./run-cancellation.ts";
 import { openAgentRunner, prepareAgentRun } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
@@ -129,7 +129,7 @@ async function askAgent(
   if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
   if (driver.family !== "harness")
     throw new JigsError(`${wire.harness.kind} is a model source, not an agent harness`);
-  const env = harnessEnv([...driver.envAllowlist(wire), ...seams.factoryEnv()]);
+  const env = agentStepEnv(driver, wire, seams.factoryEnv());
   assertAskableHarness(wire.harness);
   if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
   const requestReport = await runChecks(driver.requestChecks(wire));
