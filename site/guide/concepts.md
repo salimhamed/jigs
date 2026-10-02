@@ -106,7 +106,8 @@ other side effects in steps, because workflow code can replay.
 
 Workflow code and its imports must be safe to replay: they cannot use Node
 built-ins, read `process.env` or reach the network. Steps can do that work and
-return its results.
+return its results. Format dates, time zones and locales in a step too, since
+[workflow code may run without `Intl`](/guide/troubleshooting#workflow-code-that-uses-intl-throws-at-runtime).
 
 ## Routines compose common operations
 
