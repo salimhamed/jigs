@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.9](https://github.com/salimhamed/jigs/compare/jigs-v0.81.8...jigs-v0.81.9) (2026-10-02)
+
+
+### Bug Fixes
+
+* linear-ticket-to-pr honors its reviewer, pushes after describing, and posts no local paths ([#489](https://github.com/salimhamed/jigs/issues/489)) ([fabb30a](https://github.com/salimhamed/jigs/commit/fabb30ab48e05426bced9b8fbe233a6c71c8e67a))
+
 ## [0.81.8](https://github.com/salimhamed/jigs/compare/jigs-v0.81.7...jigs-v0.81.8) (2026-10-02)
 
 
