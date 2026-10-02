@@ -3,7 +3,7 @@
   "version": "0.81.6",
   "description": "Guides coding agents through repeatable workflows",
   "type": "module",
-  "license": "MIT",
+  "license": "BUSL-1.1",
   "author": "Salim Hamed",
   "homepage": "https://salimhamed.github.io/jigs/",
   "bugs": {

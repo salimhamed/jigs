@@ -63,6 +63,9 @@ export default {
     search: { provider: "local" },
     socialLinks: [{ icon: "github", link: "https://github.com/salimhamed/jigs" }],
     outline: [2, 3],
-    footer: { message: "Released under the MIT License." },
+    footer: {
+      message:
+        'Licensed under the <a href="https://github.com/salimhamed/jigs/blob/main/LICENSE">Business Source License 1.1</a>. Each version converts to Apache License 2.0 after four years.',
+    },
   },
 };
