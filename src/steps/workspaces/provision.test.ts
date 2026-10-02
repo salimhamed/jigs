@@ -1,6 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { FatalError } from "workflow";
 import type { Binding } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { CopySourceMissingError, PostCreateFailedError, provisionWorktree } from "./provision.ts";
@@ -98,8 +99,7 @@ test("a copy entry that matches nothing fails, naming the binding and the direct
   expect((failure as CopySourceMissingError).message).toBe(
     "binding api: copy entry .env matches nothing under bindings/api/",
   );
-  // A retry finds the same empty folder, so the SDK must not retry it.
-  expect((failure as CopySourceMissingError).fatal).toBe(true);
+  expect(FatalError.is(failure)).toBe(true);
 });
 
 test("an entry climbing out of the binding's directory is refused", async () => {

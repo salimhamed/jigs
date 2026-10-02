@@ -123,7 +123,7 @@ function checkCopySources(factoryRoot: string, name: string, copy: string[]): Ch
       return {
         ok: false,
         reason: err.message,
-        repair: `add ${path.join(bindingFilesDir(factoryRoot, name), err.entry)}, or remove ${err.entry} from the binding's copy list in ${FACTORY_CONFIG_FILE}`,
+        repair: `add a file matching ${err.entry} under ${bindingFilesDir(factoryRoot, name)}/, or remove the entry from ${FACTORY_CONFIG_FILE}`,
       };
     if (err instanceof JigsError)
       return { ok: false, reason: err.message, repair: err.hint ?? "fix the binding's copy list" };

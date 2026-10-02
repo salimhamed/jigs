@@ -85,12 +85,8 @@ function assertInsideCopyDir(
   }
 }
 
-/**
- * The paths under `bindings/<name>/` that a binding's `copy` entries match, so doctor and
- * preflight refuse exactly what provisioning would.
- */
-// One glob per entry rather than one over the whole list: an entry that
-// matches nothing has to be nameable in the error.
+// Shared with doctor and preflight so they refuse exactly what provisioning
+// would. One glob per entry so an entry that matches nothing can be named.
 export function copySourceMatches(
   factoryRoot: string,
   bindingName: string,

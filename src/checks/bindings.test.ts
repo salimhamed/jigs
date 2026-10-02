@@ -102,7 +102,21 @@ test("a copy entry with no file under the binding's folder fails before the clon
     label: "binding api",
     ok: false,
     reason: "binding api: copy entry .env matches nothing under bindings/api/",
-    repair: `add ${path.join(factory, "bindings/api/.env")}, or remove .env from the binding's copy list in jigs.config.ts`,
+    repair: `add a file matching .env under ${path.join(factory, "bindings/api")}/, or remove the entry from jigs.config.ts`,
+  });
+});
+
+test("a copy entry pointing outside the binding's folder fails the check", async () => {
+  const factory = makeFactoryRepo(tmp, {
+    bindings: { api: { remote: path.join(tmp, "nonexistent.git"), copy: ["../elsewhere/.env"] } },
+  });
+  mkdirSync(path.join(factory, "bindings/elsewhere"), { recursive: true });
+  writeFileSync(path.join(factory, "bindings/elsewhere/.env"), "A=1\n");
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason:
+      "binding api: copy entry ../elsewhere/.env must be a relative path inside bindings/api/",
+    repair: expect.stringContaining("relative to bindings/api/"),
   });
 });
 
