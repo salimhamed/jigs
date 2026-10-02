@@ -347,7 +347,10 @@ test("an abort racing service shutdown stops Pi once and both see it gone", asyn
     signal: controller.signal,
   });
   const rejection = expect(execution).rejects.toThrow("run cancelled");
-  await expect.poll(() => existsSync(childPidFile)).toBe(true);
+  // Redirection creates the file before printf writes; an empty PID would probe group 0.
+  await expect.poll(() => readFileSync(childPidFile, "utf8")).toMatch(/^[1-9]\d*$/);
+  const childPid = Number(readFileSync(childPidFile, "utf8"));
+  expect(pidIsRunning(childPid)).toBe(true);
 
   controller.abort(new Error("run cancelled"));
   const outcomes = await stopProcessGroups();
@@ -355,5 +358,5 @@ test("an abort racing service shutdown stops Pi once and both see it gone", asyn
 
   expect(outcomes).toHaveLength(1);
   expect(outcomes[0]?.kind).toBe("stopped");
-  expect(pidIsRunning(Number(readFileSync(childPidFile, "utf8")))).toBe(false);
+  expect(pidIsRunning(childPid)).toBe(false);
 });
