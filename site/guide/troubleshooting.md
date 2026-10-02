@@ -63,15 +63,15 @@ and must not be called directly from workflow code. See the [API import map](/ap
 
 Workflow code can pass its tests and then throw on `Intl` in a running factory.
 Workflow bodies run on Node by default, but on QuickJS when the service runs
-with `WORKFLOW_VM=quickjs`. QuickJS has no `Intl`, so `Intl.DateTimeFormat`, a
-`timeZone` option and `toLocaleString("en-US")` fail there, while tests run on
-Node and pass. Time-zone libraries read their zone data from `Intl`, so they
+with `WORKFLOW_VM=quickjs`. QuickJS has no `Intl`, so `Intl.DateTimeFormat` and
+`toLocaleString("en-US")` fail there, while tests run on Node and pass. Time-zone libraries read their zone data from `Intl`, so they
 fail the same way.
 
 Put date, time-zone and locale formatting in a step. Steps always run on Node,
 and the runtime records their result for replay:
 
 ```ts
+// workflows/my-flow/steps.ts
 export async function formatLocalTime(at: string, timeZone: string) {
   "use step";
   return new Date(at).toLocaleString("en-US", { timeZone });
