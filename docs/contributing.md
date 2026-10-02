@@ -1,5 +1,12 @@
 # Contributing to jigs
 
+## Licensing of contributions
+
+Contributions are accepted under the project's current license, the Business
+Source License 1.1 (BSL 1.1), on an inbound=outbound basis: contributions use
+the same license as the project, including its Additional Use Grant and
+conversion to Apache License 2.0. See [LICENSE](../LICENSE) for the terms.
+
 ## Commands
 
 Requires Node 24 or newer, pnpm and Docker.

@@ -20,6 +20,14 @@ Licensed Work while providing consulting, development, integration, support,
 or other professional services to their clients, subject to the limitation
 below.
 
+Production use by individuals for personal projects and by open-source
+projects is also permitted, whether or not those projects are commercial,
+subject to the limitation below.
+
+Using the Licensed Work as a development tool, locally or in CI, to build,
+test, or maintain software, including commercial software, is always
+permitted production use under this grant.
+
 This Additional Use Grant does not extend to production use of the Licensed
 Work to offer to third parties, as a commercial hosted, managed, SaaS,
 white-labeled, or standalone product or service, either:
@@ -27,6 +35,10 @@ white-labeled, or standalone product or service, either:
 1. The Licensed Work itself; or
 2. A substantially similar product or service primarily derived from the
    Licensed Work.
+
+For example, operating a commercial hosted or managed "Jigs-as-a-service"
+for third parties is outside this grant; using the Licensed Work internally
+during development of a commercial product is permitted.
 
 This limitation does not apply merely because a commercial product or
 service uses the Licensed Work as an internal component or development

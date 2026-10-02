@@ -51,3 +51,12 @@ See [docs/contributing.md](docs/contributing.md).
 ## License
 
 Jigs is licensed under the [Business Source License 1.1 (BSL 1.1)](LICENSE).
+The production-use grant permits free internal use, commercial development,
+personal projects, and open-source use, but excludes offering Jigs or a
+substantially similar derivative as a commercial hosted or standalone product
+or service to third parties.
+Each version converts to Apache License 2.0 four years after its first public
+release.
+Versions released before this licensing change remain available under MIT.
+
+<!-- TODO: commercial licensing contact -->
