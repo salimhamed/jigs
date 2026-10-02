@@ -1,4 +1,4 @@
-import { APPROVED_LABEL, type MergeApproval } from "./policy.ts";
+import { APPROVED_LABEL, type ApprovalCoverage, type MergeApproval } from "./policy.ts";
 import type {
   ApprovalState,
   PullRequestApproval,
@@ -15,18 +15,28 @@ import type {
  *   changes. An approval names a commit, so a push withdraws it.
  * - `label`: the `jigs:approved` label is on the pull request. It means "merge whenever
  *   ready", so it survives later pushes and jigs never removes it.
+ *
+ * With `covers: "any-commit"` a review approval of any commit counts, except one
+ * from a bot or from `builder`, the GitHub login the builder acts as.
  */
 export function approvalState(
   snapshot: Pick<PullRequestSnapshot, "labels" | "reviews" | "headSha">,
   approval: MergeApproval,
+  { covers = "latest-commit", builder }: { covers?: ApprovalCoverage; builder?: string } = {},
 ): ApprovalState {
   if (approval === "label") {
     return snapshot.labels.includes(APPROVED_LABEL) ? "approved" : "none";
   }
+  // An injected instruction could make the builder approve its own work, and
+  // under any-commit that approval would cover every push after it.
+  const counts = (review: PullRequestReview) =>
+    covers === "latest-commit" ||
+    review.state !== "APPROVED" ||
+    !(review.user.endsWith("[bot]") || review.user.toLowerCase() === builder?.toLowerCase());
   const latest = new Map<string, PullRequestReview>();
-  for (const review of [...snapshot.reviews].sort(
-    (a, b) => a.submittedAt.localeCompare(b.submittedAt) || a.id - b.id,
-  )) {
+  for (const review of snapshot.reviews
+    .filter(counts)
+    .sort((a, b) => a.submittedAt.localeCompare(b.submittedAt) || a.id - b.id)) {
     if (["APPROVED", "CHANGES_REQUESTED", "DISMISSED"].includes(review.state)) {
       latest.set(review.user, review);
     }
@@ -34,6 +44,7 @@ export function approvalState(
   const reviews = [...latest.values()];
   if (reviews.some((review) => review.state === "CHANGES_REQUESTED")) return "changes-requested";
   const approved = reviews.filter((review) => review.state === "APPROVED");
+  if (covers === "any-commit" && approved.length > 0) return "approved";
   if (approved.some((review) => review.commitSha === snapshot.headSha)) return "approved";
   return approved.length === 0 ? "none" : "stale";
 }

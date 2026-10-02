@@ -64,7 +64,9 @@ entries defined in that source, rather than accepting a model name at runtime.
 
 `mergedBy` chooses who merges: `"human"` by default, or `"jigs"` once jigs
 verifies approval, CI, mergeability and that the builder's local work is
-published. When the pull request needs a person, the recipe notes it on the
+published. `approvalCovers` chooses which commits an approving review covers:
+`"latest-commit"` by default, or `"any-commit"` to let an approval carry over
+later pushes. When the pull request needs a person, the recipe notes it on the
 ticket, leaves the ticket In Review and keeps watching; only closing the pull
 request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a

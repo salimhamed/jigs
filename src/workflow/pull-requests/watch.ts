@@ -1,6 +1,11 @@
 import { createHook } from "workflow";
 import { ClaimConflictError } from "../linear/claim.ts";
-import { type FetchPrState, type PullRequestRef, pullRequestToken } from "./pull-request.ts";
+import {
+  type FetchPrState,
+  type PullRequestReadOptions,
+  type PullRequestRef,
+  pullRequestToken,
+} from "./pull-request.ts";
 import { type PullRequestSnapshot, pullRequestSnapshotKey } from "./snapshot.ts";
 
 /**
@@ -12,10 +17,12 @@ import { type PullRequestSnapshot, pullRequestSnapshotKey } from "./snapshot.ts"
  * the consumer decides what needs attention, owns its action limits and decides who merges.
  * The service poll and GitHub webhooks wake an exclusive hook, so only one run can watch a given
  * pull request at a time. Closing the iterator releases that hook. A closed snapshot is yielded before the iterator ends.
+ * `options` say how each read counts approvals.
  */
 export async function* watchPullRequest(
   pr: PullRequestRef,
   fetchState: FetchPrState,
+  options?: PullRequestReadOptions,
 ): AsyncGenerator<PullRequestSnapshot, void, undefined> {
   const token = pullRequestToken(pr);
   const hook = createHook<unknown>({ token });
@@ -24,7 +31,7 @@ export async function* watchPullRequest(
     if (conflict !== null) throw new ClaimConflictError(token, conflict.runId);
     let previous: string | undefined;
     while (true) {
-      const snapshot = await fetchState(pr);
+      const snapshot = await fetchState(pr, options);
       // Capture before yielding so consumer mutations cannot change the previous facts.
       const current = pullRequestSnapshotKey(snapshot);
       const closed = snapshot.state === "closed";

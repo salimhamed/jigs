@@ -14,6 +14,7 @@ import type {
   JevQuestions,
   JevResult,
   ModelRequest,
+  PullRequestReadOptions,
   PullRequestRef,
   ReleasePolicy,
   RunResource,
@@ -140,9 +141,12 @@ export async function checkForTicketHumanReply(
  *
  * @group Pull requests
  */
-export async function fetchPullRequestState(pullRequest: PullRequestRef) {
+export async function fetchPullRequestState(
+  pullRequest: PullRequestRef,
+  options?: PullRequestReadOptions,
+) {
   "use step";
-  return pullRequestsOperations.fetchPullRequestState(pullRequest);
+  return pullRequestsOperations.fetchPullRequestState(pullRequest, options);
 }
 
 /**
@@ -412,7 +416,8 @@ export async function mergePullRequest(
   worktree: Worktree,
   pullRequest: PullRequestRef,
   expectedHeadSha: string,
+  options?: PullRequestReadOptions,
 ) {
   "use step";
-  return pullRequestsOperations.mergePullRequest(worktree, pullRequest, expectedHeadSha);
+  return pullRequestsOperations.mergePullRequest(worktree, pullRequest, expectedHeadSha, options);
 }

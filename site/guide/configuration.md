@@ -317,6 +317,7 @@ These are three independent decisions:
 | Concern | Controlled by |
 | --- | --- |
 | What counts as operator approval | `github.mergeApproval` |
+| Which commits an approving review covers | Workflow code (`approvalCovers`) |
 | How GitHub creates the merge | `bindings.<name>.mergeMethod` |
 | Whether and when to attempt a merge | Workflow code |
 
@@ -327,6 +328,16 @@ These are three independent decisions:
   [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
   A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
   not let you approve your own.
+- **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
+  `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
+  repository can differ. `"latest-commit"`, the default, counts a review only
+  on the commit it approved. `"any-commit"` keeps a person's approval counting
+  through later pushes, even a force-push that drops the approved commit, until
+  a later review requests changes or the approval is dismissed. Approvals by
+  bots never count under `"any-commit"`. With an App identity, approvals by the
+  configured `operator` account don't count either, because the builder may act
+  as that account, so someone else must approve. Changes requested from that
+  account still block. This applies in App mode only.
 - **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
   GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
   becomes the commit title. With `rebase`, each commit is rewritten and loses
@@ -336,7 +347,8 @@ These are three independent decisions:
 binds, whichever approval you use.
 
 Workflow code calls `mergePullRequest` when its policy says to merge. That step
-rereads GitHub and enforces readiness and approval. `watchPullRequest` only
+rereads GitHub and enforces readiness and approval, read with the
+`approvalCovers` it is given. `watchPullRequest` only
 reports facts. These checks do not restrict an agent using its own GitHub tools.
 
 jigs merges only when the approval is present, GitHub reports the pull request

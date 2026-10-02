@@ -36,8 +36,10 @@ overwrites them.
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
   `"human"`, so the run waits for you to merge. Set it to `"jigs"` to have jigs
   merge once the pull request is approved and CI is green. jigs never merges in
-  a repository with no CI. How you approve, and the merge method, are set in
-  [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
+  a repository with no CI. `approvalCovers`, next to it, is `"latest-commit"`,
+  so a push needs a new approving review; `"any-commit"` lets a person's
+  approval cover later pushes too. How you approve, and the merge method, are
+  set in [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
 
 [Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
 optional.
@@ -205,7 +207,8 @@ export async function deliverTicket(
   `onNeedsHuman`.
   With `mergedBy: "human"` the recipe waits for you to merge. With `"jigs"` it
   checks merge readiness after every watcher yield and every builder turn,
-  whatever the builder last reported: the configured GitHub approval, green CI,
+  whatever the builder last reported: the configured GitHub approval (read with
+  `approvalCovers`), green CI,
   a clean merge state, no unseen wake facts, and published local work. A transient merge refusal is retried after a durable wait, up
   to ten tries.
   The watcher never merges, and the agent is instructed not to merge or approve.

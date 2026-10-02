@@ -1,4 +1,5 @@
 import type { PullRequestSnapshot } from "../../providers/github.ts";
+import type { ApprovalCoverage } from "./policy.ts";
 
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
@@ -66,4 +67,17 @@ export type PullRequestRef = {
 // Declared here rather than written as `typeof fetchPullRequestState`: declaring the
 // contract in workflow/ typechecks the step against the routine and keeps this
 // side free of any value import into steps/.
-export type FetchPrState = (pr: PullRequestRef) => Promise<PullRequestSnapshot>;
+export type FetchPrState = (
+  pr: PullRequestRef,
+  options?: PullRequestReadOptions,
+) => Promise<PullRequestSnapshot>;
+
+/**
+ * How workflow code asks for a pull request's approval to be read.
+ *
+ * @group Pull requests
+ */
+export interface PullRequestReadOptions {
+  /** Which commits an approving review covers. Default `"latest-commit"`. */
+  approvalCovers?: ApprovalCoverage;
+}

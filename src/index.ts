@@ -149,7 +149,11 @@ export {
   type StatusReason,
 } from "./workflow/pull-requests/marker.ts";
 export { isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
-export type { PullRequestRef } from "./workflow/pull-requests/pull-request.ts";
+export type { ApprovalCoverage } from "./workflow/pull-requests/policy.ts";
+export type {
+  PullRequestReadOptions,
+  PullRequestRef,
+} from "./workflow/pull-requests/pull-request.ts";
 export {
   type ApprovalState,
   type CheckRun,

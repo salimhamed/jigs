@@ -1,4 +1,5 @@
 import {
+  type ApprovalCoverage,
   defineWorkflow,
   harnesses,
   renderTicketSnapshot,
@@ -27,6 +28,9 @@ const agentName = z.enum(["builder", "reviewer"]);
 // Who merges a pull request once it is approved and CI is green:
 // "jigs" merges it, "human" leaves the merge to you.
 const mergedBy: "jigs" | "human" = "human";
+
+// "any-commit" lets a person's approving review also cover later pushes.
+const approvalCovers: ApprovalCoverage = "latest-commit";
 
 const inputs = z.object({
   ticket: z.string().min(1),
@@ -64,6 +68,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     reviewer: agents[input.reviewer],
     budget: input.budget,
     mergedBy,
+    approvalCovers,
   };
 
   const builder = agentSession({ name: "builder", harness: delivery.builder, cwd: worktree.path });

@@ -9,6 +9,7 @@ import type {
   AgentRequest,
   AgentResult,
   AgentSessionRef,
+  ApprovalCoverage,
   ApprovalState,
   AskAgentOptions,
   AskModelOptions,
@@ -46,6 +47,7 @@ import type {
   PiMcpStdioServerConfig,
   PullRequestApproval,
   PullRequestMarker,
+  PullRequestReadOptions,
   PullRequestRef,
   RebuildContextPrompt,
   RebuildContextPromptInput,
@@ -93,6 +95,7 @@ type RootTypeSurface = {
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;
   checkRun: CheckRun;
+  approvalCoverage: ApprovalCoverage;
   approvalState: ApprovalState;
   claudeHarness: ClaudeHarness;
   claudeHarnessSettings: ClaudeHarnessSettings;
@@ -124,6 +127,7 @@ type RootTypeSurface = {
   piMcpStdioServer: PiMcpStdioServerConfig;
   prApproval: PullRequestApproval;
   prMarker: PullRequestMarker;
+  prReadOptions: PullRequestReadOptions;
   prRef: PullRequestRef;
   rebuildContextPrompt: RebuildContextPrompt;
   rebuildContextPromptInput: RebuildContextPromptInput;
