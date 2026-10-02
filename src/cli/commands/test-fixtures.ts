@@ -41,7 +41,7 @@ export function factory(tmp: string, shape: FactoryShape): string {
   if (shape.compose !== false) {
     writeFileSync(
       path.join(root, "docker-compose.yml"),
-      'name: acme-factory\nservices:\n  postgres:\n    ports:\n      - "5555:5432"\n',
+      'name: acme-factory\nservices:\n  postgres:\n    ports:\n      - "127.0.0.1:5555:5432"\n',
     );
   }
   if (shape.config !== false) {
