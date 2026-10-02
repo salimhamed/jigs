@@ -26,9 +26,7 @@ function factoryWith(webhooks: unknown, extra: Record<string, unknown> = {}): st
 
 const enabled = (url = "https://factory.example.test", linear = true) => ({
   url,
-  github: { enabled: false },
   linear: { enabled: linear },
-  pagerduty: { enabled: false },
 });
 
 function checks(webhooks: LinearWebhook[], config: unknown = enabled()) {

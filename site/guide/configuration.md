@@ -503,14 +503,14 @@ leave out (here `linear` and `pagerduty`) is off and keeps polling.
    `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is
    `webhooks.url`.
 2. **GitHub**: create a secret with `openssl rand -hex 32`, put it in `.env` as
-   `GITHUB_WEBHOOK_SECRET`, run `jigs service restart`, then run `jigs bind`
-   again for each repository. `bind` creates or repairs the repository's
-   webhook. It needs hook permissions: `admin:repo_hook` for a PAT, or
+   `GITHUB_WEBHOOK_SECRET`, set `github: { enabled: true }`, run
+   `jigs service restart`, then run `jigs bind` again for each repository.
+   `bind` creates or repairs the repository's webhook. It needs hook permissions: `admin:repo_hook` for a PAT, or
    Repository webhooks read and write for an App.
 3. **Linear**: create the webhook yourself in Linear under Settings → API →
    Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
-   only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET` and run
-   `jigs service restart`.
+   only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET`, set
+   `linear: { enabled: true }` and run `jigs service restart`.
 4. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
    and add a subscription on the service or team your triggers watch, for the
    `incident.triggered` event only, delivering to

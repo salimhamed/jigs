@@ -18,8 +18,6 @@ function factoryWith(pagerduty: unknown): string {
   roots.push(root);
   const webhooks = {
     url: "https://factory.example.test/",
-    github: { enabled: false },
-    linear: { enabled: false },
     pagerduty,
   };
   writeFileSync(

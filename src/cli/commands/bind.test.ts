@@ -99,7 +99,7 @@ test("re-bind refuses an expression-backed remote before the webhook leg", async
   const expressionConfig = `const remote = ${JSON.stringify(API)};\n${jigsConfig()
     .replace(
       "export default {",
-      'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false }, pagerduty: { enabled: false } },',
+      'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true } },',
     )
     .replace(`remote: "${API}"`, "remote")}`;
   writeFileSync(path.join(factory, "jigs.config.ts"), expressionConfig);
@@ -256,7 +256,7 @@ function bearerOf(call: number): string | null {
 function makeWebhookFactory(): void {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false }, pagerduty: { enabled: false } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
 }
 
@@ -377,7 +377,7 @@ test("bind with GitHub webhooks off needs no webhook secret, and names the inter
   vi.stubEnv("GITHUB_TOKEN", "");
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: false }, linear: { enabled: true }, pagerduty: { enabled: false } }, service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 60 } }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", linear: { enabled: true } }, service: { port: 8990, dashboardPort: 9090, pollIntervalSeconds: { github: 60 } }, workflows: {} };',
   );
   const result = await bindRepo(API, deps());
   expect(result.webhook).toBe("skipped");
@@ -423,7 +423,7 @@ test("a label permission failure preserves the binding after ensuring the webhoo
   stubWebhookEnv();
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false }, pagerduty: { enabled: false } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
   fetchMock
     .mockResolvedValueOnce(new Response("[]"))
@@ -488,7 +488,7 @@ test("an alias match is named in the repair command", async () => {
   vi.stubEnv("GITHUB_TOKEN", "");
   writeConfig(
     `gambit: { remote: ${JSON.stringify(API)} }`,
-    'webhooks: { url: "https://factory.example.ts.net", github: { enabled: true }, linear: { enabled: false }, pagerduty: { enabled: false } }, ',
+    'webhooks: { url: "https://factory.example.ts.net", github: { enabled: true } }, ',
   );
 
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
@@ -617,7 +617,7 @@ test("bind with a non-github remote skips the webhook leg", async () => {
 });
 
 test("unsupported bindings fail before modifying files or registering webhooks", async () => {
-  const text = `const bindings = {}; export default { service: { dashboardPort: 9090 }, webhooks: { url: "https://example.com", github: { enabled: true }, linear: { enabled: false }, pagerduty: { enabled: false } }, bindings };`;
+  const text = `const bindings = {}; export default { service: { dashboardPort: 9090 }, webhooks: { url: "https://example.com", github: { enabled: true } }, bindings };`;
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
   const fetch = vi.fn();
   vi.stubGlobal("fetch", fetch);

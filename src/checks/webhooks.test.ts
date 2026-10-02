@@ -28,8 +28,6 @@ function configure(github = true): void {
   const webhooks = {
     url: "https://factory.example.ts.net",
     github: { enabled: github },
-    linear: { enabled: false },
-    pagerduty: { enabled: false },
   };
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
