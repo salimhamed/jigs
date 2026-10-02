@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.8](https://github.com/salimhamed/jigs/compare/jigs-v0.81.7...jigs-v0.81.8) (2026-10-02)
+
+
+### Bug Fixes
+
+* say why jigs waits when GitHub blocks an approved, green pull request ([#493](https://github.com/salimhamed/jigs/issues/493)) ([86cd7cd](https://github.com/salimhamed/jigs/commit/86cd7cdeccc9d91b031ea640bdec23b1a78cdefb))
+
 ## [0.81.7](https://github.com/salimhamed/jigs/compare/jigs-v0.81.6...jigs-v0.81.7) (2026-10-02)
 
 
