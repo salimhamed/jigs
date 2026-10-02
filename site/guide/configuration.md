@@ -83,8 +83,9 @@ bindings: {
 Each `copy` entry is a path, or a glob, inside `bindings/<name>/` in the
 factory, and lands at the same path in the worktree. `bindings/app/.env`
 arrives as `.env` at the worktree root. Keep secret files there; the
-scaffold's `.gitignore` already ignores every `.env`. An entry that matches nothing fails the
-worktree with a message naming it.
+scaffold's `.gitignore` already ignores every `.env`. An entry that matches nothing fails
+`jigs doctor`, and stops a run of a workflow that needs the binding before it
+starts, with a message naming the missing path.
 
 `jigs bind <remote>` adds a binding with its `remote` and creates
 `bindings/<name>/` with a short `README.md` when the folder is missing. It

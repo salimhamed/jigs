@@ -98,6 +98,8 @@ test("a copy entry that matches nothing fails, naming the binding and the direct
   expect((failure as CopySourceMissingError).message).toBe(
     "binding api: copy entry .env matches nothing under bindings/api/",
   );
+  // A retry finds the same empty folder, so the SDK must not retry it.
+  expect((failure as CopySourceMissingError).fatal).toBe(true);
 });
 
 test("an entry climbing out of the binding's directory is refused", async () => {
