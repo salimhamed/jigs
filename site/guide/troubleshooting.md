@@ -59,6 +59,25 @@ Run `pnpm exec jigs generate` if the generated imports are missing. Custom
 `steps/*` modules. Those low-level implementations are not durable wrappers
 and must not be called directly from workflow code. See the [API import map](/api/).
 
+## Workflow code that uses `Intl` throws at runtime
+
+Workflow code can pass its tests and then throw on `Intl` in a running factory.
+Workflow bodies run on Node by default, but on QuickJS when the service runs
+with `WORKFLOW_VM=quickjs`. QuickJS has no `Intl`, so `Intl.DateTimeFormat` and
+`toLocaleString("en-US")` fail there, while tests run on Node and pass. Time-zone libraries read their zone data from `Intl`, so they
+fail the same way.
+
+Put date, time-zone and locale formatting in a step. Steps always run on Node,
+and the runtime records their result for replay:
+
+```ts
+// workflows/my-flow/steps.ts
+export async function formatLocalTime(at: string, timeZone: string) {
+  "use step";
+  return new Date(at).toLocaleString("en-US", { timeZone });
+}
+```
+
 ## A run is waiting
 
 Run `pnpm exec jigs status <run>`. A waiting run is expected when it asked a

@@ -20,7 +20,8 @@ become editable factory source; upgrades only regenerate `jigs/`.
 
 - A workflow is a named process with a `"use workflow"` async function.
 - Workflow code decides what happens next and must be safe to replay: no
-  filesystem, network, environment reads, or Node built-ins.
+  filesystem, network, environment reads, or Node built-ins. It may run on
+  QuickJS, which has no `Intl`: format dates, time zones and locales in a step.
 - A step has `"use step"` and performs work the runtime records. Keep a
   workflow's own steps in a `steps.ts` in its directory; their implementations
   may use Node and external services.
