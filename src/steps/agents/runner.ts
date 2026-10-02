@@ -6,7 +6,7 @@ import type { Harness } from "../../workflow/agents/harness-config.ts";
 import { type AgentSessionRef, extractAgentSession } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 import type { Driver, HarnessTarget } from "./drivers/index.ts";
-import { harnessEnv } from "./harnesses/env.ts";
+import { agentStepEnv } from "./harnesses/env.ts";
 import { acquireFileLock, FileLockTimeoutError, lockPathFor } from "./lock.ts";
 import { type RunCancellation, watchRunCancellation } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
@@ -70,7 +70,7 @@ export async function prepareAgentRun(
     );
   }
   // Built once, so the JIT checks probe exactly what the harness gets.
-  const env = harnessEnv([...driver.envAllowlist(target), ...seams.factoryEnv()]);
+  const env = agentStepEnv(driver, target, seams.factoryEnv());
   const requestReport = await runChecks(driver.requestChecks(target));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const jitFailure = await seams.jitFailures(target, env);

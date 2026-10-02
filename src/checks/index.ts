@@ -15,15 +15,18 @@ import { pagerDutyClientFor } from "../providers/pagerduty.ts";
 import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
 import { slackAuthTest, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
+import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {
   CHECK_TIMEOUT_MS,
   type Check,
+  type CheckReport,
   failedCheck,
   neededByUsers,
   requirementUsers,
+  runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
 import { type Integration, RESTART_SERVICE } from "./core.ts";
@@ -288,6 +291,86 @@ function configuredProviders(): Record<Integration, boolean> {
   }
 }
 
+// Doctor has no worktree, so it starts the servers from the factory root.
+function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
+  let root: string;
+  let agentEnv: readonly string[];
+  try {
+    root = factoryRoot();
+    agentEnv = factoryAgentEnv();
+  } catch {
+    // The binding checks report a configuration that cannot be read.
+    return [];
+  }
+  const servers = new Map<string, { checks: Check[]; workflows: string[] }>();
+  for (const [workflow, { requires }] of Object.entries(workflows)) {
+    for (const harness of Object.values(requires?.agents ?? {})) {
+      // A kind with no driver is the harness checks' diagnosis.
+      const driver = driverFor(harness.kind);
+      if (driver === undefined) continue;
+      for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
+        const key = JSON.stringify([harness.kind, name, server]);
+        const entry = servers.get(key) ?? {
+          checks: serverChecks(name, () =>
+            agentMcpServerChecks(
+              harness.kind,
+              { [name]: server },
+              root,
+              agentStepEnv(driver, { harness, cwd: root }, agentEnv),
+            ),
+          ),
+          workflows: [],
+        };
+        if (!entry.workflows.includes(workflow)) entry.workflows.push(workflow);
+        servers.set(key, entry);
+      }
+    }
+  }
+  return [...servers.values()].flatMap(({ checks, workflows }) => neededByUsers(checks, workflows));
+}
+
+// A descriptor whose environment cannot be planned fails the way the step
+// would, as the server's check rather than as the whole report.
+function serverChecks(name: string, build: () => Check[]): Check[] {
+  try {
+    return build();
+  } catch (err) {
+    return [
+      failedCheck(
+        `mcp.${name}`,
+        `MCP server ${name}`,
+        err instanceof Error ? err.message : String(err),
+        err instanceof JigsError && err.hint !== undefined
+          ? err.hint
+          : "fix the agent's harness descriptor in the workflow's requires.agents",
+      ),
+    ];
+  }
+}
+
+// Claude Code and Codex pass a step's environment on to a stdio server; Pi's
+// adapter starts it from its declaration alone.
+function agentMcpServerChecks(
+  kind: Harness["kind"],
+  servers: Harness["mcpServers"],
+  cwd: string,
+  env: Record<string, string>,
+): Check[] {
+  return mcpServerChecks(servers ?? {}, cwd, env, { inherit: kind !== "pi" });
+}
+
+/** Run doctor's checks, giving each MCP probe the allowance a step gives it. */
+export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
+  return Promise.all(
+    checks.map((check) =>
+      runChecks([check], check.id.startsWith("mcp.") ? JIT_TIMEOUT_MS : CHECK_TIMEOUT_MS),
+    ),
+  ).then((reports) => {
+    const outcomes = reports.flatMap((report) => report.checks);
+    return { ok: outcomes.every((outcome) => outcome.ok), checks: outcomes };
+  });
+}
+
 // Every check follows the factory: its workflows' manifests, the providers its
 // event triggers poll, and its configuration. A provider, harness or AWS
 // profile nothing uses is not checked. `triggers` maps each trigger to the
@@ -327,6 +410,7 @@ export function doctorChecks(
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),
+    ...requiredMcpServerChecks(workflows),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
   ];
 }
@@ -345,8 +429,6 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
   const driver = driverFor(harness.kind);
   return [
     ...(driver?.jitChecks?.(target) ?? []),
-    ...mcpServerChecks(harness.mcpServers ?? {}, target.cwd, env, {
-      inherit: harness.kind !== "pi",
-    }),
+    ...agentMcpServerChecks(harness.kind, harness.mcpServers, target.cwd, env),
   ];
 }

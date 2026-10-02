@@ -171,7 +171,10 @@ callbacks or live objects belong inside a [custom agent step](/guide/custom-agen
 Give a `runAgent` harness MCP servers with `mcpServers`. The servers you list
 are all the agent sees: jigs ignores user, project and plugin MCP configuration
 for every harness. Each server names a `probe` tool, which the step calls
-before the agent starts to prove the server works.
+before the agent starts to prove the server works. `jigs doctor` also calls
+the probe of every server an agent in `requires.agents` declares, so a bad
+token shows up at `jigs up` rather than mid-run. Doctor starts a stdio server
+from the factory root, since there is no worktree yet.
 
 Credentials never go in workflow code. An `env` entry, a header and
 `bearerTokenEnv` each name a variable in the factory's
@@ -197,7 +200,9 @@ harnesses.claude({
 Names use uppercase letters, digits and underscores. The agent gets the
 variables its servers name, so they need no
 [`agents.env`](/guide/configuration#agents-env) entry. If one is not set, the
-step fails before the agent starts and names the variable. A Pi server also
+step fails before the agent starts and names the variable. For a server
+declared in `requires.agents`, `jigs doctor` reports it first; a server built
+in the workflow body is checked only when its agent starts. A Pi server also
 lists the `tools` the model may call.
 
 The named variables are in the agent's own environment, so an agent with shell

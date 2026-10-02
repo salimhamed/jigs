@@ -9,7 +9,7 @@ import { getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
-import { doctorChecks, failedChecks, runChecks } from "../checks/index.ts";
+import { doctorChecks, failedChecks, runDoctorChecks } from "../checks/index.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { webhookSecret } from "../config/webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
@@ -124,7 +124,7 @@ export function createApp(factory: Factory): Hono {
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
     c.json(
-      await runChecks([
+      await runDoctorChecks([
         ...doctorChecks(factory.workflows, triggerProviders(factory)),
         ...scheduleChecks(factory),
         ...triggerChecks(factory),
