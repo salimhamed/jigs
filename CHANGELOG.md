@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.81.6](https://github.com/salimhamed/jigs/compare/jigs-v0.81.5...jigs-v0.81.6) (2026-10-02)
+
+
+### Features
+
+* probe agents' MCP servers in jigs doctor ([#486](https://github.com/salimhamed/jigs/issues/486)) ([56d9455](https://github.com/salimhamed/jigs/commit/56d9455d21f09db9a7e06cd680a0e60376231a78))
+
+
+### Bug Fixes
+
+* list every variable a factory can need in .env.example, and let empty slots keep shell values ([#487](https://github.com/salimhamed/jigs/issues/487)) ([41c3a14](https://github.com/salimhamed/jigs/commit/41c3a14ffe8f33056eb27128121568fc4c1a3635))
+
 ## [0.81.5](https://github.com/salimhamed/jigs/compare/jigs-v0.81.4...jigs-v0.81.5) (2026-10-02)
 
 
