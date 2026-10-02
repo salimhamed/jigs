@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.81.5](https://github.com/salimhamed/jigs/compare/jigs-v0.81.4...jigs-v0.81.5) (2026-10-02)
+
+
+### Bug Fixes
+
+* check a binding's copy files in doctor and preflight, and fail a missing one without retries ([#485](https://github.com/salimhamed/jigs/issues/485)) ([2e8d9a6](https://github.com/salimhamed/jigs/commit/2e8d9a68a1be672bb4fb351f3feaa19407e6a671))
+
 ## [0.81.4](https://github.com/salimhamed/jigs/compare/jigs-v0.81.3...jigs-v0.81.4) (2026-10-02)
 
 
