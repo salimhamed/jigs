@@ -193,12 +193,7 @@ test.each([
 test("one provider switched on mounts only its own route", async () => {
   const githubOnly = createApp({
     workflows: fixture.workflows,
-    webhooks: {
-      url: "https://f.test",
-      github: { enabled: true },
-      linear: { enabled: false },
-      pagerduty: { enabled: false },
-    },
+    webhooks: { url: "https://f.test", github: { enabled: true } },
   });
   const body = commentPayload();
   expect(

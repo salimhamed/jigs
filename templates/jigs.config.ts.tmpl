@@ -6,9 +6,7 @@ export default defineFactory({
   // Webhooks are optional: they wake runs sooner, and need a public URL.
   // webhooks: {
   //   url: "https://<machine>.<tailnet>.ts.net",
-  //   github: { enabled: true },
-  //   linear: { enabled: false },
-  //   pagerduty: { enabled: false },
+  //   github: { enabled: true }, // also linear, pagerduty; a provider left out is off
   // },
   bindings: {},
   // Agents get only a small base environment; name any other variable they need.

@@ -298,7 +298,8 @@ export type SlackDefinition = z.input<typeof slackSchema>;
 
 /**
  * Where provider webhooks reach the service, and which providers send them.
- * Without this section the service still wakes parked runs by polling.
+ * A provider left out sends none. Without this section the service still wakes
+ * parked runs by polling.
  *
  * @example
  * Use this value for `webhooks` in `jigs.config.ts`.
@@ -308,8 +309,6 @@ export type SlackDefinition = z.input<typeof slackSchema>;
  * const webhooks = {
  *   url: "https://factory.example.ts.net",
  *   github: { enabled: true },
- *   linear: { enabled: false },
- *   pagerduty: { enabled: false },
  * } satisfies WebhooksDefinition;
  * ```
  *
