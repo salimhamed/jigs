@@ -173,9 +173,13 @@ export async function deliverTicket(
     const approved = await implementAndReview(delivery, builder);
     const pr = await publish(delivery, approved);
     await setTicketStatus(snapshot.id, "In Review");
-    await followPullRequest(delivery, pr, builder, {
+    const outcome = await followPullRequest(delivery, pr, builder, {
       onNeedsHuman: (note) => noteOnTicket(claim, note),
     });
+    if (outcome === "closed") {
+      await setTicketStatus(snapshot.id, "Todo");
+      return { pr: pr.url, closed: true };
+    }
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
   } catch (error) {
@@ -219,10 +223,13 @@ export async function deliverTicket(
   keeps watching; the note's marker keeps it from waking the builder.
   The watcher never merges, and the agent is instructed not to merge or approve.
   Those instructions are not a restriction on the agent's GitHub credentials.
+  It returns `"merged"` once the pull request merges, or `"closed"` when it is
+  closed without merging; local work is never pushed on the way out.
 
 A phase that stops short throws `DeliveryStopped`. Initial implementation attempts
-to push committed work first; PR maintenance stops only when the pull request
-closes unmerged, and preserves local work without an automatic push. Its `note()` says what is still open and where the work is, and
+to push committed work first. The shipped workflow also throws it when
+`followPullRequest` returns `"closed"`, so the ticket gets a note and goes back
+to `Todo`. Its `note()` says what is still open and where the work is, and
 the workflow decides where to post it. To add your own check between phases,
 add a line to the workflow.
 

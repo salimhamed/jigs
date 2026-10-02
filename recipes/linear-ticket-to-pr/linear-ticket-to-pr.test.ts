@@ -16,7 +16,7 @@ vi.mock("./delivery/delivery.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./delivery/delivery.ts")>()),
   implementAndReview: vi.fn(async () => ({ reviewedCommit: "h1", ledger: [] })),
   publish: vi.fn(async () => pr),
-  followPullRequest: vi.fn(async () => {}),
+  followPullRequest: vi.fn(async () => "merged" as const),
 }));
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
@@ -117,6 +117,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
   };
   vi.mocked(delivery.followPullRequest).mockImplementationOnce(async (_d, _pr, _b, maintenance) => {
     await maintenance.onNeedsHuman(note);
+    return "merged";
   });
 
   await expect(run()).resolves.toEqual({ pr: pr.url });
@@ -132,6 +133,29 @@ test("a stopped delivery posts its note on the ticket, sets Todo, and fails the 
   await expect(run()).rejects.toBe(stop);
 
   expect(routines.noteOnTicket).toHaveBeenCalledWith(claim, stop.note());
+  expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
+});
+
+test("a pull request closed without merging gets a note on the ticket, sets Todo, and fails the run", async () => {
+  vi.mocked(delivery.followPullRequest).mockResolvedValueOnce("closed");
+
+  const error = await run().then(
+    () => expect.unreachable("a closed pull request should fail the run"),
+    (error: unknown) => error,
+  );
+
+  expect(error).toBeInstanceOf(delivery.DeliveryStopped);
+  expect(routines.noteOnTicket).toHaveBeenCalledWith(
+    claim,
+    (error as delivery.DeliveryStopped).note(),
+  );
+  expect((error as delivery.DeliveryStopped).note()).toMatchObject({
+    headline: "jigs stopped pull request maintenance for ABC-123.",
+    notes: expect.arrayContaining([
+      "The pull request was closed unmerged.",
+      `Unfinished pull request: ${pr.url}`,
+    ]),
+  });
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
 });
 
