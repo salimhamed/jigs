@@ -59,4 +59,6 @@ Each version converts to Apache License 2.0 four years after its first public
 release.
 Versions released before this licensing change remain available under MIT.
 
-<!-- TODO: commercial licensing contact -->
+For commercial licensing, [open a licensing inquiry](https://github.com/salimhamed/jigs/issues/new?title=Commercial%20licensing%20inquiry).
+
+This summary is for convenience; [LICENSE](LICENSE) controls.
