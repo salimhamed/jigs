@@ -492,10 +492,11 @@ the next check. See
 webhooks: {
   url: "https://my-machine.my-tailnet.ts.net",
   github: { enabled: true },
-  linear: { enabled: false },
-  pagerduty: { enabled: false },
 },
 ```
+
+Name each provider that sends webhooks with `enabled: true`. A provider you
+leave out (here `linear` and `pagerduty`) is off and keeps polling.
 
 1. **Expose the service port** with a tunnel, for example
    `tailscale funnel --bg <servicePort>` or

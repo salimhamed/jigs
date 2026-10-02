@@ -137,9 +137,9 @@ export function createApp(factory: Factory): Hono {
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
   // provider. A provider whose webhooks are off has no route at all, so a
   // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.github.enabled) mountGithubIngress(app);
-  if (factory.webhooks?.linear.enabled) mountLinearIngress(app);
-  if (factory.webhooks?.pagerduty.enabled) mountPagerDutyIngress(app);
+  if (factory.webhooks?.github?.enabled) mountGithubIngress(app);
+  if (factory.webhooks?.linear?.enabled) mountLinearIngress(app);
+  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app);
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.

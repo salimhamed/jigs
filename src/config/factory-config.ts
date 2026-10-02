@@ -67,10 +67,11 @@ const serviceSchema = z.strictObject({
   ),
 });
 
-const webhookProviderSchema = z.strictObject({ enabled: z.boolean() });
+// A provider left out is off. One that is on is stated outright rather than
+// implied by a secret in .env: a forgotten secret must be a boot error, not a
+// factory that silently polls.
+const webhookProviderSchema = z.strictObject({ enabled: z.boolean() }).default({ enabled: false });
 
-// Each provider is stated outright rather than implied by a secret in .env: a
-// forgotten secret must be a boot error, not a factory that silently polls.
 export const webhooksSchema = z.strictObject({
   url: z.url(),
   github: webhookProviderSchema,

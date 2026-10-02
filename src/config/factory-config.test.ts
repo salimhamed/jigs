@@ -96,13 +96,6 @@ test.each([
   [
     {
       service: { dashboardPort: 9090 },
-      webhooks: { url: "https://f.test", github: { enabled: true } },
-    },
-    "linear",
-  ],
-  [
-    {
-      service: { dashboardPort: 9090 },
       webhooks: {
         url: "https://f.test",
         github: {},
@@ -152,6 +145,20 @@ test("without a slack section the factory has no Slack app", () => {
 
 test("without a webhooks section no provider sends webhooks", () => {
   expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).webhooks).toBeUndefined();
+});
+
+test("a webhook provider left out of the webhooks section is disabled", () => {
+  expect(
+    parseFactoryConfig({
+      service: { dashboardPort: 3456 },
+      webhooks: { url: "https://f.test", github: { enabled: true } },
+    }).webhooks,
+  ).toEqual({
+    url: "https://f.test",
+    github: { enabled: true },
+    linear: { enabled: false },
+    pagerduty: { enabled: false },
+  });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
