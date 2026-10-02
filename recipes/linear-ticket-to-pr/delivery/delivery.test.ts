@@ -371,7 +371,7 @@ test("the implementation builder resumes to judge the PR and merges only after G
   vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
   const session = builder();
   await implementAndReview(delivery, session);
-  await followPullRequest(delivery, pr, session, { onNeedsHuman });
+  await expect(followPullRequest(delivery, pr, session, { onNeedsHuman })).resolves.toBe("merged");
   expect(calls[2]?.harness).toBe(delivery.builder);
   expect(calls[2]?.resumed).toBe(true);
   expect(calls[2]?.prompt).not.toContain("THE TASK BRIEF");
@@ -403,16 +403,6 @@ test("the maintenance prompt says when to wait, when to ask for a person, and wh
   expect(prompt).toContain("Checks that queue, run or pass do not wake you");
 });
 
-const stoppedMaintenance = async (promise: Promise<unknown>) => {
-  const error = await promise.then(
-    () => expect.unreachable("maintenance should stop"),
-    (error: unknown) => error,
-  );
-  expect(error).toBeInstanceOf(DeliveryStopped);
-  expect(steps.pushBranch).not.toHaveBeenCalled();
-  return error as DeliveryStopped;
-};
-
 test("attempt allowance resets for every update and permits more than six updates", async () => {
   mergesBy("human");
   const updates = Array.from({ length: 8 }, (_, i) => withComment(snapshot, i));
@@ -427,15 +417,15 @@ test("a human merger means jigs never merges", async () => {
   mergesBy("human");
   answer(maintenanceReport, finished);
   watch(snapshot, commented, closed);
-  await follow();
+  await expect(follow()).resolves.toBe("merged");
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
-test("closed snapshots run no agent and closing without merging stops without a push", async () => {
+test("closed snapshots run no agent and closing without merging returns closed without a push", async () => {
   mergesBy("human");
   watch({ ...closed, merged: false });
-  const error = await stoppedMaintenance(follow());
-  expect(error.findings[0]).toContain("closed unmerged");
+  await expect(follow()).resolves.toBe("closed");
+  expect(steps.pushBranch).not.toHaveBeenCalled();
   expect(calls).toHaveLength(0);
 });
 
@@ -981,8 +971,7 @@ test.each([true, false])(
     vi.mocked(steps.fetchPullRequestState)
       .mockResolvedValueOnce(commented)
       .mockResolvedValueOnce({ ...closed, merged });
-    if (merged) await follow();
-    else await stoppedMaintenance(follow());
+    await expect(follow()).resolves.toBe(merged ? "merged" : "closed");
     expect(calls).toHaveLength(1);
     expect(sleep).toHaveBeenCalledTimes(1);
   },

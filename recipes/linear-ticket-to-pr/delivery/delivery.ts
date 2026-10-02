@@ -1,7 +1,7 @@
 // Deliver one work item in three phases, each a plain function the workflow
 // calls in order: build and review until approved, publish, follow the pull
-// request until it merges. A delivery that stops short retains its work and
-// throws DeliveryStopped; the workflow decides what to tell whom.
+// request until it merges or closes. A delivery that stops short retains its
+// work and throws DeliveryStopped; the workflow decides what to tell whom.
 
 import {
   type ApprovalCoverage,
@@ -215,7 +215,7 @@ export async function publish(
   return pr;
 }
 
-// ---- phase 3: follow the pull request until it merges -------------------------
+// ---- phase 3: follow the pull request until it merges or closes ---------------
 
 export interface Maintenance {
   /**
@@ -248,7 +248,7 @@ export async function followPullRequest(
   pr: PullRequestRef,
   builder: BuilderSession,
   { onNeedsHuman }: Maintenance,
-): Promise<void> {
+): Promise<"merged" | "closed"> {
   const following: Following = {
     delivery,
     pr,
@@ -268,13 +268,10 @@ export async function followPullRequest(
         if (current.state === "open" && current.headSha !== snapshot.headSha) continue;
       }
     }
-    if (current.state === "closed") {
-      if (current.merged) return;
-      throw maintenanceStopped(delivery, pr, "The pull request was closed unmerged.");
-    }
+    if (current.state === "closed") return current.merged ? "merged" : "closed";
     // Checked after every yield and every builder turn: a turn that changes
     // nothing on GitHub produces no new yield to merge on.
-    if (await mergeIfReady(following, current)) return;
+    if (await mergeIfReady(following, current)) return "merged";
   }
 
   throw new JigsError(
@@ -469,21 +466,6 @@ function maintenanceNote(delivery: Delivery, pr: PullRequestRef, reason: string)
     closing:
       "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
   };
-}
-
-// An unresolved local/publication state must never be pushed as a side effect
-// of stopping. Keep it available for the person taking over.
-function maintenanceStopped(delivery: Delivery, pr: PullRequestRef, reason: string) {
-  return new DeliveryStopped(
-    `jigs stopped pull request maintenance for ${delivery.task.key}.`,
-    [
-      reason,
-      `Unfinished pull request: ${prUrl(pr)}`,
-      "Local work was retained without an automatic push.",
-    ],
-    delivery.worktree,
-    "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
-  );
 }
 
 // Before publication, try to preserve implementation commits remotely, then

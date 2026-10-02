@@ -10,6 +10,7 @@ import { z } from "zod";
 import { acquireTicket, agentSession, noteOnTicket, reviewTicket } from "#jigs/routines";
 import { provisionWorktree, setTicketStatus } from "#jigs/steps";
 import {
+  type Delivery,
   DeliveryStopped,
   followPullRequest,
   implementAndReview,
@@ -78,9 +79,10 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     const pr = await publish(delivery, approved);
     await setTicketStatus(snapshot.id, "In Review");
     // Only a note: the ticket stays In Review while the run keeps watching.
-    await followPullRequest(delivery, pr, builder, {
+    const outcome = await followPullRequest(delivery, pr, builder, {
       onNeedsHuman: (note) => noteOnTicket(claim, note),
     });
+    if (outcome === "closed") throw closedUnmerged(delivery, pr.url);
     await setTicketStatus(snapshot.id, "Done");
     return { pr: pr.url };
   } catch (error) {
@@ -101,6 +103,20 @@ function workItem(handoff: TicketHandoff): WorkItem {
     url: handoff.snapshot.url,
     instructions: `${renderTicketSnapshot(handoff.snapshot)}\n\n## Implementation brief\n${handoff.brief}\n\nThe ticket requirements take precedence over the brief.`,
   };
+}
+
+// Nothing is pushed on the way out: unpublished local work stays for the person taking over.
+function closedUnmerged(delivery: Delivery, url: string) {
+  return new DeliveryStopped(
+    `jigs stopped pull request maintenance for ${delivery.task.key}.`,
+    [
+      "The pull request was closed unmerged.",
+      `Unfinished pull request: ${url}`,
+      "Local work was retained without an automatic push.",
+    ],
+    delivery.worktree,
+    "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
+  );
 }
 
 export default defineWorkflow({
