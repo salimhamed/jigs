@@ -366,8 +366,8 @@ GitHub reports an approved, green pull request as `blocked` and refuses the
 merge without saying why. jigs cannot read branch rules without admin access,
 so it does not check them ahead of time. It says so in `jigs status`, and the
 `linear-ticket-to-pr` recipe also leaves one note on the pull request for each
-commit, then keeps watching. Add the account to the branch rule, or merge those
-pull requests yourself.
+commit, then keeps watching. Add the account to the branch rule, or set the
+recipe's `mergedBy: "human"` and merge those pull requests yourself.
 
 ### Call other GitHub endpoints {#call-github}
 

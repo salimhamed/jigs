@@ -17,6 +17,13 @@ const opened: PullRequestSnapshot = {
   conversationComments: [],
   approval: { signal: "review", state: "none" },
 };
+const SCOPE = "linearTicketToPr/ABC-1";
+const marked = (marker: object) => ({
+  ...comment,
+  id: 4,
+  userType: "Bot",
+  body: `A note.\n\n<!-- jigs:v1 ${JSON.stringify({ run: "r", source: "h1", ...marker })} -->`,
+});
 const check = (name: string) => ({ name, conclusion: "failure", url: `https://ci/${name}` });
 const comment = {
   id: 3,
@@ -35,12 +42,12 @@ const review = (state: string, body: string) => ({
   commitSha: "h1",
 });
 const wakes = (from: PullRequestSnapshot, to: PullRequestSnapshot) => {
-  const seen = new Set(builderWakeFacts(from));
-  return builderWakeFacts(to).some((fact) => !seen.has(fact));
+  const seen = new Set(builderWakeFacts(from, SCOPE));
+  return builderWakeFacts(to, SCOPE).some((fact) => !seen.has(fact));
 };
 
 test("a freshly opened pull request with nothing to act on has nothing to wake the builder for", () => {
-  expect(builderWakeFacts(opened)).toEqual([]);
+  expect(builderWakeFacts(opened, SCOPE)).toEqual([]);
 });
 
 test("checks queuing, running, passing and clearing never wake the builder", () => {
@@ -50,7 +57,7 @@ test("checks queuing, running, passing and clearing never wake the builder", () 
     { ...opened, ci: "green" as const, mergeState: "clean" },
     { ...opened, ci: "green" as const, mergeState: "clean", labels: ["jigs:approved"] },
   ];
-  for (const state of states) expect(builderWakeFacts(state)).toEqual([]);
+  for (const state of states) expect(builderWakeFacts(state, SCOPE)).toEqual([]);
   const failed = { ...opened, ci: "red" as const, failingChecks: [check("build")] };
   expect(wakes(failed, { ...opened, ci: "pending" })).toBe(false);
 });
@@ -97,9 +104,9 @@ test("new or edited discussion wakes the builder", () => {
 });
 
 test("a bare approval is consent to merge, not discussion for the builder", () => {
-  expect(builderWakeFacts({ ...opened, reviews: [review("APPROVED", "")] })).toEqual([]);
+  expect(builderWakeFacts({ ...opened, reviews: [review("APPROVED", "")] }, SCOPE)).toEqual([]);
   expect(
-    builderWakeFacts({ ...opened, reviews: [review("APPROVED", "LGTM, one nit")] }),
+    builderWakeFacts({ ...opened, reviews: [review("APPROVED", "LGTM, one nit")] }, SCOPE),
   ).not.toEqual([]);
 });
 
@@ -145,6 +152,16 @@ test("comment facts leave out reviews, failures and conflicts", () => {
     conversationComments: [comment],
     reviews: [review("CHANGES_REQUESTED", "")],
   };
-  expect(commentFacts(busy)).toHaveLength(1);
-  expect(builderWakeFacts(busy)).toHaveLength(4);
+  expect(commentFacts(busy, SCOPE)).toHaveLength(1);
+  expect(builderWakeFacts(busy, SCOPE)).toHaveLength(4);
+});
+
+test("only this scope's own status notes are kept from the builder", () => {
+  const status = { kind: "status", reason: "merge-retry" };
+  const facts = (marker: object) =>
+    commentFacts({ ...opened, conversationComments: [marked(marker)] }, SCOPE);
+  expect(facts({ scope: SCOPE, ...status })).toEqual([]);
+  // Another jigs workflow's note, or anything but a status note, is still news.
+  expect(facts({ scope: "otherWorkflow/ABC-1", ...status })).toHaveLength(1);
+  expect(facts({ scope: SCOPE, kind: "reply" })).toHaveLength(1);
 });
