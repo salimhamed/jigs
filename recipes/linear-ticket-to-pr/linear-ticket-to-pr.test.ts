@@ -98,6 +98,17 @@ test("a run picks its builder and reviewer by name", async () => {
   ).toBe(false);
 });
 
+test("the chosen reviewer also reviews the requirements", async () => {
+  await run({ reviewer: "builder" });
+  expect(routines.reviewTicket).toHaveBeenCalledWith(
+    expect.objectContaining({ harness: entry.requires?.agents?.builder }),
+  );
+});
+
+test("a run needs a binding before it claims the ticket", () => {
+  expect(entry.inputs.safeParse({ ticket: "ABC-123", binding: "" }).success).toBe(false);
+});
+
 test("a pull request that needs a person gets a note on the ticket and stays In Review", async () => {
   const note = {
     headline: "jigs needs a person.",

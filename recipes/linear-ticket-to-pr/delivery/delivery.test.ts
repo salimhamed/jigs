@@ -192,7 +192,10 @@ test("an exhausted review budget pushes the branch and stops with the open findi
   expect(error.findings).toEqual(["Broken"]);
   expect(error.note()).toEqual({
     headline: "jigs stopped work on ABC-1 after 2 review round(s) without an approved change.",
-    notes: ["Broken", "The work is on branch `acme/abc-1`, in the worktree at `/tmp/wt`."],
+    notes: [
+      "Broken",
+      "The work is on branch `acme/abc-1`, in the run's local worktree, which `jigs status` lists.",
+    ],
     closing: expect.stringContaining("Another run starts over on a new branch"),
   });
 });
@@ -203,8 +206,9 @@ test("uncommitted work stops the delivery before any review", async () => {
 
   const error = await stopped(implementAndReview(delivery, builder()));
 
-  expect(error.findings[0]).toContain("uncommitted changes");
-  expect(error.findings[0]).toContain("git -C /tmp/wt status");
+  expect(error.findings[0]).toBe(
+    "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it).",
+  );
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
   expect(calls).toHaveLength(1);
 });
@@ -216,7 +220,7 @@ test("a build round that commits nothing stops the delivery before any review", 
   const error = await stopped(implementAndReview(delivery, builder()));
 
   expect(error.message).toBe("jigs stopped work on ABC-1 in review round 1.");
-  expect(error.findings[0]).toContain("committed nothing on acme/abc-1");
+  expect(error.findings[0]).toBe("The builder committed nothing new on branch `acme/abc-1`.");
   expect(steps.readBranchState).toHaveBeenCalledWith(worktree, "base");
   expect(calls).toHaveLength(1);
 });
@@ -248,6 +252,15 @@ test("publish pushes the reviewed commit and appends the reviewer's notes", asyn
   expect(steps.registerResource).toHaveBeenCalledWith(
     expect.objectContaining({ kind: "pull-request", identity: "acme/app#7" }),
   );
+});
+
+test("publish pushes nothing until the builder has written a valid description", async () => {
+  answer(pullRequestDescription, { title: "# Add a flag", body: "Adds it." });
+
+  await expect(publish(delivery, { reviewedCommit: "h1", ledger: [] })).rejects.toThrow();
+
+  expect(steps.pushApprovedChange).not.toHaveBeenCalled();
+  expect(steps.openPullRequest).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -833,7 +846,27 @@ test("a failed implementation preservation push does not hide why delivery stopp
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
   const error = await stopped(implementAndReview(delivery, builder()));
   expect(error.message).toContain("review round 1");
-  expect(error.findings.at(-1)).toContain("Recover the work from /tmp/wt");
+  expect(error.findings.at(-1)).toBe(
+    "Could not push the branch; the service log has the push error.",
+  );
+  expect(JSON.stringify(error.note())).not.toContain("remote denied");
+});
+
+test("a stopped delivery never puts the local worktree path in what gets posted", async () => {
+  answer(implementationReport, { responses: [] });
+  at("h1", true);
+  vi.mocked(steps.pushBranch).mockRejectedValueOnce(
+    new Error("fatal: could not lock /data/clones/acme/app.git/refs/heads/acme/abc-1"),
+  );
+
+  const error = await stopped(implementAndReview(delivery, builder()));
+
+  const posted = JSON.stringify([error.message, error.findings, error.hint, error.note()]);
+  expect(posted).toContain("uncommitted changes");
+  expect(posted).toContain("Could not push the branch");
+  expect(posted).not.toContain("/tmp/wt");
+  expect(posted).not.toContain("/data/clones");
+  expect(error.worktree.path).toBe("/tmp/wt");
 });
 
 test("reordered GitHub collections do not prevent a ready merge", async () => {
@@ -1059,6 +1092,15 @@ test("real watcher still runs the builder for unseen facts first fetched after i
   expect(hook.dispose).toHaveBeenCalledOnce();
 });
 
+test("a needs-human note never puts the local worktree path in what gets posted", async () => {
+  mergesBy("human");
+  watch(commented, closed);
+  answer(maintenanceReport, { status: "needs-human", summary: "Look at /tmp/wt/src/x.ts." });
+  await follow();
+  expect(JSON.stringify(notes())).toContain("Look at the run's worktree/src/x.ts.");
+  expect(JSON.stringify(notes())).not.toContain("/tmp/wt");
+});
+
 test("a needs-human note links the pull request and says jigs is still watching it", async () => {
   mergesBy("human");
   watch(commented, closed);
@@ -1070,7 +1112,7 @@ test("a needs-human note links the pull request and says jigs is still watching 
       notes: [
         "The builder needs a person: Please inspect the conflict.",
         `Pull request: ${pr.url}`,
-        "The work is on branch `acme/abc-1`, in the worktree at `/tmp/wt`.",
+        "The work is on branch `acme/abc-1`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing:
         "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",

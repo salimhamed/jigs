@@ -52,7 +52,8 @@ pnpm exec jigs watch
 ```
 
 A run picks its builder and reviewer by name. By default the `builder` agent
-builds and the `reviewer` agent reviews. To have Claude Code build too:
+builds and the `reviewer` agent reviews both the ticket's requirements and the
+change. To have Claude Code build too:
 
 ```sh
 pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input builder=reviewer
@@ -92,7 +93,9 @@ remains, sets `Todo`, and fails the run. To keep the work, take over the retaine
 worktree, its branch and the pull request by hand. Another run starts over on a
 new branch and opens a new pull request. A stop during initial implementation
 still attempts to preserve committed work by pushing; a failed preservation push
-is included in the note.
+is included in the note, with its error left in the service log. Notes name the
+branch but never the local worktree path, since they may be posted anywhere;
+`jigs status` shows the path.
 
 Exhausted recovery attempts, a request for human help, and a merge that fails
 or is refused do not stop the run. The workflow posts a ticket note saying what
@@ -188,8 +191,9 @@ export async function deliverTicket(
 - **`implementAndReview`** runs the builder, then the reviewer on what it
   committed, until the reviewer raises no blocking finding. Non-blocking
   findings go into the pull request description.
-- **`publish`** pushes exactly the approved commit and opens the pull request.
-  The builder writes the title and body. A title that is not one plain line of
+- **`publish`** has the builder write the title and body, then pushes exactly
+  the approved commit and opens the pull request, so a failed description
+  pushes nothing. A title that is not one plain line of
   at most 100 characters, or a body with a "Title:" or "Description:" label
   line, is sent back once with the reasons; a second bad answer fails the run.
 - **`followPullRequest`** uses `watchPullRequest` to read the initial GitHub

@@ -34,7 +34,7 @@ const approvalCovers: ApprovalCoverage = "latest-commit";
 
 const inputs = z.object({
   ticket: z.string().min(1),
-  binding: z.string(),
+  binding: z.string().min(1),
   builder: agentName.default("builder"),
   reviewer: agentName.default("reviewer"),
   // Fixed for the life of the run. To spend more, start another run.
@@ -57,7 +57,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   const handoff = await reviewTicket({
     claim,
     snapshot,
-    harness: agents.reviewer,
+    harness: agents[input.reviewer],
     cwd: worktree.path,
   });
 

@@ -53,7 +53,7 @@ pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=ap
 | `ticket` | | The Linear ticket, by identifier or ID. |
 | `binding` | | The repository to change. |
 | `builder` | `builder` | The agent, by name, that builds the change. |
-| `reviewer` | `reviewer` | The agent, by name, that reviews it. |
+| `reviewer` | `reviewer` | The agent, by name, that reviews the requirements and the change. |
 | `budget` | `{ reviewRounds: 3, attemptsPerUpdate: 3 }` | Implementation review rounds, and agent attempts allowed for each PR update. `attemptsPerUpdate` must be positive. |
 
 #### Customize
