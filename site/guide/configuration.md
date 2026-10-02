@@ -535,19 +535,19 @@ is missing, and lists the credentials still empty.
 
 | Variable | When you need it |
 | --- | --- |
-| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
+| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. A new factory needs nothing else. |
 | `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
 | `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
-| `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
-| `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
-| `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 | `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
 | `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
-| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. |
+| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. Commented out in `.env.example`, because an empty value would hide the profile your shell sets. |
+| `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
+| `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
+| `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 
 `JIGS_SERVICE_URL` is read by the CLI, not the service. Set it in your shell to
 point commands such as `jigs status` at a different service, or pass
