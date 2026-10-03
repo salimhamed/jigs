@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.84.0](https://github.com/salimhamed/jigs/compare/jigs-v0.83.1...jigs-v0.84.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **slack:** add an until deadline to waitForSlackReply ([#508](https://github.com/salimhamed/jigs/issues/508))
+
+### Features
+
+* let a workflow declare the secrets it needs ([#509](https://github.com/salimhamed/jigs/issues/509)) ([4b0ae73](https://github.com/salimhamed/jigs/commit/4b0ae73504f1cb40fa4a20fcfc2ce3a15e73d003))
+* **slack:** add an until deadline to waitForSlackReply ([#508](https://github.com/salimhamed/jigs/issues/508)) ([2f4df6b](https://github.com/salimhamed/jigs/commit/2f4df6bb778d31ba2350f41f9f6cdabbfaba1bd3))
+
 ## [0.83.1](https://github.com/salimhamed/jigs/compare/jigs-v0.83.0...jigs-v0.83.1) (2026-10-03)
 
 
