@@ -1,4 +1,5 @@
-import { type PullRequestSnapshot, parseMarkers } from "@jigs-ai/jigs";
+import { parseMarkers } from "../pull-requests/marker.ts";
+import type { PullRequestSnapshot } from "../pull-requests/snapshot.ts";
 
 type Comment = { id: number; body: string; user: string; updatedAt: string };
 

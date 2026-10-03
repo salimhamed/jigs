@@ -13,6 +13,9 @@ import type {
   ApprovalState,
   AskAgentOptions,
   AskModelOptions,
+  BuildFacts,
+  BuildStopped,
+  Built,
   ChangePatch,
   ChangeStatus,
   ChangeSummary,
@@ -23,7 +26,10 @@ import type {
   CodexHarness,
   CodexHarnessSettings,
   CodexPolicyKey,
+  Delivery,
+  DeliveryPrompts,
   FileChange,
+  FindingResponse,
   Halt,
   HaltOption,
   HaltQuestion,
@@ -33,14 +39,17 @@ import type {
   IncidentRef,
   IncidentSnapshot,
   JsonValue,
+  MaintainFacts,
   McpHttpServerConfig,
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
+  MergeBlocked,
   ModelKind,
   ModelRequest,
   ModelResult,
   ModelSource,
+  NeedsHuman,
   OutputJsonSchema,
   PiMcpHttpServerConfig,
   PiMcpServerConfig,
@@ -53,6 +62,9 @@ import type {
   RebuildContextPromptInput,
   ReleasePolicy,
   ReleaseReport,
+  ReviewFacts,
+  ReviewFinding,
+  ReviewRound,
   ReviewThread,
   RunAgentOptions,
   RunResource,
@@ -71,6 +83,7 @@ import type {
   TicketReviewPrompt,
   TicketReviewPromptInput,
   TicketSnapshot,
+  UnpublishedWork,
   Worktree,
 } from "./index.ts";
 import type { AgentRunner, AgentRunnerOptions } from "./steps/index.ts";
@@ -91,6 +104,9 @@ type RootTypeSurface = {
   agentSessionRef: AgentSessionRef;
   askAgentOptions: AskAgentOptions;
   askModelOptions: AskModelOptions;
+  buildFacts: BuildFacts<unknown>;
+  buildStopped: BuildStopped;
+  built: Built;
   changePatch: ChangePatch;
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;
@@ -103,7 +119,10 @@ type RootTypeSurface = {
   codexHarness: CodexHarness;
   codexHarnessSettings: CodexHarnessSettings;
   codexPolicyKey: CodexPolicyKey;
+  delivery: Delivery<unknown>;
+  deliveryPrompts: DeliveryPrompts<unknown>;
   fileChange: FileChange;
+  findingResponse: FindingResponse;
   halt: Halt;
   haltOption: HaltOption;
   haltQuestion: HaltQuestion;
@@ -113,14 +132,17 @@ type RootTypeSurface = {
   incidentRef: IncidentRef;
   incidentSnapshot: IncidentSnapshot;
   jsonValue: JsonValue;
+  maintainFacts: MaintainFacts;
   mcpHttpServer: McpHttpServerConfig;
   mcpServer: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
   mcpProbe: McpToolProbe;
+  mergeBlocked: MergeBlocked;
   modelKind: ModelKind;
   modelRequest: ModelRequest;
   modelResult: ModelResult;
   modelSource: ModelSource;
+  needsHuman: NeedsHuman;
   outputJsonSchema: OutputJsonSchema;
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;
@@ -133,6 +155,9 @@ type RootTypeSurface = {
   rebuildContextPromptInput: RebuildContextPromptInput;
   releasePolicy: ReleasePolicy;
   releaseReport: ReleaseReport;
+  reviewFacts: ReviewFacts<unknown>;
+  reviewFinding: ReviewFinding;
+  reviewRound: ReviewRound;
   reviewThread: ReviewThread;
   runAgentOptions: RunAgentOptions;
   runResource: RunResource;
@@ -151,6 +176,7 @@ type RootTypeSurface = {
   ticketReviewPrompt: TicketReviewPrompt;
   ticketReviewPromptInput: TicketReviewPromptInput;
   ticketSnapshot: TicketSnapshot;
+  unpublishedWork: UnpublishedWork;
   worktree: Worktree;
 };
 

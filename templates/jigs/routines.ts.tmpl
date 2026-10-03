@@ -12,6 +12,7 @@ import {
   acquireTicket as acquireTicketRoutine,
   bindAgentSession,
   bindAgentSteps,
+  bindDeliverySteps,
   bindGitSteps,
   bindLinearSteps,
   bindPullRequestSteps,
@@ -26,9 +27,15 @@ import {
   fetchPullRequestState,
   fetchSlackMessage,
   fetchTicketSnapshot,
+  mergePullRequest,
+  openPullRequest,
   postTicketHumanInputRequest,
   postTicketNote,
+  pushApprovedChange,
+  pushBranch,
   readBranchState,
+  readWorktreeDiff,
+  registerResource,
   replyToPullRequestReviewThread,
   resolveLinearIssue,
 } from "./steps.ts";
@@ -190,6 +197,44 @@ export const postReviewAnswers = pullRequests.postReviewAnswers;
  * are logged and return without throwing; the workflow decides whether to try again.
  */
 export const postPullRequestNote = pullRequests.postPullRequestNote;
+
+const delivery = bindDeliverySteps({
+  readBranchState,
+  readWorktreeDiff,
+  pushBranch,
+  pushApprovedChange,
+  openPullRequest,
+  registerResource,
+  fetchPullRequestState,
+  mergePullRequest,
+});
+
+/**
+ * Build and review a delivery's change until the reviewer raises no blocking finding.
+ * Returns the approved commit, or `{ stopped }` when the rounds run out or there is nothing to review.
+ *
+ * @group Pull request delivery
+ */
+export const buildAndReview = delivery.buildAndReview;
+
+/**
+ * Describe the change, push exactly the given commit and open its pull request.
+ *
+ * @group Pull request delivery
+ */
+export const publishPullRequest = delivery.publishPullRequest;
+
+/**
+ * Follow a delivery's pull request until it merges or closes, waking the builder for feedback.
+ *
+ * @group Pull request delivery
+ *
+ * @remarks
+ * Needs-human and a blocked merge reach the workflow as callbacks with facts; the workflow
+ * words and sends any note. With `mergedBy: "jigs"`, an approved, green, clean pull request
+ * merges once local work is published.
+ */
+export const followPullRequestToOutcome = delivery.followPullRequestToOutcome;
 
 /**
  * Wait for a human reply in a Slack thread after `lastRead`. Returns every such reply,

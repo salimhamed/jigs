@@ -1092,8 +1092,8 @@ async function checkScaffold(name) {
   }
 
   // The scaffold's own checks, run the way a new factory runs them on day one:
-  // the typecheck covers the generated entry, the workflow, and the delivery code and
-  // prompts scaffolded beside them, and the scaffolded tests cover the shape of
+  // the typecheck covers the generated entry, the workflow, and the prompts
+  // scaffolded beside them, and the scaffolded tests cover the shape of
   // every id the same build emitted (the exact list is this file's business,
   // above) and what the workflow body hands delivery. Both read the scaffold
   // through its `imports` map, so this is also where tsc and vitest are held to

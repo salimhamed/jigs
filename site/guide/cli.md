@@ -214,8 +214,10 @@ Use `jigs up` after changing workflow code or configuration:
 - Unchanged install, migration and build work is skipped.
 - The service restarts only when the built bundle or `jigs.config.ts` changes.
   `--restart-service` forces a restart.
-- Active runs are listed before a restart and require confirmation. `--force`
-  bypasses it; without a terminal, the command otherwise refuses.
+- Parked and active runs are listed before a restart and require confirmation.
+  A parked run resumes on the new bundle, and fails if the upgrade changed the
+  steps it replays. `--force` skips the question but still prints the list;
+  without a terminal, the command otherwise refuses.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs

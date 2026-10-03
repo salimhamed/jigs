@@ -346,13 +346,17 @@ async function confirmRestart(
   deps: UpDeps,
   options: UpOptions,
 ): Promise<void> {
-  if (options.force === true) return;
   const inFlight = await listRunsInFlight(factoryRoot);
   if (inFlight.length === 0) return;
-  deps.out(`  a restart cuts off ${inFlight.length} run(s) in flight:`);
+  // Warned even under --force: a parked run replays on the new bundle, and an
+  // upgrade that changed the steps it replays fails it.
+  deps.out(
+    `  warning: ${inFlight.length} run(s) parked or active; a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay:`,
+  );
   for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
     deps.out(`    ${line}`);
   }
+  if (options.force === true) return;
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,

@@ -62,8 +62,13 @@ pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=ap
 #### Customize
 
 Edit `workflows/linear-ticket-to-pr/` to change the builder/reviewer harnesses,
-prompts, review budgets or delivery behavior. The agent names above select
-entries defined in that source, rather than accepting a model name at runtime.
+review budgets, ticket notes or the order of the phases. Every prompt is in its
+`prompts.ts`. The building, reviewing, publishing and pull request maintenance
+run in three jigs routines, described in
+[Build a pull request workflow](/guide/build-a-workflow#build-a-pull-request-workflow);
+the workflow passes them its prompts, budgets and merge policy, and writes every
+note itself. The agent names above select entries defined in that source,
+rather than accepting a model name at runtime.
 
 `mergedBy` chooses who merges: `"human"` by default, or `"jigs"` once jigs
 verifies approval, CI, mergeability and that the builder's local work is
