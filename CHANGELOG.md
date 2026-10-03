@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.86.1](https://github.com/salimhamed/jigs/compare/jigs-v0.86.0...jigs-v0.86.1) (2026-10-03)
+
+
+### Features
+
+* raise the default trigger maxActive to 20 ([#516](https://github.com/salimhamed/jigs/issues/516)) ([3955d0a](https://github.com/salimhamed/jigs/commit/3955d0a00f6500b71fc11fbc1ebb2da6d8bfdaf6))
+
 ## [0.86.0](https://github.com/salimhamed/jigs/compare/jigs-v0.85.0...jigs-v0.86.0) (2026-10-03)
 
 
