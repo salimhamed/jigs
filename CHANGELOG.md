@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.87.0](https://github.com/salimhamed/jigs/compare/jigs-v0.86.1...jigs-v0.87.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **slack:** return every new reply and gone from waitForSlackReply ([#515](https://github.com/salimhamed/jigs/issues/515))
+
+### Features
+
+* **slack:** return every new reply and gone from waitForSlackReply ([#515](https://github.com/salimhamed/jigs/issues/515)) ([8b201aa](https://github.com/salimhamed/jigs/commit/8b201aaa99b9804dd16dc0f73b81ea5c39afe202))
+
 ## [0.86.1](https://github.com/salimhamed/jigs/compare/jigs-v0.86.0...jigs-v0.86.1) (2026-10-03)
 
 
