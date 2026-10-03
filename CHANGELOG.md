@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.89.0](https://github.com/salimhamed/jigs/compare/jigs-v0.88.0...jigs-v0.89.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* rename the openPullRequest step to createPullRequest ([#521](https://github.com/salimhamed/jigs/issues/521))
+
+### Features
+
+* rename the openPullRequest step to createPullRequest ([#521](https://github.com/salimhamed/jigs/issues/521)) ([94edd13](https://github.com/salimhamed/jigs/commit/94edd131f475a066d8370e018e88c22b3eae342d))
+
 ## [0.88.0](https://github.com/salimhamed/jigs/compare/jigs-v0.87.0...jigs-v0.88.0) (2026-10-03)
 
 
