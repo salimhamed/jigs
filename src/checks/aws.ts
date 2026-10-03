@@ -1,4 +1,7 @@
 import { execFile } from "node:child_process";
+import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import { promisify } from "node:util";
 import { stringEnv } from "../steps/agents/harnesses/env.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
@@ -42,12 +45,58 @@ function lastStderrLine(err: unknown): string {
   return lines.at(-1) ?? String(err);
 }
 
+async function usesSso(
+  exec: NonNullable<AwsCredentialsDeps["exec"]>,
+  env: Record<string, string>,
+  profile: string,
+): Promise<boolean> {
+  const set = await Promise.all(
+    ["sso_session", "sso_start_url"].map((key) =>
+      exec("aws", ["configure", "get", key, "--profile", profile], {
+        env,
+        timeout: PROBE_TIMEOUT_MS,
+      }).then(
+        ({ stdout }) => stdout.trim() !== "",
+        () => false,
+      ),
+    ),
+  );
+  return set.includes(true);
+}
+
+// The CLI keeps an SSO profile's role credentials under ~/.aws/cli/cache and
+// serves them for hours after the SSO login itself has expired. A HOME without
+// that cache, sharing the real SSO login, makes the CLI prove the login still
+// mints credentials. Botocore refreshes the login there as it would anywhere.
+async function withoutCachedRoleCredentials<T>(
+  env: Record<string, string>,
+  run: (env: Record<string, string>) => Promise<T>,
+): Promise<T> {
+  const home = env.HOME ?? os.homedir();
+  const isolated = await mkdtemp(path.join(os.tmpdir(), "jigs-aws-"));
+  try {
+    await mkdir(path.join(isolated, ".aws"));
+    await symlink(path.join(home, ".aws", "sso"), path.join(isolated, ".aws", "sso"));
+    return await run({
+      ...env,
+      HOME: isolated,
+      AWS_CONFIG_FILE: env.AWS_CONFIG_FILE ?? path.join(home, ".aws", "config"),
+      AWS_SHARED_CREDENTIALS_FILE:
+        env.AWS_SHARED_CREDENTIALS_FILE ?? path.join(home, ".aws", "credentials"),
+    });
+  } finally {
+    await rm(isolated, { recursive: true, force: true });
+  }
+}
+
 // The whole credential chain is the CLI's business, so the probe asks it
 // rather than reading ~/.aws itself: an SSO cache miss and a bad key look
 // identical from the config file and different from get-caller-identity.
 export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
+  const callerIdentity = (probeEnv: Record<string, string>) =>
+    exec("aws", ["sts", "get-caller-identity"], { env: probeEnv, timeout: PROBE_TIMEOUT_MS });
   return {
     id: "aws.credentials",
     label: "AWS credentials",
@@ -61,11 +110,12 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
         };
       }
 
+      const probeEnv = stringEnv(env);
+      const sso = await usesSso(exec, probeEnv, profile);
       try {
-        await exec("aws", ["sts", "get-caller-identity"], {
-          env: stringEnv(env),
-          timeout: PROBE_TIMEOUT_MS,
-        });
+        await (sso
+          ? withoutCachedRoleCredentials(probeEnv, callerIdentity)
+          : callerIdentity(probeEnv));
       } catch (err) {
         if (isEnoent(err)) {
           return {
@@ -86,9 +136,12 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
         }
         const detail = lastStderrLine(err);
         const expired = /sso|token/i.test(detail);
+        const probe = sso
+          ? "`aws sts get-caller-identity` failed without its cached role credentials"
+          : "`aws sts get-caller-identity` failed";
         return {
           ok: false,
-          reason: `AWS_PROFILE is ${profile} but \`aws sts get-caller-identity\` failed: ${detail}`,
+          reason: `AWS_PROFILE is ${profile} but ${probe}: ${detail}`,
           repair: expired
             ? `run: \`aws sso login --profile ${profile}\``
             : `check the ${profile} profile's credentials in ~/.aws/config`,
