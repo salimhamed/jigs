@@ -569,16 +569,14 @@ test("an approved green PR GitHub blocks gets one note per head and no builder t
   );
 });
 
-test("the builder's own reply during its turn wakes nothing, and an approved green PR then merges", async () => {
-  mergesBy("jigs");
-  answer(maintenanceReport, finished);
-  const replied = withComment(commented, 2, "Renamed x.");
-  watch(commented, replied);
-  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(replied);
-  vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
+test("a person's comment posted during the builder's turn wakes it afterwards", async () => {
+  mergesBy("human");
+  answer(maintenanceReport, finished, finished);
+  const during = withComment(commented, 2, "One more thing.");
+  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(during);
+  watch(commented, during, closed);
   await follow();
-  expect(calls).toHaveLength(1);
-  expect(steps.mergePullRequest).toHaveBeenCalledOnce();
+  expect(calls).toHaveLength(2);
 });
 
 test("a check failing during the builder's turn is not mistaken for its own and wakes it", async () => {

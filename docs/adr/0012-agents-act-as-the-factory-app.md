@@ -20,9 +20,12 @@ checkout. The agent then acts as the App's bot:
   the App's grants change. Push and merge need the same permission anyway, so
   branch protection, not the token, keeps the agent from merging. The owner is
   the one that owns the agent's checkout.
-- **`gh` and `git`.** `gh` reads the token. `git` pushes to github.com over
-  HTTPS with the token, through `GIT_CONFIG_*` variables set for the agent only;
-  no setting is written into the repository. An App cannot push over SSH.
+- **`gh` and `git`.** `gh` reads the token. `git` reaches the owner's
+  repositories on github.com over HTTPS with the token, through `GIT_CONFIG_*`
+  variables set for the agent only; no setting is written into the repository.
+  An App cannot push over SSH. The rewrite and the token cover only that owner,
+  so another account's repositories, such as an SSH dependency, keep their
+  transport.
 - **Commits** are authored by `<slug>[bot]`, through `GIT_AUTHOR_*`. The
   committer and the signature stay the operator's own git configuration, so
   signed commits still show as Verified. The factory does not add a co-author
@@ -48,8 +51,10 @@ checkout. The agent then acts as the App's bot:
   next turn gets a fresh token. Refreshing during a turn waits for a real case.
 - One `gh` token per step means one owner per step. Steps that span several
   owners wait for a real case.
-- `github` is a build error in token mode. A token-mode factory still wires up
-  its agent's GitHub access itself.
+- `github` is an error in token mode: no factory build sees the harness
+  descriptors, so preflight fails a run whose workflow declares such an agent,
+  and the agent's step fails before the agent starts. A token-mode factory
+  still wires up its agent's GitHub access itself.
 - The agent still runs as the operator's OS user and can read the operator's
   files, SSH key included. The token limits what the agent does as itself, not
   what it could find on disk. Isolation is separate, later work.

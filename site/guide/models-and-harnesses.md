@@ -297,3 +297,68 @@ Agents do not automatically inherit the service environment. Add additional
 variable names through [`agents.env`](/guide/configuration#agents-env). This
 controls environment variables only: agent processes run as your user and can
 access the files your user can access.
+
+## GitHub access for agents {#github-access}
+
+With a [GitHub App identity](/guide/configuration#github-identity), jigs acts
+on GitHub as one bot, `<app-slug>[bot]`. An agent can act as the same bot: set
+`github: true` on its harness.
+
+```ts
+import { harnesses } from "@jigs-ai/jigs";
+
+harnesses.codex({ model: "gpt-5.6-sol", github: true });
+```
+
+jigs uses the bot to open, label and merge pull requests and to post its notes.
+An agent that opts in uses it to read the discussion, reply and push its fixes.
+When such an agent starts, jigs gives it:
+
+- **`GH_TOKEN`**, a new token for the App's installation on the account that
+  owns the agent's worktree. `gh` picks it up, so `gh` works as the bot with no
+  login of its own.
+- **HTTPS for that account's repositories.** Git settings in the agent's
+  environment send its fetches and pushes for that account's repositories over
+  HTTPS with the token, even where the remote is an SSH URL. Repositories of
+  other accounts, such as a dependency fetched over SSH, keep their own
+  transport and never see the token. Nothing is written to the repository's
+  configuration.
+- **The bot as commit author.** You stay the committer, and your own git
+  configuration still signs, so signed commits still show as Verified.
+
+The token lasts an hour and is not renewed during a turn: a turn longer than
+that loses GitHub access, and the next turn gets a new token. For an agent with
+no worktree, name the account: `github: { owner: "acme" }`. An agent step acts
+on one account.
+
+The token carries all of the App's permissions on that installation, so it
+could merge a pull request. Prompts can tell an agent not to merge, but what
+stops it is [branch protection](https://docs.github.com/repositories/configuring-branches-and-merges-in-your-repository/managing-protected-branches/about-protected-branches)
+on the branches you merge into. Under `approvalCovers: "any-commit"`, jigs
+ignores approvals from bots, so an agent cannot approve its own work.
+
+The agent still runs as your user on your machine. It can read any file you
+can, your SSH keys and other credentials included: the token limits what the
+agent does as itself, not what it could find on disk.
+
+It needs an App identity. With a personal access token, a run whose workflow
+declares such an agent fails preflight, and the agent's step fails before the
+agent starts. Install the [GitHub CLI](https://cli.github.com); `jigs doctor`
+checks for it.
+
+### GitHub's MCP server
+
+`githubMcp()` adds GitHub's own MCP server, acting as the same bot. It is
+optional, and only a harness that sets `github` can use it:
+
+```ts
+import { githubMcp, harnesses } from "@jigs-ai/jigs";
+
+harnesses.claude({ model: "opus", github: true, mcpServers: { github: githubMcp() } });
+```
+
+It runs the local
+[`github-mcp-server`](https://github.com/github/github-mcp-server), which you
+install yourself; `jigs doctor` checks for it. Tools that need a user, such as
+`get_me`, are left out, since an App cannot answer them. For Pi, pass the tools
+the model may call: `githubMcp({ tools: ["pull_request_read", "add_issue_comment"] })`.

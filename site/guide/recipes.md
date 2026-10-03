@@ -32,15 +32,18 @@ workflow: by default, a person merges.
 #### Requires
 
 - A [Linear identity](/guide/configuration#linear-identity).
-- A GitHub binding and [GitHub identity](/guide/configuration#github-identity).
+- A GitHub binding and a GitHub App [identity](/guide/configuration#github-identity).
 - The configured builder and reviewer harnesses, installed and authenticated.
-- GitHub tools for the builder, such as authenticated `gh` or GitHub MCP, so
-  it can read discussions, post replies and push fixes.
+- The [GitHub CLI](https://cli.github.com), `gh`.
 
-GitHub access for jigs does not configure GitHub access for the coding agent.
-Agents do not automatically inherit `GITHUB_TOKEN`. Allow a token variable
-through [`agents.env`](/guide/configuration#agents-env) if the agent's tools need
-it. No Jev model is required.
+The builder acts on GitHub as the factory's App, the same bot jigs posts as
+(`github: true`, see [GitHub access for agents](/guide/models-and-harnesses#github-access)).
+It reads discussions, posts replies and pushes fixes with `gh` and `git`, with
+no token of yours. Its replies show as the bot, which is how the recipe tells
+them apart from yours. With a personal access token, remove `github: true` from
+the builder and give it GitHub access yourself, for example a token named in
+[`agents.env`](/guide/configuration#agents-env); its replies then look like
+anyone else's, so each one wakes it once more. No Jev model is required.
 
 #### Run
 
@@ -71,7 +74,9 @@ leaves one note on it for each commit and keeps waiting. When the pull request
 needs a person, the recipe notes it on the ticket, leaves the ticket In Review
 and keeps watching; only closing the pull request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a
-restriction on its GitHub tools. See [merging configuration](/guide/configuration#merging).
+restriction on its token; see
+[GitHub access for agents](/guide/models-and-harnesses#github-access) and
+[merging configuration](/guide/configuration#merging).
 
 The copied README and source document review attempts, PR updates and recovery
 in detail. [Waiting and external events](/guide/waiting-and-events) explains

@@ -6,6 +6,7 @@ import { z } from "zod";
 import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
+import * as githubAuth from "../providers/github-auth.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
@@ -103,6 +104,7 @@ function reviewApproval(): void {
     linear: { identity: { mode: "key" } },
     agents: { env: [] },
   });
+  vi.spyOn(githubAuth, "appBotFor").mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
 }
 
 function parkedOnPr(): RunSuspension {

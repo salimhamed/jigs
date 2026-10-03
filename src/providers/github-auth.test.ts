@@ -4,10 +4,12 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
+  appBotFor,
   createGithubAuth,
   mintAppJwt,
   mintInstallationToken,
   readAppPrivateKey,
+  resetGithubAuth,
 } from "./github-auth.ts";
 
 const { privateKey } = generateKeyPairSync("rsa", {
@@ -83,6 +85,46 @@ test("a minted token is reused until five minutes are left, then re-minted", asy
   now += 2;
   expect(await auth.bearer()).toBe("second");
   expect(doFetch).toHaveBeenCalledTimes(2);
+});
+
+test("a caller can ask for a token with more time left than jigs' own margin", async () => {
+  let now = NOW;
+  const doFetch = vi
+    .fn()
+    .mockResolvedValueOnce(tokenResponse("first", NOW + 3_600_000))
+    .mockResolvedValueOnce(tokenResponse("second", NOW + 600_000 + 3_600_000));
+  const auth = createGithubAuth(APP, {
+    now: () => now,
+    fetch: doFetch,
+    readPrivateKey: () => ({ key: privateKey }),
+  });
+  expect(await auth.bearer()).toBe("first");
+  now = NOW + 4 * 60_000;
+  expect(await auth.bearer(55 * 60_000)).toBe("first");
+  now = NOW + 10 * 60_000;
+  // jigs' own calls would keep the first token for another 45 minutes.
+  expect(await auth.bearer(55 * 60_000)).toBe("second");
+  expect(await auth.bearer()).toBe("second");
+  expect(doFetch).toHaveBeenCalledTimes(2);
+});
+
+test("the App's bot is looked up once per App, as <slug>[bot] with its user id", async () => {
+  resetGithubAuth();
+  const doFetch = vi.fn(async (url: string) =>
+    url.endsWith("/app")
+      ? new Response(JSON.stringify({ slug: "jigs-dev", name: "jigs dev" }))
+      : new Response(JSON.stringify({ id: 4242, login: "jigs-dev[bot]" })),
+  );
+  const bearer = vi.fn(async () => "ghs_token");
+  const deps = { fetch: doFetch as typeof fetch, readPrivateKey: () => ({ key: privateKey }) };
+  const bot = await appBotFor(APP, bearer, deps);
+  expect(bot).toEqual({ login: "jigs-dev[bot]", id: 4242 });
+  expect(await appBotFor({ ...APP, installationId: 7 }, bearer, deps)).toBe(bot);
+  expect(doFetch.mock.calls.map(([url]) => url)).toEqual([
+    "http://mock.test/github/app",
+    "http://mock.test/github/users/jigs-dev%5Bbot%5D",
+  ]);
+  resetGithubAuth();
 });
 
 test("a rejected exchange names the configuration, and never the token", async () => {

@@ -157,7 +157,7 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
 
 describe("an approval that covers any commit", () => {
   const anyCommit = (patch: Partial<Facts>) =>
-    approvalState({ ...facts, ...patch }, "review", { covers: "any-commit", builder: "operator" });
+    approvalState({ ...facts, ...patch }, "review", { covers: "any-commit" });
   const approval: PullRequestReview = {
     id: 1,
     state: "APPROVED",
@@ -189,14 +189,13 @@ describe("an approval that covers any commit", () => {
     expect(anyCommit({ reviews: [{ ...approval, state: "DISMISSED" }] })).toBe("none");
   });
 
-  test("ignores the builder's own approvals and a bot's", () => {
-    expect(anyCommit({ reviews: [{ ...approval, user: "operator" }] })).toBe("none");
-    expect(anyCommit({ reviews: [{ ...approval, user: "Operator" }] })).toBe("none");
-    expect(anyCommit({ reviews: [{ ...approval, user: "helper[bot]" }] })).toBe("none");
+  test("counts the operator's approval and ignores a bot's", () => {
+    expect(anyCommit({ reviews: [{ ...approval, user: "operator" }] })).toBe("approved");
+    expect(anyCommit({ reviews: [{ ...approval, user: "jigs-dev[bot]" }] })).toBe("none");
     expect(
       anyCommit({
         reviews: [
-          { ...approval, user: "operator" },
+          { ...approval, user: "jigs-dev[bot]" },
           { ...approval, id: 2 },
         ],
       }),
@@ -205,9 +204,9 @@ describe("an approval that covers any commit", () => {
 
   test("leaves label approval as it was", () => {
     const labelled = { reviews: [], labels: ["jigs:approved"] };
-    expect(
-      approvalState({ ...facts, ...labelled }, "label", { covers: "any-commit", builder: "x" }),
-    ).toBe("approved");
+    expect(approvalState({ ...facts, ...labelled }, "label", { covers: "any-commit" })).toBe(
+      "approved",
+    );
   });
 });
 

@@ -168,10 +168,10 @@ test("any other failure leaves the ticket alone", async () => {
   expect(statuses()).toEqual(["In Progress"]);
 });
 
-test("the workflow requires its two agents, Linear and GitHub", () => {
+test("the workflow requires its two agents, Linear and GitHub, and the builder acts as the App", () => {
   expect(entry.requires).toEqual({
     agents: {
-      builder: harnesses.codex({ model: "gpt-5.6-sol" }),
+      builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
       reviewer: harnesses.claude({ model: "opus" }),
     },
     integrations: ["linear", "github"],

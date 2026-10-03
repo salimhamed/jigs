@@ -38,7 +38,7 @@ import {
   reviewerNotes,
   reviewVerdict,
 } from "./review.ts";
-import { builderWakeFacts, commentFacts } from "./wake.ts";
+import { builderWakeFacts } from "./wake.ts";
 
 /** The requirements to deliver. Add fields here and they reach every prompt. */
 export interface WorkItem {
@@ -316,17 +316,12 @@ async function needsHuman(following: Following, reason: string) {
   await following.onNeedsHuman(maintenanceNote(following.delivery, following.pr, reason));
 }
 
-// The builder posts as the operator, so its comments cannot be told apart by
-// author. Comments that appear during its turn count as its own; a human
-// comment landing in that window is absorbed too. It never submits reviews.
 async function readAfterTurn(following: Following): Promise<PullRequestSnapshot> {
   const { pr, delivery } = following;
-  const current = observe(
+  return observe(
     following,
     await fetchPullRequestState(pr, { approvalCovers: delivery.approvalCovers }),
   );
-  for (const fact of commentFacts(current, noteScope(following))) following.seen.add(fact);
-  return current;
 }
 
 // Builder turns for one update, until local work is published or the attempts

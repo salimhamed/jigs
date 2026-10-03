@@ -18,7 +18,9 @@ import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerdu
 import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
+import { readsAgentGithubToken } from "../workflow/agents/github-mcp.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
+import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {
@@ -277,6 +279,7 @@ export function preflightChecks(
       : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
+    ...agentGithubChecks(Object.values(requires.agents ?? {})),
     ...(requires.models ?? []).flatMap((source) => {
       const driver = driverFor(source.kind);
       if (driver === undefined) return [missingDriverCheck(source.kind)];
@@ -315,6 +318,17 @@ function configuredProviders(): Record<Integration, boolean> {
   }
 }
 
+function usedAgentGithubChecks(workflows: WorkflowManifests): Check[] {
+  const opted = Object.entries(workflows).flatMap(([workflow, { requires }]) =>
+    Object.values(requires?.agents ?? {})
+      .filter((agent) => agent.github !== undefined)
+      .map((agent) => ({ workflow, agent })),
+  );
+  return neededByUsers(agentGithubChecks(opted.map(({ agent }) => agent)), [
+    ...new Set(opted.map(({ workflow }) => workflow)),
+  ]);
+}
+
 // Doctor has no worktree, so it starts the servers from the factory root.
 function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
   let root: string;
@@ -333,16 +347,27 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
       const driver = driverFor(harness.kind);
       if (driver === undefined) continue;
       for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
-        const key = JSON.stringify([harness.kind, name, server]);
+        const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
         const entry = servers.get(key) ?? {
-          checks: serverChecks(name, () =>
-            agentMcpServerChecks(
+          checks: serverChecks(name, () => {
+            // The agent's GitHub token exists only inside its step, so doctor
+            // checks the server is installed; the step's own check probes it.
+            if (readsAgentGithubToken(server) && "command" in server)
+              return [
+                agentCommandCheck(
+                  `mcp.${name}`,
+                  `MCP server ${name}`,
+                  server.command,
+                  `install ${server.command} on the PATH the service starts agents with`,
+                ),
+              ];
+            return agentMcpServerChecks(
               harness.kind,
               { [name]: server },
               root,
               agentStepEnv(driver, { harness, cwd: root }, agentEnv),
-            ),
-          ),
+            );
+          }),
           workflows: [],
         };
         if (!entry.workflows.includes(workflow)) entry.workflows.push(workflow);
@@ -434,6 +459,7 @@ export function doctorChecks(
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),
+    ...usedAgentGithubChecks(workflows),
     ...requiredMcpServerChecks(workflows),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
     ...doctorSecretChecks(workflows, { factoryRoot }),

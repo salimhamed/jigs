@@ -1,6 +1,6 @@
 import type { ClaudeHarness, CodexHarness } from "../../../workflow/agents/harness-config.ts";
 
-const JIGS_KEYS: readonly string[] = ["kind", "model", "mcpServers"];
+const JIGS_KEYS = ["kind", "model", "mcpServers", "github"] as const;
 
 // The provider settings a descriptor carries. The drivers spread these first
 // and their policy last, and strip the policy keys here too, so a descriptor
@@ -8,11 +8,12 @@ const JIGS_KEYS: readonly string[] = ["kind", "model", "mcpServers"];
 export function descriptorSettings<H extends ClaudeHarness | CodexHarness>(
   harness: H,
   policyKeys: readonly string[],
-): Omit<H, "kind" | "model" | "mcpServers"> {
+): Omit<H, (typeof JIGS_KEYS)[number]> {
+  const jigsKeys: readonly string[] = JIGS_KEYS;
   return Object.fromEntries(
     Object.entries(harness).filter(
       ([key, value]) =>
-        !JIGS_KEYS.includes(key) && !policyKeys.includes(key) && typeof value !== "function",
+        !jigsKeys.includes(key) && !policyKeys.includes(key) && typeof value !== "function",
     ),
-  ) as Omit<H, "kind" | "model" | "mcpServers">;
+  ) as Omit<H, (typeof JIGS_KEYS)[number]>;
 }

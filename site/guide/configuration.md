@@ -248,7 +248,9 @@ agents: { env: ["SSH_AUTH_SOCK", "MISE_DATA_DIR"] },
 
 The list holds names only; the values come from the service's environment when
 an agent starts. Model keys such as `OPENROUTER_API_KEY` and variables jigs
-sets itself cannot be listed; name a model key on its model source instead.
+sets itself cannot be listed; name a model key on its model source instead. An
+agent that [acts as the App](/guide/models-and-harnesses#github-access) gets its
+GitHub token from jigs, not from this list.
 This limits what agents see in their environment only. They still run as your
 user and can read any file you can.
 
@@ -289,8 +291,11 @@ github: {
 ```
 
 Pull requests come from `<app-slug>[bot]`, and you review them like anyone
-else's, so jigs uses [review approval](#merging) unless you choose the label. `jigs init --github-identity-mode app` takes all of these values as
-flags. To set one up:
+else's, so jigs uses [review approval](#merging) unless you choose the label.
+Agents can act as the same bot: see
+[GitHub access for agents](/guide/models-and-harnesses#github-access).
+`jigs init --github-identity-mode app` takes all of these values as flags. To
+set one up:
 
 1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
    Leave OAuth and device flow off, and turn its webhook off.
@@ -334,10 +339,8 @@ These are three independent decisions:
   on the commit it approved. `"any-commit"` keeps a person's approval counting
   through later pushes, even a force-push that drops the approved commit, until
   a later review requests changes or the approval is dismissed. Approvals by
-  bots never count under `"any-commit"`. With an App identity, approvals by the
-  configured `operator` account don't count either, because the builder may act
-  as that account, so someone else must approve. Changes requested from that
-  account still block. This applies in App mode only.
+  bots never count under `"any-commit"`, so an agent acting as the App's bot
+  cannot approve its own work. Changes requested by a bot still block.
 - **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
   GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
   becomes the commit title. With `rebase`, each commit is rewritten and loses
@@ -349,7 +352,8 @@ binds, whichever approval you use.
 Workflow code calls `mergePullRequest` when its policy says to merge. That step
 rereads GitHub and enforces readiness and approval, read with the
 `approvalCovers` it is given. `watchPullRequest` only
-reports facts. These checks do not restrict an agent using its own GitHub tools.
+reports facts. These checks do not restrict an agent using its own GitHub
+tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
 jigs merges only when the approval is present, GitHub reports the pull request
 mergeable, it is not a draft, at least one check has run, and CI is green.

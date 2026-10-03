@@ -17,22 +17,21 @@ import type {
  *   ready", so it survives later pushes and jigs never removes it.
  *
  * With `covers: "any-commit"` a review approval of any commit counts, except one
- * from a bot or from `builder`, the GitHub login the builder acts as.
+ * from a bot.
  */
 export function approvalState(
   snapshot: Pick<PullRequestSnapshot, "labels" | "reviews" | "headSha">,
   approval: MergeApproval,
-  { covers = "latest-commit", builder }: { covers?: ApprovalCoverage; builder?: string } = {},
+  { covers = "latest-commit" }: { covers?: ApprovalCoverage } = {},
 ): ApprovalState {
   if (approval === "label") {
     return snapshot.labels.includes(APPROVED_LABEL) ? "approved" : "none";
   }
-  // An injected instruction could make the builder approve its own work, and
-  // under any-commit that approval would cover every push after it.
+  // An injected instruction could make an agent approve its own work, and
+  // under any-commit that approval would cover every push after it. Agents
+  // act on GitHub as the App's bot (ADR 0012), so a person's approval counts.
   const counts = (review: PullRequestReview) =>
-    covers === "latest-commit" ||
-    review.state !== "APPROVED" ||
-    !(review.user.endsWith("[bot]") || review.user.toLowerCase() === builder?.toLowerCase());
+    covers === "latest-commit" || review.state !== "APPROVED" || !review.user.endsWith("[bot]");
   const latest = new Map<string, PullRequestReview>();
   for (const review of snapshot.reviews
     .filter(counts)
