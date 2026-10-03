@@ -209,7 +209,7 @@ feedback nor your completed work.
 ## Configuration and schedules
 
 `jigs.config.ts` declares ports, poll intervals, optional webhooks, bindings,
-deferred workflow imports and schedules. Declare used credential providers in `requires.integrations`. Secrets remain in `.env`. A schedule names a `workflow`, cron
+deferred workflow imports and schedules. Declare used credential providers in `requires.integrations`. Secrets remain in `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in `.env.example` with an empty value. A schedule names a `workflow`, cron
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
 

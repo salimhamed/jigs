@@ -207,6 +207,19 @@ test("doctor checks aws only when a workflow requires it", async () => {
   });
 });
 
+test("a workflow's declared secrets are checked by preflight and doctor", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  vi.stubEnv("SNOWFLAKE_TOKEN", "");
+  expect(preflightIds({ secrets: ["SNOWFLAKE_TOKEN"] })).toEqual(["secret.SNOWFLAKE_TOKEN"]);
+  const report = await runChecks(
+    doctorChecks({ hello: {}, sync: { requires: { secrets: ["SNOWFLAKE_TOKEN"] } } }),
+  );
+  expect(report.checks.find((c) => c.id === "secret.SNOWFLAKE_TOKEN")).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("(needed by workflow sync)"),
+  });
+});
+
 test("generic workflows require neither Linear nor GitHub credentials", async () => {
   vi.stubEnv("LINEAR_API_KEY", "");
   vi.stubEnv("GITHUB_TOKEN", "");

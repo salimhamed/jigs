@@ -5,7 +5,7 @@ export type ResolvedMcpServer =
   | { command: string; args?: string[]; env?: Record<string, string> }
   | { url: string; headers?: Record<string, string> };
 
-const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
+export const ENV_NAME = /^[A-Z_][A-Z0-9_]*$/;
 
 function namedEntries(server: McpServerConfig): { field: string; source: string }[] {
   if ("command" in server)
