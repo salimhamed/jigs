@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.90.0](https://github.com/salimhamed/jigs/compare/jigs-v0.89.0...jigs-v0.90.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* open the delivery routines' wake, merge and describe seams ([#523](https://github.com/salimhamed/jigs/issues/523))
+
+### Features
+
+* open the delivery routines' wake, merge and describe seams ([#523](https://github.com/salimhamed/jigs/issues/523)) ([17bd438](https://github.com/salimhamed/jigs/commit/17bd438c13a9acd9581bd9186ca4058271c84a80))
+
 ## [0.89.0](https://github.com/salimhamed/jigs/compare/jigs-v0.88.0...jigs-v0.89.0) (2026-10-03)
 
 
