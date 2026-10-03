@@ -179,7 +179,7 @@ export interface EventTrigger {
   workflow: string;
   source: SourceDescriptor;
   inputs?: Record<string, unknown>;
-  /** Runs of this trigger active at once. Defaults to 3; further occurrences wait, oldest first. */
+  /** Runs of this trigger active at once. Defaults to 20; further occurrences wait, oldest first. */
   maxActive?: number;
   /** How far back to catch up after the service was down. Defaults to 60. */
   lookbackMinutes?: number;
