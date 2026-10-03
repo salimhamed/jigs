@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.85.0](https://github.com/salimhamed/jigs/compare/jigs-v0.84.0...jigs-v0.85.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* let agents act on GitHub as the factory's App ([#507](https://github.com/salimhamed/jigs/issues/507))
+
+### Features
+
+* let agents act on GitHub as the factory's App ([#507](https://github.com/salimhamed/jigs/issues/507)) ([4dd4704](https://github.com/salimhamed/jigs/commit/4dd470426eba58288aa1fa6a88f3c1b6778a1274))
+* **slack:** warn when two factories share one Slack app in Socket Mode ([#511](https://github.com/salimhamed/jigs/issues/511)) ([c03c16b](https://github.com/salimhamed/jigs/commit/c03c16bfaeff97b6ff7dcb0d9079ace17ff194d9))
+
 ## [0.84.0](https://github.com/salimhamed/jigs/compare/jigs-v0.83.1...jigs-v0.84.0) (2026-10-03)
 
 
