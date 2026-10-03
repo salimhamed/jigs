@@ -1,18 +1,28 @@
-import { beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { SlackAuthor, SlackMessageSnapshot, SlackPost } from "./snapshot.ts";
 import { waitForSlackReply } from "./wait-for-reply.ts";
 
-const { createHook, hook } = vi.hoisted(() => ({
+const { createHook, hook, sleep, timer } = vi.hoisted(() => ({
   createHook: vi.fn(),
+  sleep: vi.fn(),
+  timer: { fire: null as (() => void) | null },
   hook: {
     awaited: 0,
     disposed: 0,
     wake: null as (() => void) | null,
   },
 }));
-vi.mock("workflow", () => ({ createHook }));
+vi.mock("workflow", () => ({ createHook, sleep }));
 beforeEach(() => {
   Object.assign(hook, { awaited: 0, disposed: 0, wake: null });
+  timer.fire = null;
+  sleep.mockReset();
+  sleep.mockImplementation(
+    () =>
+      new Promise<void>((fire) => {
+        timer.fire = () => fire();
+      }),
+  );
   createHook.mockReset();
   createHook.mockImplementation(() => ({
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
@@ -105,3 +115,97 @@ test("a message deleted while the run waits fails the wait", async () => {
   ).rejects.toThrow(`the Slack message ${channel} ${threadTs} was deleted`);
   expect(hook.disposed).toBe(1);
 });
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
+const future = "2999-01-01T00:00:00Z";
+const past = "2000-01-01T00:00:00Z";
+
+test("a reply before the deadline is returned, with one timer for the whole wait", async () => {
+  const answer = post("1790723600.000001", salim, "now");
+  const reads = [thread(post(question, ownBot)), thread(post(question, ownBot)), thread(answer)];
+  const fetchSlackMessage = vi.fn(async () => reads.shift() ?? thread());
+  const waiting = waitForSlackReply(
+    { channel, threadTs, after: question, until: future },
+    { fetchSlackMessage },
+  );
+  await flush();
+  hook.wake?.();
+  await flush();
+  expect(hook.awaited).toBe(2);
+  hook.wake?.();
+  expect(await waiting).toEqual(answer);
+  expect(sleep).toHaveBeenCalledExactlyOnceWith(new Date(future));
+  expect(hook.disposed).toBe(1);
+});
+
+test("a deadline already passed times out after one read, without parking", async () => {
+  const fetchSlackMessage = vi.fn(async () => thread(post(question, ownBot)));
+  expect(
+    await waitForSlackReply(
+      { channel, threadTs, after: question, until: past },
+      { fetchSlackMessage },
+    ),
+  ).toBe("timed-out");
+  expect(fetchSlackMessage).toHaveBeenCalledOnce();
+  expect(sleep).not.toHaveBeenCalled();
+  expect(hook.awaited).toBe(0);
+  expect(hook.disposed).toBe(1);
+});
+
+test("a reply already in the thread wins over a deadline that has passed", async () => {
+  const answer = post("1790723501.000300", salim);
+  const fetchSlackMessage = vi.fn(async () => thread(post(question, ownBot), answer));
+  expect(
+    await waitForSlackReply(
+      { channel, threadTs, after: question, until: past },
+      { fetchSlackMessage },
+    ),
+  ).toEqual(answer);
+});
+
+test("when the deadline wins, the wait times out and releases the thread's hook", async () => {
+  const fetchSlackMessage = vi.fn(async () => thread(post(question, ownBot)));
+  const waiting = waitForSlackReply(
+    { channel, threadTs, after: question, until: future },
+    { fetchSlackMessage },
+  );
+  await flush();
+  expect(hook.awaited).toBe(1);
+  expect(hook.disposed).toBe(0);
+  timer.fire?.();
+  expect(await waiting).toBe("timed-out");
+  expect(fetchSlackMessage).toHaveBeenCalledOnce();
+  expect(hook.disposed).toBe(1);
+});
+
+test("a wake that reads the thread after the deadline times out without the timer", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
+  const fetchSlackMessage = vi.fn(async () => thread(post(question, ownBot)));
+  const waiting = waitForSlackReply(
+    { channel, threadTs, after: question, until: "2026-10-02T12:00:05Z" },
+    { fetchSlackMessage },
+  );
+  await flush();
+  expect(hook.awaited).toBe(1);
+  vi.setSystemTime(new Date("2026-10-02T12:00:06Z"));
+  hook.wake?.();
+  expect(await waiting).toBe("timed-out");
+  expect(fetchSlackMessage).toHaveBeenCalledTimes(2);
+  expect(sleep).toHaveBeenCalledOnce();
+  expect(hook.disposed).toBe(1);
+});
+
+test.each(["tomorrow", "Oct 3 2026", "2026"])(
+  "an until of %j fails before anything is awaited",
+  async (until) => {
+    const fetchSlackMessage = vi.fn();
+    await expect(
+      waitForSlackReply({ channel, threadTs, after: question, until }, { fetchSlackMessage }),
+    ).rejects.toThrow(`until must be an ISO 8601 timestamp, got ${JSON.stringify(until)}`);
+    expect(createHook).not.toHaveBeenCalled();
+  },
+);
