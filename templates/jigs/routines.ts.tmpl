@@ -192,11 +192,12 @@ export const postReviewAnswers = pullRequests.postReviewAnswers;
 export const postPullRequestNote = pullRequests.postPullRequestNote;
 
 /**
- * Wait for a human to reply in a Slack thread after the question, and return the reply.
+ * Wait for a human to reply in a Slack thread after the question, and return the reply
+ * or `"timed-out"` once `until` passes.
  *
  * @remarks
  * Binds the library's `waitForSlackReply` routine to this factory's `fetchSlackMessage`
- * step; its documentation covers wakes, deletion and conflicts.
+ * step; its documentation covers deadlines, wakes, deletion and conflicts.
  *
  * @group Slack messages
  */

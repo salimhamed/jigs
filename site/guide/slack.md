@@ -220,14 +220,19 @@ import { postSlackMessage } from "#jigs/steps";
 
 export async function askInThread(channel: string, ts: string, question: string) {
   const asked = await postSlackMessage({ channel, threadTs: ts, text: question });
-  const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked });
+  const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
+  const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked, until });
+  if (reply === "timed-out") return "no reply within a day";
   return `${reply.author.name} (${reply.author.email ?? "no email"}): ${reply.text}`;
 }
 ```
 
 Any person's reply counts. Replies from bots, including the factory's own, never
-do. The wait has no time limit: it ends with a reply, or when you cancel the run
-with `jigs cancel`. With Socket Mode on, a reply wakes the run within a second.
+do. Without `until`, the wait has no time limit: it ends with a reply, or when
+you cancel the run with `jigs cancel`. With `until`, an ISO 8601 timestamp, it
+returns `"timed-out"` once that time passes with no reply. The thread is always
+read once first, so a reply already there still wins when `until` is in the
+past. With Socket Mode on, a reply wakes the run within a second.
 The service also re-reads the thread every
 [`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
 and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
@@ -312,7 +317,9 @@ export async function answer(input: WorkflowInputs<typeof inputs>) {
       threadTs: ts,
       text: "Which part of the codebase do you mean?",
     });
-    const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked });
+    const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
+    const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked, until });
+    if (reply === "timed-out") return { answered: false };
     question += `\n\n${reply.author.name} added: ${reply.text}`;
   }
 
