@@ -15,10 +15,8 @@ export interface SlackReplySteps {
 
 /**
  * The thread a wait reads, named by the ts of its top-level message (never a
- * reply's), and `lastRead`, the ts of the newest post the workflow has read:
- * usually the last reply in its latest `fetchSlackMessage`, or the top-level
- * ts. Never pass the workflow's own question, or a reply posted while the run
- * worked is missed. Only human replies after `lastRead` count. `until`, an
+ * reply's). `lastRead` is the ts of the newest post the workflow has read,
+ * never its own question; only human replies after it count. `until`, an
  * ISO 8601 timestamp, is when to stop waiting.
  *
  * @group Slack messages
@@ -54,7 +52,7 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
  * reply's ts fails the wait, naming the top-level message's ts. A reply
  * already in the thread returns at once, and may not answer the question the
  * workflow just asked. When a human reply is already in the thread, every run
- * waiting on it returns it; a second run that has to park while another waits
+ * waiting on it returns them; a second run that has to park while another waits
  * on the thread fails with the Workflow SDK's `HookConflictError`.
  *
  * @group Slack messages

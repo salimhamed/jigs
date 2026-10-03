@@ -65,7 +65,7 @@ const future = "2999-01-01T00:00:00Z";
 const past = "2000-01-01T00:00:00Z";
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
-test("returns the first human reply after the question, without parking", async () => {
+test("returns the human replies after the last read, without parking", async () => {
   const answer = post("1790723501.000300", salim, "the payments team");
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot), answer));
   expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual([
@@ -77,7 +77,7 @@ test("returns the first human reply after the question, without parking", async 
   expect(hook.disposed).toBe(1);
 });
 
-test("a bot's reply and a reply older than the question never count, however often it wakes", async () => {
+test("a bot's reply and a reply before the last read never count, however often it wakes", async () => {
   const earlier = post("1790723479.000001", salim, "said before the question");
   const answer = post("1790723600.000001", salim, "now");
   const reads = [
@@ -128,6 +128,7 @@ test("every human reply after the last read comes back, oldest first, without bo
     first,
     second,
   ]);
+  expect(hook.awaited).toBe(0);
 });
 
 const gone = async (): Promise<SlackMessageSnapshot> => ({ gone: true, channel, ts: threadTs });
