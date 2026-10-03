@@ -578,3 +578,10 @@ shell still reaches the service.
 `JIGS_SERVICE_URL` is read by the CLI, not the service. Set it in your shell to
 point commands such as `jigs status` at a different service, or pass
 `--service-url`.
+
+### A workflow's own secrets {#workflow-secrets}
+
+A workflow that reads a credential of its own lists the variable's name in
+`requires.secrets`, and its steps read the value from `process.env`. Add each
+name to `.env.example` with an empty value, so a new checkout knows to fill it
+in. See [Secrets](/guide/build-a-workflow#secrets).

@@ -55,6 +55,7 @@ import {
   pagerDutyIdentityChecks,
 } from "./pagerduty-identity.ts";
 import { pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
+import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
 import { webhookChecks } from "./webhooks.ts";
 
@@ -104,6 +105,11 @@ export {
   pagerDutyFromChecks,
   pagerDutyIdentityChecks,
 } from "./pagerduty-identity.ts";
+export {
+  doctorSecretChecks,
+  type SecretChecksOptions,
+  secretChecks,
+} from "./secrets.ts";
 export { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
 export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
@@ -115,6 +121,8 @@ export interface WorkflowRequires {
   bindings?: string[];
   models?: AskableModelSource[];
   aws?: true;
+  // Environment variable names, never values.
+  secrets?: string[];
 }
 
 // The real provider clients, so a caller of the catalog states only its own
@@ -260,6 +268,7 @@ export function preflightChecks(
       return [...driver.installationChecks(), ...(driver.descriptorChecks?.(source) ?? [])];
     }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
+    ...secretChecks(requires, { factoryRoot }),
   ];
 }
 
@@ -412,6 +421,7 @@ export function doctorChecks(
     ...usedHarnessChecks(harnessUsers(workflows)),
     ...requiredMcpServerChecks(workflows),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
+    ...doctorSecretChecks(workflows, { factoryRoot }),
   ];
 }
 

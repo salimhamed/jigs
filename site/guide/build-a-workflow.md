@@ -110,6 +110,48 @@ recorded result gives a resumed workflow the same directory information.
 dependencies before starting, so missing tools, credentials or repositories
 produce a useful repair before expensive work begins.
 
+### Secrets {#secrets}
+
+A credential the workflow's steps use, such as a warehouse token, goes in the
+factory's `.env` and is named in `requires.secrets`:
+
+```ts
+// workflows/sync/sync.ts
+import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+
+const inputs = z.object({});
+
+async function countOrders(): Promise<number> {
+  "use step";
+  const res = await fetch("https://warehouse.example.com/orders/count", {
+    headers: { Authorization: `Bearer ${process.env.SNOWFLAKE_TOKEN}` },
+  });
+  return ((await res.json()) as { count: number }).count;
+}
+
+export async function sync(_input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+  return countOrders();
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { secrets: ["SNOWFLAKE_TOKEN"] },
+  workflow: sync,
+});
+```
+
+List names only, never values. Add each name to `.env.example` with an empty
+value (`SNOWFLAKE_TOKEN=`), then set it in `.env`. Preflight fails a run whose
+secret is unset or empty, and `jigs doctor` names every workflow that needs it.
+The variables an agent's MCP servers name are checked the same way without
+being listed. A value exported in the shell that started the service but
+missing from `.env` still works, and doctor notes that it is not set in `.env`
+so you can move it there before another machine runs without it.
+Listing a secret does not pass it to agents; use
+[`agents.env`](/guide/configuration#agents-env) for that.
+
 ### Errors
 
 Throw `JigsError` when the run should stop with an actionable explanation for

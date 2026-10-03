@@ -76,9 +76,15 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
   inputs: S;
   /**
    * What the workflow needs before a run can start: the agents it runs, the
-   * integrations, bindings and API model sources it uses. The service checks
-   * the CLI of every agent's harness when it starts, and preflight checks
+   * integrations, bindings and API model sources it uses, and the names of the
+   * environment variables its steps read as `secrets`. The service checks the
+   * CLI of every agent's harness when it starts, and preflight checks
    * everything listed before every run. List only what the workflow uses.
+   *
+   * @remarks
+   * A secret is set in the factory's `.env` and read in a step from
+   * `process.env`. The variables an agent's MCP servers name count as secrets
+   * without being listed. Listing a secret does not pass it to agents.
    *
    * @example
    * Pass this value as `requires` when calling `defineWorkflow`.
@@ -93,6 +99,8 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    * const requires = {
    *   agents,
    *   integrations: ["linear", "github"],
+   *   bindings: ["app"],
+   *   secrets: ["SNOWFLAKE_TOKEN"],
    * } satisfies WorkflowDefinition["requires"];
    * ```
    */
