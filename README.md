@@ -47,9 +47,3 @@ Then ask it `/jigs set up a factory in this empty directory`.
 ## Development
 
 See [docs/contributing.md](docs/contributing.md).
-
-## License
-
-[BSL 1.1](LICENSE), converting to Apache 2.0 four years after each version's first
-release. [LICENSE](LICENSE) controls.
-[Commercial licensing inquiries](https://github.com/salimhamed/jigs/issues/new?title=Commercial%20licensing%20inquiry).
