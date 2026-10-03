@@ -1,6 +1,6 @@
 import { getWorkflowMetadata } from "workflow";
 import type { pushApprovedChange, pushBranch, readWorktreeDiff } from "../../steps/git/branch.ts";
-import type { mergePullRequest, openPullRequest } from "../../steps/pull-requests/pr.ts";
+import type { createPullRequest, mergePullRequest } from "../../steps/pull-requests/pr.ts";
 import type { registerResource } from "../../steps/runtime/resources.ts";
 import type { AgentSession } from "../agents/agent-session.ts";
 import { JigsError } from "../errors.ts";
@@ -119,7 +119,7 @@ export interface DeliverySteps {
   readWorktreeDiff: typeof readWorktreeDiff;
   pushBranch: typeof pushBranch;
   pushApprovedChange: typeof pushApprovedChange;
-  openPullRequest: typeof openPullRequest;
+  createPullRequest: typeof createPullRequest;
   registerResource: typeof registerResource;
   fetchPullRequestState: FetchPrState;
   mergePullRequest: typeof mergePullRequest;

@@ -12,7 +12,8 @@ export interface PublishOptions {
   commit: string;
   /**
    * Turns the writer's title and body into the pull request to open, for example to enforce a
-   * title convention, add notes to the body, or open a draft. Defaults to the description as is.
+   * title convention, add notes to the body, or open a draft. It runs before the push, so throwing
+   * from it stops before anything is pushed. Defaults to the description as is.
    */
   pullRequest?:
     | ((described: { title: string; body: string }) => {
@@ -52,8 +53,9 @@ export async function publishPullRequest<W>(
     fresh: prompt,
   });
 
+  const request = pullRequest(described);
   await steps.pushApprovedChange(worktree, commit);
-  const pr = await steps.openPullRequest({ worktree, ...pullRequest(described) });
+  const pr = await steps.createPullRequest({ worktree, ...request });
   await steps.registerResource({
     kind: "pull-request",
     identity: `${pr.owner}/${pr.repo}#${pr.number}`,

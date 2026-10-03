@@ -332,18 +332,18 @@ export async function readPatch(worktree: Worktree, base: string, head: string, 
 }
 
 /**
- * Open a pull request for a branch that has already been pushed.
+ * Create a pull request for a branch that has already been pushed.
  *
  * @group Pull requests
  */
-export async function openPullRequest(request: {
+export async function createPullRequest(request: {
   worktree: Worktree;
   title: string;
   body: string;
   draft?: boolean;
 }) {
   "use step";
-  return pullRequestsOperations.openPullRequest(request);
+  return pullRequestsOperations.createPullRequest(request);
 }
 
 /**

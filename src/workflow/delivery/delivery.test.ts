@@ -36,7 +36,7 @@ const steps = {
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
   pushBranch: vi.fn(),
   pushApprovedChange: vi.fn(),
-  openPullRequest: vi.fn(),
+  createPullRequest: vi.fn(),
   registerResource: vi.fn(),
   fetchPullRequestState: vi.fn(),
   mergePullRequest: vi.fn(),
@@ -188,7 +188,7 @@ test("every prompt ends with the answer format the engine parses", async () => {
   answer(reviewVerdict, { verdict: "approved", findings: [] });
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
   answer(maintenanceReport, { status: "finished", summary: "Done." });
-  steps.openPullRequest.mockResolvedValue(pr);
+  steps.createPullRequest.mockResolvedValue(pr);
   watch(commented, closed);
 
   await build();
@@ -289,7 +289,7 @@ test("a stopped delivery never puts the local worktree path in its findings", as
 
 test("publish pushes exactly the given commit and opens the pull request the caller shapes", async () => {
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
-  steps.openPullRequest.mockResolvedValue(pr);
+  steps.createPullRequest.mockResolvedValue(pr);
 
   const opened = await publishPullRequest(delivery, {
     commit: "h1",
@@ -304,7 +304,7 @@ test("publish pushes exactly the given commit and opens the pull request the cal
   expect(steps.pushApprovedChange).toHaveBeenCalledWith(worktree, "h1");
   expect(calls[0]?.harness).toBe(builderHarness);
   expect(calls[0]?.prompt).toContain("DESCRIBE THE TASK BRIEF\ndiff --git a/x b/x");
-  expect(steps.openPullRequest).toHaveBeenCalledWith({
+  expect(steps.createPullRequest).toHaveBeenCalledWith({
     worktree,
     title: "feat: add a flag",
     body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
@@ -317,7 +317,7 @@ test("publish pushes exactly the given commit and opens the pull request the cal
 
 test("publish works without a review, and a writer session describes the change", async () => {
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
-  steps.openPullRequest.mockResolvedValue(pr);
+  steps.createPullRequest.mockResolvedValue(pr);
   const writerHarness = harnesses.claude({ model: "sonnet" });
   delivery.writer = agentSession({ name: "writer", harness: writerHarness, cwd: worktree.path });
 
@@ -325,7 +325,9 @@ test("publish works without a review, and a writer session describes the change"
 
   expect(calls.map((call) => call.harness)).toEqual([writerHarness]);
   expect(steps.pushApprovedChange).toHaveBeenCalledWith(worktree, "h9");
-  expect(steps.openPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Adds it." }));
+  expect(steps.createPullRequest).toHaveBeenCalledWith(
+    expect.objectContaining({ body: "Adds it." }),
+  );
 });
 
 test("publish pushes nothing until the writer has written a valid description", async () => {
@@ -334,7 +336,23 @@ test("publish pushes nothing until the writer has written a valid description", 
   await expect(publishPullRequest(delivery, { commit: "h1" })).rejects.toThrow();
 
   expect(steps.pushApprovedChange).not.toHaveBeenCalled();
-  expect(steps.openPullRequest).not.toHaveBeenCalled();
+  expect(steps.createPullRequest).not.toHaveBeenCalled();
+});
+
+test("a pullRequest function that throws stops publish before anything is pushed", async () => {
+  answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
+
+  await expect(
+    publishPullRequest(delivery, {
+      commit: "h1",
+      pullRequest: () => {
+        throw new Error("title is not a conventional commit");
+      },
+    }),
+  ).rejects.toThrow("title is not a conventional commit");
+
+  expect(steps.pushApprovedChange).not.toHaveBeenCalled();
+  expect(steps.createPullRequest).not.toHaveBeenCalled();
 });
 
 test.each([
@@ -372,7 +390,7 @@ test("a description the schema rejects fails before any pull request opens", asy
   answer(pullRequestDescription, { title: "Title: Add a flag", body: "Adds it." });
 
   await expect(publishPullRequest(delivery, { commit: "h1" })).rejects.toBeInstanceOf(z.ZodError);
-  expect(steps.openPullRequest).not.toHaveBeenCalled();
+  expect(steps.createPullRequest).not.toHaveBeenCalled();
 });
 
 const snapshot: PullRequestSnapshot = {
@@ -1172,7 +1190,7 @@ test("two deliveries in one run, with their own keys, each go from build to merg
     { title: "Web change", body: "Uses it." },
   );
   const prs = { "/tmp/api": { ...pr, repo: "api" }, "/tmp/web": { ...pr, repo: "web" } };
-  steps.openPullRequest.mockImplementation(
+  steps.createPullRequest.mockImplementation(
     async ({ worktree }: { worktree: { path: keyof typeof prs } }) => prs[worktree.path],
   );
   steps.mergePullRequest.mockResolvedValue({ merged: true, mergeCommitSha: "m" });
@@ -1219,7 +1237,7 @@ test("a copy of a delivery, such as one with a writer added, keeps its key", asy
   answer(implementationReport, { responses: [] });
   answer(reviewVerdict, { verdict: "approved", findings: [] });
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
-  steps.openPullRequest.mockResolvedValue(pr);
+  steps.createPullRequest.mockResolvedValue(pr);
   await build();
 
   const writer = agentSession({ name: "writer", harness: reviewerHarness, cwd: worktree.path });

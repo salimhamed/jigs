@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
-  createPullRequest,
+  createPr,
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
@@ -528,11 +528,11 @@ test("a review with an empty comments array omits comments from the request", as
   expect(JSON.parse(String(init.body))).toEqual({ event: "COMMENT", body: "Summary" });
 });
 
-test("createPullRequest posts its fields and passes through GitHub's number and URL", async () => {
+test("createPr posts its fields and passes through GitHub's number and URL", async () => {
   fetchMock.mockResolvedValueOnce(
     json({ number: 41, html_url: "https://github.example/acme/api/pull/41" }),
   );
-  const created = await createPullRequest({
+  const created = await createPr({
     owner: "acme",
     repo: "api",
     head: "salimhamed/age-316",
@@ -556,11 +556,11 @@ test("createPullRequest posts its fields and passes through GitHub's number and 
   });
 });
 
-test("createPullRequest forwards draft when supplied", async () => {
+test("createPr forwards draft when supplied", async () => {
   fetchMock.mockResolvedValueOnce(
     json({ number: 42, html_url: "https://github.example/acme/api/pull/42" }),
   );
-  await createPullRequest({
+  await createPr({
     owner: "acme",
     repo: "api",
     head: "draft",

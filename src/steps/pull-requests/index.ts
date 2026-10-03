@@ -16,11 +16,11 @@ export { callGitHub } from "./call.ts";
 export { fetchPullRequestState } from "./fetch-state.ts";
 export {
   commentOnPullRequest,
+  createPullRequest,
   type MergeOutcome,
   markPullRequestReady,
   mergePullRequest,
   type OpenedPullRequest,
-  openPullRequest,
   replyToPullRequestReviewThread,
   reviewPullRequest,
 } from "./pr.ts";

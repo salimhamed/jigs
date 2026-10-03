@@ -205,7 +205,8 @@ everything in between:
   describe the diff, pushes exactly `commit` and opens the pull request. The
   optional `pullRequest` function receives the writer's title and body and
   returns the ones to open with, plus `draft`, so you can enforce a title
-  convention or append notes. It needs no review: any clean commit at the
+  convention or append notes. It runs before the push, so throwing from it
+  stops before anything is pushed. It needs no review: any clean commit at the
   worktree's HEAD can be published.
 - `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for new
   feedback, failing checks and conflicts until the pull request merges or
