@@ -29,6 +29,7 @@ export {
   type Harness,
   type HarnessForOptions,
   type HarnessKind,
+  type HarnessSkills,
   harnesses,
   harnessKinds,
   type JsonOnly,

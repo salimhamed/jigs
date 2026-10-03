@@ -5,7 +5,7 @@ import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
-import { doctorChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
+import { doctorChecks, jitChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
 const passing = (id: string): Check => ({
   id,
@@ -525,4 +525,42 @@ test("doctor reports an agent whose environment cannot be planned, rather than f
       repair: expect.any(String),
     },
   ]);
+});
+
+test("preflight and doctor check each declared skill folder, doctor naming the workflows", async () => {
+  const root = makeTmpDir();
+  onTestFinished(() => removeTmpDir(root));
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  const analyst = harnesses.claude({ model: "opus", skills: ["skills/snowflake"] });
+  expect(preflightIds({ agents: { analyst } })).toContain("skills.skills/snowflake");
+
+  const skills = doctorChecks({
+    report: { requires: { agents: { analyst } } },
+    audit: { requires: { agents: { analyst } } },
+  }).filter((check) => check.id.startsWith("skills."));
+  expect(skills.map((check) => check.id)).toEqual(["skills.skills/snowflake"]);
+  expect((await runChecks(skills)).checks[0]).toMatchObject({
+    ok: false,
+    reason: `no skill folder at ${path.join(root, "skills/snowflake")} (needed by workflows report, audit)`,
+  });
+});
+
+test("the just-in-time checks cover the skills of the harness the body built", () => {
+  const harness = harnesses.codex({ model: "gpt-5.5", skills: ["/opt/skills/pdf"] });
+  expect(jitChecks({ harness, cwd: "/work" }, {}).map((check) => check.id)).toContain(
+    "skills./opt/skills/pdf",
+  );
+});
+
+test("doctor shows a skill path once when no earlier entry could clash with it", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  const ids = doctorChecks({
+    report: { requires: { agents: { a: harnesses.claude({ model: "opus", skills: ["s/a"] }) } } },
+    audit: {
+      requires: { agents: { b: harnesses.codex({ model: "gpt-5.5", skills: ["s/b", "s/a"] }) } },
+    },
+  })
+    .map((check) => check.id)
+    .filter((id) => id.startsWith("skills."));
+  expect(ids).toEqual(["skills.s/a", "skills.s/b"]);
 });

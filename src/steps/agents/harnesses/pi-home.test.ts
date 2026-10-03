@@ -133,3 +133,21 @@ test("Pi resumes only an exact durable session file", () => {
   expect(piSessionFile(prepared.sessionDir, "missing")).toBeUndefined();
   prepared.cleanup();
 });
+
+test("declared skills are copied into the invocation home and named for --skill", () => {
+  const skill = path.join(tmp, "factory", "skills", "snowflake");
+  mkdirSync(skill, { recursive: true });
+  writeFileSync(path.join(skill, "SKILL.md"), "# snowflake\n");
+
+  const prepared = preparePiInvocationHome(
+    "run-skills",
+    planPiModel(harnesses.pi(models.openrouter("openai/gpt-oss"))),
+    { baseDir: path.join(tmp, "pi-homes"), skills: [skill] },
+  );
+
+  const copy = path.join(prepared.home, "skills", "snowflake");
+  expect(prepared.skills).toEqual([copy]);
+  expect(readFileSync(path.join(copy, "SKILL.md"), "utf8")).toBe("# snowflake\n");
+  prepared.cleanup();
+  expect(existsSync(skill)).toBe(true);
+});

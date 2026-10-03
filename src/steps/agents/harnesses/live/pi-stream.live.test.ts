@@ -11,7 +11,7 @@ import type { AgentStreamPart } from "../../step-stream.ts";
 import { executePi } from "../pi.ts";
 import { preparePiInvocationHome, realPiAuthPath } from "../pi-home.ts";
 import { makeTmpDir, removeTmpDir, runningRunStatus } from "../test-fixtures.ts";
-import { makeScratchRepo } from "./fixtures/live-env.ts";
+import { MARKER_PROMPT, makeMarkerSkill, makeScratchRepo } from "./fixtures/live-env.ts";
 
 function hasOpenaiCodexLogin(): boolean {
   try {
@@ -92,5 +92,40 @@ test.skipIf(!hasOpenaiCodexLogin())(
     expect(beforeReturn.some((part) => part.type === "tool-result")).toBe(true);
     expect(parts.at(-1)).toEqual({ type: "finish", finishReason: "stop" });
     expect(writable.locked).toBe(false);
+  },
+);
+
+test.skipIf(!hasOpenaiCodexLogin())(
+  "a declared skill reaches a Pi agent with skill discovery still off",
+  async () => {
+    const worktree = makeScratchRepo(tmp, "pi-skill");
+    const { folder, token } = makeMarkerSkill(tmp);
+    const pi = createPiDriver({
+      openStepStream: () => undefined,
+      preparePiHome: async (runId, source, skills) =>
+        preparePiInvocationHome(runId, source, {
+          baseDir: path.join(tmp, "pi-homes"),
+          ...(skills === undefined ? {} : { skills }),
+        }),
+      executePi,
+    });
+
+    const result = await executeAgentWith(
+      buildAgentRequest({
+        harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { thinking: "low", skills: [folder] }),
+        cwd: worktree,
+        prompt: MARKER_PROMPT,
+      }),
+      { workflowRunId: `live-pi-skill-${crypto.randomUUID()}` },
+      {
+        ...executionSeams,
+        runStatus: runningRunStatus,
+        factoryEnv: () => [],
+        resolveDriver: ((kind) => (kind === "pi" ? pi : driverFor(kind))) as DriverResolver,
+      },
+    );
+
+    expect(result).not.toHaveProperty("jitFailure");
+    expect(readFileSync(path.join(worktree, "skill-marker.txt"), "utf8").trim()).toBe(token);
   },
 );

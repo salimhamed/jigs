@@ -56,3 +56,27 @@ export const PROBE_PROMPT = [
   "If that tool is available, call it and reply with exactly the token it returns and nothing else.",
   "If no such tool is available, reply with exactly NO-PROBE-SERVER and nothing else.",
 ].join("\n");
+
+// A skill whose instructions alone say what the marker holds, so a marker with
+// the right token proves the agent loaded the skill.
+export function makeMarkerSkill(parent: string): { folder: string; token: string } {
+  const folder = path.join(parent, "factory-skills", "jigs-marker");
+  mkdirSync(folder, { recursive: true });
+  const token = `SKILL-${crypto.randomUUID().slice(0, 8)}`;
+  writeFileSync(
+    path.join(folder, "SKILL.md"),
+    [
+      "---",
+      "name: jigs-marker",
+      "description: How to leave the jigs marker. Use it whenever you are asked to leave the jigs marker.",
+      "---",
+      "",
+      `To leave the jigs marker, create a file named skill-marker.txt in the current working directory containing exactly ${token} on one line.`,
+      "",
+    ].join("\n"),
+  );
+  return { folder, token };
+}
+
+export const MARKER_PROMPT =
+  "Leave the jigs marker in the current working directory, following the skill that explains how. Then reply DONE.";

@@ -164,6 +164,7 @@ export const claudePolicyKeys = [
   "agents",
   "settings",
   "plugins",
+  "skills",
 ] as const satisfies readonly (keyof ClaudeCodeSettings)[];
 /**
  * A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
@@ -174,7 +175,8 @@ export const claudePolicyKeys = [
  * permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
  * rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
  * environment, permissions and hooks from outside the worktree; they come from the repository's
- * project settings instead.
+ * project settings instead. jigs fills `plugins` itself to load the descriptor's `skills`, which
+ * replace Claude Code's own `skills` setting.
  *
  * @group Harnesses and models
  */
@@ -221,30 +223,47 @@ export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
 export type AgentGithub = true | { owner: string };
 
 /**
- * A Claude Code harness descriptor: the provider's own settings that are data, minus each
- * {@link ClaudePolicyKey}, plus the model and jigs' MCP server shape.
+ * Skill folders an agent loads, each holding a `SKILL.md` and any files it refers to.
+ *
+ * @remarks
+ * Each path is relative to the factory root, or absolute. jigs copies every folder into a private
+ * place for each agent call, so the skills reach the agent whatever its working directory and
+ * nothing the agent changes there reaches the factory. Each folder is copied under its own name,
+ * so two folders cannot share one; keep it the same as the `name` in its `SKILL.md`. A run whose
+ * folder is missing or has no `SKILL.md` fails its checks before the agent starts. Skills apply
+ * when an agent runs in a directory, not to `askAgent`.
  *
  * @group Harnesses and models
  */
-export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> & {
-  kind: "claude";
-  model: string;
-  mcpServers?: Record<string, McpServerConfig>;
-  github?: AgentGithub;
-};
+export type HarnessSkills = { skills?: string[] };
+
+/**
+ * A Claude Code harness descriptor: the provider's own settings that are data, minus each
+ * {@link ClaudePolicyKey}, plus the model, jigs' MCP server shape and {@link HarnessSkills}.
+ *
+ * @group Harnesses and models
+ */
+export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> &
+  HarnessSkills & {
+    kind: "claude";
+    model: string;
+    mcpServers?: Record<string, McpServerConfig>;
+    github?: AgentGithub;
+  };
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
- * {@link CodexPolicyKey}, plus the model and jigs' MCP server shape.
+ * {@link CodexPolicyKey}, plus the model, jigs' MCP server shape and {@link HarnessSkills}.
  *
  * @group Harnesses and models
  */
-export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>> & {
-  kind: "codex";
-  model: string;
-  mcpServers?: Record<string, McpServerConfig>;
-  github?: AgentGithub;
-};
-type SharedPiHarness = {
+export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>> &
+  HarnessSkills & {
+    kind: "codex";
+    model: string;
+    mcpServers?: Record<string, McpServerConfig>;
+    github?: AgentGithub;
+  };
+type SharedPiHarness = HarnessSkills & {
   kind: "pi";
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
@@ -391,7 +410,10 @@ export const models = {
  *
  * @group Harnesses and models
  */
-export type PiHarnessOptions = Pick<PiHarness, "thinking" | "tools" | "mcpServers" | "github"> & {
+export type PiHarnessOptions = Pick<
+  PiHarness,
+  "thinking" | "tools" | "mcpServers" | "github" | "skills"
+> & {
   compat?: Partial<PiOpenaiCompatibleOptions>;
 };
 /**
@@ -467,6 +489,15 @@ function piHarness(model: ModelSource, options: PiHarnessOptions = {}): PiHarnes
  * import { harnesses } from "@jigs-ai/jigs";
  *
  * const builder = harnesses.claude({ model: "opus", effort: "high", maxTurns: 40 });
+ * ```
+ *
+ * @example
+ * `skills` names skill folders relative to the factory root. On Claude Code they join the
+ * repository's own `.claude/skills` under the `jigs-skills:` prefix.
+ * ```ts
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * const analyst = harnesses.claude({ model: "opus", skills: ["skills/snowflake"] });
  * ```
  */
 function claudeHarness<O extends ClaudeHarnessSettings>(

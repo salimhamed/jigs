@@ -75,15 +75,19 @@ function owner(context: DriverContext): string {
 
 export interface PiDriverDependencies {
   openStepStream(): StepStream | undefined;
-  preparePiHome(runId: string, plan: PiModelPlan): Promise<PreparedPiHome>;
+  preparePiHome(
+    runId: string,
+    plan: PiModelPlan,
+    skills?: readonly string[],
+  ): Promise<PreparedPiHome>;
   executePi(options: PiExecutionOptions): Promise<ExecutorGeneration>;
 }
 
 const defaultDependencies: PiDriverDependencies = {
   openStepStream,
-  preparePiHome: async (runId, source) => {
+  preparePiHome: async (runId, source, skills) => {
     await recordRunDirectory("pi-home", runId, piRunStatePath(runId));
-    return preparePiInvocationHome(runId, source);
+    return preparePiInvocationHome(runId, source, skills === undefined ? {} : { skills });
   },
   executePi,
 };
@@ -136,7 +140,11 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
   async function run(request: RunRequest, context: DriverContext): Promise<ExecutorGeneration> {
     const harness = descriptor(request);
     const model = planPiModel(harness);
-    const prepared = await deps.preparePiHome(context.metadata.workflowRunId, model);
+    const prepared = await deps.preparePiHome(
+      context.metadata.workflowRunId,
+      model,
+      harness.skills ?? [],
+    );
     const { resume } = request;
     const sessionId = resume?.id ?? `jigs-${randomUUID()}`;
     let tap: ReturnType<typeof createPiStreamTap> | undefined;
@@ -187,7 +195,9 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
           "--session-dir",
           prepared.sessionDir,
           "-ne",
+          // Discovery stays off; explicit --skill paths still load.
           "-ns",
+          ...prepared.skills.flatMap((skill) => ["--skill", skill]),
           "-np",
           "--no-themes",
           "-nc",

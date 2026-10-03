@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import path from "node:path";
 import { createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import { afterAll, beforeAll, expect, test } from "vitest";
@@ -9,7 +10,12 @@ import { executeAgentWith } from "../../execute-agent.ts";
 import { type ExecutionSeams, executionSeams } from "../../seams.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../codex-home.ts";
 import { makeTmpDir, removeTmpDir, runningRunStatus } from "../test-fixtures.ts";
-import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
+import {
+  assertLivePreconditions,
+  MARKER_PROMPT,
+  makeMarkerSkill,
+  makeScratchRepo,
+} from "./fixtures/live-env.ts";
 
 // The staleness half of the resume contract, against the real harnesses: a
 // session reference that names nothing must surface as the resumeFailed marker,
@@ -22,9 +28,10 @@ beforeAll(() => {
   assertLivePreconditions();
   tmp = makeTmpDir();
   const codex = createCodexDriver({
-    prepareCodexHome: async (runId) =>
+    prepareCodexHome: async (runId, skills) =>
       prepareCodexInvocationHome(runId, {
         baseDir: path.join(tmp, "codex-homes"),
+        skills,
       }),
     sessionFile: codexSessionFile,
     createAppServer: () => createCodexAppServer(),
@@ -69,4 +76,19 @@ test("a claude session id with no transcript behind it reports resumeFailed", as
   const result = await executeAgentWith(wire, { workflowRunId: "live-claude-resume" }, deps);
 
   expect(result).toHaveProperty("resumeFailed");
+});
+
+test("a declared skill reaches a Codex agent through its private home", async () => {
+  const worktree = makeScratchRepo(tmp, "codex-skill");
+  const { folder, token } = makeMarkerSkill(tmp);
+  const wire = buildAgentRequest({
+    harness: harnesses.codex({ model: "gpt-5.5", skills: [folder] }),
+    cwd: worktree,
+    prompt: MARKER_PROMPT,
+  });
+
+  const result = await executeAgentWith(wire, { workflowRunId: "live-codex-skill" }, deps);
+
+  expect(result).not.toHaveProperty("jitFailure");
+  expect(readFileSync(path.join(worktree, "skill-marker.txt"), "utf8").trim()).toBe(token);
 });

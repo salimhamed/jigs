@@ -51,15 +51,15 @@ function descriptor(request: DriverRequest): CodexHarness {
 }
 
 export interface CodexDriverDependencies {
-  prepareCodexHome(runId: string): Promise<PreparedCodexHome>;
+  prepareCodexHome(runId: string, skills: readonly string[]): Promise<PreparedCodexHome>;
   sessionFile(sessionDir: string, threadId: string): string | undefined;
   createAppServer(): CodexAppServerProvider;
 }
 
 const defaultDependencies: CodexDriverDependencies = {
-  prepareCodexHome: async (runId) => {
+  prepareCodexHome: async (runId, skills) => {
     await recordRunDirectory("codex-home", runId, codexRunStatePath(runId));
-    return prepareCodexInvocationHome(runId);
+    return prepareCodexInvocationHome(runId, { skills });
   },
   sessionFile: codexSessionFile,
   createAppServer: () => createCodexAppServer(),
@@ -77,7 +77,7 @@ export function createCodexDriver(
     const { resume } = target;
     context.signal.throwIfAborted();
     const runId = context.metadata.workflowRunId;
-    const prepared = await deps.prepareCodexHome(runId);
+    const prepared = await deps.prepareCodexHome(runId, harness.skills ?? []);
     let provider: CodexAppServerProvider | undefined;
     const onAbort = () => void provider?.close().catch(() => {});
     context.signal.addEventListener("abort", onAbort, { once: true });

@@ -209,6 +209,37 @@ The named variables are in the agent's own environment, so an agent with shell
 access can read them. Give agents least-privilege tokens, such as a read-only
 PagerDuty key for a triage agent.
 
+## Skills
+
+Give an agent skills with `skills`: a list of skill folders, each holding a
+`SKILL.md` and any reference files it points to. Every harness takes it. Paths
+are relative to the factory root; an absolute path also works.
+
+```ts
+import { harnesses, models } from "@jigs-ai/jigs";
+
+harnesses.claude({ model: "opus", skills: ["skills/snowflake"] });
+harnesses.codex({ model: "gpt-5.6-sol", skills: ["skills/snowflake"] });
+harnesses.pi(models.openaiCodex("gpt-5.5"), { skills: ["skills/snowflake"] });
+```
+
+jigs copies the folders into a private place for each agent call, whether
+through `runAgent` or a [custom agent step](/guide/custom-agent-step), so the
+skills reach the agent whatever its working directory, a run directory or a
+worktree, and nothing the agent writes there reaches the factory. Each folder
+is copied under its own name, so two declared folders cannot share one; keep it
+the same as the `name` in its `SKILL.md`. `askAgent` loads no skills.
+
+On Claude Code the skills load as a plugin and appear under the `jigs-skills:`
+prefix, such as `jigs-skills:snowflake`. They add to the repository's own
+`.claude/skills` rather than replacing them. A Claude `tools` list must include
+`Skill` for the agent to use them. Pi offers skills only to an agent
+that has its `read` or `bash` tool, so a Pi `tools` list needs one of them.
+
+A folder that is missing or has no `SKILL.md` fails preflight before the run
+starts, and `jigs doctor` reports it for every agent in `requires.agents`. A
+harness built in the workflow body is checked when its agent starts.
+
 ## Claude Code
 
 `harnesses.claude({ model, ...settings })` is a harness for `runAgent` and
