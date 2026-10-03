@@ -84,7 +84,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(routines.buildAndReview).toHaveBeenCalledWith(expect.anything(), { rounds: 3 });
   expect(routines.publishPullRequest).toHaveBeenCalledWith(handed(), {
     commit: "h1",
-    body: expect.any(Function),
+    pullRequest: expect.any(Function),
   });
   expect(following()).toMatchObject({
     attemptsPerUpdate: 3,
@@ -126,15 +126,17 @@ test("the reviewer's notes are appended to the pull request body", async () => {
     ledger: [],
   });
   await run();
-  const body = vi.mocked(routines.publishPullRequest).mock.calls[0]?.[1].body;
-  expect(body?.("Adds it.")).toBe("Adds it.\n\n## Reviewer notes\n\n- Rename x");
+  const shape = vi.mocked(routines.publishPullRequest).mock.calls[0]?.[1].pullRequest;
+  expect(shape?.({ title: "Add a flag", body: "Adds it." })).toEqual({
+    title: "Add a flag",
+    body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
+  });
 });
 
 test("a pull request that needs a person gets a note on the ticket and stays In Review", async () => {
   const facts: NeedsHuman = {
     reason: "builder-asked",
     detail: "Please inspect the conflict.",
-    pr,
   };
   vi.mocked(routines.followPullRequestToOutcome).mockImplementationOnce(
     async (_delivery, _pr, options) => {
@@ -166,22 +168,36 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
       await options.onNeedsHuman({
         reason: "attempts-exhausted",
         detail: "Pushed.",
-        pr,
         unpublished: { dirty: true, localHead: "h2", pullRequestHead: "h1" },
       });
-      await options.onNeedsHuman({ reason: "merge-refused", detail: "merge method disabled", pr });
+      await options.onNeedsHuman({
+        reason: "merge-refused",
+        detail: "merge method disabled",
+        tries: 1,
+      });
+      await options.onNeedsHuman({ reason: "merge-refused", detail: "GitHub 502", tries: 10 });
       return "merged";
     },
   );
 
   await run();
 
-  expect(posted().map((note) => note.notes.slice(0, 2))).toEqual([
+  expect(posted().map((note) => note.notes.slice(0, 3))).toEqual([
     [
-      "Exhausted 3 attempts for this pull request update. The builder last said: Pushed.",
+      "Exhausted 3 attempts for this pull request update.",
       expect.stringMatching(/dirty.*local HEAD is h2.*head is h1.*holds back the merge/),
+      "The builder last said: Pushed.",
     ],
-    ["Could not merge the pull request: merge method disabled", `Pull request: ${pr.url}`],
+    [
+      "Could not merge the pull request: merge method disabled",
+      `Pull request: ${pr.url}`,
+      expect.any(String),
+    ],
+    [
+      "Could not merge the pull request after 10 tries: GitHub 502",
+      `Pull request: ${pr.url}`,
+      expect.any(String),
+    ],
   ]);
 });
 
@@ -189,7 +205,6 @@ test("a blocked merge is noted on the pull request with the delivery's scope", a
   vi.mocked(routines.followPullRequestToOutcome).mockImplementationOnce(
     async (_delivery, _pr, options) => {
       await options.onMergeBlocked?.({
-        pr,
         headSha: "h1",
         scope: "linearTicketToPr/ABC-123",
         detail: "GitHub blocks the merge.",

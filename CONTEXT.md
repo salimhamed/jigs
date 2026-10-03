@@ -33,12 +33,12 @@ _Avoid_: block, workflow-side
 **Delivery**: One piece of work taken to a pull request by the delivery
 routines (`buildAndReview`, `publishPullRequest`, `followPullRequestToOutcome`):
 the caller's work and prompts, a worktree, and the agent sessions the workflow
-named. The routines decide mechanics; the caller supplies every prompt, budget
+created. The routines decide mechanics; the caller supplies every prompt, budget
 and note.
 _Avoid_: ship, pipeline
 
 **Delivery key**: The short name a delivery's pull request notes are scoped by.
-Unique within a run.
+In a run, one key belongs to one worktree.
 
 **Recipe**: A workflow jigs ships as source, which `jigs recipe add` copies into
 a factory. Once copied it is factory code.

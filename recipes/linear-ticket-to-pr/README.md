@@ -74,35 +74,18 @@ pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=ap
 
 Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
-builder; it is not a lifetime limit on PR activity. The initial builder turn counts as one attempt.
+builder; it is not a lifetime limit on PR activity.
 
-Local work counts as published when the worktree is clean and its HEAD is a
-commit the pull request has had; a worktree behind the pull request, because a
-person pushed, is fine. The recipe reads the local worktree on every PR change,
-after every builder turn, and right before every merge. Unpublished work sends
-the builder a recovery prompt immediately, without waiting for another GitHub
-notification, even when nothing on the pull request needs it. A clean worktree
-whose HEAD the pull request has not had yet first gets two short durable waits
-and fresh reads to allow GitHub to reflect a successful push; these reads spend
-no builder attempts. The builder must safely
-commit, publish, or synchronize the work, or explain why it needs human help.
+A stop before the pull request opens, or the pull request closing unmerged,
+posts a ticket note saying what remains, sets `Todo`, and fails the run. To keep
+the work, take over the branch, the retained worktree and any pull request by
+hand; another run starts over on a new branch. Notes name the branch but never
+the local worktree path; `jigs status` shows the path.
 
-Only closing the pull request unmerged stops maintenance. The workflow retains
-local work without an automatic push, posts a ticket note explaining what
-remains, sets `Todo`, and fails the run. To keep the work, take over the retained
-worktree, its branch and the pull request by hand. Another run starts over on a
-new branch and opens a new pull request. A stop during initial implementation
-still attempts to preserve committed work by pushing; a failed preservation push
-is included in the note, with its error left in the service log. Notes name the
-branch but never the local worktree path, since they may be posted anywhere;
-`jigs status` shows the path.
-
-Exhausted recovery attempts, a request for human help, and a merge that fails
-or is refused do not stop the run. The workflow posts a ticket note saying what
-a person needs to do, leaves the ticket In Review, and keeps watching: the next
-change to the pull request picks the work back up. jigs never merges over
-unpublished local work; once recovery has given up on it, only a change to the
-local state wakes the builder for it again.
+A pull request that needs a person, because the builder asked, its attempts ran
+out, or the merge was refused, does not stop the run. The workflow posts a
+ticket note saying what a person needs to do, leaves the ticket In Review, and
+keeps watching: the next change to the pull request picks the work back up.
 
 ## The agents
 
@@ -139,9 +122,9 @@ The workflow calls three routines from `#jigs/routines` in order and sets the
 ticket status between them. Before these calls,
 [`linear-ticket-to-pr.ts`](./linear-ticket-to-pr.ts) acquires the ticket with
 `acquireTicket`, provisions a worktree, and reviews the requirements. It then
-builds `delivery` once: the ticket as `work`, the ticket key as `key`, the
-worktree, the prompts, and a named agent session for the builder and the
-reviewer. Every routine takes that same object.
+builds `delivery`: the ticket as `work`, the ticket key as `key`, the worktree,
+the prompts, and one agent session each for the builder and the reviewer.
+Every routine takes it.
 
 The following helper isolates the phase sequence from that setup. The shipped
 workflow keeps these calls inline, with its own wording for each note, so you
@@ -196,7 +179,8 @@ export async function deliverTicket(
   committed, until the reviewer raises no blocking finding. A finding's
   `blocking` flag decides, not the verdict the reviewer states. It returns the
   approved commit and the approving round's non-blocking findings, which the
-  workflow appends to the pull request body. When the rounds run out, or the
+  workflow appends to the pull request body through `publishPullRequest`'s
+  `pullRequest` option. When the rounds run out, or the
   builder leaves uncommitted work or commits nothing, it pushes the branch and
   returns `{ stopped }` with the reason, the open findings, and whether the push
   worked.
@@ -226,9 +210,9 @@ export async function deliverTicket(
   `approvalCovers`), green CI, a clean merge state, no unseen wake facts, and
   published local work. A transient merge refusal is retried after a durable
   wait, up to ten tries. When GitHub reports an approved, green pull request as
-  `blocked`, the routine calls `onMergeBlocked`; the recipe posts one note on
-  the pull request for each commit, marked with the delivery's scope so it does
-  not wake the builder.
+  `blocked`, the routine calls `onMergeBlocked` once for that head; the recipe
+  posts a note on the pull request, marked with the delivery's scope so it does
+  not wake the builder and a later run does not post it again.
   The watcher never merges, and the agent is instructed not to merge or approve;
   see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
   for what actually holds a merge back.

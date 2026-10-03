@@ -10,8 +10,17 @@ import { claimKey, type Delivery, type DeliverySteps } from "./delivery.ts";
 export interface PublishOptions {
   /** The commit to publish. It must be the worktree's HEAD, with nothing uncommitted. */
   commit: string;
-  /** Turns the writer's description into the pull request body. Defaults to the description. */
-  body?: ((description: string) => string) | undefined;
+  /**
+   * Turns the writer's title and body into the pull request to open, for example to enforce a
+   * title convention, add notes to the body, or open a draft. Defaults to the description as is.
+   */
+  pullRequest?:
+    | ((described: { title: string; body: string }) => {
+        title: string;
+        body: string;
+        draft?: boolean;
+      })
+    | undefined;
 }
 
 /**
@@ -27,7 +36,7 @@ export interface PublishOptions {
  */
 export async function publishPullRequest<W>(
   delivery: Delivery<W>,
-  { commit, body = (description) => description }: PublishOptions,
+  { commit, pullRequest = (described) => described }: PublishOptions,
   steps: DeliverySteps,
 ): Promise<PullRequestRef & { url: string }> {
   claimKey(delivery);
@@ -36,6 +45,7 @@ export async function publishPullRequest<W>(
     prompts.describe({ work, worktree, diff: await steps.readWorktreeDiff(worktree) }),
     formats.describe,
   );
+  // The prompt carries every fact it needs, so a resumed and a fresh writer are told the same.
   const described = await (delivery.writer ?? delivery.builder).run({
     output: pullRequestDescription,
     resume: prompt,
@@ -43,11 +53,7 @@ export async function publishPullRequest<W>(
   });
 
   await steps.pushApprovedChange(worktree, commit);
-  const pr = await steps.openPullRequest({
-    worktree,
-    title: described.title,
-    body: body(described.body),
-  });
+  const pr = await steps.openPullRequest({ worktree, ...pullRequest(described) });
   await steps.registerResource({
     kind: "pull-request",
     identity: `${pr.owner}/${pr.repo}#${pr.number}`,

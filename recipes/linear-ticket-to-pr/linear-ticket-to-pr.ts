@@ -96,7 +96,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
 
   const pr = await publishPullRequest(delivery, {
     commit: built.reviewedCommit,
-    body: (description) => withReviewerNotes(description, built.notes),
+    pullRequest: ({ title, body }) => ({ title, body: withReviewerNotes(body, built.notes) }),
   });
   await setTicketStatus(snapshot.id, "In Review");
 
@@ -107,8 +107,8 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     // Only a note: the ticket stays In Review while the run keeps watching.
     onNeedsHuman: (facts) =>
       noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
-    // The marker keeps the note to one per head, across wakes and runs.
-    onMergeBlocked: ({ pr, headSha, scope, detail }) =>
+    // Called once per head; the marker also keeps a later run from posting it again.
+    onMergeBlocked: ({ headSha, scope, detail }) =>
       postPullRequestNote({ pr, scope, headSha, reason: "merge-retry", body: detail }),
   });
   if (outcome === "closed") return stop(closedNote(key, worktree, pr.url));
@@ -190,19 +190,23 @@ function needsHumanNote(
   attempts: number,
   facts: NeedsHuman,
 ): TicketNote {
+  const held = facts.unpublished === undefined ? [] : [localState(facts.unpublished)];
   const why = {
-    "builder-asked": `The builder needs a person: ${facts.detail}`,
-    "attempts-exhausted": `Exhausted ${attempts} attempts for this pull request update. The builder last said: ${facts.detail}`,
-    "merge-refused": `Could not merge the pull request: ${facts.detail}`,
+    "builder-asked": [`The builder needs a person: ${facts.detail}`, ...held],
+    "attempts-exhausted": [
+      `Exhausted ${attempts} attempts for this pull request update.`,
+      ...held,
+      `The builder last said: ${facts.detail}`,
+    ],
+    "merge-refused": [
+      (facts.tries ?? 1) > 1
+        ? `Could not merge the pull request after ${facts.tries} tries: ${facts.detail}`
+        : `Could not merge the pull request: ${facts.detail}`,
+    ],
   }[facts.reason];
   return {
     headline: `jigs needs a person to move the pull request for ${key} forward.`,
-    notes: [
-      why,
-      ...(facts.unpublished === undefined ? [] : [localState(facts.unpublished)]),
-      `Pull request: ${url}`,
-      workLocation(worktree),
-    ],
+    notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
       "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
   };

@@ -201,18 +201,30 @@ everything in between:
   finding. It returns the reviewed commit, or `{ stopped }` with the reason
   (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings, and
   whether it could push the branch first.
-- `publishPullRequest(delivery, { commit, body })` has the writer describe the
-  diff, pushes exactly `commit` and opens the pull request. It needs no review:
-  any clean commit at the worktree's HEAD can be published.
+- `publishPullRequest(delivery, { commit, pullRequest })` has the writer
+  describe the diff, pushes exactly `commit` and opens the pull request. The
+  optional `pullRequest` function receives the writer's title and body and
+  returns the ones to open with, plus `draft`, so you can enforce a title
+  convention or append notes. It needs no review: any clean commit at the
+  worktree's HEAD can be published.
 - `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for new
   feedback, failing checks and conflicts until the pull request merges or
   closes, and merges it when `mergedBy` is `"jigs"`. It returns `"merged"` or
   `"closed"`.
 
-The routines write nothing a person reads. A stop is a return value, and a pull
-request that needs a person, or one GitHub blocks from merging, reaches your
-workflow as a callback with facts. You word the note and choose where it goes.
+The routines write nothing a person reads. A stop is a return value. A pull
+request that needs a person reaches your workflow through `onNeedsHuman`, never
+with the same facts twice in a row, and one GitHub blocks from merging through
+`onMergeBlocked`, once per head. You word the note and choose where it goes.
 Budgets, `mergedBy` and `approvalCovers` are always yours to pass.
+
+While following, the builder's local work counts as published when the worktree
+is clean and its HEAD is a commit the pull request has had; a worktree behind
+the pull request, because a person pushed, is fine. Unpublished work sends the
+builder a recovery prompt at once, without waiting for GitHub, and holds back
+any merge. After a turn whose push GitHub does not show yet, the pull request is
+read twice more, two seconds apart, without spending an attempt. A transient
+merge refusal is retried up to ten times, 30 seconds apart.
 
 ### The prompts
 
@@ -272,12 +284,12 @@ export const prompts: DeliveryPrompts<Bump> = {
 
 ### The workflow
 
-A delivery is a plain object you build once and pass to every routine: the
-work, a `key`, the worktree, the prompts, and the agent sessions. Name the
-sessions yourself. The `key` scopes the hidden markers on the notes jigs posts
-for this work, so each delivery in a run needs its own; a second delivery with
-a key already used in the run throws. A `writer` session describes the pull
-request; without one, the builder does.
+A delivery is a plain object you pass to every routine: the work, a `key`, the
+worktree, the prompts, and the agent sessions. Create separate session objects
+for each delivery: a session holds its agent's conversation, and its name only
+labels log lines. The `key` scopes the hidden markers on the notes posted for
+this work; in a run, a key already used for another worktree throws. A `writer`
+session describes the pull request; without one, the builder does.
 
 This workflow upgrades a dependency in every repository it is given, one
 delivery per repository, each merged before the next starts:
@@ -355,8 +367,8 @@ export default defineWorkflow({
 ```
 
 To deliver to every repository at once instead, map the bindings to the same
-steps and `await Promise.all(...)`; keys and session names already differ per
-repository. A delivery's next step can also depend on an earlier one's result,
+steps and `await Promise.all(...)`; each repository already gets its own key and
+sessions. A delivery's next step can also depend on an earlier one's result,
 such as opening a pull request in a client only after the library merged. Each
 agent step acts in one GitHub owner, so give each repository its own delivery.
 

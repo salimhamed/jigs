@@ -12,8 +12,9 @@ factory's steps in the generated `jigs/routines.ts`:
 - `buildAndReview(delivery, { rounds })` returns the reviewed commit, or a stop
   as a value: `rounds-exhausted`, `uncommitted` or `no-commits`, after pushing
   the branch when it can.
-- `publishPullRequest(delivery, { commit, body? })` describes the diff, pushes
-  exactly `commit`, opens the pull request and records it. It needs no review.
+- `publishPullRequest(delivery, { commit, pullRequest? })` describes the diff,
+  lets the caller reshape the title and body or open a draft, pushes exactly
+  `commit`, opens the pull request and records it. It needs no review.
 - `followPullRequestToOutcome(delivery, pr, options)` returns `"merged"` or
   `"closed"`.
 
@@ -27,23 +28,27 @@ The engine is closed and the workflow extends it:
   required arguments. Needs-human and a blocked merge are callbacks carrying
   facts, with local paths scrubbed; the workflow words every note and picks its
   destination.
-- **Sessions are the caller's.** The workflow creates and names the builder,
-  reviewer and optional writer sessions, so deliveries never collide.
+- **Sessions are the caller's.** The workflow creates the builder, reviewer
+  and optional writer sessions. Separate session objects keep deliveries'
+  conversations apart; a session's name only labels its log lines.
 - **`work` is opaque.** Only the caller's prompts read it.
 
 The mechanics stay inside: the wake rules, recovery of unpublished work, the
 head-lag rechecks, merging only published work, ten merge tries 30 seconds
-apart, needs-human dedupe, and `blocking` deciding a review.
+apart, needs-human dedupe, one blocked-merge callback per head, and `blocking`
+deciding a review.
 
 ## Delivery keys
 
-A delivery's `key` scopes its pull request markers, so two deliveries in one
-run with one key would read each other's notes as their own. Each routine
-records the delivery object under its run and key in a module-level map, and
-throws when a different object arrives with a key already held. The Workflow
-SDK evaluates the bundle afresh for every activation and runs the workflow
-once in it, so the map holds exactly the deliveries the current activation has
-built and is rebuilt identically on replay. It records nothing durable.
+A delivery's `key` scopes the markers on its pull request notes. Markers live
+on one pull request, so keys collide only when two deliveries share a pull
+request, which means they share a worktree's branch. Each routine records the
+worktree path under the run and key in a module-level map, and throws when the
+same key arrives with a different worktree. Copies of one delivery, such as
+`{ ...delivery, writer }`, pass. The Workflow SDK evaluates the bundle once per
+run session and runs the workflow once in it, so the map holds only that
+session's keys and is rebuilt identically on replay. It records nothing
+durable.
 
 ## Consequences
 

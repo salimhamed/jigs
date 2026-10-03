@@ -13,6 +13,7 @@ import type {
   ApprovalState,
   AskAgentOptions,
   AskModelOptions,
+  BuildAndReviewOptions,
   BuildFacts,
   BuildStopped,
   Built,
@@ -30,6 +31,7 @@ import type {
   DeliveryPrompts,
   FileChange,
   FindingResponse,
+  FollowOptions,
   Halt,
   HaltOption,
   HaltQuestion,
@@ -54,6 +56,7 @@ import type {
   PiMcpHttpServerConfig,
   PiMcpServerConfig,
   PiMcpStdioServerConfig,
+  PublishOptions,
   PullRequestApproval,
   PullRequestMarker,
   PullRequestReadOptions,
@@ -104,6 +107,7 @@ type RootTypeSurface = {
   agentSessionRef: AgentSessionRef;
   askAgentOptions: AskAgentOptions;
   askModelOptions: AskModelOptions;
+  buildAndReviewOptions: BuildAndReviewOptions;
   buildFacts: BuildFacts<unknown>;
   buildStopped: BuildStopped;
   built: Built;
@@ -122,6 +126,7 @@ type RootTypeSurface = {
   delivery: Delivery<unknown>;
   deliveryPrompts: DeliveryPrompts<unknown>;
   fileChange: FileChange;
+  followOptions: FollowOptions;
   findingResponse: FindingResponse;
   halt: Halt;
   haltOption: HaltOption;
@@ -144,6 +149,7 @@ type RootTypeSurface = {
   modelSource: ModelSource;
   needsHuman: NeedsHuman;
   outputJsonSchema: OutputJsonSchema;
+  publishOptions: PublishOptions;
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;
   piMcpStdioServer: PiMcpStdioServerConfig;

@@ -174,7 +174,7 @@ For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workfl
 `workflows/linear-ticket-to-pr/` holds the workflow file and `prompts.ts`. The workflow calls
 three routines from `#jigs/routines` in order: `buildAndReview`, `publishPullRequest` and
 `followPullRequestToOutcome`. They take a delivery, a plain object the workflow builds once:
-the work, a unique `key`, the worktree, the prompts and the agent sessions it names itself. The
+the work, a `key`, the worktree, the prompts and the agent sessions it creates itself. The
 routines return stops as values and report needs-human and blocked merges through callbacks
 with facts; the workflow writes every note and decides where it goes. To change a prompt, edit
 its function in `prompts.ts`; jigs adds only the line asking for each answer's shape. Read

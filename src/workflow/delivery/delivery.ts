@@ -12,13 +12,13 @@ import type { FindingResponse, ReviewFinding, ReviewRound } from "./answers.ts";
 
 /**
  * One piece of work taken to a pull request: what to build, where, and the agents that build,
- * review and describe it. Build it once and pass the same object to every delivery routine.
+ * review and describe it.
  *
  * @remarks
  * `work` is yours: only your prompts read it. `key` names the work in the hidden markers on pull
- * request notes; two deliveries in one run need two keys. Name each agent session yourself, so
- * several deliveries in one run keep their sessions apart. `writer` describes the pull request and
- * defaults to `builder`.
+ * request notes; within a run, one key belongs to one worktree. Give each delivery its own agent
+ * session objects: a session holds its agent's conversation, and its name only labels log lines.
+ * `writer` describes the pull request and defaults to `builder`.
  *
  * @group Pull request delivery
  */
@@ -125,25 +125,25 @@ export interface DeliverySteps {
   mergePullRequest: typeof mergePullRequest;
 }
 
-// The Workflow SDK evaluates the bundle afresh for every activation and runs
-// the workflow once in it, so this map only ever holds the deliveries of the
-// activation running now, rebuilt the same way on every replay.
-const deliveries = new Map<string, object>();
+// The Workflow SDK evaluates the bundle once per run session and runs the
+// workflow once in it, so this map only holds the current session's keys,
+// rebuilt the same way on every replay.
+const worktrees = new Map<string, string>();
 
-/** Throws when another delivery in this run already uses this delivery's key. */
+/** Throws when this run already used the delivery's key for another worktree. */
 export function claimKey<W>(delivery: Delivery<W>): void {
   const id = `${getWorkflowMetadata().workflowRunId}\n${delivery.key}`;
-  const holder = deliveries.get(id);
-  if (holder === undefined) deliveries.set(id, delivery);
-  else if (holder !== delivery) {
+  const path = worktrees.get(id);
+  if (path === undefined) worktrees.set(id, delivery.worktree.path);
+  else if (path !== delivery.worktree.path) {
     throw new JigsError(
-      `two deliveries in this run use the key "${delivery.key}"`,
-      "give each delivery its own key, and pass the same delivery object to each routine",
+      `the key "${delivery.key}" is already used by a delivery in another worktree in this run`,
+      "give each delivery its own key",
     );
   }
 }
 
-// Facts that can end up posted, on a ticket or a pull request, can quote agent
+// Facts that can end up posted anywhere can quote agent
 // text, so the worktree path is replaced in them; `jigs status` shows it to the
 // operator. Raw git and library errors are never put in them, as they can name
 // other local paths.

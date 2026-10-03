@@ -1,5 +1,6 @@
 import { sleep } from "workflow";
 import { JigsError } from "../errors.ts";
+import type { BranchState } from "../git/committed-work.ts";
 import { blockedMergeNote, isPullRequestMergeReady } from "../pull-requests/merge-ready.ts";
 import type { ApprovalCoverage } from "../pull-requests/policy.ts";
 import type { PullRequestRef } from "../pull-requests/pull-request.ts";
@@ -23,8 +24,8 @@ import { builderWakeFacts } from "./wake.ts";
  * - `builder-asked`: the builder returned needs-human; `detail` is its summary.
  * - `attempts-exhausted`: the builder's attempts for one pull request update ran out with local
  *   work still unpublished; `detail` is its last summary.
- * - `merge-refused`: GitHub refused the merge, or a transient refusal outlasted the retries;
- *   `detail` is the refusal.
+ * - `merge-refused`: GitHub refused the merge; `detail` is the last refusal and `tries` how
+ *   often jigs tried. A transient refusal is retried up to ten times before it is reported.
  *
  * `unpublished` is set when local work the pull request has never had holds back the merge.
  * The local worktree path never appears in `detail`.
@@ -34,19 +35,18 @@ import { builderWakeFacts } from "./wake.ts";
 export interface NeedsHuman {
   reason: "builder-asked" | "attempts-exhausted" | "merge-refused";
   detail: string;
-  pr: PullRequestRef;
   unpublished?: UnpublishedWork | undefined;
+  tries?: number | undefined;
 }
 
 /**
  * An approved, green pull request that GitHub still blocks from merging, usually because of a
- * branch rule. `detail` says so in a sentence. A note posted about it should carry `scope` and
- * `headSha` in its marker, so the builder is not woken by it and it is posted once per head.
+ * branch rule. `detail` says so in a sentence. Mark a note posted about it with `scope` and
+ * `headSha`, so it does not wake the builder and a later run does not post it again.
  *
  * @group Pull request delivery
  */
 export interface MergeBlocked {
-  pr: PullRequestRef;
   headSha: string;
   scope: string;
   detail: string;
@@ -69,24 +69,25 @@ export interface FollowOptions {
    * request picks the work back up. The same facts are never sent twice in a row.
    */
   onNeedsHuman: (facts: NeedsHuman) => Promise<void>;
-  /** Called on every read of an approved, green pull request GitHub blocks. */
+  /** Called once per head of an approved, green pull request GitHub blocks. */
   onMergeBlocked?: ((facts: MergeBlocked) => Promise<void>) | undefined;
 }
 
 const MERGE_TRIES = 10;
 
-type LocalState = { dirty: boolean; headSha: string };
-
-/** What one pull request's maintenance remembers between watcher yields. */
-interface Following<W> extends FollowOptions {
+/** One pull request's maintenance: its inputs, and what it remembers between watcher yields. */
+interface Following<W> {
   delivery: Delivery<W>;
-  steps: DeliverySteps;
   pr: PullRequestRef;
+  options: FollowOptions;
+  steps: DeliverySteps;
   scope: string;
   /** Wake facts the builder has already been shown. */
   seen: Set<string>;
   /** Every head the pull request has had, as read from GitHub. */
   prHeads: Set<string>;
+  /** Heads already reported to `onMergeBlocked`. */
+  blockedHeads: Set<string>;
   lastNeed?: string;
   /** Unpublished local state recovery gave up on; only a change to it wakes the builder again. */
   heldLocal?: string | undefined;
@@ -100,7 +101,9 @@ interface Following<W> extends FollowOptions {
  * a newly failing check and a conflict with the base. Checks that queue, run or pass, a bare
  * approval, the App bot's unmarked comments (the builder's own replies) and notes marked with
  * this delivery's scope wake nothing. Local work the pull request has never had is recovered at
- * once, and holds back a merge until it is published.
+ * once, and holds back a merge until it is published: the worktree is clean and its HEAD is a
+ * commit the pull request has had. After a builder turn whose push GitHub does not show yet, the
+ * pull request is read again twice, 2 seconds apart, without spending an attempt.
  *
  * With `mergedBy: "jigs"`, an approved, green, clean pull request is merged after every read
  * and builder turn, whatever the builder reported; a transient refusal is retried up to ten
@@ -117,22 +120,27 @@ export async function followPullRequestToOutcome<W>(
 ): Promise<"merged" | "closed"> {
   claimKey(delivery);
   const following: Following<W> = {
-    ...options,
     delivery,
-    steps,
     pr,
+    options,
+    steps,
     scope: defaultPullRequestScope(delivery.key),
     seen: new Set(),
     prHeads: new Set(),
+    blockedHeads: new Set(),
   };
-  const read = { approvalCovers: options.approvalCovers };
-  for await (const snapshot of watchPullRequest(pr, steps.fetchPullRequestState, read)) {
-    let current = observe(following, snapshot);
+  const { approvalCovers } = options;
+  for await (const snapshot of watchPullRequest(pr, steps.fetchPullRequestState, {
+    approvalCovers,
+  })) {
+    following.prHeads.add(snapshot.headSha);
+    let current = snapshot;
     if (current.state === "open") {
       const local = await steps.readBranchState(delivery.worktree);
-      const recover = !isPublished(following, local) && following.heldLocal !== localKey(local);
+      const work = unpublished(following, local, current);
+      const recover = work !== undefined && following.heldLocal !== heldKey(work);
       if (recover || hasUnseenFacts(following, current)) {
-        current = await maintain(following, current, local);
+        current = await maintain(following, current, work);
         // A newly pushed head is merged only from its own watcher yield.
         if (current.state === "open" && current.headSha !== snapshot.headSha) continue;
       }
@@ -148,7 +156,11 @@ export async function followPullRequestToOutcome<W>(
   );
 }
 
-function observe<W>(following: Following<W>, snapshot: PullRequestSnapshot) {
+async function read<W>(following: Following<W>): Promise<PullRequestSnapshot> {
+  const { pr, steps, options } = following;
+  const snapshot = await steps.fetchPullRequestState(pr, {
+    approvalCovers: options.approvalCovers,
+  });
   following.prHeads.add(snapshot.headSha);
   return snapshot;
 }
@@ -157,49 +169,23 @@ const hasUnseenFacts = <W>(following: Following<W>, snapshot: PullRequestSnapsho
   builderWakeFacts(snapshot, following.scope).some((fact) => !following.seen.has(fact));
 
 // Local work behind the PR is fine (a person pushed); work the PR never had is not.
-const isPublished = <W>(following: Following<W>, local: LocalState) =>
-  !local.dirty && following.prHeads.has(local.headSha);
-
-const localKey = (local: LocalState) => `${local.dirty}:${local.headSha}`;
-
-const unpublished = (local: LocalState, current: PullRequestSnapshot): UnpublishedWork => ({
-  dirty: local.dirty,
-  localHead: local.headSha,
-  pullRequestHead: current.headSha,
-});
-
-// Remembers local work that holds back the merge, and returns it.
-function holdUnpublished<W>(
+function unpublished<W>(
   following: Following<W>,
-  local: LocalState,
+  local: BranchState,
   current: PullRequestSnapshot,
 ): UnpublishedWork | undefined {
-  const held = !isPublished(following, local);
-  following.heldLocal = held ? localKey(local) : undefined;
-  return held ? unpublished(local, current) : undefined;
+  if (!local.dirty && following.prHeads.has(local.headSha)) return undefined;
+  return { dirty: local.dirty, localHead: local.headSha, pullRequestHead: current.headSha };
 }
 
-async function needsHuman<W>(
-  following: Following<W>,
-  reason: "builder-asked" | "attempts-exhausted" | "merge-refused",
-  detail: string,
-  held?: UnpublishedWork,
-) {
-  const facts: NeedsHuman = {
-    reason,
-    detail: withoutLocalPath(following.delivery.worktree, detail),
-    pr: following.pr,
-    ...(held === undefined ? {} : { unpublished: held }),
-  };
-  const key = JSON.stringify([facts.reason, facts.detail, facts.unpublished]);
+const heldKey = (work: UnpublishedWork) => `${work.dirty}:${work.localHead}`;
+
+async function needsHuman<W>(following: Following<W>, facts: NeedsHuman) {
+  const posted = { ...facts, detail: withoutLocalPath(following.delivery.worktree, facts.detail) };
+  const key = JSON.stringify(posted);
   if (key === following.lastNeed) return;
   following.lastNeed = key;
-  await following.onNeedsHuman(facts);
-}
-
-async function readAfterTurn<W>(following: Following<W>): Promise<PullRequestSnapshot> {
-  const { pr, steps, approvalCovers } = following;
-  return observe(following, await steps.fetchPullRequestState(pr, { approvalCovers }));
+  await following.options.onNeedsHuman(posted);
 }
 
 // Builder turns for one update, until local work is published or the attempts
@@ -207,15 +193,15 @@ async function readAfterTurn<W>(following: Following<W>): Promise<PullRequestSna
 async function maintain<W>(
   following: Following<W>,
   snapshot: PullRequestSnapshot,
-  before: LocalState,
+  before: UnpublishedWork | undefined,
 ): Promise<PullRequestSnapshot> {
-  const { delivery, pr, steps, attemptsPerUpdate } = following;
+  const { delivery, pr, steps } = following;
   const { work, worktree, prompts } = delivery;
   let assessed = snapshot;
   let current = snapshot;
-  let recovery = isPublished(following, before) ? undefined : unpublished(before, snapshot);
+  let recovery = before;
   let summary = "";
-  for (let attempt = 1; attempt <= attemptsPerUpdate; attempt++) {
+  for (let attempt = 1; attempt <= following.options.attemptsPerUpdate; attempt++) {
     const facts = { pr, snapshot: assessed, recovery };
     const report = await delivery.builder.run({
       output: maintenanceReport,
@@ -235,11 +221,16 @@ async function maintain<W>(
     // Remember only what the builder saw, never a newer post-turn read.
     for (const fact of builderWakeFacts(assessed, following.scope)) following.seen.add(fact);
     let local = await steps.readBranchState(worktree);
-    current = await readAfterTurn(following);
+    current = await read(following);
     if (current.state === "closed") return current;
     if (report.status === "needs-human") {
-      const held = holdUnpublished(following, local, current);
-      await needsHuman(following, "builder-asked", report.summary, held);
+      const held = unpublished(following, local, current);
+      following.heldLocal = held && heldKey(held);
+      await needsHuman(following, {
+        reason: "builder-asked",
+        detail: report.summary,
+        unpublished: held,
+      });
       return current;
     }
 
@@ -247,37 +238,42 @@ async function maintain<W>(
     // These two durable waits do not consume another builder attempt.
     for (
       let recheck = 0;
-      !local.dirty && !isPublished(following, local) && recheck < 2;
+      !local.dirty && unpublished(following, local, current) !== undefined && recheck < 2;
       recheck++
     ) {
       await sleep("2s");
-      current = await readAfterTurn(following);
+      current = await read(following);
       local = await steps.readBranchState(worktree);
       if (current.state === "closed") return current;
     }
 
-    const held = holdUnpublished(following, local, current);
+    const held = unpublished(following, local, current);
+    following.heldLocal = held && heldKey(held);
     if (held === undefined) return current;
     recovery = held;
     // Recovery is local work, not an external event: retry without waiting
     // for a new watcher yield, even if GitHub has not changed at all.
     assessed = current;
   }
-  await needsHuman(following, "attempts-exhausted", summary, recovery);
+  await needsHuman(following, {
+    reason: "attempts-exhausted",
+    detail: summary,
+    unpublished: recovery,
+  });
   return current;
 }
 
 // Readiness is GitHub's to decide, not the builder's: an approved, green,
 // clean head merges whatever the builder last reported.
 async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSnapshot) {
-  const { delivery, pr, steps, approvalCovers } = following;
-  if (following.mergedBy !== "jigs") return false;
+  const { delivery, pr, steps, options } = following;
+  if (options.mergedBy !== "jigs") return false;
   let current = snapshot;
   let reason = "";
   for (let attempt = 1; attempt <= MERGE_TRIES; attempt++) {
     if (attempt > 1) {
       await sleep("30s");
-      current = await readAfterTurn(following);
+      current = await read(following);
     }
     if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
     if (!isPullRequestMergeReady(current)) {
@@ -287,9 +283,12 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
       if (attempt > 1) continue;
       return false;
     }
-    if (!isPublished(following, await steps.readBranchState(delivery.worktree))) return false;
+    const local = await steps.readBranchState(delivery.worktree);
+    if (unpublished(following, local, current) !== undefined) return false;
     const result = await steps
-      .mergePullRequest(delivery.worktree, pr, current.headSha, { approvalCovers })
+      .mergePullRequest(delivery.worktree, pr, current.headSha, {
+        approvalCovers: options.approvalCovers,
+      })
       .catch((error: unknown) => ({
         merged: false as const,
         reason: String(error),
@@ -297,22 +296,24 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
       }));
     if (result.merged) return true;
     if (!result.transient) {
-      await needsHuman(following, "merge-refused", result.reason);
+      await needsHuman(following, {
+        reason: "merge-refused",
+        detail: result.reason,
+        tries: attempt,
+      });
       return false;
     }
     reason = result.reason;
   }
-  await needsHuman(following, "merge-refused", reason);
+  await needsHuman(following, { reason: "merge-refused", detail: reason, tries: MERGE_TRIES });
   return false;
 }
 
 async function reportBlocked<W>(following: Following<W>, snapshot: PullRequestSnapshot) {
+  const { onMergeBlocked } = following.options;
   const detail = blockedMergeNote(snapshot);
-  if (detail === null || following.onMergeBlocked === undefined) return;
-  await following.onMergeBlocked({
-    pr: following.pr,
-    headSha: snapshot.headSha,
-    scope: following.scope,
-    detail,
-  });
+  if (detail === null || onMergeBlocked === undefined) return;
+  if (following.blockedHeads.has(snapshot.headSha)) return;
+  following.blockedHeads.add(snapshot.headSha);
+  await onMergeBlocked({ headSha: snapshot.headSha, scope: following.scope, detail });
 }

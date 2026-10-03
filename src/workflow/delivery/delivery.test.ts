@@ -287,13 +287,17 @@ test("a stopped delivery never puts the local worktree path in its findings", as
   expect(JSON.stringify(built)).not.toContain("/data/clones");
 });
 
-test("publish pushes exactly the given commit and builds the body from the description", async () => {
+test("publish pushes exactly the given commit and opens the pull request the caller shapes", async () => {
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
   steps.openPullRequest.mockResolvedValue(pr);
 
   const opened = await publishPullRequest(delivery, {
     commit: "h1",
-    body: (description) => `${description}\n\n## Reviewer notes\n\n- Rename x`,
+    pullRequest: ({ title, body }) => ({
+      title: `feat: ${title.toLowerCase()}`,
+      body: `${body}\n\n## Reviewer notes\n\n- Rename x`,
+      draft: true,
+    }),
   });
 
   expect(opened).toBe(pr);
@@ -302,8 +306,9 @@ test("publish pushes exactly the given commit and builds the body from the descr
   expect(calls[0]?.prompt).toContain("DESCRIBE THE TASK BRIEF\ndiff --git a/x b/x");
   expect(steps.openPullRequest).toHaveBeenCalledWith({
     worktree,
-    title: "Add a flag",
+    title: "feat: add a flag",
     body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
+    draft: true,
   });
   expect(steps.registerResource).toHaveBeenCalledWith(
     expect.objectContaining({ kind: "pull-request", identity: "acme/app#7" }),
@@ -523,7 +528,7 @@ test("needs-human calls back with the builder's summary and keeps watching; a la
   await follow();
   expect(calls).toHaveLength(1);
   expect(notes()).toEqual([
-    { reason: "builder-asked", detail: "The CodeBuild check needs a re-run.", pr },
+    { reason: "builder-asked", detail: "The CodeBuild check needs a re-run." },
   ]);
   expect(steps.mergePullRequest).toHaveBeenCalledOnce();
 });
@@ -592,7 +597,7 @@ test("an approved green PR GitHub blocks is reported with its scope; a marked no
     yield blocked();
     yield closed;
   });
-  const onMergeBlocked = vi.fn(async ({ pr, headSha, scope, detail }) =>
+  const onMergeBlocked = vi.fn(async ({ headSha, scope, detail }) =>
     postPullRequestNote({
       pr,
       scope,
@@ -608,12 +613,15 @@ test("an approved green PR GitHub blocks is reported with its scope; a marked no
 
   expect(calls).toHaveLength(0);
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
-  expect(onMergeBlocked).toHaveBeenCalledWith({
-    pr,
-    headSha: "h1",
-    scope: "linearTicketToPr/ABC-1",
-    detail: expect.stringMatching(/approved and CI is green.*keeps watching/s),
-  });
+  expect(onMergeBlocked.mock.calls).toEqual(
+    ["h1", "h2"].map((headSha) => [
+      {
+        headSha,
+        scope: "linearTicketToPr/ABC-1",
+        detail: expect.stringMatching(/approved and CI is green.*keeps watching/s),
+      },
+    ]),
+  );
   expect(posted).toHaveLength(2);
   expect(posted.flatMap(parseMarkers)).toEqual(
     ["h1", "h2"].map((source) =>
@@ -707,7 +715,7 @@ test("merge retries give up after ten tries with one call back, then watching go
   await follow();
   expect(steps.mergePullRequest).toHaveBeenCalledTimes(10);
   expect(sleep).toHaveBeenCalledTimes(9);
-  expect(notes()).toEqual([{ reason: "merge-refused", detail: "Error: GitHub 502", pr }]);
+  expect(notes()).toEqual([{ reason: "merge-refused", detail: "Error: GitHub 502", tries: 10 }]);
 });
 
 test("a merge refused for a reason no wake changes is reported once", async () => {
@@ -721,7 +729,7 @@ test("a merge refused for a reason no wake changes is reported once", async () =
   await follow();
   expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
   expect(sleep).not.toHaveBeenCalled();
-  expect(notes()).toEqual([{ reason: "merge-refused", detail: "merge method disabled", pr }]);
+  expect(notes()).toEqual([{ reason: "merge-refused", detail: "merge method disabled", tries: 1 }]);
 });
 
 test("the same needs-human facts are not sent twice in a row", async () => {
@@ -782,7 +790,6 @@ test("local commits that never reached the PR still hold back a merge after a pe
     {
       reason: "attempts-exhausted",
       detail: finished.summary,
-      pr,
       unpublished: { dirty: false, localHead: "h2", pullRequestHead: "h1" },
     },
   ]);
@@ -970,7 +977,6 @@ test.each(["dirty", "unpublished"])(
       {
         reason: "attempts-exhausted",
         detail: finished.summary,
-        pr,
         unpublished: { dirty: head.dirty, localHead: head.headSha, pullRequestHead: "h1" },
       },
     ]);
@@ -1115,7 +1121,7 @@ test("needs-human facts never carry the local worktree path", async () => {
   answer(maintenanceReport, { status: "needs-human", summary: "Look at /tmp/wt/src/x.ts." });
   await follow();
   expect(notes()).toEqual([
-    { reason: "builder-asked", detail: "Look at the run's worktree/src/x.ts.", pr },
+    { reason: "builder-asked", detail: "Look at the run's worktree/src/x.ts." },
   ]);
 });
 
@@ -1189,22 +1195,33 @@ test("two deliveries in one run, with their own keys, each go from build to merg
   ]);
 });
 
-test("a second delivery with a key already used in this run throws", async () => {
+test("a key already used in this run for another worktree throws", async () => {
   answer(implementationReport, { responses: [] });
   answer(reviewVerdict, { verdict: "approved", findings: [] });
   await build();
 
-  const again = deliveryOf("ABC-1");
-  await expect(buildAndReview(again, { rounds: 1 })).rejects.toThrow(
-    'two deliveries in this run use the key "ABC-1"',
+  const elsewhere = deliveryOf("ABC-1", { ...worktree, path: "/tmp/other" });
+  await expect(buildAndReview(elsewhere, { rounds: 1 })).rejects.toThrow(
+    'the key "ABC-1" is already used by a delivery in another worktree in this run',
   );
-  await expect(publishPullRequest(again, { commit: "h1" })).rejects.toBeInstanceOf(JigsError);
+  await expect(publishPullRequest(elsewhere, { commit: "h1" })).rejects.toBeInstanceOf(JigsError);
   expect(calls).toHaveLength(2);
 
   metadata.workflowRunId = "wrun_OTHER";
   answer(implementationReport, { responses: [] });
   answer(reviewVerdict, { verdict: "approved", findings: [] });
-  await expect(buildAndReview(again, { rounds: 1 })).resolves.toMatchObject({
+  await expect(buildAndReview(elsewhere, { rounds: 1 })).resolves.toMatchObject({
     reviewedCommit: "h1",
   });
+});
+
+test("a copy of a delivery, such as one with a writer added, keeps its key", async () => {
+  answer(implementationReport, { responses: [] });
+  answer(reviewVerdict, { verdict: "approved", findings: [] });
+  answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
+  steps.openPullRequest.mockResolvedValue(pr);
+  await build();
+
+  const writer = agentSession({ name: "writer", harness: reviewerHarness, cwd: worktree.path });
+  await expect(publishPullRequest({ ...delivery, writer }, { commit: "h1" })).resolves.toBe(pr);
 });
