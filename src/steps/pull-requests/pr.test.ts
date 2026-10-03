@@ -35,7 +35,10 @@ vi.mock("../../providers/github.ts", () => ({
   mergePr: vi.fn(),
   postPullRequestReview: vi.fn(),
 }));
-vi.mock("../../providers/github-auth.ts", () => ({ resolveGithubIdentity: vi.fn() }));
+vi.mock("../../providers/github-auth.ts", () => ({
+  resolveGithubIdentity: vi.fn(),
+  githubAuthFor: () => ({ identity: { mode: "pat" }, bearer: async () => "token" }),
+}));
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const repo = { owner: "owner", repo: "repo" };
@@ -422,8 +425,12 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
     mergeCommitSha: "merged",
   });
 
-  // The builder acts as the operator, so the operator's approval cannot carry forward.
+  // Agents act as the App's bot, so the operator's approval counts and a bot's never does.
   vi.mocked(fetchPrSnapshot).mockResolvedValue(approvedEarlier("salimhamed"));
+  expect(
+    await mergePullRequest(worktree, pr, "head", { approvalCovers: "any-commit" }),
+  ).toMatchObject({ merged: true });
+  vi.mocked(fetchPrSnapshot).mockResolvedValue(approvedEarlier("jigs-dev[bot]"));
   expect(
     await mergePullRequest(worktree, pr, "head", { approvalCovers: "any-commit" }),
   ).toMatchObject({ merged: false, reason: "no approving review yet" });

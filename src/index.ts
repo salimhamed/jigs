@@ -15,7 +15,9 @@
  */
 
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
+export { type GithubMcpOptions, githubMcp } from "./workflow/agents/github-mcp.ts";
 export {
+  type AgentGithub,
   type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,

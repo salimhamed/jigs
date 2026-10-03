@@ -85,7 +85,7 @@ export const maintenance = {
   job: join([
     "Continue maintaining the pull request you implemented.",
     "Read the discussion, code, and checks and decide what needs attention; a new message may need no action, including your own replies.",
-    "Use GitHub tools to investigate and respond directly when useful.",
+    "You act on GitHub as the factory's App bot (appBot in the GitHub facts): `gh` is signed in as it and your pushes go as it. Use `gh` to investigate and respond directly when useful. Comments by the bot without a hidden jigs marker are your own earlier replies.",
     "Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push.",
     "Fix issues, run relevant checks, commit and push any changes. Uncommitted or unpublished work needs recovery now, not waiting for GitHub activity.",
     "Do not merge or approve the PR yourself: the workflow decides who merges.",
@@ -95,7 +95,7 @@ export const maintenance = {
     "You are woken again on the next change to the pull request that needs you: new discussion, a newly failed check, or a conflict with the base branch. Checks that queue, run or pass do not wake you, and the workflow merges an approved, green pull request without you.",
     'ci "none" means no check has reported on the head: CI may not have started yet, or the repository has none. Do not wait for it.',
     "Explain the result in summary. Do not repeat a reply or change already made. When everything is settled, post nothing.",
-    "Return needs-human if GitHub tools or credentials are unavailable; do not claim completion.",
+    "Return needs-human if `gh` or pushing to GitHub does not work; do not claim completion.",
   ]),
   resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot, recovery?: string) =>
     join([

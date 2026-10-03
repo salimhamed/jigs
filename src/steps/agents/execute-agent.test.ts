@@ -171,6 +171,7 @@ function makeDeps(
       return driverFor(kind);
     }) as DriverResolver,
     factoryEnv: () => [],
+    githubEnv: async () => ({}),
     // The probe itself is covered in ./jit-marker.test.ts, against a server
     // that really cannot start.
     jitFailures: async () => undefined,
@@ -1558,6 +1559,53 @@ test("the JIT checks and the harness get the same environment, built from the ba
   expect(names).toEqual(expect.arrayContaining(["PATH", "DRIVER_VAR", "FACTORY_VAR"]));
   expect(names).not.toContain("SYNTHETIC_DATABASE_URL");
   expect(names).not.toContain("SYNTHETIC_PRIVATE_KEY");
+});
+
+test("only an agent whose harness sets github gets its GitHub environment, and its JIT checks see it", async () => {
+  vi.stubEnv("GH_TOKEN", "operator-token");
+  const envs: Record<string, string>[] = [];
+  const jitEnvs: Record<string, string>[] = [];
+  const driver = {
+    ...createClaudeDriver(),
+    requestChecks: () => [],
+    open: async (_target: unknown, context: { env: Record<string, string> }) => {
+      envs.push(context.env);
+      return { model: new MockLanguageModelV4(), close: async () => {} };
+    },
+  };
+  const deps: ExecutionSeams = {
+    ...executionSeams,
+    runStatus: runningRunStatus,
+    streamText: () => streamOf({ text: "done" }),
+    resolveDriver: (() => driver) as unknown as DriverResolver,
+    factoryEnv: () => [],
+    githubEnv: async ({ harness }): Promise<Record<string, string>> =>
+      harness.github === undefined ? {} : { GH_TOKEN: "ghs_bot", GIT_AUTHOR_NAME: "jigs[bot]" },
+    jitFailures: async (_wire, env) => {
+      jitEnvs.push(env);
+      return undefined;
+    },
+  };
+  const run = (github?: true) =>
+    agentStep(
+      buildAgentRequest({
+        harness: harnesses.claude({ model: "sonnet", ...(github ? { github } : {}) }),
+        cwd: worktree,
+        prompt: "p",
+      }),
+      { workflowRunId: "run-github" },
+      deps,
+    );
+  try {
+    await run(true);
+    await run();
+  } finally {
+    vi.unstubAllEnvs();
+  }
+  expect(envs[0]).toMatchObject({ GH_TOKEN: "ghs_bot", GIT_AUTHOR_NAME: "jigs[bot]" });
+  expect(jitEnvs[0]).toBe(envs[0]);
+  expect(envs[1]).not.toHaveProperty("GH_TOKEN");
+  expect(envs[1]).not.toHaveProperty("GIT_AUTHOR_NAME");
 });
 
 type ModelStreamPart =

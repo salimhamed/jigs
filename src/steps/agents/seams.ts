@@ -22,6 +22,7 @@ import {
   type HarnessTarget,
 } from "./drivers/index.ts";
 import { factoryAgentEnv } from "./harnesses/env.ts";
+import { agentGithubEnv } from "./harnesses/github-access.ts";
 import { type RunStatusReader, worldRunStatus } from "./run-cancellation.ts";
 import { openStepStream, type StepStream } from "./step-stream.ts";
 
@@ -46,6 +47,8 @@ export interface ExecutionSeams extends DriverDependencies {
   resolveDriver: DriverResolver;
   /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
   factoryEnv(): readonly string[];
+  /** What a harness that sets `github` adds to its agent's environment. */
+  githubEnv(target: HarnessTarget): Promise<Record<string, string>>;
   jitFailures(
     target: HarnessTarget,
     env: Record<string, string>,
@@ -62,6 +65,7 @@ export const executionSeams: ExecutionSeams = {
   evaluate: (options) => experimental_evaluate(options),
   resolveDriver: driverFor,
   factoryEnv: factoryAgentEnv,
+  githubEnv: agentGithubEnv,
   jitFailures: async (target, env) => {
     const report = await runChecks(jitChecks(target, env), JIT_TIMEOUT_MS);
     return report.ok ? undefined : failedChecks(report);

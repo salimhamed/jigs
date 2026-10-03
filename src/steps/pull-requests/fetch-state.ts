@@ -5,7 +5,7 @@ import {
   type PullRequestRef,
   type PullRequestSnapshot,
 } from "../../providers/github.ts";
-import { resolveGithubIdentity } from "../../providers/github-auth.ts";
+import { appBotFor, githubAuthFor } from "../../providers/github-auth.ts";
 import { approvalState } from "../../workflow/pull-requests/merge-ready.ts";
 import type {
   FetchPrState,
@@ -22,14 +22,13 @@ export async function readPullRequestSnapshot(
 ): Promise<PullRequestSnapshot> {
   const facts = await fetchPrSnapshot(pr);
   const signal = readFactoryConfig(factoryRoot()).github.mergeApproval;
-  // The builder acts with the operator's own token, so its approvals carry the
-  // operator's login. A PAT factory cannot approve by review at all.
-  const identity = approvalCovers === "any-commit" ? resolveGithubIdentity(pr.owner) : undefined;
-  const state = approvalState(facts, signal, {
-    covers: approvalCovers,
-    ...(identity?.mode === "app" ? { builder: identity.operator } : {}),
-  });
-  return { ...facts, approval: { signal, state } };
+  const state = approvalState(facts, signal, { covers: approvalCovers });
+  const auth = githubAuthFor(pr.owner);
+  const appBot =
+    auth.identity.mode === "app"
+      ? (await appBotFor(auth.identity, () => auth.bearer())).login
+      : undefined;
+  return { ...facts, ...(appBot === undefined ? {} : { appBot }), approval: { signal, state } };
 }
 
 /**

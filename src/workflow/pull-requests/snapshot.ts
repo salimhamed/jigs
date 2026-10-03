@@ -102,6 +102,11 @@ export interface PullRequestSnapshot {
   failingChecks: CheckRun[];
   /** The operator's consent, read the way this factory's `github.mergeApproval` asks for it. */
   approval: PullRequestApproval;
+  /**
+   * The login of the factory's GitHub App, `<slug>[bot]`: the account jigs posts as, and so do
+   * agents whose harness sets `github`. Absent with a personal access token.
+   */
+  appBot?: string;
 }
 
 /**

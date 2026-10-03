@@ -113,14 +113,25 @@ export function scrubCredentials(text: string): string {
 
 // git reads `GIT_CONFIG_KEY_n`/`VALUE_n` as if they were `-c` settings, but
 // without putting them where another process can read them.
+export function gitConfigEnv(
+  settings: readonly (readonly [string, string])[],
+): Record<string, string> {
+  const env: Record<string, string> = { GIT_CONFIG_COUNT: String(settings.length) };
+  for (const [index, [key, value]] of settings.entries()) {
+    env[`GIT_CONFIG_KEY_${index}`] = key;
+    env[`GIT_CONFIG_VALUE_${index}`] = value;
+  }
+  return env;
+}
+
+/** The setting that sends an installation token with every request to github.com. */
+export function githubAuthHeader(token: string): [string, string] {
+  const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
+  return ["http.https://github.com/.extraheader", `Authorization: Basic ${basic}`];
+}
+
 function pushEnv(target: PushTarget): NodeJS.ProcessEnv {
-  if (target.token === undefined) return {};
-  const basic = Buffer.from(`x-access-token:${target.token}`).toString("base64");
-  return {
-    GIT_CONFIG_COUNT: "1",
-    GIT_CONFIG_KEY_0: "http.https://github.com/.extraheader",
-    GIT_CONFIG_VALUE_0: `Authorization: Basic ${basic}`,
-  };
+  return target.token === undefined ? {} : gitConfigEnv([githubAuthHeader(target.token)]);
 }
 
 /** What a push did to the remote branch. */

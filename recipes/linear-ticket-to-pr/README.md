@@ -18,7 +18,7 @@ overwrites them.
 
 ## What it needs
 
-- **Linear and GitHub credentials.** See
+- **Linear and GitHub credentials**, with a GitHub App as the GitHub identity. See
   [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
   and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
@@ -26,11 +26,13 @@ overwrites them.
   missing one.
 - **Claude Code and Codex**, installed and logged in. Both are declared in
   `requires.agents` and checked when the service starts.
-- **Builder access to GitHub tools**, such as authenticated `gh` or a configured
-  GitHub MCP server, with permission to read the PR, comment, and push its branch.
-  Service GitHub credentials are not automatically agent credentials. If your
-  tool uses an environment token, configure its name in `agents.env`; otherwise
-  authenticate the tool separately. Missing access makes maintenance ask for help.
+- **The GitHub CLI, `gh`.** The builder sets `github: true`, so it acts on
+  GitHub as the factory's App, the same bot jigs posts as: `gh` and its pushes
+  use a token jigs gives it, and its commits are authored by the bot. See
+  [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access).
+  With a personal access token instead of an App, remove `github: true` and give
+  the builder GitHub access yourself; its replies then look like anyone else's,
+  so each one wakes it once more. Missing access makes maintenance ask for help.
 - **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
   `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
@@ -128,8 +130,8 @@ Adding `careful` as above lets a run pass `--input builder=careful`. Every agent
 in the object is checked before a run starts, whether or not a run picks it.
 
 The builder session continues from implementation into PR maintenance. It
-judges the discussion and checks, then responds and pushes through its own
-GitHub tools. No hidden comment markers are required. If its saved session is
+judges the discussion and checks, then responds and pushes as the App's bot. Its
+replies need no hidden comment markers: an unmarked comment by the bot is its own. If its saved session is
 unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
 
 ## The three phases
@@ -213,8 +215,10 @@ export async function deliverTicket(
   (`builderWakeFacts` in `delivery/wake.ts`): a new or edited review or comment,
   a newly failed check on the current head, or a conflict with the base. Checks
   that queue, run or pass, a bare approval, and edits of a bot's comment wake
-  nothing. The builder posts as you, so comments that appear during its own
-  turn count as its own replies; reviews never do. Each wake gets its own attempt allowance.
+  nothing. Neither do the builder's own replies: comments by the App's bot
+  (`appBot` on the snapshot) with no jigs marker. A person's comment wakes it,
+  even one posted while the builder was working, and so do reviews and other
+  jigs workflows' notes. Each wake gets its own attempt allowance.
   The builder returns `finished`, `pending`, or `needs-human` with a summary.
   `pending` waits for an external change, such as a re-run of a check that
   failed for no visible reason; unfinished local or unpublished work is
@@ -230,7 +234,9 @@ export async function deliverTicket(
   `blocked`, the recipe posts one note on the pull request for each commit and
   keeps watching; the note's marker keeps it from waking the builder.
   The watcher never merges, and the agent is instructed not to merge or approve.
-  Those instructions are not a restriction on the agent's GitHub credentials.
+  Those instructions are not a restriction on its token, which could merge:
+  branch protection on the base branch is. Under `"any-commit"`, approvals by
+  bots never count, so the builder cannot approve its own work.
   It returns `"merged"` once the pull request merges, or `"closed"` when it is
   closed without merging; local work is never pushed on the way out.
 

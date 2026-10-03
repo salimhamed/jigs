@@ -48,8 +48,10 @@ checkout. The agent then acts as the App's bot:
   next turn gets a fresh token. Refreshing during a turn waits for a real case.
 - One `gh` token per step means one owner per step. Steps that span several
   owners wait for a real case.
-- `github` is a build error in token mode. A token-mode factory still wires up
-  its agent's GitHub access itself.
+- `github` is an error in token mode: no factory build sees the harness
+  descriptors, so preflight fails a run whose workflow declares such an agent,
+  and the agent's step fails before the agent starts. A token-mode factory
+  still wires up its agent's GitHub access itself.
 - The agent still runs as the operator's OS user and can read the operator's
   files, SSH key included. The token limits what the agent does as itself, not
   what it could find on disk. Isolation is separate, later work.

@@ -1,6 +1,6 @@
 import type { PullRequestSnapshot } from "@jigs-ai/jigs";
-import { expect, test } from "vitest";
-import { builderWakeFacts, commentFacts } from "./wake.ts";
+import { describe, expect, test } from "vitest";
+import { builderWakeFacts } from "./wake.ts";
 
 const opened: PullRequestSnapshot = {
   state: "open",
@@ -145,23 +145,70 @@ test("edits of a bot's sticky comment do not wake the builder; its new comments 
   expect(wakes(threaded, { ...opened, reviewThreads: [edited] })).toBe(false);
 });
 
-test("comment facts leave out reviews, failures and conflicts", () => {
+test("a review, a comment, a failure and a conflict are one fact each", () => {
   const busy = {
     ...failed,
     mergeState: "dirty",
     conversationComments: [comment],
     reviews: [review("CHANGES_REQUESTED", "")],
   };
-  expect(commentFacts(busy, SCOPE)).toHaveLength(1);
   expect(builderWakeFacts(busy, SCOPE)).toHaveLength(4);
 });
 
 test("only this scope's own status notes are kept from the builder", () => {
   const status = { kind: "status", reason: "merge-retry" };
   const facts = (marker: object) =>
-    commentFacts({ ...opened, conversationComments: [marked(marker)] }, SCOPE);
+    builderWakeFacts({ ...opened, conversationComments: [marked(marker)] }, SCOPE);
   expect(facts({ scope: SCOPE, ...status })).toEqual([]);
   // Another jigs workflow's note, or anything but a status note, is still news.
   expect(facts({ scope: "otherWorkflow/ABC-1", ...status })).toHaveLength(1);
   expect(facts({ scope: SCOPE, kind: "reply" })).toHaveLength(1);
+});
+
+describe("the builder's own replies, posted as the App's bot", () => {
+  const APP_BOT = "jigs-dev[bot]";
+  const asBot = { ...opened, appBot: APP_BOT };
+  const reply = { ...comment, id: 7, user: APP_BOT, userType: "Bot", body: "Renamed x." };
+  const threadOf = (user: string, body: string) => ({
+    rootId: 8,
+    path: "a.ts",
+    line: 1,
+    comments: [
+      { id: 8, rootId: 8, body, user, path: "a.ts", line: 1, createdAt: "t1", updatedAt: "t1" },
+    ],
+  });
+
+  test("an unmarked comment by the bot wakes nothing", () => {
+    expect(builderWakeFacts({ ...asBot, conversationComments: [reply] }, SCOPE)).toEqual([]);
+    expect(
+      builderWakeFacts(
+        { ...asBot, conversationComments: [{ ...reply, user: "Jigs-Dev[bot]" }] },
+        SCOPE,
+      ),
+    ).toEqual([]);
+    expect(
+      builderWakeFacts({ ...asBot, reviewThreads: [threadOf(APP_BOT, "Fixed.")] }, SCOPE),
+    ).toEqual([]);
+  });
+
+  test("a person's comment, another bot's and a marked note from another scope still wake", () => {
+    expect(wakes(asBot, { ...asBot, conversationComments: [reply, comment] })).toBe(true);
+    expect(wakes(asBot, { ...asBot, reviewThreads: [threadOf("will", "Why?")] })).toBe(true);
+    const other = { ...reply, user: "codecov[bot]" };
+    expect(wakes(asBot, { ...asBot, conversationComments: [other] })).toBe(true);
+    const note = {
+      ...marked({ scope: "otherWorkflow/ABC-1", kind: "status", reason: "merge-retry" }),
+      user: APP_BOT,
+    };
+    expect(wakes(asBot, { ...asBot, conversationComments: [note] })).toBe(true);
+  });
+
+  test("a review by the bot still wakes", () => {
+    const own = { ...review("COMMENTED", "Done"), user: APP_BOT };
+    expect(wakes(asBot, { ...asBot, reviews: [own] })).toBe(true);
+  });
+
+  test("with a personal token there is no bot to recognize", () => {
+    expect(wakes(opened, { ...opened, conversationComments: [reply] })).toBe(true);
+  });
 });

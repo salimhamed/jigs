@@ -168,10 +168,16 @@ async function appJwtGet<T>(
   return (await res.json()) as T;
 }
 
+/** An agent's turn gets no refresh, so its token starts with close to the full hour. */
+export const AGENT_TOKEN_MIN_LIFETIME_MS = 55 * 60 * 1000;
+
 export interface GithubAuth {
   identity: ResolvedGithubIdentity;
-  /** The bearer token for a REST or GraphQL call, minted or renewed as needed. */
-  bearer(): Promise<string>;
+  /**
+   * The bearer token for a REST or GraphQL call, minted or renewed as needed. An App token is
+   * renewed when less than `minLifetimeMs` of it is left.
+   */
+  bearer(minLifetimeMs?: number): Promise<string>;
 }
 
 export interface GithubAuthDeps {
@@ -197,7 +203,7 @@ export function createGithubAuth(
   let minting: Promise<MintedToken> | null = null;
   return {
     identity,
-    async bearer(): Promise<string> {
+    async bearer(minLifetimeMs = REFRESH_MARGIN_MS): Promise<string> {
       if (identity.mode === "pat") {
         const token = (deps.patToken ?? environmentPat)();
         if (token === undefined || token === "") {
@@ -208,7 +214,7 @@ export function createGithubAuth(
         }
         return token;
       }
-      if (cached !== null && cached.expiresAt - now() > REFRESH_MARGIN_MS) return cached.token;
+      if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached.token;
       if (minting === null) {
         minting = mint().finally(() => {
           minting = null;
@@ -279,9 +285,56 @@ export function githubAuthFor(account: string): GithubAuth {
   return auth;
 }
 
+/** The account a GitHub App acts as: `<slug>[bot]`, with that account's user id. */
+export interface AppBot {
+  login: string;
+  id: number;
+}
+
+const appBots = new Map<number, Promise<AppBot>>();
+
+/** The App's bot account, looked up once per App. */
+export function appBotFor(
+  identity: ResolvedAppIdentity,
+  bearer: () => Promise<string>,
+  deps: Pick<GithubAuthDeps, "fetch" | "readPrivateKey"> = {},
+): Promise<AppBot> {
+  let bot = appBots.get(identity.appId);
+  if (bot === undefined) {
+    bot = lookupAppBot(identity, bearer, deps);
+    appBots.set(identity.appId, bot);
+    bot.catch(() => appBots.delete(identity.appId));
+  }
+  return bot;
+}
+
+async function lookupAppBot(
+  identity: ResolvedAppIdentity,
+  bearer: () => Promise<string>,
+  deps: Pick<GithubAuthDeps, "fetch" | "readPrivateKey">,
+): Promise<AppBot> {
+  const { key } = (deps.readPrivateKey ?? readAppPrivateKey)(identity.privateKeyPath);
+  const { slug } = await fetchAppRegistration(identity, key, deps);
+  const login = `${slug}[bot]`;
+  const res = await (deps.fetch ?? fetch)(
+    `${GITHUB_API_BASE()}/users/${encodeURIComponent(login)}`,
+    {
+      headers: {
+        authorization: `Bearer ${await bearer()}`,
+        accept: "application/vnd.github+json",
+        "x-github-api-version": "2022-11-28",
+      },
+    },
+  );
+  if (!res.ok) throw new JigsError(`GitHub API ${res.status} on /users/${login}`);
+  const { id } = (await res.json()) as { id: number };
+  return { login, id };
+}
+
 /** Drop cached credentials so the next call re-reads configuration. */
 export function resetGithubAuth(): void {
   processAuth.clear();
+  appBots.clear();
   processIdentities = null;
   setCredentialRoot(null);
 }
