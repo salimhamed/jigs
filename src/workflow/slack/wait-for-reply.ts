@@ -14,17 +14,17 @@ export interface SlackReplySteps {
 }
 
 /**
- * The message a wait answers: the thread it is in, named by the ts of the
- * thread's top-level message (never a reply's), and the ts of the question
- * itself. Only replies posted after `after` count. `until`, an ISO 8601
- * timestamp, is when to stop waiting.
+ * The thread a wait reads, named by the ts of its top-level message (never a
+ * reply's). `lastRead` is the ts of the newest post the workflow has read,
+ * never its own question; only human replies after it count. `until`, an
+ * ISO 8601 timestamp, is when to stop waiting.
  *
  * @group Slack messages
  */
 export interface SlackQuestion {
   channel: string;
   threadTs: string;
-  after: string;
+  lastRead: string;
   until?: string;
 }
 
@@ -38,8 +38,9 @@ function tsValue(ts: string): bigint {
 const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{2}:\d{2})$/;
 
 /**
- * Wait for a human to reply in a Slack thread after the question, and return
- * the first such reply, or `"timed-out"` once `until` passes.
+ * Wait for a human to reply in a Slack thread after `lastRead`, and return
+ * every such reply, oldest first and never empty. Returns `"timed-out"` once
+ * `until` passes, and `"gone"` when the thread's top-level message is deleted.
  *
  * @remarks
  * Without `until`, waits until a reply or `jigs cancel`. With it, the thread is
@@ -48,20 +49,20 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
  * reply wakes nothing. Socket Mode, the service's poll and `jigs poke` each
  * make it read the thread again. Replies from bots, including the factory's
  * own, never count. `threadTs` must be the thread's top-level message: a
- * reply's ts fails the wait, naming the top-level message's ts. Deleting the
- * message while the run waits fails the run. When a human reply is already in
- * the thread, every run waiting on it returns that reply; a second run that
- * has to park while another waits on the thread fails with the Workflow SDK's
- * `HookConflictError`.
+ * reply's ts fails the wait, naming the top-level message's ts. A reply
+ * already in the thread returns at once, and may not answer the question the
+ * workflow just asked. When a human reply is already in the thread, every run
+ * waiting on it returns them; a second run that has to park while another waits
+ * on the thread fails with the Workflow SDK's `HookConflictError`.
  *
  * @group Slack messages
  */
 export async function waitForSlackReply(
   question: SlackQuestion,
   steps: SlackReplySteps,
-): Promise<SlackPost | "timed-out"> {
+): Promise<SlackPost[] | "timed-out" | "gone"> {
   const { fetchSlackMessage } = steps;
-  const { channel, threadTs, after, until } = question;
+  const { channel, threadTs, lastRead, until } = question;
   const deadline = until === undefined ? undefined : new Date(until);
   if (
     deadline !== undefined &&
@@ -74,16 +75,12 @@ export async function waitForSlackReply(
   const hook = createHook<unknown>({ token });
   let expired: Promise<"timed-out"> | undefined;
   try {
-    const since = tsValue(after);
+    const since = tsValue(lastRead);
     while (true) {
       const thread = await fetchSlackMessage({ channel, ts: threadTs });
-      if (thread.gone) {
-        throw new JigsError(
-          `the Slack message ${channel} ${threadTs} was deleted while this run waited for a reply in its thread`,
-        );
-      }
-      const reply = thread.replies.find((post) => !post.author.bot && tsValue(post.ts) > since);
-      if (reply !== undefined) return reply;
+      if (thread.gone) return "gone";
+      const replies = thread.replies.filter((post) => !post.author.bot && tsValue(post.ts) > since);
+      if (replies.length > 0) return replies;
       if (deadline === undefined) {
         await hook;
         continue;

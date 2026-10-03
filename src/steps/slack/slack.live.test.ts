@@ -61,7 +61,7 @@ test.skipIf(!configured)(
     expect(snapshot.permalink).toMatch(/^https:\/\/.+\/archives\/C0C5EUZ7P9Q\/p\d+/);
 
     // The bot's reply is no human's, so the wait parks rather than returning it.
-    void waitForSlackReply({ channel, threadTs: ts, after: ts }, { fetchSlackMessage });
+    void waitForSlackReply({ channel, threadTs: ts, lastRead: ts }, { fetchSlackMessage });
     await vi.waitFor(() => expect(parked.count).toBe(1), { timeout: 10_000 });
   },
 );
