@@ -21,6 +21,8 @@ const MAX_RETRY_MS = 60_000;
 // stays up this long.
 const HEALTHY_AFTER_MS = 30_000;
 const REFRESH_REASONS = new Set(["warning", "refresh_requested"]);
+const TOO_MANY_WEBSOCKETS =
+  "[slack] Slack says this app has too many Socket Mode connections (too_many_websockets): another process, on this machine or elsewhere, is likely holding connections for the same Slack app, and Slack splits the app's events between them. Each factory needs its own Slack app";
 
 /** The part of a WebSocket the connection uses. */
 export interface SlackSocketLike {
@@ -141,7 +143,10 @@ export function startSlackSocket(deps: SlackSocketDeps): SlackSocket {
         // reconnect at once too.
         if (REFRESH_REASONS.has(reason))
           end(`refreshed by Slack (${reason})`, () => void connect());
-        else end(`ended by Slack (${reason})`, retry);
+        else {
+          if (reason === "too_many_websockets") log(TOO_MANY_WEBSOCKETS);
+          end(`ended by Slack (${reason})`, retry);
+        }
       } else if (envelope.type === "events_api") {
         const event = envelope.payload?.event;
         if (isMessageEvent(event)) void deliver(event);

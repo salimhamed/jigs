@@ -494,7 +494,7 @@ slack: { socketMode: true },
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. |
+| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. Each factory needs its own Slack app; two factories on one app split its events between them. |
 | `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the bot holds them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
 
 The service polls the channels its Slack triggers watch every

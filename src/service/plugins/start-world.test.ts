@@ -4,6 +4,7 @@ import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.t
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import {
+  announceSlackApp,
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
@@ -548,4 +549,39 @@ test("Socket Mode with its app-level token boots", async () => {
       exit: vi.fn(),
     }),
   ).toBe(true);
+});
+
+const holder = (slug: string) => ({ slug, pid: 1, startedAt: "2026-10-02T12:00:00.000Z" });
+
+test("a Slack app no other service holds is recorded without a warning", () => {
+  const log = vi.fn();
+  const hold = { others: [], forget: vi.fn() };
+  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
+  expect(log).not.toHaveBeenCalled();
+});
+
+test("a Slack app another service holds is warned about once, and the boot goes on", () => {
+  const log = vi.fn();
+  const hold = { others: [holder("jigs-factory-js-1a2b3c4d")], forget: vi.fn() };
+  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
+  expect(log.mock.calls).toEqual([
+    [
+      "[slack] the service jigs-factory-js-1a2b3c4d on this machine uses the same Slack app for Socket Mode; Slack splits its events between them, so each factory misses some until its poll catches up. Give each factory its own Slack app",
+    ],
+  ]);
+});
+
+test("a Slack app record that cannot be written is logged and does not stop the boot", () => {
+  const log = vi.fn();
+  expect(
+    announceSlackApp({
+      hold: () => {
+        throw new Error("EACCES: permission denied");
+      },
+      log,
+    }),
+  ).toBeUndefined();
+  expect(log).toHaveBeenCalledWith(
+    "[slack] could not record which Slack app this service uses: EACCES: permission denied",
+  );
 });

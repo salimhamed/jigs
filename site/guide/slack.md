@@ -91,6 +91,14 @@ message within a second of it being posted. It still polls every
 underneath, so a message posted while the service is down is still found. With
 `socketMode: false`, jigs only polls, and `SLACK_APP_TOKEN` is not needed.
 
+Each factory running Socket Mode needs its own Slack app. Slack spreads an app's
+events across every open Socket Mode connection, so two factories on one app
+each see only some of them. The poll is the fallback: a message one factory
+missed starts its trigger on the next poll, and a missed thread reply wakes its
+run on the next re-read. `jigs doctor` flags two factories on the same machine
+sharing an app; across machines, the only sign is a `too_many_websockets`
+warning in the service log.
+
 A workflow that uses Slack declares it:
 
 ```ts
@@ -350,7 +358,9 @@ Register it with the `slack.mentions` trigger from
 `jigs doctor`, and `jigs up`, check that Slack accepts `SLACK_BOT_TOKEN` and
 that the bot holds every scope above, plus any listed in `slack.scopes`. With
 `socketMode` on, they also check that `SLACK_APP_TOKEN` can open a Socket Mode
-connection. Each failure names the missing scope or `.env` key.
+connection, and that no other factory's service on this machine uses the same
+Slack app. Each failure names the missing scope, the `.env` key or the other
+factory's service.
 
 Before every run of a workflow that requires `slack`, preflight checks the bot
 token and the same scopes. If the bot lacks one, including one listed in

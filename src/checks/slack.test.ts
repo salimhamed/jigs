@@ -1,6 +1,11 @@
 import { expect, test } from "vitest";
 import { SlackApiError, type SlackAuth, type SlackToken } from "../providers/slack.ts";
-import { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
+import {
+  type SlackProbes,
+  slackIdentityChecks,
+  slackSharedAppChecks,
+  slackSocketModeChecks,
+} from "./slack.ts";
 
 const AUTH: SlackAuth = {
   userId: "U0C59SU5V29",
@@ -172,4 +177,46 @@ test("a bot token in SLACK_APP_TOKEN is called out", async () => {
 
 test("with Socket Mode off there is no connection check", async () => {
   expect((await run(false, probes())).map((check) => check.id)).toEqual(["slack.identity"]);
+});
+
+async function sharing(others: readonly string[], socketMode = true, lookup = BOTH) {
+  return Promise.all(
+    slackSharedAppChecks({ socketMode }, () => others, lookup).map(async (check) => ({
+      id: check.id,
+      label: check.label,
+      ...(await check.run()),
+    })),
+  );
+}
+
+test("a Slack app no other service on this machine uses passes", async () => {
+  expect(await sharing([])).toEqual([
+    { id: "slack.shared-app", label: "Slack app sharing", ok: true },
+  ]);
+});
+
+test("another service on the same Slack app fails, naming it and the split", async () => {
+  const [check] = await sharing(["jigs-factory-js-1a2b3c4d"]);
+  expect(check).toMatchObject({
+    ok: false,
+    reason:
+      "SLACK_APP_TOKEN belongs to the same Slack app as the running service jigs-factory-js-1a2b3c4d; Slack splits Socket Mode events between them, so each factory misses some until its poll catches up",
+  });
+  expect(check).toHaveProperty(
+    "repair",
+    expect.stringContaining("create a separate Slack app for this factory"),
+  );
+});
+
+test("several other services are each named", async () => {
+  const [check] = await sharing(["factory-a", "factory-b"]);
+  expect(check).toHaveProperty(
+    "reason",
+    expect.stringContaining("the running services factory-a and factory-b;"),
+  );
+});
+
+test("the sharing check is left out without Socket Mode or an app-level token", async () => {
+  expect(await sharing(["factory-a"], false)).toEqual([]);
+  expect(await sharing(["factory-a"], true, env({ SLACK_BOT_TOKEN: "xoxb-1" }))).toEqual([]);
 });
