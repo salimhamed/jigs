@@ -67,10 +67,10 @@ const recoveryFacts = (recovery: UnpublishedWork) =>
   ].join(" ");
 
 const build =
-  "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit before you finish: only committed work is reviewed. Do not push or open a pull request.";
+  "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit before you finish: only committed work is reviewed. Do not push or open a pull request. A finding you decline stays open until the reviewer accepts your reason, so give one it can judge.";
 
 const review =
-  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. No pull request exists yet and CI has not run: review only the diff and worktree you are given, do not look up pull requests, branches or CI status on GitHub, and leave acceptance criteria about CI or the pull request to the pull-request phase that follows. A finding is blocking when it is a stated requirement left unmet, a defect a user could hit, or an untested risk that matters; preferences about naming, structure, comments, extra tests and wording are not. Non-blocking findings are kept for a human to read on the pull request.";
+  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. No pull request exists yet and CI has not run: review only the diff and worktree you are given, do not look up pull requests, branches or CI status on GitHub, and leave acceptance criteria about CI or the pull request to the pull-request phase that follows. A finding is blocking when it is a stated requirement left unmet, a defect a user could hit, or an untested risk that matters; preferences about naming, structure, comments, extra tests and wording are not. Only a blocking finding sends the change back to the builder; non-blocking findings are kept for a human to read on the pull request.";
 
 const maintain = join([
   "Continue maintaining the pull request you implemented.",
@@ -79,12 +79,12 @@ const maintain = join([
   "Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push.",
   "Fix issues, run relevant checks, commit and push any changes. Uncommitted or unpublished work needs recovery now, not waiting for GitHub activity.",
   "Do not merge or approve the PR yourself: the workflow decides who merges.",
-  "A check that failed for a reason you cannot see, while you wait for someone to re-run it, is pending.",
-  "A person is told when you need them, and the pull request stays watched.",
+  "A check that failed for a reason you cannot see, while you wait for someone to re-run it, needs no person: say in your summary that you are waiting for the re-run.",
+  "Ask for a person only when one must act before you can continue, and say what they need to do. A person is told, and the pull request stays watched.",
   "You are woken again on the next change to the pull request that needs you: new discussion, a newly failed check, or a conflict with the base branch. Checks that queue, run or pass do not wake you, and the workflow merges an approved, green pull request without you.",
   'ci "none" means no check has reported on the head: CI may not have started yet, or the repository has none. Do not wait for it.',
   "Do not repeat a reply or change already made. When everything is settled, post nothing.",
-  "Return needs-human if `gh` or pushing to GitHub does not work; do not claim completion.",
+  "Ask for a person if `gh` or pushing to GitHub does not work; do not claim completion.",
 ]);
 
 const describe =
@@ -133,9 +133,12 @@ export const prompts: DeliveryPrompts<Ticket> = {
   maintain: {
     fresh: ({ work, worktree, diff, ...facts }) =>
       join([brief(work, worktree), `Current diff:\n${diff}`, prompts.maintain.resume(facts)]),
-    resume: ({ pr, snapshot, recovery }) =>
+    resume: ({ pr, snapshot, news, recovery }) =>
       join([
         `Pull request: ${prUrl(pr)}`,
+        news.length === 0
+          ? ""
+          : `New since your last turn:\n${news.map((fact) => `- ${fact}`).join("\n")}`,
         `Current GitHub facts:\n${JSON.stringify(snapshot)}`,
         recovery === undefined ? "" : `Recovery required:\n${recoveryFacts(recovery)}`,
         maintain,

@@ -192,32 +192,43 @@ result later. On success the worktree is released automatically; configure
 
 ## Build a pull request workflow
 
-Three routines from `#jigs/routines` take a change from an agent's first commit
+Four routines from `#jigs/routines` take a change from an agent's first commit
 to a merged pull request. Your workflow calls them in order and decides
 everything in between:
 
 - `buildAndReview(delivery, { rounds })` has the builder implement and commit,
   then the reviewer review the commit, until the reviewer raises no blocking
   finding. It returns the reviewed commit, or `{ stopped }` with the reason
-  (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings, and
-  whether it could push the branch first.
-- `publishPullRequest(delivery, { commit, pullRequest })` has the writer
-  describe the diff, pushes exactly `commit` and opens the pull request. The
-  optional `pullRequest` function receives the writer's title and body and
-  returns the ones to open with, plus `draft`, so you can enforce a title
-  convention or append notes. It runs before the push, so throwing from it
-  stops before anything is pushed. It needs no review: any clean commit at the
-  worktree's HEAD can be published.
-- `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for new
-  feedback, failing checks and conflicts until the pull request merges or
-  closes, and merges it when `mergedBy` is `"jigs"`. It returns `"merged"` or
-  `"closed"`.
+  (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings and
+  the round it stopped in. A stop pushes nothing: push the branch with the
+  `pushBranch` step if whoever takes over should find the work on the remote.
+- `describePullRequest(delivery, { check })` has the writer write the pull
+  request's title and body from the diff. The optional `check` returns the
+  problems with an answer, such as a title that breaks your convention; the
+  writer is sent back once with them, and a second answer with problems throws.
+  Nothing is pushed.
+- `publishPullRequest(delivery, { commit, title, body, draft })` pushes exactly
+  `commit` and opens the pull request with the title and body you pass. No
+  agent runs, and it needs no review: any clean commit at the worktree's HEAD
+  can be published. Describe first, so a failed description pushes nothing.
+- `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for
+  what it has to act on until the pull request merges or closes, and merges it
+  when you consent. It returns `"merged"` or `"closed"`.
 
 The routines write nothing a person reads. A stop is a return value. A pull
-request that needs a person reaches your workflow through `onNeedsHuman`, never
-with the same facts twice in a row, and one GitHub blocks from merging through
-`onMergeBlocked`, once per head. You word the note and choose where it goes.
-Budgets, `mergedBy` and `approvalCovers` are always yours to pass.
+request that needs a person, including one GitHub blocks from merging, reaches
+your workflow through `onNeedsHuman`, never with the same facts twice in a row.
+You word the note and choose where it goes.
+
+`followPullRequestToOutcome` takes these options, all required but the last:
+
+| Option | What it decides |
+| --- | --- |
+| `attemptsPerUpdate` | Builder turns for each change to the pull request, recovery included. |
+| `wake` | Which facts in a snapshot wake the builder. Pass `builderWakeFacts` for the default: new reviews with a body or requesting changes, new comments, a newly failing check and a conflict with the base. Wrap it to ignore something, such as a bot's comments. |
+| `mergeWhen` | Whether you consent to merging the current snapshot. Return `false` to leave every merge to a person, or check the snapshot, such as for a label. jigs still merges only an approved, green, clean pull request, so this can only make merging stricter. |
+| `approvalCovers` | Which commits a person's approving review covers. |
+| `onNeedsHuman` | Called with the facts when a person must act. For a blocked merge, `headSha` names the head; mark a note about it with that head and `defaultPullRequestScope(key)` so it does not wake the builder. |
 
 While following, the builder's local work counts as published when the worktree
 is clean and its HEAD is a commit the pull request has had; a worktree behind
@@ -238,8 +249,8 @@ else, so upgrading jigs never changes what your agents are told.
 | --- | --- | --- |
 | `build` | Each round, to the builder | `fresh`: work, worktree, open findings, diff. `resume`: the findings. |
 | `review` | Each round, to the reviewer | `fresh`: work, worktree, head commit, diff, earlier rounds. `resume`: head commit, diff, the builder's answers. |
-| `describe` | Before publishing, to the writer | Work, worktree, diff. |
-| `maintain` | Each pull request change that needs the builder | `fresh`: work, worktree, diff, plus the `resume` facts. `resume`: the pull request, its GitHub snapshot, and any unpublished local work to recover. |
+| `describe` | By `describePullRequest`, to the writer | Work, worktree, diff. |
+| `maintain` | Each pull request change that needs the builder | `fresh`: work, worktree, diff, plus the `resume` facts. `resume`: the pull request, its GitHub snapshot, `news` (the wake facts the builder has not been shown, empty when it only recovers), and any unpublished local work to recover. |
 
 `resume` goes to an agent session that holds the earlier turns, so it says only
 what is new; `fresh` goes to one starting from nothing, so it says everything.
@@ -273,9 +284,10 @@ export const prompts: DeliveryPrompts<Bump> = {
   maintain: {
     fresh: ({ work, diff, ...facts }) =>
       `${task(work)}\n\nCurrent diff:\n${diff}\n\n${prompts.maintain.resume(facts)}`,
-    resume: ({ pr, snapshot, recovery }) =>
+    resume: ({ pr, snapshot, news, recovery }) =>
       [
         `Pull request ${pr.owner}/${pr.repo}#${pr.number} changed:\n${JSON.stringify(snapshot)}`,
+        news.length === 0 ? "" : `New since your last turn:\n${news.join("\n")}`,
         recovery === undefined ? "" : `Publish your local work first: ${JSON.stringify(recovery)}`,
         "Answer feedback, fix failing checks, commit and push. Do not merge or approve.",
       ].join("\n\n"),
@@ -288,20 +300,28 @@ export const prompts: DeliveryPrompts<Bump> = {
 A delivery is a plain object you pass to every routine: the work, a `key`, the
 worktree, the prompts, and the agent sessions. Create separate session objects
 for each delivery: a session holds its agent's conversation, and its name only
-labels log lines. The `key` scopes the hidden markers on the notes posted for
-this work; in a run, a key already used for another worktree throws. A `writer`
-session describes the pull request; without one, the builder does.
+labels log lines. Give each pull request its own `key`: it scopes the hidden
+markers on the notes posted on that pull request. A `writer` session describes
+the pull request; without one, the builder does. Each routine reads only the
+fields it needs, so one delivery object serves all four.
 
 This workflow upgrades a dependency in every repository it is given, one
 delivery per repository, each merged before the next starts:
 
 ```ts
 // workflows/bump/bump.ts
-import { defineWorkflow, harnesses, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
+import {
+  builderWakeFacts,
+  defineWorkflow,
+  harnesses,
+  JigsError,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
 import {
   agentSession,
   buildAndReview,
+  describePullRequest,
   followPullRequestToOutcome,
   publishPullRequest,
 } from "#jigs/routines";
@@ -342,10 +362,17 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
         built.stopped.findings.join("\n"),
       );
     }
-    const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit });
+    const { title, body } = await describePullRequest(delivery, {
+      check: (described) =>
+        described.title.startsWith("chore(deps): ")
+          ? []
+          : ['Start the title with "chore(deps): ".'],
+    });
+    const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
     const outcome = await followPullRequestToOutcome(delivery, pr, {
       attemptsPerUpdate: 2,
-      mergedBy: "jigs",
+      wake: builderWakeFacts,
+      mergeWhen: () => true,
       approvalCovers: "latest-commit",
       onNeedsHuman: async ({ reason, detail }) => {
         await postSlackMessage({

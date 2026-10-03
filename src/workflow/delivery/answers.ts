@@ -10,7 +10,6 @@ const reviewFinding = z.strictObject({
 });
 
 export const reviewVerdict = z.strictObject({
-  verdict: z.enum(["approved", "changes-requested"]),
   findings: z.array(reviewFinding),
 });
 
@@ -35,12 +34,11 @@ export const pullRequestDescription = z.strictObject({
   title: z
     .string()
     .min(1)
-    .max(100, "The title must be 100 characters or fewer; aim for 72.")
     .regex(/^[^\r\n]*$/, "The title must be a single line.")
     .refine((title) => !markdownStart.test(title), "The title must be plain text, not markdown.")
     .refine((title) => !titleLabel.test(title), 'The title must not start with a "Title:" label.')
     .describe(
-      'The pull request title itself: one line of plain text, 72 characters or fewer, with no markdown and no "Title:" label.',
+      'The pull request title itself: one short line of plain text, with no markdown and no "Title:" label.',
     ),
   body: z
     .string()
@@ -55,7 +53,7 @@ export const pullRequestDescription = z.strictObject({
 });
 
 export const maintenanceReport = z.strictObject({
-  status: z.enum(["finished", "pending", "needs-human"]),
+  needsHuman: z.boolean(),
   summary: z.string().min(1),
 });
 
@@ -82,20 +80,20 @@ export interface ReviewRound {
   round: number;
   /** The builder's answers to the previous round's findings; empty on the first round. */
   responses: FindingResponse[];
-  /** Decided by whether any finding is blocking, whatever verdict the reviewer stated. */
+  /** `changes-requested` when any finding is blocking. */
   verdict: "approved" | "changes-requested";
   findings: ReviewFinding[];
 }
 
 export const formats = {
   build:
-    "Answer every finding you were given, one response each, quoting the finding as it was stated. Set changed to true with what you changed, or to false with the reason you did not: a finding you decline stays open until the reviewer accepts your reason, so give one it can judge. Return no responses when you were given no findings.",
+    "Return one response per finding you were given, with the finding quoted as it was stated. Set changed to true and say in detail what you changed, or set it to false and give the reason in detail. Return no responses when you were given no findings.",
   review:
-    "Mark each finding blocking or not: only a blocking finding sends the change back to the builder. Return changes-requested only when a blocking finding remains; otherwise return approved and keep the non-blocking findings.",
+    "Return each finding as a one-sentence summary, with blocking set to whether it must be fixed before the change can go ahead. Return no findings when you have none.",
   describe:
-    'Return the title as one line of plain text, 72 characters or fewer, with no markdown and no "Title:" label, and the body as markdown that does not repeat the title or label its parts "Title:" or "Description:".',
+    'Return the title as one short line of plain text, with no markdown and no "Title:" label, and the body as markdown that does not repeat the title or label its parts "Title:" or "Description:".',
   maintain:
-    "Return finished only when no work remains for you on the current code and discussion, pending when you are waiting for checks or another external change, or needs-human only when a person must act before you can continue. Explain the result in summary; for needs-human, say what the person needs to do.",
+    "Set needsHuman to true when a person must act before you can continue, and false otherwise. Say in summary what you did, or what the person needs to do.",
 };
 
 /** The caller's prompt with the engine's answer format after it. */

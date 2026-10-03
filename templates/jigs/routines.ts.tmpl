@@ -32,7 +32,6 @@ import {
   postTicketHumanInputRequest,
   postTicketNote,
   pushApprovedChange,
-  pushBranch,
   readBranchState,
   readWorktreeDiff,
   registerResource,
@@ -201,7 +200,6 @@ export const postPullRequestNote = pullRequests.postPullRequestNote;
 const delivery = bindDeliverySteps({
   readBranchState,
   readWorktreeDiff,
-  pushBranch,
   pushApprovedChange,
   createPullRequest,
   registerResource,
@@ -218,7 +216,15 @@ const delivery = bindDeliverySteps({
 export const buildAndReview = delivery.buildAndReview;
 
 /**
- * Describe the change, push exactly the given commit and open its pull request.
+ * Have the writer, or the builder, write the pull request's title and body from the diff.
+ * An optional `check` returns problems; the writer is sent back once with them.
+ *
+ * @group Pull request delivery
+ */
+export const describePullRequest = delivery.describePullRequest;
+
+/**
+ * Push exactly the given commit and open its pull request with the given title and body.
  *
  * @group Pull request delivery
  */
@@ -230,9 +236,10 @@ export const publishPullRequest = delivery.publishPullRequest;
  * @group Pull request delivery
  *
  * @remarks
- * Needs-human and a blocked merge reach the workflow as callbacks with facts; the workflow
- * words and sends any note. With `mergedBy: "jigs"`, an approved, green, clean pull request
- * merges once local work is published.
+ * `wake` decides what wakes the builder; pass `builderWakeFacts` for the default rules. A pull
+ * request that needs a person, a blocked merge included, reaches the workflow through
+ * `onNeedsHuman` with facts; the workflow words and sends any note. When `mergeWhen` agrees, an
+ * approved, green, clean pull request merges once local work is published.
  */
 export const followPullRequestToOutcome = delivery.followPullRequestToOutcome;
 

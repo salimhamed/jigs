@@ -172,11 +172,15 @@ deletes it.
 
 For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
 `workflows/linear-ticket-to-pr/` holds the workflow file and `prompts.ts`. The workflow calls
-three routines from `#jigs/routines` in order: `buildAndReview`, `publishPullRequest` and
-`followPullRequestToOutcome`. They take a delivery, a plain object the workflow builds once:
-the work, a `key`, the worktree, the prompts and the agent sessions it creates itself. The
-routines return stops as values and report needs-human and blocked merges through callbacks
-with facts; the workflow writes every note and decides where it goes. To change a prompt, edit
+four routines from `#jigs/routines` in order: `buildAndReview`, `describePullRequest`,
+`publishPullRequest` and `followPullRequestToOutcome`. They take a delivery, a plain object the
+workflow builds once: the work, a `key` (one per pull request), the worktree, the prompts and
+the agent sessions it creates itself. The routines return stops as values, without pushing, and
+report needs-human, a blocked merge included, through `onNeedsHuman` with facts; the workflow
+writes every note and decides where it goes. The workflow also owns three rules:
+`describePullRequest`'s optional `check` on the title and body, and
+`followPullRequestToOutcome`'s `wake` (pass `builderWakeFacts` for the default) and
+`mergeWhen`, which can only hold back a merge GitHub reports ready. To change a prompt, edit
 its function in `prompts.ts`; jigs adds only the line asking for each answer's shape. Read
 `workflows/linear-ticket-to-pr/README.md` for the recipe's prerequisites, budgets, agents and
 prompts before changing the linear-ticket-to-pr process. For several repositories, build one

@@ -9,48 +9,49 @@ import { watchPullRequest } from "../pull-requests/watch.ts";
 import { defaultPullRequestScope } from "../pull-requests/writer.ts";
 import { formats, maintenanceReport, withFormat } from "./answers.ts";
 import {
-  claimKey,
   type Delivery,
+  type DeliveryPrompts,
   type DeliverySteps,
   type UnpublishedWork,
   withoutLocalPath,
 } from "./delivery.ts";
-import { builderWakeFacts } from "./wake.ts";
+
+/**
+ * The parts of a delivery `followPullRequestToOutcome` reads.
+ *
+ * @group Pull request delivery
+ */
+export type FollowDelivery<W> = Pick<Delivery<W>, "work" | "key" | "worktree" | "builder"> & {
+  prompts: Pick<DeliveryPrompts<W>, "maintain">;
+};
 
 /**
  * Why a pull request needs a person, as facts for the workflow to word and send.
  *
  * @remarks
- * - `builder-asked`: the builder returned needs-human; `detail` is its summary.
+ * - `builder-asked`: the builder said it needs a person; `detail` is its summary.
  * - `attempts-exhausted`: the builder's attempts for one pull request update ran out with local
  *   work still unpublished; `detail` is its last summary.
  * - `merge-refused`: GitHub refused the merge; `detail` is the last refusal and `tries` how
  *   often jigs tried. A transient refusal is retried up to ten times before it is reported.
+ * - `merge-blocked`: GitHub blocks an approved, green pull request from merging, usually because
+ *   of a branch rule; `detail` says so in a sentence. Mark a note posted about it with `headSha`
+ *   and the delivery's scope, so it does not wake the builder and a later run does not post it
+ *   again.
  *
  * `unpublished` is set when local work the pull request has never had holds back the merge.
  * The local worktree path never appears in `detail`.
  *
  * @group Pull request delivery
  */
-export interface NeedsHuman {
-  reason: "builder-asked" | "attempts-exhausted" | "merge-refused";
-  detail: string;
-  unpublished?: UnpublishedWork | undefined;
-  tries?: number | undefined;
-}
-
-/**
- * An approved, green pull request that GitHub still blocks from merging, usually because of a
- * branch rule. `detail` says so in a sentence. Mark a note posted about it with `scope` and
- * `headSha`, so it does not wake the builder and a later run does not post it again.
- *
- * @group Pull request delivery
- */
-export interface MergeBlocked {
-  headSha: string;
-  scope: string;
-  detail: string;
-}
+export type NeedsHuman =
+  | {
+      reason: "builder-asked" | "attempts-exhausted";
+      detail: string;
+      unpublished?: UnpublishedWork | undefined;
+    }
+  | { reason: "merge-refused"; detail: string; tries: number }
+  | { reason: "merge-blocked"; detail: string; headSha: string };
 
 /**
  * What `followPullRequestToOutcome` needs besides the delivery and the pull request.
@@ -60,8 +61,18 @@ export interface MergeBlocked {
 export interface FollowOptions {
   /** Builder turns allowed for each change to the pull request, including recovery. */
   attemptsPerUpdate: number;
-  /** Who merges once the pull request is approved, green and clean. */
-  mergedBy: "jigs" | "human";
+  /**
+   * The facts in a snapshot that wake the builder, one string each; it is woken for one it has
+   * not been shown. `scope` is the delivery's marker scope. Pass `builderWakeFacts` for the
+   * default rules, or your own function, for example to ignore another bot's comments.
+   */
+  wake: (snapshot: PullRequestSnapshot, scope: string) => string[];
+  /**
+   * Whether you consent to merging this snapshot now. jigs still merges only when GitHub reports
+   * the pull request approved, green and clean, so this can only make merging stricter. Return
+   * `false` to leave every merge to a person, or check the snapshot, such as for a label.
+   */
+  mergeWhen: (snapshot: PullRequestSnapshot) => boolean;
   /** Which commits a person's approving review covers. */
   approvalCovers: ApprovalCoverage;
   /**
@@ -69,15 +80,13 @@ export interface FollowOptions {
    * request picks the work back up. The same facts are never sent twice in a row.
    */
   onNeedsHuman: (facts: NeedsHuman) => Promise<void>;
-  /** Called once per head of an approved, green pull request GitHub blocks. */
-  onMergeBlocked?: ((facts: MergeBlocked) => Promise<void>) | undefined;
 }
 
 const MERGE_TRIES = 10;
 
 /** One pull request's maintenance: its inputs, and what it remembers between watcher yields. */
 interface Following<W> {
-  delivery: Delivery<W>;
+  delivery: FollowDelivery<W>;
   pr: PullRequestRef;
   options: FollowOptions;
   steps: DeliverySteps;
@@ -86,8 +95,6 @@ interface Following<W> {
   seen: Set<string>;
   /** Every head the pull request has had, as read from GitHub. */
   prHeads: Set<string>;
-  /** Heads already reported to `onMergeBlocked`. */
-  blockedHeads: Set<string>;
   lastNeed?: string;
   /** Unpublished local state recovery gave up on; only a change to it wakes the builder again. */
   heldLocal?: string | undefined;
@@ -97,28 +104,25 @@ interface Following<W> {
  * Follow a pull request until it merges or closes, waking the builder for what it has to act on.
  *
  * @remarks
- * The builder session is woken for new reviews with a body or requesting changes, new comments,
- * a newly failing check and a conflict with the base. Checks that queue, run or pass, a bare
- * approval, the App bot's unmarked comments (the builder's own replies) and notes marked with
- * this delivery's scope wake nothing. Local work the pull request has never had is recovered at
+ * The builder session is woken for a fact from `wake` it has not been shown, and told which ones
+ * are new. Local work the pull request has never had is recovered at
  * once, and holds back a merge until it is published: the worktree is clean and its HEAD is a
  * commit the pull request has had. After a builder turn whose push GitHub does not show yet, the
  * pull request is read again twice, 2 seconds apart, without spending an attempt.
  *
- * With `mergedBy: "jigs"`, an approved, green, clean pull request is merged after every read
- * and builder turn, whatever the builder reported; a transient refusal is retried up to ten
- * times, 30 seconds apart. Returns `"merged"`, or `"closed"` when it closes unmerged. Nothing
+ * When `mergeWhen` agrees, an approved, green, clean pull request is merged after every read and
+ * builder turn, whatever the builder reported; a transient refusal is retried up to ten times,
+ * 30 seconds apart. Returns `"merged"`, or `"closed"` when it closes unmerged. Nothing
  * is pushed on the way out.
  *
  * @group Pull request delivery
  */
 export async function followPullRequestToOutcome<W>(
-  delivery: Delivery<W>,
+  delivery: FollowDelivery<W>,
   pr: PullRequestRef,
   options: FollowOptions,
   steps: DeliverySteps,
 ): Promise<"merged" | "closed"> {
-  claimKey(delivery);
   const following: Following<W> = {
     delivery,
     pr,
@@ -127,7 +131,6 @@ export async function followPullRequestToOutcome<W>(
     scope: defaultPullRequestScope(delivery.key),
     seen: new Set(),
     prHeads: new Set(),
-    blockedHeads: new Set(),
   };
   const { approvalCovers } = options;
   for await (const snapshot of watchPullRequest(pr, steps.fetchPullRequestState, {
@@ -165,8 +168,11 @@ async function read<W>(following: Following<W>): Promise<PullRequestSnapshot> {
   return snapshot;
 }
 
+const unseenFacts = <W>(following: Following<W>, snapshot: PullRequestSnapshot) =>
+  following.options.wake(snapshot, following.scope).filter((fact) => !following.seen.has(fact));
+
 const hasUnseenFacts = <W>(following: Following<W>, snapshot: PullRequestSnapshot) =>
-  builderWakeFacts(snapshot, following.scope).some((fact) => !following.seen.has(fact));
+  unseenFacts(following, snapshot).length > 0;
 
 // Local work behind the PR is fine (a person pushed); work the PR never had is not.
 function unpublished<W>(
@@ -202,7 +208,8 @@ async function maintain<W>(
   let recovery = before;
   let summary = "";
   for (let attempt = 1; attempt <= following.options.attemptsPerUpdate; attempt++) {
-    const facts = { pr, snapshot: assessed, recovery };
+    const news = unseenFacts(following, assessed);
+    const facts = { pr, snapshot: assessed, news, recovery };
     const report = await delivery.builder.run({
       output: maintenanceReport,
       resume: withFormat(prompts.maintain.resume(facts), formats.maintain),
@@ -219,11 +226,11 @@ async function maintain<W>(
     });
     summary = report.summary;
     // Remember only what the builder saw, never a newer post-turn read.
-    for (const fact of builderWakeFacts(assessed, following.scope)) following.seen.add(fact);
+    for (const fact of news) following.seen.add(fact);
     let local = await steps.readBranchState(worktree);
     current = await read(following);
     if (current.state === "closed") return current;
-    if (report.status === "needs-human") {
+    if (report.needsHuman) {
       const held = unpublished(following, local, current);
       following.heldLocal = held && heldKey(held);
       await needsHuman(following, {
@@ -264,10 +271,10 @@ async function maintain<W>(
 }
 
 // Readiness is GitHub's to decide, not the builder's: an approved, green,
-// clean head merges whatever the builder last reported.
+// clean head merges whatever the builder last reported. The caller's consent
+// is asked on every attempt, so it can only hold a merge back.
 async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSnapshot) {
   const { delivery, pr, steps, options } = following;
-  if (options.mergedBy !== "jigs") return false;
   let current = snapshot;
   let reason = "";
   for (let attempt = 1; attempt <= MERGE_TRIES; attempt++) {
@@ -276,8 +283,16 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
       current = await read(following);
     }
     if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
+    if (!options.mergeWhen(current)) return false;
     if (!isPullRequestMergeReady(current)) {
-      await reportBlocked(following, current);
+      const blocked = blockedMergeNote(current);
+      if (blocked !== null) {
+        await needsHuman(following, {
+          reason: "merge-blocked",
+          detail: blocked,
+          headSha: current.headSha,
+        });
+      }
       // After a refusal, keep polling: GitHub settling back to the yielded
       // state matches the watcher's last key, so the watcher would never yield it.
       if (attempt > 1) continue;
@@ -307,13 +322,4 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
   }
   await needsHuman(following, { reason: "merge-refused", detail: reason, tries: MERGE_TRIES });
   return false;
-}
-
-async function reportBlocked<W>(following: Following<W>, snapshot: PullRequestSnapshot) {
-  const { onMergeBlocked } = following.options;
-  const detail = blockedMergeNote(snapshot);
-  if (detail === null || onMergeBlocked === undefined) return;
-  if (following.blockedHeads.has(snapshot.headSha)) return;
-  following.blockedHeads.add(snapshot.headSha);
-  await onMergeBlocked({ headSha: snapshot.headSha, scope: following.scope, detail });
 }
