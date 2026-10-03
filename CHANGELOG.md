@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.88.0](https://github.com/salimhamed/jigs/compare/jigs-v0.87.0...jigs-v0.88.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* ship the PR delivery engine as routines ([#519](https://github.com/salimhamed/jigs/issues/519))
+
+### Features
+
+* ship the PR delivery engine as routines ([#519](https://github.com/salimhamed/jigs/issues/519)) ([763e5a3](https://github.com/salimhamed/jigs/commit/763e5a3c1e9416ab1e17fd1b63b23ee2ab1b3f41))
+
 ## [0.87.0](https://github.com/salimhamed/jigs/compare/jigs-v0.86.1...jigs-v0.87.0) (2026-10-03)
 
 
