@@ -216,22 +216,36 @@ risk posting twice.
 
 ## Wait for a reply
 
-`waitForSlackReply({ channel, threadTs, after })` parks the run until someone
-replies in the thread under `threadTs`, and returns the first reply posted
-after the message `after`, usually the question the workflow just posted.
-`threadTs` must be the thread's top-level message, never a reply. The
-reply comes back with its text and author:
+`waitForSlackReply({ channel, threadTs, lastRead })` parks the run until someone
+replies in the thread under `threadTs`, and returns every reply posted after
+`lastRead`, oldest first. `threadTs` must be the thread's top-level message,
+never a reply.
+
+`lastRead` is the ts of the newest post the workflow has read: usually the
+last reply in its latest `fetchSlackMessage`, or `threadTs` when the thread had
+no replies. Never pass the question the workflow just posted, or a reply
+posted while the run was working is missed. A reply already in the thread
+returns at once, so it may not answer the question just asked.
+
+The replies come back as an array, never empty, each with its text and
+author. The wait returns `"timed-out"` instead when `until` passes, and
+`"gone"` when the thread's top-level message was deleted, before or during the
+wait:
 
 ```ts
 import { waitForSlackReply } from "#jigs/routines";
-import { postSlackMessage } from "#jigs/steps";
+import { fetchSlackMessage, postSlackMessage } from "#jigs/steps";
 
 export async function askInThread(channel: string, ts: string, question: string) {
-  const asked = await postSlackMessage({ channel, threadTs: ts, text: question });
+  const thread = await fetchSlackMessage({ channel, ts });
+  if (thread.gone) return "the message was deleted";
+  const lastRead = thread.replies.at(-1)?.ts ?? ts;
+  await postSlackMessage({ channel, threadTs: ts, text: question });
   const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked, until });
-  if (reply === "timed-out") return "no reply within a day";
-  return `${reply.author.name} (${reply.author.email ?? "no email"}): ${reply.text}`;
+  const replies = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+  if (replies === "timed-out") return "no reply within a day";
+  if (replies === "gone") return "the message was deleted";
+  return replies.map((reply) => `${reply.author.name}: ${reply.text}`).join("\n");
 }
 ```
 
@@ -244,7 +258,7 @@ past. With Socket Mode on, a reply wakes the run within a second.
 The service also re-reads the thread every
 [`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
 and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
-time. Deleting the thread's top-level message while a run waits fails the run.
+time.
 
 ## Call other Slack methods
 
@@ -257,7 +271,7 @@ function. Arguments that are not strings, such as `blocks`, are sent as JSON.
 When Slack answers with an error, `callSlack` throws a `SlackApiError` whose
 `code` is Slack's error, such as `already_reacted`. A step can run more than
 once, so a call that is not safe to repeat should treat the error a repeat gets
-as success:
+as success. Here a deleted message, `message_not_found`, is tolerated too:
 
 ```ts
 // workflows/deploys/steps.ts
@@ -268,7 +282,8 @@ export async function addReaction(channel: string, timestamp: string, name: stri
   try {
     await callSlack("reactions.add", { channel, timestamp, name });
   } catch (error) {
-    if (!(error instanceof SlackApiError && error.code === "already_reacted")) throw error;
+    const tolerated = ["already_reacted", "message_not_found"];
+    if (!(error instanceof SlackApiError && tolerated.includes(error.code))) throw error;
   }
 }
 ```
@@ -320,15 +335,18 @@ export async function answer(input: WorkflowInputs<typeof inputs>) {
 
   let question = message.text;
   if (answers.clear.probability < 0.5) {
-    const asked = await postSlackMessage({
+    const lastRead = message.replies.at(-1)?.ts ?? ts;
+    await postSlackMessage({
       channel,
       threadTs: ts,
       text: "Which part of the codebase do you mean?",
     });
     const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const reply = await waitForSlackReply({ channel, threadTs: ts, after: asked, until });
-    if (reply === "timed-out") return { answered: false };
-    question += `\n\n${reply.author.name} added: ${reply.text}`;
+    const replies = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+    if (replies === "timed-out" || replies === "gone") return { answered: false };
+    for (const reply of replies) {
+      question += `\n\n${reply.author.name} added: ${reply.text}`;
+    }
   }
 
   const worktree = await provisionWorktree({ binding: "app", branch: `answer/${input.triggerId}` });

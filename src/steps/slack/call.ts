@@ -12,8 +12,9 @@ import { type SlackParams, type SlackReply, slackCall } from "../../providers/sl
  *
  * A step can run more than once, so a call that is not safe to repeat has to
  * accept what a repeat gets back, such as `already_reacted` from
- * `reactions.add`. Add any scope the method needs that jigs does not already
- * use to `slack.scopes` in `jigs.config.ts`.
+ * `reactions.add`, or `message_not_found` once the message is deleted. Add
+ * any scope the method needs that jigs does not already use to `slack.scopes`
+ * in `jigs.config.ts`.
  *
  * @example
  * ```ts
@@ -25,7 +26,8 @@ import { type SlackParams, type SlackReply, slackCall } from "../../providers/sl
  *   try {
  *     await callSlack("reactions.add", { channel, timestamp, name });
  *   } catch (error) {
- *     if (!(error instanceof SlackApiError && error.code === "already_reacted")) throw error;
+ *     const tolerated = ["already_reacted", "message_not_found"];
+ *     if (!(error instanceof SlackApiError && tolerated.includes(error.code))) throw error;
  *   }
  * }
  * ```
