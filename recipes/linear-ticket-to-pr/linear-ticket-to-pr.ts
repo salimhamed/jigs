@@ -181,7 +181,7 @@ function stoppedNote(
         ? `jigs stopped work on ${key} after ${stopped.round} review round(s) without an approved change.`
         : stopped.round === 1
           ? `jigs stopped work on ${key} before review.`
-          : `jigs stopped work on ${key} in round ${stopped.round}.`,
+          : `jigs stopped work on ${key} in round ${stopped.round}, before its review.`,
     notes: [
       ...why,
       ...(pushed ? [] : ["Could not push the branch; the service log has the push error."]),

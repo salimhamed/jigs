@@ -64,11 +64,12 @@ export async function describePullRequest<W>(
   const problems = check?.(described) ?? [];
   if (problems.length === 0) return described;
 
-  const fix = `A first title and body had these problems:\n${list(problems)}\n\nWrite the title and body again without them.`;
+  const fix = `Write the title and body again without these problems:\n${list(problems)}`;
+  const rejected = `A first answer had problems.\nTitle: ${described.title}\nBody:\n${described.body}`;
   const again = await writer.run({
     output: pullRequestDescription,
     resume: withFormat(fix, formats.describe),
-    fresh: withFormat(`${asked}\n\n${fix}`, formats.describe),
+    fresh: withFormat(`${asked}\n\n${rejected}\n\n${fix}`, formats.describe),
   });
   const remaining = check?.(again) ?? [];
   if (remaining.length > 0) {

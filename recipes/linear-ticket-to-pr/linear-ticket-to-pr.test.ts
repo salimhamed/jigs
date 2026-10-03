@@ -265,7 +265,7 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
 
 test.each([
   [1, "jigs stopped work on ABC-123 before review."],
-  [2, "jigs stopped work on ABC-123 in round 2."],
+  [2, "jigs stopped work on ABC-123 in round 2, before its review."],
 ])("a stop in round %i before its review says so", async (round, headline) => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
     stopped: { reason: "uncommitted", findings: [], round },

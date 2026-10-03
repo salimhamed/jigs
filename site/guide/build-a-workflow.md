@@ -220,7 +220,7 @@ request that needs a person, including one GitHub blocks from merging, reaches
 your workflow through `onNeedsHuman`, never with the same facts twice in a row.
 You word the note and choose where it goes.
 
-`followPullRequestToOutcome` takes these options, all required but the last:
+`followPullRequestToOutcome` takes these options, all required:
 
 | Option | What it decides |
 | --- | --- |

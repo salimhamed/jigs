@@ -303,6 +303,23 @@ test("a check's problems send the writer back once, with the problems listed", a
   expect(calls[1]?.prompt.endsWith(formats.describe)).toBe(true);
 });
 
+test("a fresh writer sent back is shown the rejected title and body with the problems", async () => {
+  const fresh: string[] = [];
+  const run = vi.fn(async (turn: { fresh: string }) => {
+    fresh.push(turn.fresh);
+    return fresh.length === 1
+      ? { title: "Add a flag", body: "Adds it." }
+      : { title: "feat: add a flag", body: "Adds it." };
+  });
+  const writer = { harness: builderHarness, run } as unknown as Delivery<Work>["builder"];
+
+  await describePullRequest({ ...delivery, writer }, { check: conventional });
+
+  expect(fresh[1]).toContain("DESCRIBE THE TASK BRIEF");
+  expect(fresh[1]).toContain("Title: Add a flag");
+  expect(fresh[1]).toContain("- The title must be a conventional commit.");
+});
+
 test("a second answer that still fails the check throws, naming the problems", async () => {
   const plain = { title: "Add a flag", body: "Adds it." };
   answer(pullRequestDescription, plain, plain);
@@ -628,6 +645,34 @@ test("an approved green PR GitHub blocks needs a person once per head; a marked 
     ),
   );
   onNeedsHuman.mockImplementation(async () => {});
+});
+
+test("a blocked merge is reported once per head, even with another need in between", async () => {
+  mergesBy("jigs");
+  const blocked = { ...snapshot, mergeState: "blocked" as const };
+  answer(maintenanceReport, { needsHuman: true, summary: "Stuck." });
+  steps.fetchPullRequestState.mockResolvedValue(withComment(blocked));
+  watch(blocked, withComment(blocked), closed);
+
+  await follow();
+
+  expect(notes().map((facts) => facts.reason)).toEqual(["merge-blocked", "builder-asked"]);
+});
+
+test("a no from mergeWhen while polling after a refusal keeps polling", async () => {
+  const ship = { ...snapshot, labels: ["ship"] };
+  steps.mergePullRequest
+    .mockResolvedValueOnce({ merged: false, reason: "computing", transient: true })
+    .mockResolvedValueOnce({ merged: true, mergeCommitSha: "m" });
+  steps.fetchPullRequestState.mockResolvedValueOnce(snapshot).mockResolvedValueOnce(ship);
+  watch(ship);
+
+  await expect(follow({ mergeWhen: (state) => state.labels.includes("ship") })).resolves.toBe(
+    "merged",
+  );
+
+  expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
+  expect(sleep).toHaveBeenCalledTimes(2);
 });
 
 test("a blocked merge is not reported when the workflow does not consent to merging", async () => {

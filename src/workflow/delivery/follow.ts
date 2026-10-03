@@ -35,9 +35,9 @@ export type FollowDelivery<W> = Pick<Delivery<W>, "work" | "key" | "worktree" | 
  * - `merge-refused`: GitHub refused the merge; `detail` is the last refusal and `tries` how
  *   often jigs tried. A transient refusal is retried up to ten times before it is reported.
  * - `merge-blocked`: GitHub blocks an approved, green pull request from merging, usually because
- *   of a branch rule; `detail` says so in a sentence. Mark a note posted about it with `headSha`
- *   and the delivery's scope, so it does not wake the builder and a later run does not post it
- *   again.
+ *   of a branch rule; `detail` says so in a sentence. Sent once per head. Mark a note posted
+ *   about it with `headSha` and the delivery's scope, so it does not wake the builder and a later
+ *   run does not post it again.
  *
  * `unpublished` is set when local work the pull request has never had holds back the merge.
  * The local worktree path never appears in `detail`.
@@ -95,6 +95,8 @@ interface Following<W> {
   seen: Set<string>;
   /** Every head the pull request has had, as read from GitHub. */
   prHeads: Set<string>;
+  /** Heads already reported as merge-blocked. */
+  blockedHeads: Set<string>;
   lastNeed?: string;
   /** Unpublished local state recovery gave up on; only a change to it wakes the builder again. */
   heldLocal?: string | undefined;
@@ -131,6 +133,7 @@ export async function followPullRequestToOutcome<W>(
     scope: defaultPullRequestScope(delivery.key),
     seen: new Set(),
     prHeads: new Set(),
+    blockedHeads: new Set(),
   };
   const { approvalCovers } = options;
   for await (const snapshot of watchPullRequest(pr, steps.fetchPullRequestState, {
@@ -283,10 +286,11 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
       current = await read(following);
     }
     if (current.state !== "open" || hasUnseenFacts(following, current)) return false;
-    if (!options.mergeWhen(current)) return false;
-    if (!isPullRequestMergeReady(current)) {
-      const blocked = blockedMergeNote(current);
-      if (blocked !== null) {
+    const consented = options.mergeWhen(current);
+    if (!consented || !isPullRequestMergeReady(current)) {
+      const blocked = consented ? blockedMergeNote(current) : null;
+      if (blocked !== null && !following.blockedHeads.has(current.headSha)) {
+        following.blockedHeads.add(current.headSha);
         await needsHuman(following, {
           reason: "merge-blocked",
           detail: blocked,
