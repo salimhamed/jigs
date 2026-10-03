@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.83.1](https://github.com/salimhamed/jigs/compare/jigs-v0.83.0...jigs-v0.83.1) (2026-10-03)
+
+
+### Bug Fixes
+
+* show MCP stderr and expired AWS SSO logins in doctor ([#503](https://github.com/salimhamed/jigs/issues/503)) ([79115c0](https://github.com/salimhamed/jigs/commit/79115c0e9f059caa8002446e2ea7a4c33316008d))
+
 ## [0.83.0](https://github.com/salimhamed/jigs/compare/jigs-v0.82.0...jigs-v0.83.0) (2026-10-02)
 
 
