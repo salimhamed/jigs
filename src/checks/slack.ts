@@ -127,3 +127,34 @@ export function slackSocketModeChecks(
     },
   ];
 }
+
+/** The slugs of the other live services on this machine using the same Slack app. */
+export type SlackAppHoldersProbe = () => readonly string[];
+
+/**
+ * With Socket Mode on, whether another service on this machine holds Socket
+ * Mode connections for the same Slack app, which splits its events.
+ */
+export function slackSharedAppChecks(
+  slack: Pick<SlackConfig, "socketMode">,
+  otherHolders: SlackAppHoldersProbe,
+  env: EnvLookup = slackEnvValue,
+): Check[] {
+  if (!slack.socketMode || env("SLACK_APP_TOKEN") === undefined) return [];
+  return [
+    {
+      id: "slack.shared-app",
+      label: "Slack app sharing",
+      run: async () => {
+        const others = otherHolders();
+        if (others.length === 0) return { ok: true };
+        const services = others.length === 1 ? "service" : "services";
+        return {
+          ok: false,
+          reason: `SLACK_APP_TOKEN belongs to the same Slack app as the running ${services} ${and(others)}; Slack splits Socket Mode events between them, so each factory misses some until its poll catches up`,
+          repair: `create a separate Slack app for this factory in ${APP_SETTINGS}, put its SLACK_BOT_TOKEN and SLACK_APP_TOKEN in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+        };
+      },
+    },
+  ];
+}

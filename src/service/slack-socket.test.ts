@@ -200,6 +200,20 @@ test("any other disconnect reason reconnects with backoff, like a close", async 
   expect(opens()).toBe(2);
 });
 
+test("too_many_websockets names a shared Slack app as the likely cause, then retries as usual", async () => {
+  const { sockets, logs, waits, opens } = harness();
+  await settle();
+  sockets[0]?.emit("message", { ...DISCONNECT, reason: "too_many_websockets" });
+  await settle();
+  expect(logs).toContain(
+    "[slack] Slack says this app has too many Socket Mode connections (too_many_websockets): another process, on this machine or elsewhere, is likely holding connections for the same Slack app, and Slack splits the app's events between them. Each factory needs its own Slack app",
+  );
+  expect(logs).toContain("[slack] Socket Mode connection ended by Slack (too_many_websockets)");
+  expect(waits()).toEqual([1]);
+  await vi.advanceTimersByTimeAsync(1_000);
+  expect(opens()).toBe(2);
+});
+
 test("a dropped connection reconnects with backoff, reset once a connection stays up 30s", async () => {
   const { sockets, waits, opens } = harness();
   await settle();

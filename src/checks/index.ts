@@ -3,9 +3,11 @@ import {
   type LinearIdentity,
   type PagerDutyIdentity,
   readFactoryConfig,
+  resolveService,
   type SlackConfig,
 } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
+import { otherSlackAppHolders } from "../config/slack-apps.ts";
 import { JigsError } from "../errors.ts";
 import { getAuthenticatedUser } from "../providers/github.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
@@ -13,7 +15,7 @@ import { findUserByEmail, getViewer } from "../providers/linear.ts";
 import { resolveLinearIdentity } from "../providers/linear-auth.ts";
 import { pagerDutyClientFor } from "../providers/pagerduty.ts";
 import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
-import { slackAuthTest, slackOpenConnection } from "../providers/slack.ts";
+import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
@@ -56,7 +58,12 @@ import {
 } from "./pagerduty-identity.ts";
 import { pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
-import { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
+import {
+  type SlackProbes,
+  slackIdentityChecks,
+  slackSharedAppChecks,
+  slackSocketModeChecks,
+} from "./slack.ts";
 import { webhookChecks } from "./webhooks.ts";
 
 export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
@@ -189,7 +196,15 @@ function slackDoctorChecks(): Check[] {
   return [
     ...slackIdentityChecks(slackProbes, slack.scopes),
     ...slackSocketModeChecks(slack, slackProbes),
+    ...slackSharedAppChecks(slack, otherSlackAppServices),
   ];
+}
+
+function otherSlackAppServices(): string[] {
+  const token = slackEnvValue("SLACK_APP_TOKEN");
+  if (token === undefined) return [];
+  const { slug } = resolveService(factoryRoot());
+  return otherSlackAppHolders(token, slug).map((holder) => holder.slug);
 }
 
 // An unreadable config is the identity check's diagnosis, so it adds nothing here.

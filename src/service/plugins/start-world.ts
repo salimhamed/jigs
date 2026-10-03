@@ -8,6 +8,7 @@ import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { SlackConfig, WebhooksConfig } from "../../config/factory-config.ts";
+import type { SlackAppHold } from "../../config/slack-apps.ts";
 import { plainHint } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stopProcessGroups } from "../../steps/agents/harnesses/process-group.ts";
@@ -358,6 +359,47 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
   return true;
 }
 
+/** Injectable record keeping and output used when the service takes its Slack app. */
+export interface SlackAppHoldDeps {
+  hold: () => SlackAppHold;
+  log?: (line: string) => void;
+}
+
+// Not a gate: another factory on the same app splits events rather than
+// stopping them, and the poll still finds what this socket misses.
+/** Record this service as a Socket Mode holder of its Slack app, warning when it is shared. */
+export function announceSlackApp(deps: SlackAppHoldDeps): SlackAppHold | undefined {
+  const log = deps.log ?? ((line: string) => console.warn(line));
+  let hold: SlackAppHold;
+  try {
+    hold = deps.hold();
+  } catch (err) {
+    log(`[slack] could not record which Slack app this service uses: ${describe(err)}`);
+    return undefined;
+  }
+  const others = hold.others.map((holder) => holder.slug);
+  if (others.length > 0) {
+    log(
+      `[slack] ${others.length === 1 ? "the service" : "the services"} ${others.join(" and ")} on this machine ${others.length === 1 ? "uses" : "use"} the same Slack app for Socket Mode; Slack splits its events between them, so each factory misses some until its poll catches up. Give each factory its own Slack app`,
+    );
+  }
+  return hold;
+}
+
+async function holdFactorySlackApp(): Promise<SlackAppHold | undefined> {
+  const [slackApps, { slackEnvValue }, { resolveService }, { factoryRoot }] = await Promise.all([
+    import("../../config/slack-apps.ts"),
+    import("../../providers/slack.ts"),
+    import("../../config/factory-config.ts"),
+    import("../../config/factory-root.ts"),
+  ]);
+  const token = slackEnvValue("SLACK_APP_TOKEN");
+  if (token === undefined) return undefined;
+  return announceSlackApp({
+    hold: () => slackApps.holdSlackApp(token, resolveService(factoryRoot()).slug),
+  });
+}
+
 // One connection for the whole service: every Slack listener reads the same
 // message stream.
 async function startSlackSocketMode(): Promise<void> {
@@ -366,6 +408,7 @@ async function startSlackSocketMode(): Promise<void> {
     import("../triggers.ts"),
     import("../slack-thread-wake.ts"),
   ]);
+  const hold = await holdFactorySlackApp();
   const socket = startSlackSocket({
     onMessage: async (event) => {
       const [pushed, woken] = await Promise.allSettled([
@@ -379,7 +422,16 @@ async function startSlackSocketMode(): Promise<void> {
         console.log(`[slack] could not wake the thread of ${where}: ${String(woken.reason)}`);
     },
   });
-  onShutdown(() => socket.stop(), { phase: "quiesce" });
+  onShutdown(
+    () => {
+      try {
+        socket.stop();
+      } finally {
+        hold?.forget();
+      }
+    },
+    { phase: "quiesce" },
+  );
 }
 
 // The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
