@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { PullRequestSnapshot } from "../../providers/github.ts";
 import {
   assignPullRequest,
-  createPullRequest,
+  createPr,
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
@@ -17,16 +17,16 @@ import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import {
+  createPullRequest,
   markPullRequestReady,
   mergePullRequest,
-  openPullRequest,
   preservedCommitMessageBody,
   reviewPullRequest,
 } from "./pr.ts";
 
 vi.mock("../../providers/github.ts", () => ({
   assignPullRequest: vi.fn(),
-  createPullRequest: vi.fn(),
+  createPr: vi.fn(),
   fetchPrCommitMessages: vi.fn(),
   fetchPrSnapshot: vi.fn(),
   fetchPrTitle: vi.fn(),
@@ -100,7 +100,7 @@ beforeEach(() => {
     "fix: title\n\nThe body.\n\nBREAKING CHANGE: the shape moved.",
   ]);
   vi.mocked(findOpenPullRequestByBranch).mockResolvedValue(null);
-  vi.mocked(createPullRequest).mockResolvedValue({
+  vi.mocked(createPr).mockResolvedValue({
     number: 1,
     html_url: "https://github.example/owner/repo/pull/1",
   });
@@ -268,12 +268,12 @@ test("a rebase has no merge message to carry a trailer in", async () => {
 });
 
 test("pat mode adds no trailer, no assignee and no requested-by line", async () => {
-  expect(await openPullRequest({ worktree, title: "fix: search", body: "Body." })).toEqual({
+  expect(await createPullRequest({ worktree, title: "fix: search", body: "Body." })).toEqual({
     ...pr,
     url: "https://github.example/owner/repo/pull/1",
   });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
-  expect(createPullRequest).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
+  expect(createPr).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).not.toHaveBeenCalled();
   await mergePullRequest(worktree, pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
@@ -281,27 +281,27 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
 
 test("app mode names the operator and returns the provider's URL", async () => {
   asApp();
-  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).resolves.toEqual(
-    { ...pr, url: "https://github.example/owner/repo/pull/1" },
-  );
+  await expect(
+    createPullRequest({ worktree, title: "fix: search", body: "Body." }),
+  ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
-  expect(createPullRequest).toHaveBeenCalledWith(
+  expect(createPr).toHaveBeenCalledWith(
     expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
   );
   expect(assignPullRequest).toHaveBeenCalledWith(pr, ["salimhamed"]);
 });
 
-test("openPullRequest forwards draft only when supplied", async () => {
-  await openPullRequest({
+test("createPullRequest forwards draft only when supplied", async () => {
+  await createPullRequest({
     worktree,
     title: "fix: search",
     body: "Body.",
     draft: true,
   });
-  expect(createPullRequest).toHaveBeenLastCalledWith(expect.objectContaining({ draft: true }));
+  expect(createPr).toHaveBeenLastCalledWith(expect.objectContaining({ draft: true }));
 
-  await openPullRequest({ worktree, title: "fix: search", body: "Body." });
-  expect(createPullRequest).toHaveBeenLastCalledWith({
+  await createPullRequest({ worktree, title: "fix: search", body: "Body." });
+  expect(createPr).toHaveBeenLastCalledWith({
     owner: "owner",
     repo: "repo",
     head: "fix",
@@ -319,11 +319,11 @@ test("an open pull request for the branch is adopted instead of created again", 
     url: "https://github.example/owner/repo/pull/7",
   });
 
-  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).resolves.toEqual(
-    { ...pr, number: 7, url: "https://github.example/owner/repo/pull/7" },
-  );
+  await expect(
+    createPullRequest({ worktree, title: "fix: search", body: "Body." }),
+  ).resolves.toEqual({ ...pr, number: 7, url: "https://github.example/owner/repo/pull/7" });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
-  expect(createPullRequest).not.toHaveBeenCalled();
+  expect(createPr).not.toHaveBeenCalled();
   expect(assignPullRequest).toHaveBeenCalledWith({ ...pr, number: 7 }, ["salimhamed"]);
 });
 
@@ -331,10 +331,10 @@ test("a failed assignment is not swallowed", async () => {
   asApp();
   vi.mocked(assignPullRequest).mockRejectedValue(new GitHubApiError(403, "/assignees", "no"));
 
-  await expect(openPullRequest({ worktree, title: "fix: search", body: "Body." })).rejects.toThrow(
-    "no",
-  );
-  expect(createPullRequest).toHaveBeenCalledOnce();
+  await expect(
+    createPullRequest({ worktree, title: "fix: search", body: "Body." }),
+  ).rejects.toThrow("no");
+  expect(createPr).toHaveBeenCalledOnce();
 });
 
 test("markPullRequestReady mutates before returning a fresh snapshot", async () => {
@@ -374,7 +374,7 @@ test("opening a PR derives its repository, head and default branch from the supp
     bindings: { docs: { remote: "git@github.com:acme/docs.git" } },
   };`,
   );
-  await openPullRequest({
+  await createPullRequest({
     worktree: { ...worktree, binding: "docs", branch: "update-guide", defaultBranch: "trunk" },
     title: "Update guide",
     body: "More examples.",
@@ -386,7 +386,7 @@ test("opening a PR derives its repository, head and default branch from the supp
     "trunk",
   );
   expect(resolveGithubIdentity).toHaveBeenCalledWith("acme");
-  expect(createPullRequest).toHaveBeenCalledExactlyOnceWith({
+  expect(createPr).toHaveBeenCalledExactlyOnceWith({
     owner: "acme",
     repo: "docs",
     head: "update-guide",

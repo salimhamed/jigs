@@ -51,7 +51,7 @@ test("a finished step and the park that follows it are two lines, in that order"
   const before = run();
   const after = run({
     steps: 2,
-    lastStep: { name: "openPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
+    lastStep: { name: "createPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
     suspensions: [
       {
         token: "github:pr:acme/api#41",
@@ -63,7 +63,7 @@ test("a finished step and the park that follows it are two lines, in that order"
   });
   const events = runEvents(before, after, AT);
   expect(names(events)).toEqual(["step", "suspended"]);
-  expect(events[0]?.detail).toBe("2 openPullRequest completed");
+  expect(events[0]?.detail).toBe("2 createPullRequest completed");
   expect(events[1]?.detail).toBe(
     "waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41",
   );

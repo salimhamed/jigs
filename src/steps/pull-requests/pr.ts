@@ -2,7 +2,7 @@ import { type MergeMethod, resolveBinding } from "../../config/factory-config.ts
 import { factoryRoot } from "../../config/factory-root.ts";
 import {
   assignPullRequest,
-  createPullRequest,
+  createPr,
   fetchPrCommitMessages,
   fetchPrTitle,
   findOpenPullRequestByBranch,
@@ -45,7 +45,7 @@ function repositoryOf(binding: string) {
 }
 
 /**
- * Open a pull request from the worktree's branch into its repository's default branch.
+ * Create a pull request from the worktree's branch into its repository's default branch.
  *
  * The lookup comes first because this is one step: a create that succeeded
  * before the assignment failed, or whose response was lost, leaves a pull
@@ -54,7 +54,7 @@ function repositoryOf(binding: string) {
  *
  * @group Open/update
  */
-export async function openPullRequest(request: {
+export async function createPullRequest(request: {
   worktree: Worktree;
   title: string;
   body: string;
@@ -70,7 +70,7 @@ export async function openPullRequest(request: {
   const operator = identity.mode === "app" ? identity.operator : null;
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
-    const { number, html_url } = await createPullRequest({
+    const { number, html_url } = await createPr({
       owner: repo.owner,
       repo: repo.repo,
       head,

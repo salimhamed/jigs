@@ -397,7 +397,7 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
   }
 }
 
-export async function createPullRequest(
+export async function createPr(
   request: CreatePullRequest,
 ): Promise<{ number: number; html_url: string }> {
   const { owner, repo, ...rest } = request;
