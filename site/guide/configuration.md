@@ -566,7 +566,7 @@ is missing, and lists the credentials still empty.
 | `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
-| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. |
+| `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
 | `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
 | `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |

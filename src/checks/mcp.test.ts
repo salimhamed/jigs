@@ -271,6 +271,59 @@ test("a server whose command cannot start fails with a repair", async () => {
   });
 });
 
+function failingServer(stderr: string[]): McpServerConfig {
+  const script = `${stderr.map((line) => `console.error(${JSON.stringify(line)});`).join("")}process.exit(1);`;
+  return { command: "node", args: ["-e", script], probe: { tool: "get_probe_token" } };
+}
+
+test("a server that exits before connecting fails quoting the end of its stderr", async () => {
+  const lines = Array.from({ length: 12 }, (_, i) => `line ${i}`);
+  const outcome = await check(
+    failingServer([...lines, "TokenRetrievalError: Token has expired and refresh failed"]),
+  );
+  expect(outcome).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("did not start or connect"),
+  });
+  const reason = outcome.ok ? "" : outcome.reason;
+  expect(reason).toContain("TokenRetrievalError: Token has expired and refresh failed");
+  expect(reason).toContain("line 11");
+  expect(reason).not.toContain("line 0");
+});
+
+test("a failing server's stderr is quoted with its credentials redacted", async () => {
+  const outcome = await check(
+    {
+      ...failingServer([
+        "auth failed for very-secret-value",
+        "fetching https://user:hunter2pass@example.com/mcp",
+      ]),
+      env: { PROBE_TOKEN: "PROBE_SOURCE" },
+    },
+    process.cwd(),
+    { PROBE_SOURCE: "very-secret-value" },
+  );
+  expect(outcome.ok).toBe(false);
+  const written = JSON.stringify(outcome);
+  expect(written).toContain("auth failed for");
+  expect(written).not.toContain("very-secret-value");
+  expect(written).not.toContain("hunter2pass");
+});
+
+test("an inherited credential-named variable is redacted from a failing server's stderr", async () => {
+  const report = await runChecks(
+    mcpServerChecks(
+      { linear: failingServer(["using inherited-secret-value"]) },
+      process.cwd(),
+      { GITHUB_TOKEN: "inherited-secret-value" },
+      { inherit: true },
+    ),
+  );
+  const written = JSON.stringify(report.checks[0]);
+  expect(written).toContain("using");
+  expect(written).not.toContain("inherited-secret-value");
+});
+
 test("a server that connects but does not expose the probe tool fails naming the tools it does expose", async () => {
   const outcome = await check({
     command: "node",

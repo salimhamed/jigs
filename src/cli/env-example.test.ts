@@ -18,6 +18,9 @@ const NOT_IN_ENV_EXAMPLE = new Set([
   "GIT_SSH_COMMAND",
   "XDG_DATA_HOME",
   "VIRTUAL_ENV",
+  "HOME",
+  "AWS_CONFIG_FILE",
+  "AWS_SHARED_CREDENTIALS_FILE",
   // Model keys agents are never handed; a model source names its own.
   "ANTHROPIC_API_KEY",
   "ANTHROPIC_AUTH_TOKEN",
