@@ -196,7 +196,7 @@ export default defineFactory({
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
-- At most `maxActive` runs of the trigger are active at once (default 3).
+- At most `maxActive` runs of the trigger are active at once (default 20).
   Further occurrences wait and start oldest first.
 - A start that fails validation or preflight is recorded as failed and not
   retried. A preflight check that could not reach its provider is tried again

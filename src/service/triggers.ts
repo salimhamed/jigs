@@ -38,7 +38,7 @@ import {
 type Ready = Extract<PreparedRun, { kind: "ready" }>;
 type Refusal = Exclude<PreparedRun, { kind: "ready" }>;
 
-const DEFAULT_MAX_ACTIVE = 3;
+const DEFAULT_MAX_ACTIVE = 20;
 const DEFAULT_LOOKBACK_MINUTES = 60;
 // How soon an occurrence waiting on the cap notices a run finishing. While
 // nothing waits, each check is one read of the pending rows.

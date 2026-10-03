@@ -377,13 +377,13 @@ test("past maxActive, occurrences wait and start oldest first as runs finish", a
   expect(h.memory.state("pages", "P4")?.state).toBe("pending");
 });
 
-test("the cap defaults to three", async () => {
+test("the cap defaults to twenty", async () => {
   const h = harness();
   await h.engine.arm();
-  h.at(minutes(10));
-  h.queued.push(...["P1", "P2", "P3", "P4"].map((page, i) => occurrenceAt(page, minutes(i + 1))));
+  h.at(minutes(30));
+  h.queued.push(...Array.from({ length: 21 }, (_, i) => occurrenceAt(`P${i + 1}`, minutes(i + 1))));
   await h.engine.poll("pages");
-  expect(h.starts).toHaveLength(3);
+  expect(h.starts).toHaveLength(20);
 });
 
 test("a new trigger starts from now: nothing before its first enable is recorded", async () => {

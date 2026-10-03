@@ -173,7 +173,7 @@ Each message starts at most one run, whether it arrives over Socket Mode, by
 polling or both, and however often Slack sends it again. A new trigger starts
 with messages posted after the service first runs it. After the service was
 down, it starts runs only for messages from the last 60 minutes; set the
-trigger's `lookbackMinutes` to change that. At most 3 of a trigger's runs are
+trigger's `lookbackMinutes` to change that. At most 20 of a trigger's runs are
 active at once, and later messages wait their turn; set `maxActive` to change
 that.
 
