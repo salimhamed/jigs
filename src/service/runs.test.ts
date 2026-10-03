@@ -104,7 +104,6 @@ function reviewApproval(): void {
     linear: { identity: { mode: "key" } },
     agents: { env: [] },
   });
-  githubAuth.resetGithubAuth();
   vi.spyOn(githubAuth, "appBotFor").mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
 }
 

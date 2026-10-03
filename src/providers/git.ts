@@ -112,22 +112,29 @@ export function scrubCredentials(text: string): string {
 }
 
 // git reads `GIT_CONFIG_KEY_n`/`VALUE_n` as if they were `-c` settings, but
-// without putting them where another process can read them.
+// without putting them where another process can read them. Settings already
+// in `env` keep their indexes; these follow them.
 export function gitConfigEnv(
   settings: readonly (readonly [string, string])[],
+  env: Record<string, string | undefined> = {},
 ): Record<string, string> {
-  const env: Record<string, string> = { GIT_CONFIG_COUNT: String(settings.length) };
-  for (const [index, [key, value]] of settings.entries()) {
-    env[`GIT_CONFIG_KEY_${index}`] = key;
-    env[`GIT_CONFIG_VALUE_${index}`] = value;
+  const first = Number.parseInt(env.GIT_CONFIG_COUNT ?? "0", 10) || 0;
+  const added: Record<string, string> = { GIT_CONFIG_COUNT: String(first + settings.length) };
+  for (const [offset, [key, value]] of settings.entries()) {
+    added[`GIT_CONFIG_KEY_${first + offset}`] = key;
+    added[`GIT_CONFIG_VALUE_${first + offset}`] = value;
   }
-  return env;
+  return added;
 }
 
-/** The setting that sends an installation token with every request to github.com. */
-export function githubAuthHeader(token: string): [string, string] {
+/**
+ * The setting that sends a GitHub token with every request to github.com, or only to the
+ * repositories under `owner` when one is given.
+ */
+export function githubAuthHeader(token: string, owner?: string): [string, string] {
   const basic = Buffer.from(`x-access-token:${token}`).toString("base64");
-  return ["http.https://github.com/.extraheader", `Authorization: Basic ${basic}`];
+  const prefix = owner === undefined ? "https://github.com/" : `https://github.com/${owner}/`;
+  return [`http.${prefix}.extraheader`, `Authorization: Basic ${basic}`];
 }
 
 function pushEnv(target: PushTarget): NodeJS.ProcessEnv {

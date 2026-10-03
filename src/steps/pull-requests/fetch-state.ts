@@ -1,11 +1,12 @@
-import { readFactoryConfig } from "../../config/factory-config.ts";
+import { type ResolvedAppIdentity, readFactoryConfig } from "../../config/factory-config.ts";
 import { factoryRoot } from "../../config/factory-root.ts";
+import { JigsError } from "../../errors.ts";
 import {
   fetchPrSnapshot,
   type PullRequestRef,
   type PullRequestSnapshot,
 } from "../../providers/github.ts";
-import { appBotFor, githubAuthFor } from "../../providers/github-auth.ts";
+import { appBotFor, type GithubAuth, githubAuthFor } from "../../providers/github-auth.ts";
 import { approvalState } from "../../workflow/pull-requests/merge-ready.ts";
 import type {
   FetchPrState,
@@ -23,12 +24,20 @@ export async function readPullRequestSnapshot(
   const facts = await fetchPrSnapshot(pr);
   const signal = readFactoryConfig(factoryRoot()).github.mergeApproval;
   const state = approvalState(facts, signal, { covers: approvalCovers });
+  const snapshot: PullRequestSnapshot = { ...facts, approval: { signal, state } };
   const auth = githubAuthFor(pr.owner);
-  const appBot =
-    auth.identity.mode === "app"
-      ? (await appBotFor(auth.identity, () => auth.bearer())).login
-      : undefined;
-  return { ...facts, ...(appBot === undefined ? {} : { appBot }), approval: { signal, state } };
+  if (auth.identity.mode === "app") snapshot.appBot = await lookUpAppBot(auth.identity, auth);
+  return snapshot;
+}
+
+async function lookUpAppBot(identity: ResolvedAppIdentity, auth: GithubAuth): Promise<string> {
+  try {
+    return (await appBotFor(identity, () => auth.bearer())).login;
+  } catch (error) {
+    throw new JigsError(
+      `could not look up the bot account of GitHub App ${identity.appId}: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 /**

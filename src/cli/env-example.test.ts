@@ -31,6 +31,7 @@ const NOT_IN_ENV_EXAMPLE = new Set([
   "JIGS_SERVICE_URL",
   // Set by jigs in the environment of an agent that acts as the GitHub App.
   "GH_TOKEN",
+  "GIT_CONFIG_COUNT",
 ]);
 
 function sourceFiles(dir: string): string[] {

@@ -3,13 +3,14 @@ import { promisify } from "node:util";
 import type { GithubIdentity } from "../config/factory-config.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
+import { NEEDS_APP_IDENTITY } from "../steps/agents/harnesses/github-access.ts";
 import type { Harness } from "../workflow/agents/harness-config.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE } from "./core.ts";
 
 const execFileAsync = promisify(execFile);
 
-export interface AgentGithubCheckDeps {
+export interface AgentCommandDeps {
   identities?: () => GithubIdentity[];
   exec?: (
     file: string,
@@ -25,7 +26,7 @@ export function agentCommandCheck(
   label: string,
   command: string,
   repair: string,
-  deps: AgentGithubCheckDeps = {},
+  deps: AgentCommandDeps = {},
 ): Check {
   return {
     id,
@@ -53,7 +54,7 @@ export function agentCommandCheck(
  */
 export function agentGithubChecks(
   agents: readonly Harness[],
-  deps: AgentGithubCheckDeps = {},
+  deps: AgentCommandDeps = {},
 ): Check[] {
   if (!agents.some((agent) => agent.github !== undefined)) return [];
   return [
@@ -65,9 +66,8 @@ export function agentGithubChecks(
         if (identities.some((identity) => identity.mode === "app")) return { ok: true };
         return {
           ok: false,
-          reason:
-            "an agent's harness sets github, which needs a GitHub App identity, and this factory uses a personal access token",
-          repair: `configure a GitHub App in github.identities in jigs.config.ts, or remove github from the harness and give the agent its own GitHub access, then: \`${RESTART_SERVICE}\``,
+          reason: NEEDS_APP_IDENTITY.reason,
+          repair: `${NEEDS_APP_IDENTITY.repair}, then: \`${RESTART_SERVICE}\``,
         };
       },
     },

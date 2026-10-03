@@ -293,8 +293,9 @@ github: {
 Pull requests come from `<app-slug>[bot]`, and you review them like anyone
 else's, so jigs uses [review approval](#merging) unless you choose the label.
 Agents can act as the same bot: see
-[GitHub access for agents](/guide/models-and-harnesses#github-access). `jigs init --github-identity-mode app` takes all of these values as
-flags. To set one up:
+[GitHub access for agents](/guide/models-and-harnesses#github-access).
+`jigs init --github-identity-mode app` takes all of these values as flags. To
+set one up:
 
 1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
    Leave OAuth and device flow off, and turn its webhook off.
@@ -351,10 +352,8 @@ binds, whichever approval you use.
 Workflow code calls `mergePullRequest` when its policy says to merge. That step
 rereads GitHub and enforces readiness and approval, read with the
 `approvalCovers` it is given. `watchPullRequest` only
-reports facts. These checks do not restrict an agent using its own GitHub tools:
-an agent that [acts as the App](/guide/models-and-harnesses#github-access) holds
-a token that could merge, so protect the branches you merge into with GitHub's
-branch protection.
+reports facts. These checks do not restrict an agent using its own GitHub
+tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
 jigs merges only when the approval is present, GitHub reports the pull request
 mergeable, it is not a draft, at least one check has run, and CI is green.

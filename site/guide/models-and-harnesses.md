@@ -312,14 +312,17 @@ harnesses.codex({ model: "gpt-5.6-sol", github: true });
 
 jigs uses the bot to open, label and merge pull requests and to post its notes.
 An agent that opts in uses it to read the discussion, reply and push its fixes.
-Only agents that opt in get it. When such an agent starts, jigs gives it:
+When such an agent starts, jigs gives it:
 
 - **`GH_TOKEN`**, a new token for the App's installation on the account that
   owns the agent's worktree. `gh` picks it up, so `gh` works as the bot with no
   login of its own.
-- **Pushes over HTTPS.** Git settings in the agent's environment send its pushes
-  to github.com over HTTPS with the token, even where the remote is an SSH URL.
-  Nothing is written to the repository's configuration.
+- **HTTPS for that account's repositories.** Git settings in the agent's
+  environment send its fetches and pushes for that account's repositories over
+  HTTPS with the token, even where the remote is an SSH URL. Repositories of
+  other accounts, such as a dependency fetched over SSH, keep their own
+  transport and never see the token. Nothing is written to the repository's
+  configuration.
 - **The bot as commit author.** You stay the committer, and your own git
   configuration still signs, so signed commits still show as Verified.
 

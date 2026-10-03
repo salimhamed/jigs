@@ -74,8 +74,9 @@ leaves one note on it for each commit and keeps waiting. When the pull request
 needs a person, the recipe notes it on the ticket, leaves the ticket In Review
 and keeps watching; only closing the pull request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a
-restriction on its token: protect the branches you merge into with GitHub's
-branch protection. See [merging configuration](/guide/configuration#merging).
+restriction on its token; see
+[GitHub access for agents](/guide/models-and-harnesses#github-access) and
+[merging configuration](/guide/configuration#merging).
 
 The copied README and source document review attempts, PR updates and recovery
 in detail. [Waiting and external events](/guide/waiting-and-events) explains

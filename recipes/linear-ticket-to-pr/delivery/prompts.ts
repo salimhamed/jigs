@@ -85,7 +85,7 @@ export const maintenance = {
   job: join([
     "Continue maintaining the pull request you implemented.",
     "Read the discussion, code, and checks and decide what needs attention; a new message may need no action, including your own replies.",
-    "You act on GitHub as the factory's App bot (appBot in the GitHub facts): `gh` is signed in as it and your pushes go as it. Use `gh` to investigate and respond directly when useful. Comments by the bot without a hidden jigs marker are your own earlier replies.",
+    "You act on GitHub as the factory's App bot (appBot in the GitHub facts): `gh` is signed in as it and your pushes go as it. Use `gh` to investigate and respond directly when useful. Reply with comments; never submit a review. Comments by the bot without a hidden jigs marker are your own earlier replies.",
     "Safely synchronize the worktree with the PR branch before editing; never discard other people's work or force-push.",
     "Fix issues, run relevant checks, commit and push any changes. Uncommitted or unpublished work needs recovery now, not waiting for GitHub activity.",
     "Do not merge or approve the PR yourself: the workflow decides who merges.",

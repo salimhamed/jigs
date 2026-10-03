@@ -20,9 +20,12 @@ checkout. The agent then acts as the App's bot:
   the App's grants change. Push and merge need the same permission anyway, so
   branch protection, not the token, keeps the agent from merging. The owner is
   the one that owns the agent's checkout.
-- **`gh` and `git`.** `gh` reads the token. `git` pushes to github.com over
-  HTTPS with the token, through `GIT_CONFIG_*` variables set for the agent only;
-  no setting is written into the repository. An App cannot push over SSH.
+- **`gh` and `git`.** `gh` reads the token. `git` reaches the owner's
+  repositories on github.com over HTTPS with the token, through `GIT_CONFIG_*`
+  variables set for the agent only; no setting is written into the repository.
+  An App cannot push over SSH. The rewrite and the token cover only that owner,
+  so another account's repositories, such as an SSH dependency, keep their
+  transport.
 - **Commits** are authored by `<slug>[bot]`, through `GIT_AUTHOR_*`. The
   committer and the signature stay the operator's own git configuration, so
   signed commits still show as Verified. The factory does not add a co-author

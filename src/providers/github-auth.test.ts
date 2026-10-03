@@ -4,7 +4,6 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
-  AGENT_TOKEN_MIN_LIFETIME_MS,
   appBotFor,
   createGithubAuth,
   mintAppJwt,
@@ -88,7 +87,7 @@ test("a minted token is reused until five minutes are left, then re-minted", asy
   expect(doFetch).toHaveBeenCalledTimes(2);
 });
 
-test("an agent's token is re-minted unless close to a full hour is left", async () => {
+test("a caller can ask for a token with more time left than jigs' own margin", async () => {
   let now = NOW;
   const doFetch = vi
     .fn()
@@ -101,10 +100,10 @@ test("an agent's token is re-minted unless close to a full hour is left", async 
   });
   expect(await auth.bearer()).toBe("first");
   now = NOW + 4 * 60_000;
-  expect(await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS)).toBe("first");
+  expect(await auth.bearer(55 * 60_000)).toBe("first");
   now = NOW + 10 * 60_000;
   // jigs' own calls would keep the first token for another 45 minutes.
-  expect(await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS)).toBe("second");
+  expect(await auth.bearer(55 * 60_000)).toBe("second");
   expect(await auth.bearer()).toBe("second");
   expect(doFetch).toHaveBeenCalledTimes(2);
 });

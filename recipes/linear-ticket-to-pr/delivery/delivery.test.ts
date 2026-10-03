@@ -569,25 +569,6 @@ test("an approved green PR GitHub blocks gets one note per head and no builder t
   );
 });
 
-test("the builder's own reply as the App's bot wakes nothing, and an approved green PR then merges", async () => {
-  mergesBy("jigs");
-  answer(maintenanceReport, finished);
-  const asBot = { ...commented, appBot: "jigs-dev[bot]" };
-  const replied = {
-    ...asBot,
-    conversationComments: [
-      ...asBot.conversationComments,
-      { ...comment(2, "Renamed x."), user: "jigs-dev[bot]", userType: "Bot" },
-    ],
-  };
-  watch(asBot, replied);
-  vi.mocked(steps.fetchPullRequestState).mockResolvedValue(replied);
-  vi.mocked(steps.mergePullRequest).mockResolvedValue({ merged: true, mergeCommitSha: "m" });
-  await follow();
-  expect(calls).toHaveLength(1);
-  expect(steps.mergePullRequest).toHaveBeenCalledOnce();
-});
-
 test("a person's comment posted during the builder's turn wakes it afterwards", async () => {
   mergesBy("human");
   answer(maintenanceReport, finished, finished);

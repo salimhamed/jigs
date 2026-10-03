@@ -16,7 +16,7 @@ import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerdu
 import { slackAuthTest, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
-import { assertGithubMcp, readsAgentGithubToken } from "../workflow/agents/github-mcp.ts";
+import { readsAgentGithubToken } from "../workflow/agents/github-mcp.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
@@ -295,13 +295,14 @@ function configuredProviders(): Record<Integration, boolean> {
 }
 
 function usedAgentGithubChecks(workflows: WorkflowManifests): Check[] {
-  const using = Object.entries(workflows).filter(([, { requires }]) =>
-    Object.values(requires?.agents ?? {}).some((agent) => agent.github !== undefined),
+  const opted = Object.entries(workflows).flatMap(([workflow, { requires }]) =>
+    Object.values(requires?.agents ?? {})
+      .filter((agent) => agent.github !== undefined)
+      .map((agent) => ({ workflow, agent })),
   );
-  return neededByUsers(
-    agentGithubChecks(using.flatMap(([, { requires }]) => Object.values(requires?.agents ?? {}))),
-    using.map(([name]) => name),
-  );
+  return neededByUsers(agentGithubChecks(opted.map(({ agent }) => agent)), [
+    ...new Set(opted.map(({ workflow }) => workflow)),
+  ]);
 }
 
 // Doctor has no worktree, so it starts the servers from the factory root.
@@ -325,7 +326,6 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
         const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
         const entry = servers.get(key) ?? {
           checks: serverChecks(name, () => {
-            assertGithubMcp(harness);
             // The agent's GitHub token exists only inside its step, so doctor
             // checks the server is installed; the step's own check probes it.
             if (readsAgentGithubToken(server) && "command" in server)

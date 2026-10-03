@@ -47,8 +47,8 @@ export interface ExecutionSeams extends DriverDependencies {
   resolveDriver: DriverResolver;
   /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
   factoryEnv(): readonly string[];
-  /** What a harness that sets `github` adds to its agent's environment. */
-  githubEnv(target: HarnessTarget): Promise<Record<string, string>>;
+  /** What a harness that sets `github` adds to its agent's environment `env`. */
+  githubEnv(target: HarnessTarget, env: Record<string, string>): Promise<Record<string, string>>;
   jitFailures(
     target: HarnessTarget,
     env: Record<string, string>,

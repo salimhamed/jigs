@@ -130,9 +130,10 @@ Adding `careful` as above lets a run pass `--input builder=careful`. Every agent
 in the object is checked before a run starts, whether or not a run picks it.
 
 The builder session continues from implementation into PR maintenance. It
-judges the discussion and checks, then responds and pushes as the App's bot. Its
-replies need no hidden comment markers: an unmarked comment by the bot is its own. If its saved session is
-unavailable, a fresh prompt supplies the ticket, current diff, and PR facts.
+judges the discussion and checks, then responds and pushes as the App's bot.
+Its replies need no hidden comment markers: an unmarked comment by the bot is
+its own. If its saved session is unavailable, a fresh prompt supplies the
+ticket, current diff, and PR facts.
 
 ## The three phases
 
@@ -233,10 +234,9 @@ export async function deliverTicket(
   to ten tries. When GitHub reports an approved, green pull request as
   `blocked`, the recipe posts one note on the pull request for each commit and
   keeps watching; the note's marker keeps it from waking the builder.
-  The watcher never merges, and the agent is instructed not to merge or approve.
-  Those instructions are not a restriction on its token, which could merge:
-  branch protection on the base branch is. Under `"any-commit"`, approvals by
-  bots never count, so the builder cannot approve its own work.
+  The watcher never merges, and the agent is instructed not to merge or approve;
+  see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
+  for what actually holds a merge back.
   It returns `"merged"` once the pull request merges, or `"closed"` when it is
   closed without merging; local work is never pushed on the way out.
 

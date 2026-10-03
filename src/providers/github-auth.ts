@@ -168,9 +168,6 @@ async function appJwtGet<T>(
   return (await res.json()) as T;
 }
 
-/** An agent's turn gets no refresh, so its token starts with close to the full hour. */
-export const AGENT_TOKEN_MIN_LIFETIME_MS = 55 * 60 * 1000;
-
 export interface GithubAuth {
   identity: ResolvedGithubIdentity;
   /**

@@ -211,10 +211,10 @@ export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
  * @remarks
  * `true` acts on the account that owns the agent's worktree; `{ owner }` names the account, for
  * an agent with no worktree. The agent gets a fresh installation token in `GH_TOKEN`, so `gh`
- * works as the bot, and its pushes to github.com go over HTTPS with that token. Its commits are
- * authored by the bot, while your own git configuration stays the committer and signer. It
- * needs a GitHub App identity: with a personal access token, an agent that sets it fails before
- * it starts.
+ * works as the bot, and git reaches that account's repositories over HTTPS with that token. Its
+ * commits are authored by the bot, while your own git configuration stays the committer and
+ * signer. It needs a GitHub App identity: with a personal access token, an agent that sets it
+ * fails before it starts.
  *
  * @group Harnesses and models
  */
