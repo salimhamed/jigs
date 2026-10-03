@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.86.0](https://github.com/salimhamed/jigs/compare/jigs-v0.85.0...jigs-v0.86.0) (2026-10-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* let a harness declare the skills its agent loads ([#513](https://github.com/salimhamed/jigs/issues/513))
+
+### Features
+
+* let a harness declare the skills its agent loads ([#513](https://github.com/salimhamed/jigs/issues/513)) ([4f3b0b7](https://github.com/salimhamed/jigs/commit/4f3b0b7609d72ad923d4d1c8385f3a95f80958f9))
+
 ## [0.85.0](https://github.com/salimhamed/jigs/compare/jigs-v0.84.0...jigs-v0.85.0) (2026-10-03)
 
 
