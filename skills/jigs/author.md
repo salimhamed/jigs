@@ -71,7 +71,9 @@ its Markdown paths mirror the package import paths.
    importing `defineWorkflow` from `@jigs-ai/jigs`. Name each agent the
    workflow runs in `requires.agents`, as a plain object of harness
    descriptors; jigs checks the harness CLIs those agents use, and doctor
-   calls the probe of each MCP server they declare.
+   calls the probe of each MCP server they declare. A harness's `skills`
+   lists skill folders (each with a `SKILL.md`) relative to the factory root;
+   jigs copies them into each agent call and checks they exist.
 4. Register `name: () => import("./workflows/<name>/<name>.ts")` in the config's
    `workflows` object. Keep imports deferred so operating commands don't load
    workflow code.

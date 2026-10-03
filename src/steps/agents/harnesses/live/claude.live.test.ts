@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync, mkdirSync, readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { generateText } from "ai";
 import { claudeCode } from "ai-sdk-provider-claude-code";
@@ -8,7 +8,12 @@ import { CLAUDE_ENV, claudeStepSettings } from "../../drivers/claude-support.ts"
 import { createAgentRunner } from "../../runner.ts";
 import { harnessEnv } from "../env.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { assertLivePreconditions, makeScratchRepo } from "./fixtures/live-env.ts";
+import {
+  assertLivePreconditions,
+  MARKER_PROMPT,
+  makeMarkerSkill,
+  makeScratchRepo,
+} from "./fixtures/live-env.ts";
 
 // Outside a factory there is no jigs.config.ts declaring agent variables.
 vi.mock("../env.ts", async (importOriginal) => ({
@@ -110,4 +115,19 @@ test("maxTurns: 1 reaches the CLI: a task that needs a tool stops after one turn
     }),
   ).rejects.toThrow("Reached maximum number of turns (1)");
   expect(existsSync(path.join(scratch, "two.txt"))).toBe(false);
+});
+
+test("a declared skill reaches an agent in a plain directory and its plugin is removed", async () => {
+  const directory = path.join(tmp, "run-directory");
+  mkdirSync(directory);
+  const { folder, token } = makeMarkerSkill(tmp);
+
+  await factoryStep({
+    harness: harnesses.claude({ model: "haiku", maxTurns: 10, skills: [folder] }),
+    cwd: directory,
+    prompt: MARKER_PROMPT,
+  });
+
+  expect(readFileSync(path.join(directory, "skill-marker.txt"), "utf8").trim()).toBe(token);
+  expect(readdirSync(path.join(tmp, "data", "jigs", "claude-plugins"))).toEqual([]);
 });

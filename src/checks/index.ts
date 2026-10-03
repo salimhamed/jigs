@@ -1,3 +1,4 @@
+import path from "node:path";
 import {
   FACTORY_CONFIG_FILE,
   type LinearIdentity,
@@ -60,6 +61,7 @@ import {
 } from "./pagerduty-identity.ts";
 import { pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
+import { skillChecks } from "./skills.ts";
 import {
   type SlackProbes,
   slackIdentityChecks,
@@ -280,6 +282,7 @@ export function preflightChecks(
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
+    ...declaredSkillChecks({ workflow: { requires } }).flatMap(({ checks }) => checks),
     ...(requires.models ?? []).flatMap((source) => {
       const driver = driverFor(source.kind);
       if (driver === undefined) return [missingDriverCheck(source.kind)];
@@ -327,6 +330,31 @@ function usedAgentGithubChecks(workflows: WorkflowManifests): Check[] {
   return neededByUsers(agentGithubChecks(opted.map(({ agent }) => agent)), [
     ...new Set(opted.map(({ workflow }) => workflow)),
   ]);
+}
+
+// A skill check's outcome depends on the earlier entries in its list that
+// could clash with it by name, so checks share a key only when those match.
+function declaredSkillChecks(
+  workflows: WorkflowManifests,
+): { checks: Check[]; workflows: string[] }[] {
+  const base = (entry: string) => path.basename(path.normalize(entry));
+  const entries = new Map<string, { checks: Check[]; workflows: string[] }>();
+  for (const [workflow, { requires }] of Object.entries(workflows)) {
+    for (const harness of Object.values(requires?.agents ?? {})) {
+      const skills = harness.skills ?? [];
+      skills.forEach((entry, index) => {
+        const rivals = skills.slice(0, index).filter((other) => base(other) === base(entry));
+        const key = JSON.stringify([entry, rivals]);
+        const found = entries.get(key) ?? {
+          checks: skillChecks([...rivals, entry]).slice(-1),
+          workflows: [],
+        };
+        if (!found.workflows.includes(workflow)) found.workflows.push(workflow);
+        entries.set(key, found);
+      });
+    }
+  }
+  return [...entries.values()];
 }
 
 // Doctor has no worktree, so it starts the servers from the factory root.
@@ -461,6 +489,9 @@ export function doctorChecks(
     ...usedHarnessChecks(harnessUsers(workflows)),
     ...usedAgentGithubChecks(workflows),
     ...requiredMcpServerChecks(workflows),
+    ...declaredSkillChecks(workflows).flatMap(({ checks, workflows }) =>
+      neededByUsers(checks, workflows),
+    ),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
     ...doctorSecretChecks(workflows, { factoryRoot }),
   ];
@@ -480,6 +511,7 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
   const driver = driverFor(harness.kind);
   return [
     ...(driver?.jitChecks?.(target) ?? []),
+    ...skillChecks(harness.skills ?? []),
     ...agentMcpServerChecks(harness.kind, harness.mcpServers, target.cwd, env),
   ];
 }

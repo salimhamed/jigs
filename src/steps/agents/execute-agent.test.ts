@@ -78,7 +78,7 @@ type Captured = {
   codexCall?: MockLanguageModelV4["doGenerateCalls"][number];
   homeRunIds: string[];
   piOptions?: PiExecutionOptions;
-  piHome?: { runId: string; model: unknown };
+  piHome?: { runId: string; model: unknown; skills: readonly string[] };
 };
 
 // Pi's request checks probe the nested model endpoint and credentials, which
@@ -100,13 +100,22 @@ function makeDeps(
     captured.options = options;
     return streamOf({ text: "done", ...generation });
   };
-  const preparePiHome: PiDriverDependencies["preparePiHome"] = async (runId, model) => {
-    captured.piHome = { runId, model };
+  const preparePiHome: PiDriverDependencies["preparePiHome"] = async (
+    runId,
+    model,
+    skills = [],
+  ) => {
+    captured.piHome = { runId, model, skills };
     const home = path.join(tmp, "pi-home", runId, crypto.randomUUID());
     const sessionDir = path.join(tmp, "pi-home", runId, "sessions");
     mkdirSync(home, { recursive: true });
     mkdirSync(sessionDir, { recursive: true });
-    return { home, sessionDir, cleanup: () => rmSync(home, { recursive: true, force: true }) };
+    return {
+      home,
+      sessionDir,
+      skills: skills.map((skill) => path.join(home, "skills", path.basename(skill))),
+      cleanup: () => rmSync(home, { recursive: true, force: true }),
+    };
   };
   const piDeps: PiDriverDependencies = {
     openStepStream: () => undefined,
@@ -915,7 +924,7 @@ test("pi ask executes its nested model with isolated discovery and returns execu
 
   const result = await agentStep(wire, { workflowRunId: "run-pi" }, deps);
 
-  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(harness) });
+  expect(captured.piHome).toEqual({ runId: "run-pi", model: planPiModel(harness), skills: [] });
   expect(captured.piOptions?.args).toEqual([
     "--mode",
     "json",
@@ -1064,6 +1073,42 @@ test("pi run mints and records a matching session with tools in the worktree", a
   if (extension === undefined) throw new Error("Pi output extension was not passed");
   expect(extension).toContain("submit-result.ts");
   expect(existsSync(extension)).toBe(false);
+});
+
+test("pi run passes each declared skill's private copy with discovery still off", async () => {
+  const wire = buildAgentRequest({
+    harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { skills: ["/factory/skills/snowflake"] }),
+    cwd: worktree,
+    prompt: "query it",
+  });
+  const { deps, captured, piDeps } = makeDeps();
+  piDeps.executePi = async (options) => {
+    captured.piOptions = options;
+    const id = options.args[options.args.indexOf("--session-id") + 1];
+    return { text: "done", providerMetadata: { pi: { sessionId: id } } };
+  };
+
+  await agentStep(wire, { workflowRunId: "run-pi-skills" }, deps);
+
+  expect(captured.piHome?.skills).toEqual(["/factory/skills/snowflake"]);
+  const args = captured.piOptions?.args ?? [];
+  expect(args).toContain("-ns");
+  expect(args[args.indexOf("--skill") + 1]).toBe(
+    path.join(captured.piOptions?.env.PI_CODING_AGENT_DIR ?? "", "skills", "snowflake"),
+  );
+});
+
+test("pi ask loads no skills", async () => {
+  const wire = buildAskAgentRequest({
+    harness: harnesses.pi(models.openaiCodex("gpt-5.5"), { skills: ["/factory/skills/snowflake"] }),
+    prompt: "say hello",
+  });
+  const { deps, captured } = makeDeps({ text: "hello" });
+
+  await agentStep(wire, { workflowRunId: "run-pi-ask-skills" }, deps);
+
+  expect(captured.piHome?.skills).toEqual([]);
+  expect(captured.piOptions?.args).not.toContain("--skill");
 });
 
 test("pi run translates its declared MCP universe into a private adapter extension", async () => {

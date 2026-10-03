@@ -13,6 +13,7 @@ import {
 import { homedir } from "node:os";
 import path from "node:path";
 import { jigsDataDir } from "../../../config/paths.ts";
+import { copySkills } from "./skills.ts";
 
 // Codex has no strict-config flag. Each invocation therefore receives a
 // private CODEX_HOME with a curated zero-server config and a link to the
@@ -30,6 +31,9 @@ export interface CodexHomeOptions {
   baseDir?: string;
   invocationBaseDir?: string;
   realAuthPath?: string;
+  /** Skill folders copied into the home's `skills`, where Codex discovers them. */
+  skills?: readonly string[];
+  root?: () => string;
 }
 
 export interface PreparedCodexHome {
@@ -115,6 +119,7 @@ export function prepareCodexInvocationHome(
     writeFileSync(path.join(home, "config.toml"), CURATED_CONFIG_TOML);
     symlinkSync(realAuthPath, path.join(home, "auth.json"));
     symlinkSync(sessionDir, path.join(home, "sessions"));
+    copySkills(options.skills ?? [], path.join(home, "skills"), options.root);
   } catch (error) {
     rmSync(home, { recursive: true, force: true });
     throw error;

@@ -1,6 +1,6 @@
 import type { ClaudeHarness, CodexHarness } from "../../../workflow/agents/harness-config.ts";
 
-const JIGS_KEYS = ["kind", "model", "mcpServers", "github"] as const;
+const JIGS_KEYS = ["kind", "model", "mcpServers", "github", "skills"] as const;
 
 // The provider settings a descriptor carries. The drivers spread these first
 // and their policy last, and strip the policy keys here too, so a descriptor

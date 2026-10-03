@@ -203,6 +203,8 @@ const claudePolicyRejected = [
   () => harnesses.claude({ model: "opus", settings: "/etc/claude.json" }),
   // @ts-expect-error plugins is Claude policy
   () => harnesses.claude({ model: "opus", plugins: [] }),
+  // @ts-expect-error skills takes jigs' folder paths, not Claude Code's skill filter
+  () => harnesses.claude({ model: "opus", skills: "all" }),
   // @ts-expect-error mcpServers takes jigs' shape with a probe, not the provider's
   () => harnesses.claude({ model: "opus", mcpServers: { s: { type: "stdio", command: "x" } } }),
 ];
@@ -279,6 +281,25 @@ test("a descriptor holds only the provider's data settings outside the policy li
   expect(claudePolicyRejected).toHaveLength(claudePolicyKeys.length);
   expect(codexPolicyRejected).toHaveLength(codexPolicyKeys.length);
   expect(functionsRejected).toHaveLength(6);
+});
+
+test("every harness takes skill folder paths as plain data", () => {
+  const skills = ["skills/snowflake", "/opt/skills/pdf"];
+  expect(harnesses.claude({ model: "opus", skills })).toEqual({
+    kind: "claude",
+    model: "opus",
+    skills,
+  });
+  expect(harnesses.codex({ model: "gpt-5.5", skills })).toEqual({
+    kind: "codex",
+    model: "gpt-5.5",
+    skills,
+  });
+  expect(harnesses.pi(models.openaiCodex("gpt-5.5"), { skills })).toEqual({
+    kind: "pi",
+    model: { kind: "openai-codex", model: "gpt-5.5" },
+    skills,
+  });
 });
 
 test("a settings object held in a variable is checked too", () => {

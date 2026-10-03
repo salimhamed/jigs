@@ -93,7 +93,9 @@ The investigator is a named, harness-backed agent that works in the repository
 worktree. The summarizer makes a direct model call with no tools. Its `output`
 schema checks the answer's shape, not whether it is right. Before running,
 log in to Claude Code and set `OPENROUTER_API_KEY` in the factory's `.env`; see
-[Models and harnesses](/guide/models-and-harnesses).
+[Models and harnesses](/guide/models-and-harnesses). To give an agent
+reference material, such as how to query your warehouse, declare
+[skills](/guide/models-and-harnesses#skills) on its harness.
 
 ### Workflow orchestration
 

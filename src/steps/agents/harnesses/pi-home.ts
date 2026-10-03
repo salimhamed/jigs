@@ -12,16 +12,22 @@ import { homedir } from "node:os";
 import path from "node:path";
 import { jigsDataDir } from "../../../config/paths.ts";
 import type { PiModelPlan } from "./pi-model.ts";
+import { copySkills } from "./skills.ts";
 
 export interface PiHomeOptions {
   baseDir?: string;
   invocationBaseDir?: string;
   realAuthPath?: string;
+  /** Skill folders copied into the home's `skills`. */
+  skills?: readonly string[];
+  root?: () => string;
 }
 
 export interface PreparedPiHome {
   home: string;
   sessionDir: string;
+  /** The copied skill folders, for Pi's `--skill`. */
+  skills: string[];
   cleanup(): void;
 }
 
@@ -69,7 +75,9 @@ export function preparePiInvocationHome(
   const invocationBaseDir = options.invocationBaseDir ?? path.join(runState, "invocations");
   mkdirSync(invocationBaseDir, { recursive: true });
   const home = mkdtempSync(path.join(invocationBaseDir, "invocation-"));
+  let skills: string[];
   try {
+    skills = copySkills(options.skills ?? [], path.join(home, "skills"), options.root);
     writeFileSync(
       path.join(home, "settings.json"),
       `${JSON.stringify({ packages: [] }, null, 2)}\n`,
@@ -89,6 +97,7 @@ export function preparePiInvocationHome(
   return {
     home,
     sessionDir,
+    skills,
     cleanup: () => rmSync(home, { recursive: true, force: true }),
   };
 }

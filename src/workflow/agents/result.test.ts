@@ -86,4 +86,7 @@ test("describeHarness includes every provider setting, so a changed one starts a
   expect(describeHarness(harnesses.codex({ model: "gpt", personality: "pragmatic" }))).not.toBe(
     describeHarness(harnesses.codex({ model: "gpt" })),
   );
+  expect(describeHarness(harnesses.claude({ model: "opus", skills: ["skills/a"] }))).not.toBe(
+    describeHarness(harnesses.claude({ model: "opus", skills: ["skills/b"] })),
+  );
 });
