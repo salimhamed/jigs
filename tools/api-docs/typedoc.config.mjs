@@ -15,6 +15,7 @@ export const sharedOptions = {
     "Linear and human input",
     "PagerDuty incidents",
     "Pull requests",
+    "Pull request delivery",
     "Slack messages",
     "Git/change data",
     "Git changes",

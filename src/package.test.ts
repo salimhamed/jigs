@@ -253,6 +253,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "acquireTicket",
     "bindAgentSession",
     "bindAgentSteps",
+    "bindDeliverySteps",
     "bindGitSteps",
     "bindLinearSteps",
     "bindPullRequestSteps",

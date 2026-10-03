@@ -260,9 +260,11 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   expect(io.procs.spawns).toHaveLength(2);
 
   io.exec.bundle = "bundle v3";
+  lines = [];
   const forced = await up(root, io, {}, { force: true });
   expect(forced.service).toBe("restarted");
   expect(io.procs.spawns).toHaveLength(3);
+  expect(lines.join("\n")).toMatch(/warning: 1 run\(s\) parked or active.*\n.*wrun_01/);
 });
 
 test("a restart whose service answers nothing is not asked about", async () => {

@@ -171,14 +171,16 @@ only: `jigs status <run-id>` shows it as the run's history, and nothing ever
 deletes it.
 
 For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workflow. The copied
-`workflows/linear-ticket-to-pr/` holds the workflow file and `delivery/`: the three phases
-(`implementAndReview`, `publish`, `followPullRequest`), the prompts and the review schemas.
-These are factory code to edit, not library exports. Read
+`workflows/linear-ticket-to-pr/` holds the workflow file and `prompts.ts`. The workflow calls
+three routines from `#jigs/routines` in order: `buildAndReview`, `publishPullRequest` and
+`followPullRequestToOutcome`. They take a delivery, a plain object the workflow builds once:
+the work, a `key`, the worktree, the prompts and the agent sessions it creates itself. The
+routines return stops as values and report needs-human and blocked merges through callbacks
+with facts; the workflow writes every note and decides where it goes. To change a prompt, edit
+its function in `prompts.ts`; jigs adds only the line asking for each answer's shape. Read
 `workflows/linear-ticket-to-pr/README.md` for the recipe's prerequisites, budgets, agents and
-prompts before changing the linear-ticket-to-pr process. To change a prompt, edit its function in
-`delivery/prompts.ts`. Reuse existing routines for comment scoping and agent sessions
-(`agentSession`, which resumes or starts fresh) rather than duplicating their
-mechanics.
+prompts before changing the linear-ticket-to-pr process. For several repositories, build one
+delivery per repository, each with its own key and worktree.
 
 ## Marker convention for bespoke pull request workflows
 

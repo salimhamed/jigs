@@ -87,6 +87,26 @@ export {
   describeHarness,
   type ModelResult,
 } from "./workflow/agents/result.ts";
+export type {
+  FindingResponse,
+  ReviewFinding,
+  ReviewRound,
+} from "./workflow/delivery/answers.ts";
+export type {
+  BuildAndReviewOptions,
+  BuildStopped,
+  Built,
+} from "./workflow/delivery/build-and-review.ts";
+export type {
+  BuildFacts,
+  Delivery,
+  DeliveryPrompts,
+  MaintainFacts,
+  ReviewFacts,
+  UnpublishedWork,
+} from "./workflow/delivery/delivery.ts";
+export type { FollowOptions, MergeBlocked, NeedsHuman } from "./workflow/delivery/follow.ts";
+export type { PublishOptions } from "./workflow/delivery/publish.ts";
 export { JigsError } from "./workflow/errors.ts";
 export {
   type AgentsDefinition,

@@ -6,15 +6,13 @@ change and another review it, opens the pull request, and follows its review
 comments and CI with the same builder session until it merges.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
-overwrites them.
+overwrites them. The delivery itself, building, reviewing, publishing and
+following the pull request, runs in three jigs routines the workflow calls.
 
 | File | What it holds |
 | --- | --- |
-| `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, and the ticket status it sets between phases. |
-| `delivery/delivery.ts` | The three phases and `DeliveryStopped`. |
-| `delivery/prompts.ts` | Every prompt the agents are sent. |
-| `delivery/review.ts` | What a review returns and how it is rendered. |
-| `delivery/wake.ts` | Which pull request changes wake the builder. |
+| `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, the ticket status it sets between phases, and every note it posts. |
+| `prompts.ts` | Every prompt the agents are sent. |
 
 ## What it needs
 
@@ -76,35 +74,18 @@ pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=ap
 
 Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
-builder; it is not a lifetime limit on PR activity. The initial builder turn counts as one attempt.
+builder; it is not a lifetime limit on PR activity.
 
-Local work counts as published when the worktree is clean and its HEAD is a
-commit the pull request has had; a worktree behind the pull request, because a
-person pushed, is fine. The recipe reads the local worktree on every PR change,
-after every builder turn, and right before every merge. Unpublished work sends
-the builder a recovery prompt immediately, without waiting for another GitHub
-notification, even when nothing on the pull request needs it. A clean worktree
-whose HEAD the pull request has not had yet first gets two short durable waits
-and fresh reads to allow GitHub to reflect a successful push; these reads spend
-no builder attempts. The builder must safely
-commit, publish, or synchronize the work, or explain why it needs human help.
+A stop before the pull request opens, or the pull request closing unmerged,
+posts a ticket note saying what remains, sets `Todo`, and fails the run. To keep
+the work, take over the branch, the retained worktree and any pull request by
+hand; another run starts over on a new branch. Notes name the branch but never
+the local worktree path; `jigs status` shows the path.
 
-Only closing the pull request unmerged stops maintenance. The workflow retains
-local work without an automatic push, posts a ticket note explaining what
-remains, sets `Todo`, and fails the run. To keep the work, take over the retained
-worktree, its branch and the pull request by hand. Another run starts over on a
-new branch and opens a new pull request. A stop during initial implementation
-still attempts to preserve committed work by pushing; a failed preservation push
-is included in the note, with its error left in the service log. Notes name the
-branch but never the local worktree path, since they may be posted anywhere;
-`jigs status` shows the path.
-
-Exhausted recovery attempts, a request for human help, and a merge that fails
-or is refused do not stop the run. The workflow posts a ticket note saying what
-a person needs to do, leaves the ticket In Review, and keeps watching: the next
-change to the pull request picks the work back up. jigs never merges over
-unpublished local work; once recovery has given up on it, only a change to the
-local state wakes the builder for it again.
+A pull request that needs a person, because the builder asked, its attempts ran
+out, or the merge was refused, does not stop the run. The workflow posts a
+ticket note saying what a person needs to do, leaves the ticket In Review, and
+keeps watching: the next change to the pull request picks the work back up.
 
 ## The agents
 
@@ -137,157 +118,143 @@ ticket, current diff, and PR facts.
 
 ## The three phases
 
-The workflow calls three phases from `delivery/delivery.ts` in order and sets
-the ticket status between them. Before these calls,
+The workflow calls three routines from `#jigs/routines` in order and sets the
+ticket status between them. Before these calls,
 [`linear-ticket-to-pr.ts`](./linear-ticket-to-pr.ts) acquires the ticket with
-`acquireTicket` (returning `claim` and `snapshot`), provisions a worktree, and
-reviews the requirements. It assembles `delivery` from that worktree, the
-reviewed task, selected agents, budgets and merge policy.
+`acquireTicket`, provisions a worktree, and reviews the requirements. It then
+builds `delivery`: the ticket as `work`, the ticket key as `key`, the worktree,
+the prompts, and one agent session each for the builder and the reviewer.
+Every routine takes it.
 
-The following helper isolates the phase sequence from that setup. It could live
-beside `linear-ticket-to-pr.ts`; call `deliverTicket(delivery, claim, snapshot)`
-inside the workflow after preparing those values. The shipped workflow keeps
-these calls inline so you can insert your own checks between phases.
+The following helper isolates the phase sequence from that setup. The shipped
+workflow keeps these calls inline, with its own wording for each note, so you
+can insert your own checks between phases.
 
 ```ts
-import type { TicketClaim, TicketSnapshot } from "@jigs-ai/jigs";
-import { agentSession, noteOnTicket } from "#jigs/routines";
-import { setTicketStatus } from "#jigs/steps";
+import { type Delivery, JigsError, type TicketClaim, type TicketSnapshot } from "@jigs-ai/jigs";
 import {
-  type Delivery,
-  DeliveryStopped,
-  followPullRequest,
-  implementAndReview,
-  publish,
-} from "./delivery/delivery.ts";
+  buildAndReview,
+  followPullRequestToOutcome,
+  noteOnTicket,
+  publishPullRequest,
+} from "#jigs/routines";
+import { setTicketStatus } from "#jigs/steps";
+import type { Ticket } from "./prompts.ts";
 
 export async function deliverTicket(
-  delivery: Delivery,
+  delivery: Delivery<Ticket>,
   claim: TicketClaim,
   snapshot: TicketSnapshot,
 ) {
-  const builder = agentSession({
-    name: "builder",
-    harness: delivery.builder,
-    cwd: delivery.worktree.path,
-  });
-
-  try {
-    const approved = await implementAndReview(delivery, builder);
-    const pr = await publish(delivery, approved);
-    await setTicketStatus(snapshot.id, "In Review");
-    const outcome = await followPullRequest(delivery, pr, builder, {
-      onNeedsHuman: (note) => noteOnTicket(claim, note),
+  const built = await buildAndReview(delivery, { rounds: 3 });
+  if ("stopped" in built) {
+    await noteOnTicket(claim, {
+      headline: `jigs stopped work on ${delivery.key} (${built.stopped.reason}).`,
+      notes: built.stopped.findings,
+      closing: "Take the branch over by hand to keep this work.",
     });
-    if (outcome === "closed") {
-      throw new DeliveryStopped(
-        `jigs stopped pull request maintenance for ${delivery.task.key}.`,
-        [
-          "The pull request was closed unmerged.",
-          `Unfinished pull request: ${pr.url}`,
-          "Local work was retained without an automatic push.",
-        ],
-        delivery.worktree,
-        "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
-      );
-    }
-    await setTicketStatus(snapshot.id, "Done");
-    return { pr: pr.url };
-  } catch (error) {
-    if (error instanceof DeliveryStopped) {
-      await noteOnTicket(claim, error.note());
-      await setTicketStatus(snapshot.id, "Todo");
-    }
-    throw error;
+    await setTicketStatus(snapshot.id, "Todo");
+    throw new JigsError(`delivery stopped: ${built.stopped.reason}`);
   }
+  const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit });
+  await setTicketStatus(snapshot.id, "In Review");
+  const outcome = await followPullRequestToOutcome(delivery, pr, {
+    attemptsPerUpdate: 3,
+    mergedBy: "human",
+    approvalCovers: "latest-commit",
+    onNeedsHuman: (facts) =>
+      noteOnTicket(claim, {
+        headline: `${pr.url} needs a person (${facts.reason}).`,
+        notes: [facts.detail],
+        closing: "jigs keeps watching the pull request.",
+      }),
+  });
+  if (outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
+  await setTicketStatus(snapshot.id, "Done");
+  return { pr: pr.url };
 }
 ```
 
-- **`implementAndReview`** runs the builder, then the reviewer on what it
-  committed, until the reviewer raises no blocking finding. Non-blocking
-  findings go into the pull request description.
-- **`publish`** has the builder write the title and body, then pushes exactly
-  the approved commit and opens the pull request, so a failed description
-  pushes nothing. A title that is not one plain line of
-  at most 100 characters, or a body with a "Title:" or "Description:" label
-  line, is sent back once with the reasons; a second bad answer fails the run.
-- **`followPullRequest`** uses `watchPullRequest` to read the initial GitHub
-  snapshot and changed facts. The builder wakes only for a fact it has not seen
-  (`builderWakeFacts` in `delivery/wake.ts`): a new or edited review or comment,
-  a newly failed check on the current head, or a conflict with the base. Checks
-  that queue, run or pass, a bare approval, and edits of a bot's comment wake
+- **`buildAndReview`** runs the builder, then the reviewer on what it
+  committed, until the reviewer raises no blocking finding. A finding's
+  `blocking` flag decides, not the verdict the reviewer states. It returns the
+  approved commit and the approving round's non-blocking findings, which the
+  workflow appends to the pull request body through `publishPullRequest`'s
+  `pullRequest` option. When the rounds run out, or the
+  builder leaves uncommitted work or commits nothing, it pushes the branch and
+  returns `{ stopped }` with the reason, the open findings, and whether the push
+  worked.
+- **`publishPullRequest`** has the builder write the title and body, then pushes
+  exactly the given commit and opens the pull request, so a failed description
+  pushes nothing. A title that is not one plain line of at most 100 characters,
+  or a body with a "Title:" or "Description:" label line, is sent back once with
+  the reasons; a second bad answer fails the run. It needs no review: any clean
+  HEAD commit can be published.
+- **`followPullRequestToOutcome`** watches the pull request. The builder wakes
+  only for a fact it has not seen: a new or edited review or comment, a newly
+  failed check on the current head, or a conflict with the base. Checks that
+  queue, run or pass, a bare approval, and edits of a bot's comment wake
   nothing. Neither do the builder's own replies: comments by the App's bot
   (`appBot` on the snapshot) with no jigs marker. A person's comment wakes it,
   even one posted while the builder was working, and so do reviews and other
-  jigs workflows' notes. Each wake gets its own attempt allowance.
-  The builder returns `finished`, `pending`, or `needs-human` with a summary.
-  `pending` waits for an external change, such as a re-run of a check that
-  failed for no visible reason; unfinished local or unpublished work is
-  recovered immediately instead. `needs-human` calls `onNeedsHuman` with a note
-  and keeps watching. To move the ticket back to `Todo` as well, do it inside
-  `onNeedsHuman`.
+  jigs workflows' notes. Each wake gets its own attempt allowance. The builder
+  returns `finished`, `pending`, or `needs-human` with a summary. `pending`
+  waits for an external change, such as a re-run of a check that failed for no
+  visible reason; unfinished local or unpublished work is recovered immediately
+  instead. `needs-human` calls `onNeedsHuman` with facts, never the same facts
+  twice in a row, and keeps watching. To move the ticket back to `Todo` as well,
+  do it inside `onNeedsHuman`.
   With `mergedBy: "human"` the recipe waits for you to merge. With `"jigs"` it
   checks merge readiness after every watcher yield and every builder turn,
   whatever the builder last reported: the configured GitHub approval (read with
-  `approvalCovers`), green CI,
-  a clean merge state, no unseen wake facts, and published local work. A transient merge refusal is retried after a durable wait, up
-  to ten tries. When GitHub reports an approved, green pull request as
-  `blocked`, the recipe posts one note on the pull request for each commit and
-  keeps watching; the note's marker keeps it from waking the builder.
+  `approvalCovers`), green CI, a clean merge state, no unseen wake facts, and
+  published local work. A transient merge refusal is retried after a durable
+  wait, up to ten tries. When GitHub reports an approved, green pull request as
+  `blocked`, the routine calls `onMergeBlocked` once for that head; the recipe
+  posts a note on the pull request, marked with the delivery's scope so it does
+  not wake the builder and a later run does not post it again.
   The watcher never merges, and the agent is instructed not to merge or approve;
   see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
   for what actually holds a merge back.
   It returns `"merged"` once the pull request merges, or `"closed"` when it is
   closed without merging; local work is never pushed on the way out.
 
-A phase that stops short throws `DeliveryStopped`. Initial implementation attempts
-to push committed work first. The shipped workflow also throws it when
-`followPullRequest` returns `"closed"`, so the ticket gets a note and goes back
-to `Todo`. Its `note()` says what is still open and where the work is, and
-the workflow decides where to post it. To add your own check between phases,
-add a line to the workflow.
+The routines word nothing a person reads. Stops are return values, and
+needs-human and a blocked merge are callbacks with facts; the workflow writes
+every note and decides where it goes. Facts never contain the local worktree
+path.
 
 ## Edit the prompts
 
-Every prompt is a plain function in `delivery/prompts.ts`. To change what an
-agent is told, edit the function.
+Every prompt is a plain function in `prompts.ts`. To change what an agent is
+told, edit the function. jigs adds one line to each prompt, asking for the
+answer in the shape it reads back, such as the three maintenance statuses.
 
 Each turn has two forms, because an agent session resumes the harness session
 it holds when it can and starts fresh when it cannot. `resume` is sent to an
 agent that already holds the earlier turns, so it says only what is new.
 `fresh` is sent to an agent starting from nothing, so it says everything.
-For example, replace the `maintenance` export in `delivery/prompts.ts` with this
-shorter prompt. Its arguments come from `followPullRequest`: the task and
-worktree in `delivery`, the current diff, the published PR, the GitHub snapshot,
-and an optional instruction to recover unfinished local work.
+For example, replace the `maintain` entry in `prompts.ts` with this shorter
+prompt. Its facts come from `followPullRequestToOutcome`: the ticket and
+worktree, the current diff, the pull request, the GitHub snapshot, and any
+unpublished local work to recover first.
 
 ```ts
-// delivery/prompts.ts
-import type { PullRequestRef, PullRequestSnapshot, Worktree } from "@jigs-ai/jigs";
-import type { WorkItem } from "./delivery.ts";
+import type { DeliveryPrompts } from "@jigs-ai/jigs";
+import type { Ticket } from "./prompts.ts";
 
-export const maintenance = {
-  resume: (pr: PullRequestRef, snapshot: PullRequestSnapshot, recovery?: string) => [
-    `Attend ${pr.owner}/${pr.repo}#${pr.number}. Read these facts:\n${JSON.stringify(snapshot)}`,
-    recovery ?? "",
-    "Address needed changes, run checks, commit and push. Do not merge or approve.",
-    "Return finished if no work remains, pending only for external waits, or needs-human if blocked.",
-  ].join("\n\n"),
-  fresh: (
-    task: WorkItem,
-    worktree: Worktree,
-    diff: string,
-    pr: PullRequestRef,
-    snapshot: PullRequestSnapshot,
-    recovery?: string,
-  ) => [
-    task.instructions,
-    `Worktree: ${worktree.path}\nCurrent diff:\n${diff}`,
-    maintenance.resume(pr, snapshot, recovery),
-  ].join("\n\n"),
+export const maintain: DeliveryPrompts<Ticket>["maintain"] = {
+  resume: ({ pr, snapshot, recovery }) =>
+    [
+      `Attend ${pr.owner}/${pr.repo}#${pr.number}. Read these facts:\n${JSON.stringify(snapshot)}`,
+      recovery === undefined ? "" : `Publish your local work first: ${JSON.stringify(recovery)}`,
+      "Address needed changes, run checks, commit and push. Do not merge or approve.",
+    ].join("\n\n"),
+  fresh: ({ work, diff, ...facts }) =>
+    [work.instructions, `Current diff:\n${diff}`, maintain.resume(facts)].join("\n\n"),
 };
 ```
 
-`WorkItem` in `delivery/delivery.ts` is the statement of the work every prompt
-reads. Add a field to it, fill it in `workItem` at the bottom of the workflow
-file, and use it in a prompt.
+`Ticket` in `prompts.ts` is the statement of the work every prompt reads. Add a
+field to it, fill it in `ticket` at the bottom of the workflow file, and use it
+in a prompt.

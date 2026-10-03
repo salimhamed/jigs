@@ -17,6 +17,8 @@ export {
   type RunAgentFn,
 } from "./agents/agent-session.ts";
 export { type AgentSteps, bindAgentSteps } from "./agents/bind.ts";
+export { bindDeliverySteps } from "./delivery/bind.ts";
+export type { DeliverySteps } from "./delivery/delivery.ts";
 export {
   type BranchState,
   bindGitSteps,

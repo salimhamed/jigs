@@ -55,6 +55,12 @@ Factories adopt a release by upgrading and fixing what breaks. `Driver`,
 `@jigs-ai/jigs/steps`, are a published contract pinned by
 `src/steps/contract.test.ts`; changing them is a breaking release.
 
+The delivery routines (`buildAndReview`, `publishPullRequest`,
+`followPullRequestToOutcome`) run steps inside a factory's runs, and a parked
+run replays them on the new release. A change to the steps they run, or to
+their order, is a breaking release whose notes tell factories to let parked
+runs finish before upgrading.
+
 ## Docs
 
 The website (`site/`) is the only user documentation; `docs/` holds maintainer

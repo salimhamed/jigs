@@ -1,5 +1,5 @@
-import type { PullRequestSnapshot } from "@jigs-ai/jigs";
 import { describe, expect, test } from "vitest";
+import type { PullRequestSnapshot } from "../pull-requests/snapshot.ts";
 import { builderWakeFacts } from "./wake.ts";
 
 const opened: PullRequestSnapshot = {

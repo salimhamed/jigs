@@ -189,3 +189,196 @@ and returns immediately with its run identity. The service runs it independently
 of the CLI process. `watch` follows progress, and `jigs status <run>` shows the
 result later. On success the worktree is released automatically; configure
 [`release`](/guide/configuration#release) to keep it instead.
+
+## Build a pull request workflow
+
+Three routines from `#jigs/routines` take a change from an agent's first commit
+to a merged pull request. Your workflow calls them in order and decides
+everything in between:
+
+- `buildAndReview(delivery, { rounds })` has the builder implement and commit,
+  then the reviewer review the commit, until the reviewer raises no blocking
+  finding. It returns the reviewed commit, or `{ stopped }` with the reason
+  (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings, and
+  whether it could push the branch first.
+- `publishPullRequest(delivery, { commit, pullRequest })` has the writer
+  describe the diff, pushes exactly `commit` and opens the pull request. The
+  optional `pullRequest` function receives the writer's title and body and
+  returns the ones to open with, plus `draft`, so you can enforce a title
+  convention or append notes. It needs no review: any clean commit at the
+  worktree's HEAD can be published.
+- `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for new
+  feedback, failing checks and conflicts until the pull request merges or
+  closes, and merges it when `mergedBy` is `"jigs"`. It returns `"merged"` or
+  `"closed"`.
+
+The routines write nothing a person reads. A stop is a return value. A pull
+request that needs a person reaches your workflow through `onNeedsHuman`, never
+with the same facts twice in a row, and one GitHub blocks from merging through
+`onMergeBlocked`, once per head. You word the note and choose where it goes.
+Budgets, `mergedBy` and `approvalCovers` are always yours to pass.
+
+While following, the builder's local work counts as published when the worktree
+is clean and its HEAD is a commit the pull request has had; a worktree behind
+the pull request, because a person pushed, is fine. Unpublished work sends the
+builder a recovery prompt at once, without waiting for GitHub, and holds back
+any merge. After a turn whose push GitHub does not show yet, the pull request is
+read twice more, two seconds apart, without spending an attempt. A transient
+merge refusal is retried up to ten times, 30 seconds apart.
+
+### The prompts
+
+A delivery sends the prompts you write, typed by `DeliveryPrompts<W>`. `W` is
+your own description of the work; only your prompts read it. jigs adds one line
+to each prompt, asking for the answer in the shape it reads back, and nothing
+else, so upgrading jigs never changes what your agents are told.
+
+| Prompt | Sent when | Its facts |
+| --- | --- | --- |
+| `build` | Each round, to the builder | `fresh`: work, worktree, open findings, diff. `resume`: the findings. |
+| `review` | Each round, to the reviewer | `fresh`: work, worktree, head commit, diff, earlier rounds. `resume`: head commit, diff, the builder's answers. |
+| `describe` | Before publishing, to the writer | Work, worktree, diff. |
+| `maintain` | Each pull request change that needs the builder | `fresh`: work, worktree, diff, plus the `resume` facts. `resume`: the pull request, its GitHub snapshot, and any unpublished local work to recover. |
+
+`resume` goes to an agent session that holds the earlier turns, so it says only
+what is new; `fresh` goes to one starting from nothing, so it says everything.
+
+```ts
+// workflows/bump/prompts.ts
+import type { DeliveryPrompts, ReviewFinding } from "@jigs-ai/jigs";
+
+export interface Bump {
+  dependency: string;
+  version: string;
+}
+
+const task = ({ dependency, version }: Bump) =>
+  `Upgrade ${dependency} to ${version} and fix whatever breaks.`;
+const list = (findings: ReviewFinding[]) =>
+  findings.map((finding) => `- ${finding.summary}`).join("\n");
+
+export const prompts: DeliveryPrompts<Bump> = {
+  build: {
+    fresh: ({ work, findings, diff }) =>
+      `${task(work)}\n\nCurrent diff:\n${diff}\n\nOpen findings:\n${list(findings)}\n\nCommit when the tests pass.`,
+    resume: ({ findings }) => `Address these findings, then commit:\n${list(findings)}`,
+  },
+  review: {
+    fresh: ({ work, headSha, diff }) =>
+      `${task(work)}\n\nReview commit ${headSha}. A finding is blocking only when it breaks something.\n\n${diff}`,
+    resume: ({ headSha, diff }) => `Review commit ${headSha} again.\n\n${diff}`,
+  },
+  describe: ({ work, diff }) => `Describe this upgrade of ${work.dependency} for a reviewer.\n\n${diff}`,
+  maintain: {
+    fresh: ({ work, diff, ...facts }) =>
+      `${task(work)}\n\nCurrent diff:\n${diff}\n\n${prompts.maintain.resume(facts)}`,
+    resume: ({ pr, snapshot, recovery }) =>
+      [
+        `Pull request ${pr.owner}/${pr.repo}#${pr.number} changed:\n${JSON.stringify(snapshot)}`,
+        recovery === undefined ? "" : `Publish your local work first: ${JSON.stringify(recovery)}`,
+        "Answer feedback, fix failing checks, commit and push. Do not merge or approve.",
+      ].join("\n\n"),
+  },
+};
+```
+
+### The workflow
+
+A delivery is a plain object you pass to every routine: the work, a `key`, the
+worktree, the prompts, and the agent sessions. Create separate session objects
+for each delivery: a session holds its agent's conversation, and its name only
+labels log lines. The `key` scopes the hidden markers on the notes posted for
+this work; in a run, a key already used for another worktree throws. A `writer`
+session describes the pull request; without one, the builder does.
+
+This workflow upgrades a dependency in every repository it is given, one
+delivery per repository, each merged before the next starts:
+
+```ts
+// workflows/bump/bump.ts
+import { defineWorkflow, harnesses, JigsError, type WorkflowInputs } from "@jigs-ai/jigs";
+import { z } from "zod";
+import {
+  agentSession,
+  buildAndReview,
+  followPullRequestToOutcome,
+  publishPullRequest,
+} from "#jigs/routines";
+import { postSlackMessage, provisionWorktree } from "#jigs/steps";
+import { prompts } from "./prompts.ts";
+
+const agents = {
+  builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
+  reviewer: harnesses.claude({ model: "opus" }),
+};
+
+const inputs = z.object({
+  dependency: z.string().min(1),
+  version: z.string().min(1),
+  bindings: z.array(z.string()).min(1),
+});
+
+export async function bump(input: WorkflowInputs<typeof inputs>) {
+  "use workflow";
+
+  const merged: string[] = [];
+  for (const binding of input.bindings) {
+    const worktree = await provisionWorktree({ binding, branch: `bump/${input.dependency}` });
+    const cwd = worktree.path;
+    const delivery = {
+      work: { dependency: input.dependency, version: input.version },
+      key: `${binding}-${input.dependency}`,
+      worktree,
+      prompts,
+      builder: agentSession({ name: `${binding} builder`, harness: agents.builder, cwd }),
+      reviewer: agentSession({ name: `${binding} reviewer`, harness: agents.reviewer, cwd }),
+    };
+
+    const built = await buildAndReview(delivery, { rounds: 2 });
+    if ("stopped" in built) {
+      throw new JigsError(
+        `${binding}: the upgrade stopped (${built.stopped.reason})`,
+        built.stopped.findings.join("\n"),
+      );
+    }
+    const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit });
+    const outcome = await followPullRequestToOutcome(delivery, pr, {
+      attemptsPerUpdate: 2,
+      mergedBy: "jigs",
+      approvalCovers: "latest-commit",
+      onNeedsHuman: async ({ reason, detail }) => {
+        await postSlackMessage({
+          channel: "#upgrades",
+          text: `${pr.url} needs a person (${reason}): ${detail}`,
+        });
+      },
+    });
+    if (outcome === "closed") throw new JigsError(`${pr.url} was closed without merging`);
+    merged.push(pr.url);
+  }
+  return { merged };
+}
+
+export default defineWorkflow({
+  inputs,
+  requires: { agents, integrations: ["github", "slack"] },
+  workflow: bump,
+});
+```
+
+To deliver to every repository at once instead, map the bindings to the same
+steps and `await Promise.all(...)`; each repository already gets its own key and
+sessions. A delivery's next step can also depend on an earlier one's result,
+such as opening a pull request in a client only after the library merged. Each
+agent step acts in one GitHub owner, so give each repository its own delivery.
+
+The `linear-ticket-to-pr` [recipe](/guide/recipes) is a complete example: it
+claims a Linear ticket, moves its status between the phases, and writes its own
+ticket notes for stops and for a pull request that needs a person.
+
+### Upgrading with runs parked
+
+A run parked in `followPullRequestToOutcome` replays the routines' steps when
+it wakes. A jigs release that changes those steps is a breaking release, and
+its notes say so: let parked runs finish, or cancel them, before upgrading.
+`jigs up` lists parked and active runs before it restarts the service.
