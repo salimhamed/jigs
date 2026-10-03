@@ -1,3 +1,4 @@
+import type { Worktree } from "../workspaces/worktree.ts";
 import {
   formats,
   implementationReport,
@@ -6,7 +7,21 @@ import {
   reviewVerdict,
   withFormat,
 } from "./answers.ts";
-import { claimKey, type Delivery, type DeliverySteps, withoutLocalPath } from "./delivery.ts";
+import {
+  type Delivery,
+  type DeliveryPrompts,
+  type DeliverySteps,
+  withoutLocalPath,
+} from "./delivery.ts";
+
+/**
+ * The parts of a delivery `buildAndReview` reads.
+ *
+ * @group Pull request delivery
+ */
+export type BuildDelivery<W> = Pick<Delivery<W>, "work" | "worktree" | "builder" | "reviewer"> & {
+  prompts: Pick<DeliveryPrompts<W>, "build" | "review">;
+};
 
 /**
  * What `buildAndReview` needs besides the delivery.
@@ -32,8 +47,8 @@ export interface Built {
 }
 
 /**
- * Why `buildAndReview` stopped without an approved change. The branch was pushed first when it
- * could be; `pushed` says whether it was.
+ * Why `buildAndReview` stopped without an approved change. Nothing is pushed: committed work stays
+ * in the worktree for the workflow to push or leave.
  *
  * @remarks
  * `rounds-exhausted` carries the blocking findings still open. `uncommitted` and `no-commits` mean
@@ -44,7 +59,8 @@ export interface Built {
 export interface BuildStopped {
   reason: "rounds-exhausted" | "uncommitted" | "no-commits";
   findings: string[];
-  pushed: boolean;
+  /** The round it stopped in; for `rounds-exhausted`, the last round. */
+  round: number;
 }
 
 /**
@@ -52,17 +68,16 @@ export interface BuildStopped {
  *
  * @remarks
  * The builder works in the delivery's worktree and commits; the reviewer reviews what it
- * committed. A finding's `blocking` flag decides a round, not the verdict the reviewer states.
- * Each agent resumes its session from round to round. Nothing is pushed on approval.
+ * committed. A round is approved when no finding is blocking. Each agent resumes its session from
+ * round to round. Nothing is pushed, on approval or on a stop.
  *
  * @group Pull request delivery
  */
 export async function buildAndReview<W>(
-  delivery: Delivery<W>,
+  delivery: BuildDelivery<W>,
   { rounds }: BuildAndReviewOptions,
-  steps: DeliverySteps,
+  steps: Pick<DeliverySteps, "readBranchState" | "readWorktreeDiff">,
 ): Promise<Built | { stopped: BuildStopped }> {
-  claimKey(delivery);
   const { work, worktree, prompts } = delivery;
   const diff = () => steps.readWorktreeDiff(worktree);
   const ledger: ReviewRound[] = [];
@@ -80,8 +95,8 @@ export async function buildAndReview<W>(
     });
 
     const state = await steps.readBranchState(worktree, worktree.baseSha);
-    if (state.dirty) return stop(delivery, steps, "uncommitted", []);
-    if (state.commits === 0) return stop(delivery, steps, "no-commits", []);
+    if (state.dirty) return stop(worktree, "uncommitted", [], round);
+    if (state.commits === 0) return stop(worktree, "no-commits", [], round);
 
     const current = await diff();
     const verdict = await delivery.reviewer.run({
@@ -100,7 +115,6 @@ export async function buildAndReview<W>(
       ),
     });
 
-    // An approval that carries a blocking finding is the reviewer contradicting itself.
     findings = verdict.findings;
     const blocking = findings.some((finding) => finding.blocking);
     ledger.push({
@@ -116,21 +130,18 @@ export async function buildAndReview<W>(
   }
 
   const open = findings.filter((finding) => finding.blocking).map((finding) => finding.summary);
-  return stop(delivery, steps, "rounds-exhausted", open);
+  return stop(worktree, "rounds-exhausted", open, rounds);
 }
 
-// The push keeps committed work on the remote for whoever takes it over. Its
-// error can name local paths, so it stays in the service log.
-async function stop<W>(
-  delivery: Delivery<W>,
-  steps: DeliverySteps,
+const stop = (
+  worktree: Worktree,
   reason: BuildStopped["reason"],
   findings: string[],
-): Promise<{ stopped: BuildStopped }> {
-  const pushed = await steps.pushBranch(delivery.worktree).then(
-    () => true,
-    () => false,
-  );
-  const posted = findings.map((finding) => withoutLocalPath(delivery.worktree, finding));
-  return { stopped: { reason, findings: posted, pushed } };
-}
+  round: number,
+): { stopped: BuildStopped } => ({
+  stopped: {
+    reason,
+    findings: findings.map((finding) => withoutLocalPath(worktree, finding)),
+    round,
+  },
+});

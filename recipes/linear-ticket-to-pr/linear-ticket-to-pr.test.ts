@@ -1,7 +1,9 @@
 import {
+  builderWakeFacts,
   type Delivery,
   harnesses,
   type NeedsHuman,
+  type PullRequestSnapshot,
   type TicketClaim,
   type TicketHandoff,
   type TicketSnapshot,
@@ -14,9 +16,15 @@ import { prompts, type Ticket } from "./prompts.ts";
 
 // The workflow body against mocked delivery routines: what it hands them, the
 // ticket status it sets around each one, and the notes it words.
+// The real scope reads the run's workflow name, which only a running workflow has.
+vi.mock("@jigs-ai/jigs", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@jigs-ai/jigs")>()),
+  defaultPullRequestScope: (subject: string) => `linearTicketToPr/${subject}`,
+}));
 vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
   provisionWorktree: vi.fn(async () => worktree),
+  pushBranch: vi.fn(async () => ({ created: false })),
   setTicketStatus: vi.fn(async () => ({})),
 }));
 vi.mock("#jigs/routines", async (importOriginal) => ({
@@ -26,6 +34,7 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
   noteOnTicket: vi.fn(async () => {}),
   postPullRequestNote: vi.fn(async () => {}),
   buildAndReview: vi.fn(async () => ({ reviewedCommit: "h1", notes: [], ledger: [] })),
+  describePullRequest: vi.fn(async () => ({ title: "Add a flag", body: "Adds it." })),
   publishPullRequest: vi.fn(async () => pr),
   followPullRequestToOutcome: vi.fn(async () => "merged" as const),
 }));
@@ -82,15 +91,18 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(handed()?.work).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.work.instructions).toContain("## Implementation brief\nUse the flag.");
   expect(routines.buildAndReview).toHaveBeenCalledWith(expect.anything(), { rounds: 3 });
+  expect(routines.describePullRequest).toHaveBeenCalledWith(handed());
   expect(routines.publishPullRequest).toHaveBeenCalledWith(handed(), {
     commit: "h1",
-    pullRequest: expect.any(Function),
+    title: "Add a flag",
+    body: "Adds it.",
   });
   expect(following()).toMatchObject({
     attemptsPerUpdate: 3,
-    mergedBy: "human",
+    wake: builderWakeFacts,
     approvalCovers: "latest-commit",
   });
+  expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(false);
 });
 
 test("a run picks its builder and reviewer by name, each in its own session", async () => {
@@ -126,8 +138,7 @@ test("the reviewer's notes are appended to the pull request body", async () => {
     ledger: [],
   });
   await run();
-  const shape = vi.mocked(routines.publishPullRequest).mock.calls[0]?.[1].pullRequest;
-  expect(shape?.({ title: "Add a flag", body: "Adds it." })).toEqual({
+  expect(vi.mocked(routines.publishPullRequest).mock.calls[0]?.[1]).toMatchObject({
     title: "Add a flag",
     body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
   });
@@ -201,12 +212,12 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
   ]);
 });
 
-test("a blocked merge is noted on the pull request with the delivery's scope", async () => {
+test("a blocked merge is noted on the pull request with the delivery's scope, not on the ticket", async () => {
   vi.mocked(routines.followPullRequestToOutcome).mockImplementationOnce(
     async (_delivery, _pr, options) => {
-      await options.onMergeBlocked?.({
+      await options.onNeedsHuman({
+        reason: "merge-blocked",
         headSha: "h1",
-        scope: "linearTicketToPr/ABC-123",
         detail: "GitHub blocks the merge.",
       });
       return "merged";
@@ -215,6 +226,7 @@ test("a blocked merge is noted on the pull request with the delivery's scope", a
 
   await run();
 
+  expect(routines.noteOnTicket).not.toHaveBeenCalled();
   expect(routines.postPullRequestNote).toHaveBeenCalledWith({
     pr,
     scope: "linearTicketToPr/ABC-123",
@@ -224,10 +236,11 @@ test("a blocked merge is noted on the pull request with the delivery's scope", a
   });
 });
 
-test("a stopped build posts its note on the ticket, sets Todo, and fails the run", async () => {
+test("a stopped build pushes the branch, posts its note on the ticket, sets Todo, and fails the run", async () => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
-    stopped: { reason: "rounds-exhausted", findings: ["Broken"], pushed: false },
+    stopped: { reason: "rounds-exhausted", findings: ["Broken"], round: 3 },
   });
+  vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
   await expect(run()).rejects.toThrow(
     "jigs stopped work on ABC-123 after 3 review round(s) without an approved change.",
@@ -244,8 +257,25 @@ test("a stopped build posts its note on the ticket, sets Todo, and fails the run
       closing: expect.stringContaining("Another run starts over on a new branch"),
     },
   ]);
+  expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
+  expect(JSON.stringify(posted())).not.toContain("remote denied");
   expect(routines.publishPullRequest).not.toHaveBeenCalled();
   expect(statuses()).toEqual(["In Progress", "Todo"]);
+});
+
+test.each([
+  [1, "jigs stopped work on ABC-123 before review."],
+  [2, "jigs stopped work on ABC-123 in round 2, before its review."],
+])("a stop in round %i before its review says so", async (round, headline) => {
+  vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
+    stopped: { reason: "uncommitted", findings: [], round },
+  });
+
+  await expect(run()).rejects.toThrow(headline);
+
+  expect(posted()[0]?.notes).not.toContain(
+    "Could not push the branch; the service log has the push error.",
+  );
 });
 
 test("a pull request closed without merging gets a note on the ticket, sets Todo, and fails the run", async () => {
@@ -283,11 +313,12 @@ test("the reviewer is told no pull request or CI exists yet and to stay off GitH
 });
 
 test("the maintenance prompt says when to wait, when to ask for a person, and what wakes the builder", () => {
-  const prompt = prompts.maintain.resume({
-    pr,
-    snapshot: {} as Parameters<typeof prompts.maintain.resume>[0]["snapshot"],
-  });
+  const facts = { pr, snapshot: {} as PullRequestSnapshot };
+  const prompt = prompts.maintain.resume({ ...facts, news: ["comment:5:2026-01-01"] });
+  expect(prompt).toContain("New since your last turn:\n- comment:5:2026-01-01");
+  expect(prompts.maintain.resume({ ...facts, news: [] })).not.toContain("New since");
   expect(prompt).toContain("https://github.com/acme/app/pull/7");
+  expect(prompt).toContain("Ask for a person only when one must act before you can continue");
   expect(prompt).toContain("A check that failed for a reason you cannot see");
   expect(prompt).toContain("You are woken again on the next change to the pull request");
   expect(prompt).toContain("Checks that queue, run or pass do not wake you");

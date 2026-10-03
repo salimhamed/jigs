@@ -220,6 +220,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "JigsError",
     "JitCheckError",
     "blockedMergeNote",
+    "builderWakeFacts",
     "choice",
     "defaultPullRequestScope",
     "describeHarness",

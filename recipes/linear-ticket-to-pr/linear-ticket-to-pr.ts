@@ -1,6 +1,8 @@
 import {
   type ApprovalCoverage,
   type BuildStopped,
+  builderWakeFacts,
+  defaultPullRequestScope,
   defineWorkflow,
   harnesses,
   JigsError,
@@ -17,13 +19,14 @@ import {
   acquireTicket,
   agentSession,
   buildAndReview,
+  describePullRequest,
   followPullRequestToOutcome,
   noteOnTicket,
   postPullRequestNote,
   publishPullRequest,
   reviewTicket,
 } from "#jigs/routines";
-import { provisionWorktree, setTicketStatus } from "#jigs/steps";
+import { provisionWorktree, pushBranch, setTicketStatus } from "#jigs/steps";
 import { prompts, type Ticket } from "./prompts.ts";
 
 // The agents this workflow can run, by the part they play. A run picks one per
@@ -37,7 +40,9 @@ const agents = {
 const agentName = z.enum(["builder", "reviewer"]);
 
 // Who merges a pull request once it is approved and CI is green:
-// "jigs" merges it, "human" leaves the merge to you.
+// "jigs" merges it, "human" leaves the merge to you. For a rule of your own,
+// such as merging only with a label, pass a check on the snapshot as
+// `mergeWhen` below.
 const mergedBy: "jigs" | "human" = "human";
 
 // "any-commit" lets a person's approving review also cover later pushes.
@@ -92,24 +97,42 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
 
   const { reviewRounds, attemptsPerUpdate } = input.budget;
   const built = await buildAndReview(delivery, { rounds: reviewRounds });
-  if ("stopped" in built) return stop(stoppedNote(key, worktree, reviewRounds, built.stopped));
+  if ("stopped" in built) {
+    // The push keeps committed work on the remote for whoever takes it over.
+    // Its error can name local paths, so it stays in the service log.
+    const pushed = await pushBranch(worktree).then(
+      () => true,
+      () => false,
+    );
+    return stop(stoppedNote(key, worktree, built.stopped, pushed));
+  }
 
+  const described = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, {
     commit: built.reviewedCommit,
-    pullRequest: ({ title, body }) => ({ title, body: withReviewerNotes(body, built.notes) }),
+    title: described.title,
+    body: withReviewerNotes(described.body, built.notes),
   });
   await setTicketStatus(snapshot.id, "In Review");
 
   const outcome = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate,
-    mergedBy,
+    wake: builderWakeFacts,
+    mergeWhen: () => mergedBy === "jigs",
     approvalCovers,
-    // Only a note: the ticket stays In Review while the run keeps watching.
+    // A blocked merge is noted on the pull request, marked so it wakes no
+    // builder and a later run does not post it again. Anything else is only a
+    // ticket note: the ticket stays In Review while the run keeps watching.
     onNeedsHuman: (facts) =>
-      noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
-    // Called once per head; the marker also keeps a later run from posting it again.
-    onMergeBlocked: ({ headSha, scope, detail }) =>
-      postPullRequestNote({ pr, scope, headSha, reason: "merge-retry", body: detail }),
+      facts.reason === "merge-blocked"
+        ? postPullRequestNote({
+            pr,
+            scope: defaultPullRequestScope(key),
+            headSha: facts.headSha,
+            reason: "merge-retry",
+            body: facts.detail,
+          })
+        : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
   });
   if (outcome === "closed") return stop(closedNote(key, worktree, pr.url));
 
@@ -142,8 +165,8 @@ const workLocation = (worktree: Worktree) =>
 function stoppedNote(
   key: string,
   worktree: Worktree,
-  rounds: number,
   stopped: BuildStopped,
+  pushed: boolean,
 ): TicketNote {
   const why = {
     "rounds-exhausted": stopped.findings,
@@ -155,11 +178,13 @@ function stoppedNote(
   return {
     headline:
       stopped.reason === "rounds-exhausted"
-        ? `jigs stopped work on ${key} after ${rounds} review round(s) without an approved change.`
-        : `jigs stopped work on ${key} before review.`,
+        ? `jigs stopped work on ${key} after ${stopped.round} review round(s) without an approved change.`
+        : stopped.round === 1
+          ? `jigs stopped work on ${key} before review.`
+          : `jigs stopped work on ${key} in round ${stopped.round}, before its review.`,
     notes: [
       ...why,
-      ...(stopped.pushed ? [] : ["Could not push the branch; the service log has the push error."]),
+      ...(pushed ? [] : ["Could not push the branch; the service log has the push error."]),
       workLocation(worktree),
     ],
     closing:
@@ -183,27 +208,38 @@ const closedNote = (key: string, worktree: Worktree, url: string): TicketNote =>
 const localState = (work: UnpublishedWork) =>
   `The worktree is ${work.dirty ? "dirty (uncommitted changes remain)" : "clean"}; local HEAD is ${work.localHead}, the pull request's head is ${work.pullRequestHead}. This local work holds back the merge until the worktree is clean and its HEAD is a commit the pull request has had.`;
 
+const held = (work: UnpublishedWork | undefined) => (work === undefined ? [] : [localState(work)]);
+
+function needsHumanWhy(
+  attempts: number,
+  facts: Exclude<NeedsHuman, { reason: "merge-blocked" }>,
+): string[] {
+  switch (facts.reason) {
+    case "builder-asked":
+      return [`The builder needs a person: ${facts.detail}`, ...held(facts.unpublished)];
+    case "attempts-exhausted":
+      return [
+        `Exhausted ${attempts} attempts for this pull request update.`,
+        ...held(facts.unpublished),
+        `The builder last said: ${facts.detail}`,
+      ];
+    case "merge-refused":
+      return [
+        facts.tries > 1
+          ? `Could not merge the pull request after ${facts.tries} tries: ${facts.detail}`
+          : `Could not merge the pull request: ${facts.detail}`,
+      ];
+  }
+}
+
 function needsHumanNote(
   key: string,
   worktree: Worktree,
   url: string,
   attempts: number,
-  facts: NeedsHuman,
+  facts: Exclude<NeedsHuman, { reason: "merge-blocked" }>,
 ): TicketNote {
-  const held = facts.unpublished === undefined ? [] : [localState(facts.unpublished)];
-  const why = {
-    "builder-asked": [`The builder needs a person: ${facts.detail}`, ...held],
-    "attempts-exhausted": [
-      `Exhausted ${attempts} attempts for this pull request update.`,
-      ...held,
-      `The builder last said: ${facts.detail}`,
-    ],
-    "merge-refused": [
-      (facts.tries ?? 1) > 1
-        ? `Could not merge the pull request after ${facts.tries} tries: ${facts.detail}`
-        : `Could not merge the pull request: ${facts.detail}`,
-    ],
-  }[facts.reason];
+  const why = needsHumanWhy(attempts, facts);
   return {
     headline: `jigs needs a person to move the pull request for ${key} forward.`,
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],

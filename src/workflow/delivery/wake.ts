@@ -36,9 +36,34 @@ function commentFacts(snapshot: PullRequestSnapshot, scope: string): string[] {
 }
 
 /**
- * The facts in a snapshot the builder can act on, one string each. The builder
- * is woken only for a fact it has not seen: checks that queue, run or pass, a
- * bare approval, label changes and its own replies are none of its business.
+ * The default wake rule for `followPullRequestToOutcome`: the facts in a snapshot a builder can
+ * act on, one string each.
+ *
+ * @remarks
+ * A review with a body or one requesting changes, a new comment or a person's edit of one, a
+ * check failing on the current head, and a conflict with the base each wake the builder. Checks
+ * that queue, run or pass, a bare approval, label changes, a bot editing its own comment, the App
+ * bot's unmarked comments (the builder's own replies) and notes marked with the delivery's
+ * `scope` wake nothing. To change the rules, wrap it or pass your own function as `wake`.
+ *
+ * @example
+ * ```ts
+ * import { builderWakeFacts, type PullRequestSnapshot } from "@jigs-ai/jigs";
+ *
+ * // Also ignore a coverage bot's comments.
+ * const wake = (snapshot: PullRequestSnapshot, scope: string) =>
+ *   builderWakeFacts(
+ *     {
+ *       ...snapshot,
+ *       conversationComments: snapshot.conversationComments.filter(
+ *         (comment) => comment.user !== "codecov[bot]",
+ *       ),
+ *     },
+ *     scope,
+ *   );
+ * ```
+ *
+ * @group Pull request delivery
  */
 export function builderWakeFacts(snapshot: PullRequestSnapshot, scope: string): string[] {
   const { headSha } = snapshot;

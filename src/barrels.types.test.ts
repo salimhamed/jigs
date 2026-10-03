@@ -14,6 +14,7 @@ import type {
   AskAgentOptions,
   AskModelOptions,
   BuildAndReviewOptions,
+  BuildDelivery,
   BuildFacts,
   BuildStopped,
   Built,
@@ -29,8 +30,12 @@ import type {
   CodexPolicyKey,
   Delivery,
   DeliveryPrompts,
+  DescribeDelivery,
+  Described,
+  DescribeOptions,
   FileChange,
   FindingResponse,
+  FollowDelivery,
   FollowOptions,
   Halt,
   HaltOption,
@@ -46,7 +51,6 @@ import type {
   McpServerConfig,
   McpStdioServerConfig,
   McpToolProbe,
-  MergeBlocked,
   ModelKind,
   ModelRequest,
   ModelResult,
@@ -56,6 +60,7 @@ import type {
   PiMcpHttpServerConfig,
   PiMcpServerConfig,
   PiMcpStdioServerConfig,
+  PublishDelivery,
   PublishOptions,
   PullRequestApproval,
   PullRequestMarker,
@@ -123,7 +128,12 @@ type RootTypeSurface = {
   codexHarness: CodexHarness;
   codexHarnessSettings: CodexHarnessSettings;
   codexPolicyKey: CodexPolicyKey;
+  buildDelivery: BuildDelivery<unknown>;
   delivery: Delivery<unknown>;
+  described: Described;
+  describeDelivery: DescribeDelivery<unknown>;
+  describeOptions: DescribeOptions;
+  followDelivery: FollowDelivery<unknown>;
   deliveryPrompts: DeliveryPrompts<unknown>;
   fileChange: FileChange;
   followOptions: FollowOptions;
@@ -142,13 +152,13 @@ type RootTypeSurface = {
   mcpServer: McpServerConfig;
   mcpStdioServer: McpStdioServerConfig;
   mcpProbe: McpToolProbe;
-  mergeBlocked: MergeBlocked;
   modelKind: ModelKind;
   modelRequest: ModelRequest;
   modelResult: ModelResult;
   modelSource: ModelSource;
   needsHuman: NeedsHuman;
   outputJsonSchema: OutputJsonSchema;
+  publishDelivery: PublishDelivery;
   publishOptions: PublishOptions;
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;

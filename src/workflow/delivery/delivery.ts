@@ -1,9 +1,7 @@
-import { getWorkflowMetadata } from "workflow";
-import type { pushApprovedChange, pushBranch, readWorktreeDiff } from "../../steps/git/branch.ts";
+import type { pushApprovedChange, readWorktreeDiff } from "../../steps/git/branch.ts";
 import type { createPullRequest, mergePullRequest } from "../../steps/pull-requests/pr.ts";
 import type { registerResource } from "../../steps/runtime/resources.ts";
 import type { AgentSession } from "../agents/agent-session.ts";
-import { JigsError } from "../errors.ts";
 import type { ReadBranchState } from "../git/committed-work.ts";
 import type { FetchPrState, PullRequestRef } from "../pull-requests/pull-request.ts";
 import type { PullRequestSnapshot } from "../pull-requests/snapshot.ts";
@@ -15,15 +13,16 @@ import type { FindingResponse, ReviewFinding, ReviewRound } from "./answers.ts";
  * review and describe it.
  *
  * @remarks
- * `work` is yours: only your prompts read it. `key` names the work in the hidden markers on pull
- * request notes; within a run, one key belongs to one worktree. Give each delivery its own agent
- * session objects: a session holds its agent's conversation, and its name only labels log lines.
- * `writer` describes the pull request and defaults to `builder`.
+ * `work` is yours: only your prompts read it. Give each delivery its own agent session objects: a
+ * session holds its agent's conversation, and its name only labels log lines. `writer` describes
+ * the pull request and defaults to `builder`. Each routine reads only some of these fields, so a
+ * full delivery can be passed to all of them.
  *
  * @group Pull request delivery
  */
 export interface Delivery<W> {
   work: W;
+  /** One key per pull request: it scopes the hidden markers on that pull request's notes. */
   key: string;
   worktree: Worktree;
   prompts: DeliveryPrompts<W>;
@@ -94,6 +93,11 @@ export interface ReviewFacts<W> {
 export interface MaintainFacts {
   pr: PullRequestRef;
   snapshot: PullRequestSnapshot;
+  /**
+   * The wake facts in `snapshot` the builder has not been shown, as the wake rule wrote them.
+   * Empty when the turn only recovers local work.
+   */
+  news: string[];
   recovery?: UnpublishedWork | undefined;
 }
 
@@ -117,30 +121,11 @@ export interface UnpublishedWork {
 export interface DeliverySteps {
   readBranchState: ReadBranchState;
   readWorktreeDiff: typeof readWorktreeDiff;
-  pushBranch: typeof pushBranch;
   pushApprovedChange: typeof pushApprovedChange;
   createPullRequest: typeof createPullRequest;
   registerResource: typeof registerResource;
   fetchPullRequestState: FetchPrState;
   mergePullRequest: typeof mergePullRequest;
-}
-
-// The Workflow SDK evaluates the bundle once per run session and runs the
-// workflow once in it, so this map only holds the current session's keys,
-// rebuilt the same way on every replay.
-const worktrees = new Map<string, string>();
-
-/** Throws when this run already used the delivery's key for another worktree. */
-export function claimKey<W>(delivery: Delivery<W>): void {
-  const id = `${getWorkflowMetadata().workflowRunId}\n${delivery.key}`;
-  const path = worktrees.get(id);
-  if (path === undefined) worktrees.set(id, delivery.worktree.path);
-  else if (path !== delivery.worktree.path) {
-    throw new JigsError(
-      `the key "${delivery.key}" is already used by a delivery in another worktree in this run`,
-      "give each delivery its own key",
-    );
-  }
 }
 
 // Facts that can end up posted anywhere can quote agent

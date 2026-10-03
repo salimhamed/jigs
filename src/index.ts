@@ -94,6 +94,7 @@ export type {
 } from "./workflow/delivery/answers.ts";
 export type {
   BuildAndReviewOptions,
+  BuildDelivery,
   BuildStopped,
   Built,
 } from "./workflow/delivery/build-and-review.ts";
@@ -105,8 +106,14 @@ export type {
   ReviewFacts,
   UnpublishedWork,
 } from "./workflow/delivery/delivery.ts";
-export type { FollowOptions, MergeBlocked, NeedsHuman } from "./workflow/delivery/follow.ts";
-export type { PublishOptions } from "./workflow/delivery/publish.ts";
+export type {
+  DescribeDelivery,
+  Described,
+  DescribeOptions,
+} from "./workflow/delivery/describe.ts";
+export type { FollowDelivery, FollowOptions, NeedsHuman } from "./workflow/delivery/follow.ts";
+export type { PublishDelivery, PublishOptions } from "./workflow/delivery/publish.ts";
+export { builderWakeFacts } from "./workflow/delivery/wake.ts";
 export { JigsError } from "./workflow/errors.ts";
 export {
   type AgentsDefinition,

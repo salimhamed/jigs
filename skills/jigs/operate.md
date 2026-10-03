@@ -181,7 +181,7 @@ nothing else. Holding it:
 - **Leave a factory with a parked run alone.** An upgrade restarts the service,
   and a rename in the new release moves the durable addresses that run resumes
   against. Finish or cancel it first.
-- **Take over a delivery that stopped short.** The run fails after jigs pushes
+- **Take over a delivery that stopped short.** The run fails after the workflow pushes
   the branch and notes it on the ticket. `jigs status <run-id>` shows the failure
   message naming the branch. To keep that work, settle the findings on that
   branch and its pull request by hand. Relaunching the ticket starts fresh on a
