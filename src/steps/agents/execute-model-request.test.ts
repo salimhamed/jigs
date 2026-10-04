@@ -54,6 +54,7 @@ afterEach(() => {
 const verdict = z.object({ ok: z.boolean() });
 
 test("askJev rejects a non-decision model by name", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   await expect(
     askJev(
       {

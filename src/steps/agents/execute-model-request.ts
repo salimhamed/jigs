@@ -4,7 +4,6 @@ import type { AskJevOptions, JevQuestions, JevResult } from "../../workflow/agen
 import type { ModelRequest } from "../../workflow/agents/plan.ts";
 import { type ModelResult, toModelResult } from "../../workflow/agents/result.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
-import { assertJevModel } from "./drivers/openrouter.ts";
 import { outputSpec } from "./execute-agent.ts";
 import { harnessEnv } from "./harnesses/env.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
@@ -84,8 +83,6 @@ export async function executeJevWith<const QUESTIONS extends JevQuestions>(
         `question "${key}" is malformed: scores need at least two described levels`,
       );
   }
-  // The model's class is a cheaper and more specific diagnosis than its credential.
-  if (wire.model.kind === "openrouter") assertJevModel(wire.model);
   const requestReport = await runChecks(driver.descriptorChecks(wire.model));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.decide(wire, {

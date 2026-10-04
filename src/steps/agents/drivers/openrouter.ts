@@ -23,8 +23,7 @@ function descriptor(request: DriverRequest): OpenrouterSource | undefined {
   return request.model;
 }
 
-/** Reject a decision on an OpenRouter model that is not jev-class. */
-export function assertJevModel(source: OpenrouterSource): void {
+function assertJevModel(source: OpenrouterSource): void {
   if (source.model !== "~typesafe/jev-latest" && !source.model.startsWith("typesafe/jev-"))
     throw new JigsError(
       `${source.model} is not a jev-class model; askJev accepts only jev-class models`,
