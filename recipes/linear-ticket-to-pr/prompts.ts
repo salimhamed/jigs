@@ -100,10 +100,7 @@ export const prompts: DeliveryPrompts<Ticket> = {
         build,
       ]),
     resume: ({ findings }) =>
-      join([
-        findings.length === 0 ? "" : `The reviewer found:\n${renderFindings(findings)}`,
-        build,
-      ]),
+      join([findings.length === 0 ? "" : `Open findings:\n${renderFindings(findings)}`, build]),
   },
 
   review: {

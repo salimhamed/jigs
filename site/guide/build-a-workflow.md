@@ -209,7 +209,8 @@ everything in between:
   work on the remote.
 - `describePullRequest(delivery, { commit, check })` has the writer write the
   pull request's title and body from the diff, then resets the worktree to
-  `commit` the same way. The optional `check` returns the problems with an
+  `commit` the same way. It throws first unless the worktree is clean at
+  `commit`. The optional `check` returns the problems with an
   answer, such as a title that breaks your convention; the writer is sent back
   once with them, and a second answer with problems throws. Nothing is pushed.
 - `publishPullRequest(delivery, { commit, title, body, draft })` pushes exactly

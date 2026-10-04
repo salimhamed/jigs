@@ -406,6 +406,20 @@ test("a second answer that still fails the check throws, naming the problems", a
   expect(calls).toHaveLength(2);
 });
 
+test.each([
+  ["HEAD is another commit", "h2", false, "HEAD is h2"],
+  ["the worktree is dirty", "h1", true, "with uncommitted changes"],
+])("describing refuses before any writer turn when %s", async (_, headSha, dirty, message) => {
+  at(headSha, dirty);
+
+  const described = describePullRequest(delivery, { commit: "h1" });
+
+  await expect(described).rejects.toBeInstanceOf(JigsError);
+  await expect(described).rejects.toThrow(message);
+  expect(calls).toHaveLength(0);
+  expect(steps.restoreWorktree).not.toHaveBeenCalled();
+});
+
 test("the worktree is restored to the described commit after each writer turn", async () => {
   answer(
     pullRequestDescription,

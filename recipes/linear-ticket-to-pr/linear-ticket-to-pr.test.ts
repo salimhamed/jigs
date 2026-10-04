@@ -312,6 +312,13 @@ test("the reviewer is told no pull request or CI exists yet and to stay off GitH
   }
 });
 
+test("a resumed builder's findings are listed without crediting them to the reviewer", () => {
+  const findings = [{ summary: "The worktree has uncommitted changes.", blocking: true }];
+  const prompt = prompts.build.resume({ findings });
+  expect(prompt).toContain("Open findings:\n- The worktree has uncommitted changes.");
+  expect(prompt).not.toContain("The reviewer found");
+});
+
 test("the maintenance prompt says when to wait, when to ask for a person, and what wakes the builder", () => {
   const facts = { pr, snapshot: {} as PullRequestSnapshot };
   const prompt = prompts.maintain.resume({ ...facts, news: ["comment:5:2026-01-01"] });

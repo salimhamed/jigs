@@ -28,8 +28,8 @@ export interface Described {
  */
 export interface DescribeOptions {
   /**
-   * The commit being described, normally the reviewed commit you publish next. The worktree is
-   * reset to it after the writer's turns.
+   * The commit being described, normally the reviewed commit you publish next. It must be the
+   * worktree's clean HEAD; the worktree is reset to it after the writer's turns.
    */
   commit: string;
   /**
@@ -49,18 +49,24 @@ export interface DescribeOptions {
  * sent back once with the reasons; a second bad answer throws. `check` adds your own rules the
  * same way. Nothing is pushed.
  *
- * The writer must not change the worktree. Afterwards the worktree is reset to `commit` and its
- * untracked files are removed, while ignored files are kept, so it can be published as it was
- * reviewed.
+ * The worktree must be clean at `commit`, or it throws before the writer runs. The writer must
+ * not change the worktree: afterwards the worktree is reset to `commit` and its untracked files
+ * are removed, while ignored files are kept, so it can be published as it was reviewed.
  *
  * @group Pull request delivery
  */
 export async function describePullRequest<W>(
   delivery: DescribeDelivery<W>,
   { commit, check }: DescribeOptions,
-  steps: Pick<DeliverySteps, "readWorktreeDiff" | "restoreWorktree">,
+  steps: Pick<DeliverySteps, "readBranchState" | "readWorktreeDiff" | "restoreWorktree">,
 ): Promise<Described> {
   const { work, worktree, prompts } = delivery;
+  const state = await steps.readBranchState(worktree, worktree.baseSha);
+  if (state.dirty || state.headSha !== commit) {
+    throw new JigsError(
+      `cannot describe ${commit}: the worktree must be clean at that commit, but HEAD is ${state.headSha}${state.dirty ? " with uncommitted changes" : ""}`,
+    );
+  }
   const writer = delivery.writer ?? delivery.builder;
   const asked = prompts.describe({ work, worktree, diff: await steps.readWorktreeDiff(worktree) });
   // The prompt carries every fact it needs, so a resumed and a fresh writer are told the same.
