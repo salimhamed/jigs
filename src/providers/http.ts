@@ -1,6 +1,6 @@
-// The one request loop behind every provider's HTTP API: credential, send, one
-// re-mint on a rejected credential, bounded waits on a rate limit, and a
-// provider-owned decode that turns any answer into a value or a failure.
+// What every provider's request loop shares: its error, the rate-limit wait and
+// the one re-mint on a rejected credential. Each provider sends and decodes in
+// its own file.
 
 import { JigsError } from "../errors.ts";
 
@@ -17,7 +17,7 @@ const PROVIDER_NAMES: Record<Provider, string> = {
 
 const RATE_LIMIT_RETRIES = 3;
 // A wait longer than this belongs to the caller's schedule, not a blocked call.
-const MAX_RATE_LIMIT_WAIT_SECONDS = 60;
+export const MAX_RATE_LIMIT_WAIT_SECONDS = 60;
 const MAX_ERROR_BODY = 1_000;
 
 /** Where a provider call's credential comes from. */
@@ -64,58 +64,14 @@ export class ProviderApiError extends JigsError {
   }
 }
 
-/** Builds the failure for this response, with provider, status, request and body filled in. */
-export type Fail = (
-  extra?: Pick<ProviderApiErrorInit, "code" | "detail" | "message">,
-) => ProviderApiError;
-
-export interface ProviderRequest<T> {
-  provider: Provider;
-  /** Absent for a call that sends no credential, such as a token exchange. */
-  auth?: ProviderAuth;
-  url: string;
-  method?: string;
-  /** Names the call in a failure; defaults to the method and the URL's path. */
-  request?: string;
-  headers?: Record<string, string>;
-  /** Sent JSON-encoded, with its content type. */
-  json?: unknown;
-  /** Sent as is; set its content type in `headers`. */
-  body?: string;
-  /** The `authorization` header for a credential. Defaults to `Bearer <credential>`. */
-  authorization?: (credential: string) => string;
-  /** Whether the provider rejected the credential. Defaults to a 401. */
-  isAuthFailure?: (res: Response, text: string) => boolean;
-  /** Whether the answer is a rate limit to wait out. Defaults to a 429. */
-  isRateLimited?: (res: Response) => boolean;
-  /** Seconds a rate limit asks to wait. Defaults to `retry-after`, else 1. */
-  retryAfter?: (res: Response) => number;
-  /**
-   * Every answer not retried, including a rate limit the loop gave up on, becomes a value or a thrown
-   * failure here. Defaults to `jsonDecode`.
-   */
-  decode?: (res: Response, text: string, fail: Fail) => T;
-  fetch?: typeof fetch;
-  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /**
-   * Ends a rate-limit wait early, failing with the signal's reason: a signal, or a watch started
-   * when a wait begins, such as a factory context's `runSignal`. Absent or `null`, nothing ends it.
-   */
-  signal?: AbortSignal | WaitSignal | null;
-}
-
-/** A signal for one wait, started when the wait begins and disposed when it ends. */
+/** A watch for one wait, started when the wait begins and disposed when it ends. */
 export type WaitSignal = (
   subject: string,
 ) => Promise<{ signal: AbortSignal; dispose(): void } | undefined>;
 
-/** A JSON body on success, nothing on 204, and a failure for any error status. */
-function jsonDecode<T>(res: Response, text: string, fail: Fail): T {
-  if (!res.ok) throw fail();
-  return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
-}
+export type Sleep = (ms: number, signal?: AbortSignal) => Promise<void>;
 
-const realSleep = (ms: number, signal?: AbortSignal) =>
+const realSleep: Sleep = (ms, signal) =>
   new Promise<void>((resolve) => {
     const timer = setTimeout(resolve, ms);
     signal?.addEventListener("abort", () => clearTimeout(timer), { once: true });
@@ -134,84 +90,49 @@ export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise
   });
 }
 
-function retryAfterHeader(res: Response): number {
+/** The seconds a rate limit's `retry-after` asks to wait, else `fallback`. */
+export function retryAfterSeconds(res: Response, fallback = 1): number {
   const seconds = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
-  return Number.isNaN(seconds) ? 1 : seconds;
+  return Number.isNaN(seconds) ? fallback : seconds;
 }
 
-async function waitOut(
-  ms: number,
-  spec: Pick<ProviderRequest<unknown>, "provider" | "signal">,
-  sleep: NonNullable<ProviderRequest<unknown>["sleep"]>,
-): Promise<void> {
-  if (spec.signal === null || spec.signal === undefined) return sleep(ms);
-  const watch =
-    typeof spec.signal === "function"
-      ? await spec.signal(`waiting out ${PROVIDER_NAMES[spec.provider]}'s rate limit`)
-      : undefined;
-  const signal = typeof spec.signal === "function" ? watch?.signal : spec.signal;
+/**
+ * Wait out a rate limit asking for `seconds`, after `waited` earlier waits on the same call, and
+ * say whether to send it again: not for a wait over a minute, nor past the third. `watch` ends the
+ * wait early with its signal's reason, such as the run's cancellation; `null` waits regardless.
+ */
+export async function rateLimitWait(
+  provider: Provider,
+  seconds: number,
+  waited: number,
+  watch: WaitSignal | null,
+  sleep: Sleep = realSleep,
+): Promise<boolean> {
+  if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS || waited >= RATE_LIMIT_RETRIES) return false;
+  const ms = seconds * 1000;
+  if (watch === null) {
+    await sleep(ms);
+    return true;
+  }
+  const run = await watch(`waiting out ${PROVIDER_NAMES[provider]}'s rate limit`);
   try {
-    if (signal?.aborted) throw abortReason(signal);
-    await abortable(sleep(ms, signal), signal);
+    if (run?.signal.aborted) throw abortReason(run.signal);
+    await abortable(sleep(ms, run?.signal), run?.signal);
   } finally {
-    watch?.dispose();
+    run?.dispose();
   }
+  return true;
 }
 
-export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
-  const method = spec.method ?? "GET";
-  const request = spec.request ?? `${method} ${new URL(spec.url).pathname}`;
-  const doFetch = spec.fetch ?? fetch;
-  const sleep = spec.sleep ?? realSleep;
-  const decode = spec.decode ?? jsonDecode<T>;
-  let reauthorized = false;
-  let rateLimited = 0;
-  for (;;) {
-    const credential = await spec.auth?.bearer();
-    const res = await doFetch(spec.url, {
-      method,
-      headers: {
-        ...(credential === undefined
-          ? {}
-          : { authorization: spec.authorization?.(credential) ?? `Bearer ${credential}` }),
-        ...(spec.json === undefined ? {} : { "content-type": "application/json" }),
-        ...spec.headers,
-      },
-      body: spec.json === undefined ? spec.body : JSON.stringify(spec.json),
-    });
-    const text = await res.text();
-    let detail: string | undefined;
-    // A long-lived token can be revoked early, by a re-mint with other scopes.
-    if (
-      !reauthorized &&
-      credential !== undefined &&
-      spec.auth?.invalidate &&
-      (spec.isAuthFailure?.(res, text) ?? res.status === 401)
-    ) {
-      reauthorized = true;
-      spec.auth.invalidate(credential);
-      continue;
-    }
-    if (spec.isRateLimited?.(res) ?? res.status === 429) {
-      const wait = (spec.retryAfter ?? retryAfterHeader)(res);
-      if (wait > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${wait}s`;
-      else if (rateLimited < RATE_LIMIT_RETRIES) {
-        rateLimited += 1;
-        await waitOut(wait * 1000, spec, sleep);
-        continue;
-      }
-    }
-    const fail: Fail = (extra = {}) =>
-      new ProviderApiError({
-        provider: spec.provider,
-        status: res.status,
-        request,
-        body: text,
-        detail,
-        ...extra,
-      });
-    return decode(res, text, fail);
-  }
+/**
+ * Forget a rejected credential so the next `bearer()` mints a fresh one, and say whether to send
+ * again. A credential that cannot be re-minted, such as a personal key, is not retried.
+ */
+export function reauthorize(auth: ProviderAuth, stale: string): boolean {
+  if (auth.invalidate === undefined) return false;
+  // A long-lived token can be revoked early, by a re-mint with other scopes.
+  auth.invalidate(stale);
+  return true;
 }
 
 export interface ClientCredentialsGrant {
@@ -228,42 +149,47 @@ export interface ClientCredentialsGrant {
 }
 
 /** Exchange an OAuth app's client credentials for a token, keeping the secret out of any failure. */
-export function mintClientCredentials(
+export async function mintClientCredentials(
   grant: ClientCredentialsGrant,
 ): Promise<{ accessToken: string; expiresIn?: unknown }> {
   const name = PROVIDER_NAMES[grant.provider];
-  return providerRequest({
-    provider: grant.provider,
-    url: grant.url,
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: grant.clientId,
-      client_secret: grant.clientSecret,
-      scope: grant.scope,
-    }).toString(),
-    fetch: grant.fetch,
-    // One mint serves every run waiting on it.
-    signal: null,
-    decode: (res, text) => {
-      if (!res.ok) {
-        const detail = grant.quote(text).replaceAll(grant.clientSecret, "[redacted]");
-        throw new JigsError(
-          `${name} refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
-          grant.hint,
-        );
-      }
-      let body: { access_token?: unknown; expires_in?: unknown };
-      try {
-        body = JSON.parse(text) as typeof body;
-      } catch {
-        throw new JigsError(`${name}'s token response (HTTP ${res.status}) was not JSON`);
-      }
-      if (typeof body.access_token !== "string" || body.access_token === "") {
-        throw new JigsError(`${name}'s token response carried no access_token`);
-      }
-      return { accessToken: body.access_token, expiresIn: body.expires_in };
-    },
-  });
+  const doFetch = grant.fetch ?? fetch;
+  let waits = 0;
+  for (;;) {
+    const res = await doFetch(grant.url, {
+      method: "POST",
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        grant_type: "client_credentials",
+        client_id: grant.clientId,
+        client_secret: grant.clientSecret,
+        scope: grant.scope,
+      }).toString(),
+    });
+    const text = await res.text();
+    // One mint serves every run waiting on it, so no run's cancellation ends its wait.
+    if (
+      res.status === 429 &&
+      (await rateLimitWait(grant.provider, retryAfterSeconds(res), waits++, null))
+    ) {
+      continue;
+    }
+    if (!res.ok) {
+      const detail = grant.quote(text).replaceAll(grant.clientSecret, "[redacted]");
+      throw new JigsError(
+        `${name} refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
+        grant.hint,
+      );
+    }
+    let body: { access_token?: unknown; expires_in?: unknown };
+    try {
+      body = JSON.parse(text) as typeof body;
+    } catch {
+      throw new JigsError(`${name}'s token response (HTTP ${res.status}) was not JSON`);
+    }
+    if (typeof body.access_token !== "string" || body.access_token === "") {
+      throw new JigsError(`${name}'s token response carried no access_token`);
+    }
+    return { accessToken: body.access_token, expiresIn: body.expires_in };
+  }
 }
