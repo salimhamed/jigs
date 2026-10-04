@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.91.0](https://github.com/salimhamed/jigs/compare/jigs-v0.90.0...jigs-v0.91.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* restore the worktree after review and description, and let the builder tidy up once ([#527](https://github.com/salimhamed/jigs/issues/527))
+
+### Bug Fixes
+
+* clean up a Claude skills folder left by a crashed run ([#525](https://github.com/salimhamed/jigs/issues/525)) ([777a83e](https://github.com/salimhamed/jigs/commit/777a83ec1048917395ba7b4fae45dfd9769a32d9))
+* keep a finished Codex step when its home cleanup races Codex's exit ([#528](https://github.com/salimhamed/jigs/issues/528)) ([22d78fa](https://github.com/salimhamed/jigs/commit/22d78fa09392fb5999a4d730d56752a69925a47e))
+* restore the worktree after review and description, and let the builder tidy up once ([#527](https://github.com/salimhamed/jigs/issues/527)) ([4d6e64a](https://github.com/salimhamed/jigs/commit/4d6e64a3c3ab1c551c44058d9c156acbe8ea3b4e))
+
 ## [0.90.0](https://github.com/salimhamed/jigs/compare/jigs-v0.89.0...jigs-v0.90.0) (2026-10-03)
 
 
