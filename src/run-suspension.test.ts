@@ -3,6 +3,7 @@ import { describeSuspension } from "./run-suspension.ts";
 import { needsHumanToken } from "./workflow/linear/halt-for-human.ts";
 import { ticketToken } from "./workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "./workflow/pull-requests/pull-request.ts";
+import { slackThreadToken } from "./workflow/slack/thread-token.ts";
 
 // Read through the minters, never through a token spelled out here: a reason
 // derived from a prefix the minters no longer produce degrades to the generic
@@ -21,6 +22,11 @@ test("a ticket claim is not a park, and every other hook explains itself", () =>
     token: "jigs:needs-human:issue-1:comment-1",
     kind: "needs-human",
     reason: "waiting for a human reply on AGE-317",
+  });
+  expect(describeSuspension(slackThreadToken("C0123ABCD", "1790723244.335019"))).toEqual({
+    token: "slack:thread:C0123ABCD:1790723244.335019",
+    kind: "slack-thread",
+    reason: "waiting for a reply in the Slack thread 1790723244.335019 in C0123ABCD",
   });
   // A workflow of its own that parks on createHook({ token }) is parked too,
   // so parkedness can never depend on jigs recognizing the token.

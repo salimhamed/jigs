@@ -8,7 +8,7 @@ import { getWorld } from "workflow/runtime";
 import type { PullRequestRef } from "../providers/github.ts";
 import { getComment } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import { needsHumanParts, prFromToken, type RunSuspension } from "../run-suspension.ts";
+import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
 import { currentFactory, listResources, registrySql, toRecord } from "../steps/runtime/registry.ts";
 import {
@@ -18,6 +18,7 @@ import {
   type RunState,
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { occurrencesByAttribute } from "./trigger-store.ts";
 import { lastWake } from "./wake-note.ts";
@@ -190,11 +191,12 @@ export async function enrichSuspensions(
 ): Promise<RunSuspension[]> {
   return await Promise.all(
     suspensions.map(async (suspension) => {
-      const pr = prFromToken(suspension.token)?.pr;
-      if (pr !== undefined) return await withPrState(suspension, pr, runId);
-      const halt = needsHumanParts(suspension.token);
-      if (halt === null) return suspension;
-      const comment = await getComment(halt.commentId).catch(() => null);
+      const parsed = parseHookToken(suspension.token);
+      if (parsed?.kind === "pull-request" && parsed.pr !== null) {
+        return await withPrState(suspension, parsed.pr, runId);
+      }
+      if (parsed?.kind !== "needs-human" || parsed.halt === null) return suspension;
+      const comment = await getComment(parsed.halt.commentId).catch(() => null);
       if (comment === null) return suspension;
       return { ...suspension, url: comment.url, question: comment.body };
     }),

@@ -5,13 +5,9 @@
 // from step returns, never from Date.now() or process.env.
 
 import { createHook } from "workflow";
+import { NEEDS_HUMAN_TOKEN_PREFIX } from "../hook-tokens.ts";
 import type { HaltQuestion } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
-
-// The halt's marker hook. It names no external resource and nothing resumes
-// it: the reply that ends the halt lands on the ticket claim.
-/** Prefix for marker hooks that tell operators which ticket comment needs an answer. */
-export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
 
 /** Build the marker token for a run's unanswered ticket comment. */
 export function needsHumanToken(issueId: string, commentId: string): string {

@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
+import { describeSuspension } from "../../run-suspension.ts";
 import { stubService } from "../../test-fixtures.ts";
+import { slackThreadToken } from "../../workflow/slack/thread-token.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type StatusResult, showRunStatus } from "./status.ts";
 
@@ -83,6 +85,16 @@ test("status says what the run waits for, where to act, and what was asked", asy
     "    Which binding?",
     "    A. api",
   ]);
+});
+
+test("a run waiting on a Slack thread says which thread", async () => {
+  const suspension = describeSuspension(slackThreadToken("C0123ABCD", "1790723244.335019"));
+  respond(result({ suspensions: suspension === null ? [] : [suspension] }));
+  respond({ steps: [], deadJobs: [] });
+  await showRunStatus(RUN, deps(), { now: NOW });
+  expect(lines).toContain(
+    "  waiting for a reply in the Slack thread 1790723244.335019 in C0123ABCD",
+  );
 });
 
 test("a trigger's run names the Slack message it was started for", async () => {
