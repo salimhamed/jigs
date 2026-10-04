@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { JigsError } from "../../errors.ts";
+import { stubService } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { runDoctor } from "./doctor.ts";
 
@@ -7,7 +8,7 @@ const fetchMock = vi.fn();
 let lines: string[];
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
+  stubService(fetchMock);
   fetchMock.mockReset();
   lines = [];
 });

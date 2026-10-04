@@ -5,6 +5,7 @@
 import { resolveService } from "../../config/factory-config.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 
 export interface ServiceDeps {
   serviceUrl: string;
@@ -32,14 +33,18 @@ export async function serviceFetch(
   init?: RequestInit,
 ): Promise<Response> {
   const base = serviceUrl.replace(/\/+$/, "");
+  let res: Response;
   try {
-    return await fetch(`${base}${path}`, init);
+    res = await fetch(`${base}${path}`, init);
   } catch {
     throw new JigsError(
       `could not reach the jigs service at ${base}`,
       "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs service start`",
     );
   }
+  const version = res.headers.get(VERSION_HEADER);
+  if (version !== JIGS_VERSION) throw new ServiceVersionMismatch(base, version ?? undefined);
+  return res;
 }
 
 /** The one error for a run argument that is not an existing run's full ID. */
@@ -48,4 +53,18 @@ export function runNotFound(ref: string): JigsError {
     `run ${ref} not found`,
     "commands take a full run ID\nlist each run's ID and ticket: `pnpm exec jigs status`",
   );
+}
+
+/**
+ * The service runs a different jigs than this CLI, typically after an upgrade
+ * and before `jigs up` restarts it. Its responses may have another shape, so
+ * none is read. A service with no version header predates the check.
+ */
+export class ServiceVersionMismatch extends JigsError {
+  constructor(base: string, serviceVersion: string | undefined) {
+    super(
+      `the jigs service at ${base} runs ${serviceVersion === undefined ? "an older jigs" : `jigs ${serviceVersion}`}, and this CLI is jigs ${JIGS_VERSION}`,
+      "restart it on this factory's jigs: `pnpm exec jigs up`",
+    );
+  }
 }

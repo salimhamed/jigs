@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, stubService } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { coerceInputs, launchRun, splitInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
@@ -13,7 +13,7 @@ let lines: string[];
 let tmp: string;
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
+  stubService(fetchMock);
   fetchMock.mockReset();
   lines = [];
   tmp = makeTmpDir();

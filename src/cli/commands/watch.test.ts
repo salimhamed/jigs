@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { stubService } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import type { RunListRun } from "./run-list.ts";
 import { runEvents, watchRuns } from "./watch.ts";
@@ -7,7 +8,7 @@ const fetchMock = vi.fn();
 let lines: string[];
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
+  stubService(fetchMock);
   fetchMock.mockReset();
   lines = [];
 });

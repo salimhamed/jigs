@@ -12,6 +12,7 @@ import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import { resetLinearAuth } from "../providers/linear-auth.ts";
 import * as sql from "../steps/runtime/registry.ts";
+import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
@@ -585,6 +586,12 @@ test("workflow discovery returns actual launch names and their existing input me
     type: "boolean",
     default: false,
   });
+});
+
+test("every response names the jigs the service runs, misses included", async () => {
+  for (const res of [await app.request("/api/workflows"), await app.request("/api/nope")]) {
+    expect(res.headers.get(VERSION_HEADER)).toBe(JIGS_VERSION);
+  }
 });
 
 test("health names the factory that answers here, and the injected workflows", async () => {

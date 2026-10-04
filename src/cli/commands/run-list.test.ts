@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { stubService } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
 
@@ -6,7 +7,7 @@ const fetchMock = vi.fn();
 let lines: string[];
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
+  stubService(fetchMock);
   fetchMock.mockReset();
   lines = [];
 });
@@ -89,14 +90,6 @@ test("a trigger's run names the message it was started for before it waits", asy
   await showRuns(deps(), { now: NOW });
   expect(lines[1]).toContain("trigger:answers  slack C0123ABCD 1790723244.335019  30m");
   expect(lines[2]).toContain("trigger:pages    pagerduty Q1ABCDEF");
-});
-
-// After an upgrade, `jigs status` runs before `jigs up` restarts the older service.
-test("a run from a service too old to report its source shows a dash", async () => {
-  const { source: _, ...older } = run();
-  respond({ runs: [older], schedules: [], triggers: [] });
-  await showRuns(deps(), { now: NOW });
-  expect(lines[1]).toContain("manual   -");
 });
 
 test("runs are distinguished by SDK status", async () => {

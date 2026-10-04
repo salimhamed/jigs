@@ -195,6 +195,9 @@ nothing else. Holding it:
 
 `jigs upgrade` moves the factory to the latest jigs release, rebuilds, restarts,
 runs `jigs doctor` and typechecks the factory; see **Confirm first** when runs are in flight.
+Check `jigs status` before upgrading: once the new jigs is installed, commands
+that talk to the old service fail with a version error until `jigs up` restarts
+it, and `up` asks before that restart because it cannot list the old service's runs.
 
 ## Parked runs and worktrees
 

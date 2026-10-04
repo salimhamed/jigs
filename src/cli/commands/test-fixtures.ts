@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 import type { ExecFile, ExecOptions } from "../exec.ts";
 import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-lifecycle.ts";
 
@@ -175,6 +176,8 @@ export interface ServiceRoutes {
   health?: number;
   runs?: Array<{ runId: string; workflow: string; status: string }>;
   doctor?: { ok: boolean; checks: unknown[] };
+  /** The jigs the service reports; null for one that predates the header. */
+  version?: string | null;
 }
 
 // The running service, as far as `up` can tell: /health, /api/runs and
@@ -182,6 +185,8 @@ export interface ServiceRoutes {
 export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
   const server = createServer((req, res) => {
     res.setHeader("content-type", "application/json");
+    const version = routes.version === undefined ? JIGS_VERSION : routes.version;
+    if (version !== null) res.setHeader(VERSION_HEADER, version);
     if (req.url === "/health") {
       res.statusCode = routes.health ?? 200;
       res.end(JSON.stringify({ ok: true }));
