@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.96.0](https://github.com/salimhamed/jigs/compare/jigs-v0.95.0...jigs-v0.96.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* resolve the factory context once per entry point ([#555](https://github.com/salimhamed/jigs/issues/555))
+
+### Code Refactoring
+
+* resolve the factory context once per entry point ([#555](https://github.com/salimhamed/jigs/issues/555)) ([917a18b](https://github.com/salimhamed/jigs/commit/917a18b340ff02974d3405ccfad63f87ca116886))
+
 ## [0.95.0](https://github.com/salimhamed/jigs/compare/jigs-v0.94.0...jigs-v0.95.0) (2026-10-04)
 
 
