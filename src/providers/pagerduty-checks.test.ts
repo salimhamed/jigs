@@ -1,13 +1,13 @@
 import { expect, test } from "vitest";
+import { runChecks } from "../checks/catalog.ts";
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
-import { ProviderApiError } from "../providers/http.ts";
-import { runChecks } from "./catalog.ts";
+import { ProviderApiError } from "./http.ts";
 import {
   type PagerDutyIdentityProbes,
   type PagerDutyUserProbes,
   pagerDutyFromChecks,
   pagerDutyIdentityChecks,
-} from "./pagerduty-identity.ts";
+} from "./pagerduty-checks.ts";
 
 const IDENTITY: PagerDutyIdentity = {
   mode: "app",

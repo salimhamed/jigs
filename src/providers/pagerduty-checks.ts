@@ -1,13 +1,20 @@
 import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../config/factory-config.ts";
-import { credentialValue, type EnvLookup } from "../providers/credentials.ts";
-import { ProviderApiError } from "../providers/http.ts";
-import type { PagerDutyUser } from "../providers/pagerduty.ts";
+import { JigsError } from "../errors.ts";
+import { type Check, failedCheck } from "./check.ts";
+import {
+  credentialValue,
+  type EnvLookup,
+  RESTART_SERVICE,
+  SERVICE_ENV_FILE,
+} from "./credentials.ts";
+import { ProviderApiError } from "./http.ts";
+import { type PagerDutyUser, pagerDutyClientFor } from "./pagerduty.ts";
 import {
   missingPagerDutyVariables,
   PAGERDUTY_IDENTITY_VARIABLES,
-} from "../providers/pagerduty-auth.ts";
-import type { Check } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+  pagerDutyAuthFor,
+  resolvePagerDutyIdentity,
+} from "./pagerduty-auth.ts";
 
 // A probe is a provider client; the catalog owns the repair text, which is
 // what makes preflight and doctor say the same thing.
@@ -118,3 +125,51 @@ export function pagerDutyFromChecks(
     },
   ];
 }
+
+async function pagerDutyToken(): Promise<void> {
+  await pagerDutyAuthFor().bearer();
+}
+
+// A missing or unreadable pagerduty section fails as itself, with the section
+// to add, rather than as a credential PagerDuty rejected.
+export function pagerDutyChecks(): Check[] {
+  let identity: PagerDutyIdentity;
+  try {
+    identity = resolvePagerDutyIdentity();
+  } catch (err) {
+    return [
+      failedCheck(
+        "pagerduty.identity",
+        "PagerDuty identity",
+        err instanceof Error ? err.message : String(err),
+        err instanceof JigsError && err.hint !== undefined
+          ? err.hint
+          : `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
+      ),
+    ];
+  }
+  return pagerDutyIdentityChecks(identity, {
+    token: pagerDutyToken,
+    read: () => pagerDutyClientFor().verifyAccess(),
+  });
+}
+
+// An unreadable config is the identity check's diagnosis, so it adds nothing here.
+export function pagerDutyFromDoctorChecks(): Check[] {
+  let identity: PagerDutyIdentity;
+  try {
+    identity = resolvePagerDutyIdentity();
+  } catch {
+    return [];
+  }
+  return pagerDutyFromChecks(identity, {
+    token: pagerDutyToken,
+    userByEmail: (email) => pagerDutyClientFor().findUserByEmail(email),
+  });
+}
+
+/** The real lookups for the PagerDuty webhook check. */
+export const pagerDutyWebhookProbes = {
+  token: pagerDutyToken,
+  subscriptions: (url: string) => pagerDutyClientFor().listWebhookSubscriptions({ url }),
+};

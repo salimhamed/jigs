@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
-import { SlackApiError, type SlackAuth, type SlackToken } from "../providers/slack.ts";
+import { SlackApiError, type SlackAuth, type SlackToken } from "./slack.ts";
 import {
   type SlackProbes,
   slackIdentityChecks,
   slackSharedAppChecks,
   slackSocketModeChecks,
-} from "./slack.ts";
+} from "./slack-checks.ts";
 
 const AUTH: SlackAuth = {
   userId: "U0C59SU5V29",

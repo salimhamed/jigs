@@ -4,10 +4,10 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { ProviderApiError } from "../providers/http.ts";
-import type { PagerDutyWebhookSubscription } from "../providers/pagerduty.ts";
-import type { Check, CheckResult } from "./catalog.ts";
-import { RESTART_SERVICE } from "./core.ts";
+import type { Check, CheckResult } from "./check.ts";
+import { RESTART_SERVICE } from "./credentials.ts";
+import { ProviderApiError } from "./http.ts";
+import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";
 
 /** The PagerDuty lookups the webhook check makes. */
 export interface PagerDutyWebhookProbes {

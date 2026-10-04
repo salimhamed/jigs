@@ -1,12 +1,12 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { GithubIdentity } from "../config/factory-config.ts";
+import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { NEEDS_APP_IDENTITY } from "../steps/agents/harnesses/github-access.ts";
 import type { Harness } from "../workflow/agents/harness-config.ts";
 import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
-import { RESTART_SERVICE } from "./core.ts";
 
 const execFileAsync = promisify(execFile);
 

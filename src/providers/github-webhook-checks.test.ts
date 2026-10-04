@@ -1,11 +1,11 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { configureGithub } from "../providers/github-http.ts";
-import { type FakeGithub, fakeGithub } from "../providers/github-test-support.ts";
-import { WEBHOOK_EVENTS } from "../providers/github-webhook.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { webhookChecks } from "./webhooks.ts";
+import { configureGithub } from "./github-http.ts";
+import { type FakeGithub, fakeGithub } from "./github-test-support.ts";
+import { WEBHOOK_EVENTS } from "./github-webhook.ts";
+import { webhookChecks } from "./github-webhook-checks.ts";
 
 let github: FakeGithub;
 let tmp: string;

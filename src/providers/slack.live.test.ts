@@ -1,5 +1,4 @@
 import { expect, test } from "vitest";
-import { slackIdentityChecks, slackSocketModeChecks } from "../checks/slack.ts";
 import {
   slackAuthTest,
   slackBot,
@@ -8,6 +7,7 @@ import {
   slackPermalink,
   slackReplies,
 } from "./slack.ts";
+import { slackIdentityChecks, slackSocketModeChecks } from "./slack-checks.ts";
 
 // The live half of the Slack client, read-only. Set SLACK_BOT_TOKEN (and
 // SLACK_APP_TOKEN for Socket Mode) to a test app's that is in the test channel.

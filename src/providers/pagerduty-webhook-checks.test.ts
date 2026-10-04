@@ -2,9 +2,9 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { ProviderApiError } from "../providers/http.ts";
-import type { PagerDutyWebhookSubscription } from "../providers/pagerduty.ts";
-import { type PagerDutyWebhookProbes, pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
+import { ProviderApiError } from "./http.ts";
+import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";
+import { type PagerDutyWebhookProbes, pagerDutyWebhookChecks } from "./pagerduty-webhook-checks.ts";
 
 const roots: string[] = [];
 const URL_AT = "https://factory.example.test/ingress/pagerduty";

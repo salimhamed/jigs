@@ -8,8 +8,8 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { type LinearWebhook, listWebhooks } from "../providers/linear.ts";
-import type { Check, CheckResult } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
+import { type LinearWebhook, listWebhooks } from "./linear.ts";
 
 export interface LinearWebhookChecksOptions {
   factoryRoot: () => string;

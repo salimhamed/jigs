@@ -1,12 +1,12 @@
 import { expect, test } from "vitest";
+import { runChecks } from "../checks/catalog.ts";
 import type { LinearIdentity } from "../config/factory-config.ts";
-import { runChecks } from "./catalog.ts";
 import {
   type LinearIdentityProbes,
   type LinearOperatorProbes,
   linearIdentityChecks,
   linearOperatorChecks,
-} from "./linear-identity.ts";
+} from "./linear-checks.ts";
 
 function probes(overrides: Partial<LinearIdentityProbes> = {}) {
   const calls: string[] = [];

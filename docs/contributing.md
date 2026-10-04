@@ -53,7 +53,8 @@ src/
   build/      the templates and the generated factory files, shared by the
               CLI and the service build
   checks/     preflight, doctor and just-in-time checks
-  providers/  Git, GitHub and Linear clients
+  providers/  Git and provider clients (GitHub, Linear, Slack, PagerDuty)
+              with their identity and webhook checks
   config/     factory config, root, env and paths
 ```
 

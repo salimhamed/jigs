@@ -34,10 +34,10 @@ module.exports = {
       to: { path: "^src/cli/" },
     },
     {
-      name: "providers-not-steps-service-or-cli",
+      name: "providers-not-checks-steps-service-or-cli",
       severity: "error",
       from: { path: "^src/providers/" },
-      to: { path: "^src/(steps|service|cli)/" },
+      to: { path: "^src/(checks|steps|service|cli)/" },
     },
     {
       name: "config-not-steps-service-or-cli",
