@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.93.0](https://github.com/salimhamed/jigs/compare/jigs-v0.92.2...jigs-v0.93.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* one request loop, one provider list, provider-owned checks and tokens, and tier-1 fixes ([#549](https://github.com/salimhamed/jigs/issues/549))
+
+### Code Refactoring
+
+* one request loop, one provider list, provider-owned checks and tokens, and tier-1 fixes ([#549](https://github.com/salimhamed/jigs/issues/549)) ([eabab48](https://github.com/salimhamed/jigs/commit/eabab486bf0f885d6883c3046be2c3e5521b66c9))
+
 ## [0.92.2](https://github.com/salimhamed/jigs/compare/jigs-v0.92.1...jigs-v0.92.2) (2026-10-04)
 
 
