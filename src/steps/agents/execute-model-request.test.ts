@@ -54,6 +54,7 @@ afterEach(() => {
 const verdict = z.object({ ok: z.boolean() });
 
 test("askJev rejects a non-decision model by name", async () => {
+  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   await expect(
     askJev(
       {
@@ -446,23 +447,23 @@ test("an OpenAI-compatible source uses only its optional named credential", asyn
   expect(
     drivers["openai-compatible"].envAllowlist(buildModelRequest({ model: source, prompt: "x" })),
   ).toEqual(["LOCAL_MODEL_KEY"]);
-  expect(
-    drivers["openai-compatible"]
-      .requestChecks(buildModelRequest({ model: source, prompt: "x" }))
-      .map((check) => check.id),
-  ).toEqual(["model.openai-compatible-secured-server", "model.local-model-key"]);
-  const withoutKey = buildModelRequest({
-    model: models.openaiCompatible({
-      name: "open-server",
-      baseUrl: "https://models.example/v1",
-      model: "served-model",
-    }),
-    prompt: "x",
-  });
-  expect(drivers["openai-compatible"].envAllowlist(withoutKey)).toEqual([]);
-  expect(drivers["openai-compatible"].requestChecks(withoutKey).map((check) => check.id)).toEqual([
-    "model.openai-compatible-open-server",
+  expect(drivers["openai-compatible"].descriptorChecks(source).map((check) => check.id)).toEqual([
+    "model.openai-compatible-secured-server",
+    "model.local-model-key",
   ]);
+  const openServer = models.openaiCompatible({
+    name: "open-server",
+    baseUrl: "https://models.example/v1",
+    model: "served-model",
+  });
+  expect(
+    drivers["openai-compatible"].envAllowlist(
+      buildModelRequest({ model: openServer, prompt: "x" }),
+    ),
+  ).toEqual([]);
+  expect(
+    drivers["openai-compatible"].descriptorChecks(openServer).map((check) => check.id),
+  ).toEqual(["model.openai-compatible-open-server"]);
 });
 
 test("OpenRouter answers one structured request directly", async () => {

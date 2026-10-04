@@ -162,7 +162,7 @@ export function createClaudeDriver(
       }
     },
     installationChecks: () => [harnessRuntimeCheck("claude"), claudeAuthCheck()],
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     envAllowlist: (request) => [
       ...CLAUDE_ENV,
       ...("harness" in request && request.harness.kind === "claude"

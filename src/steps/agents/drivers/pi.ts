@@ -240,9 +240,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     ask,
     run,
     installationChecks: () => [harnessRuntimeCheck("pi")],
-    requestChecks: (request) => {
-      const harness = nestedHarness(request);
-      if (harness === undefined) return [];
+    descriptorChecks: (harness) => {
       if (harness.mcpServers !== undefined) validatePiMcpServers(harness.mcpServers);
       const model = planPiModel(harness);
       return [
