@@ -1,11 +1,7 @@
 import { FACTORY_CONFIG_FILE, type LinearIdentity } from "../config/factory-config.ts";
+import { credentialValue, type EnvLookup } from "../providers/credentials.ts";
 import type { LinearUser } from "../providers/linear.ts";
-import {
-  type EnvLookup,
-  LINEAR_IDENTITY_VARIABLES,
-  linearEnvValue,
-  missingLinearVariables,
-} from "../providers/linear-auth.ts";
+import { LINEAR_IDENTITY_VARIABLES, missingLinearVariables } from "../providers/linear-auth.ts";
 import type { Check } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -24,7 +20,7 @@ const SOURCE: Record<LinearIdentity["mode"], string> = {
 export function linearIdentityChecks(
   identity: LinearIdentity,
   probes: LinearIdentityProbes,
-  env: EnvLookup = linearEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   const { mode } = identity;
   const variables = LINEAR_IDENTITY_VARIABLES[mode].join(" and ");

@@ -235,11 +235,10 @@ test("a green preflight lets the trigger call start()", async () => {
   });
   vi.stubEnv("LINEAR_API_KEY", "lin_live");
   vi.stubEnv("GITHUB_TOKEN", "ghp_live");
-  vi.stubEnv("LINEAR_API_URL", "http://linear.test/graphql");
   vi.stubEnv("GITHUB_API_URL", "http://github.test");
   vi.stubGlobal("fetch", async (input: unknown) => {
     const url = String(input);
-    if (url.startsWith("http://linear.test")) {
+    if (url.startsWith("https://api.linear.app/")) {
       return Response.json({ data: { viewer: { id: "u1", name: "Dev" } } });
     }
     if (url.startsWith("http://github.test/user")) {

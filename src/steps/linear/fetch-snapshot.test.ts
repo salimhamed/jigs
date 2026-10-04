@@ -7,7 +7,6 @@ const fetchMock = vi.fn();
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("LINEAR_API_KEY", "lin_test_key");
-  vi.stubEnv("LINEAR_API_URL", "http://mock.test/graphql");
   fetchMock.mockReset();
 });
 afterEach(() => {

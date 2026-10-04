@@ -7,7 +7,6 @@ import { locateTemplates, packageRoot } from "../build/templates.ts";
 const NOT_IN_ENV_EXAMPLE = new Set([
   // Test seams that point a client at a fake server.
   "GITHUB_API_URL",
-  "LINEAR_API_URL",
   // Set by jigs on the service process.
   "JIGS_DASHBOARD_PORT",
   "JIGS_FACTORY_ROOT",

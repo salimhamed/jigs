@@ -8,9 +8,9 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
+import { resetProviderContext } from "../providers/credentials.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
-import { resetLinearAuth } from "../providers/linear-auth.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
@@ -128,7 +128,7 @@ beforeEach(() => {
   vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "pd-hook-secret");
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
   resetGithubAuth();
-  resetLinearAuth();
+  resetProviderContext();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -137,7 +137,7 @@ afterEach(() => {
   // again from the data dir above.
   setWorld(undefined);
   resetGithubAuth();
-  resetLinearAuth();
+  resetProviderContext();
 });
 
 const sign = (body: string, secret: string) =>
