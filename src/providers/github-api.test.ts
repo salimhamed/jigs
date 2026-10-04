@@ -25,6 +25,7 @@ test("repository paths and GraphQL select their target accounts", async () => {
       "account Uncovered",
     );
     await expect(githubRequest("POST", "/graphql", {}, "Other")).rejects.toThrow("account Other");
+    await expect(githubRequest("GET", "/user")).rejects.toThrow("/user requires a PAT identity");
     expect(fetchMock).not.toHaveBeenCalled();
   } finally {
     resetGithubAuth();

@@ -173,15 +173,16 @@ test("mentions keeps only the top-level messages that tag the bot", async () => 
   expect(found.map((seen) => seen.inputs)).toEqual([{ channel: CHANNEL, ts: MENTION.ts }]);
 });
 
-test("a failing channel is logged with its repair and skipped, and the rest are read", async () => {
+test("a failing channel is logged with its repair, the rest are read, and the poll fails", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => {});
   const history = vi
     .spyOn(slackApi, "slackHistory")
     .mockRejectedValueOnce(new slackApi.SlackApiError("conversations.history", "not_in_channel"))
     .mockResolvedValueOnce([TOP_LEVEL]);
-  const found = await messages.poll({ channels: ["C0SECOND1", CHANNEL] }, new Date(0));
+  await expect(messages.poll({ channels: ["C0SECOND1", CHANNEL] }, new Date(0))).rejects.toThrow(
+    "could not poll Slack channel C0SECOND1: Slack conversations.history: not_in_channel",
+  );
   expect(history).toHaveBeenCalledTimes(2);
-  expect(found.map((seen) => seen.inputs)).toEqual([{ channel: CHANNEL, ts: TOP_LEVEL.ts }]);
   const lines = log.mock.calls.map(([line]) => String(line));
   expect(lines[0]).toBe(
     "[slack] could not poll channel C0SECOND1: Slack conversations.history: not_in_channel",
