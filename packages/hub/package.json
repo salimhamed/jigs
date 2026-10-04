@@ -1,12 +1,34 @@
 {
   "name": "@jigs-ai/hub",
   "version": "0.102.1",
-  "private": true,
   "description": "Receives provider events and holds credentials for jigs factories",
   "type": "module",
   "license": "BUSL-1.1",
+  "author": "Salim Hamed",
+  "homepage": "https://salimhamed.github.io/jigs/",
+  "bugs": {
+    "url": "https://github.com/salimhamed/jigs/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/salimhamed/jigs.git",
+    "directory": "packages/hub"
+  },
   "engines": {
     "node": ">=24"
+  },
+  "bin": {
+    "jigs-hub": "bin/jigs-hub.js"
+  },
+  "files": [
+    "bin",
+    "dist",
+    "build",
+    "migrations"
+  ],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
   },
   "scripts": {
     "dev": "NODE_ENV=development node --env-file-if-exists=.env src/main.ts",
