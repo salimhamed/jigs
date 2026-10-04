@@ -396,23 +396,18 @@ async function holdFactorySlackApp(ctx: FactoryContext): Promise<SlackAppHold | 
 // One connection for the whole service: every Slack listener reads the same
 // message stream.
 async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
-  const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
+  const [{ startSlackSocket }, { pushEvent }, { routeProviderEvent }] = await Promise.all([
     import("./slack-socket.ts"),
     import("./event-triggers/runner.ts"),
-    import("./slack-thread-wake.ts"),
+    import("./provider-events.ts"),
   ]);
   const hold = await holdFactorySlackApp(ctx);
   const socket = startSlackSocket({
-    onMessage: async (event) => {
-      const [pushed] = await Promise.allSettled([
-        pushEvent("slack", event),
-        wakeSlackThread(event),
-      ]);
-      if (pushed.status === "rejected")
-        console.log(
-          `[slack] could not start runs for ${event.channel}:${event.ts}: ${String(pushed.reason)}`,
-        );
-    },
+    onMessage: (event) =>
+      routeProviderEvent(
+        { provider: "slack", name: event.type, payload: event },
+        { context: ctx, push: pushEvent },
+      ),
   });
   onShutdown(
     () => {
