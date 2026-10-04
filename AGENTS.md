@@ -51,7 +51,8 @@ has to keep:
 `pnpm lint` runs dependency-cruiser with these rules, and biome forbids
 `process.env` everywhere but `src/config/factory-context.ts` and tests: read a
 setting through `currentFactoryContext().env`, and an environment for a child
-process through `processEnv()`.
+process through `processEnv()`. `processEnv()` is never a factory setting: a
+token, key or anything the factory's `.env` can hold goes through `ctx.env`.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
 live in factory code, including the copied recipes
