@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.1](https://github.com/salimhamed/jigs/compare/jigs-v0.92.0...jigs-v0.92.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* show a dash, not a crash, when jigs status meets a service too old to report a run's source ([#544](https://github.com/salimhamed/jigs/issues/544)) ([857185a](https://github.com/salimhamed/jigs/commit/857185a5b75deec4d7e237cab1cc2d5394845ae8))
+
 ## [0.92.0](https://github.com/salimhamed/jigs/compare/jigs-v0.91.2...jigs-v0.92.0) (2026-10-04)
 
 
