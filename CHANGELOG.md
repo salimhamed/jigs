@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.94.0](https://github.com/salimhamed/jigs/compare/jigs-v0.93.0...jigs-v0.94.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* supervise Codex on service stop, validate Pi descriptors up front, and break the checks/drivers cycle ([#551](https://github.com/salimhamed/jigs/issues/551))
+
+### Bug Fixes
+
+* supervise Codex on service stop, validate Pi descriptors up front, and break the checks/drivers cycle ([#551](https://github.com/salimhamed/jigs/issues/551)) ([abc555c](https://github.com/salimhamed/jigs/commit/abc555c934fd867b4d3cfacf1293e429fc2519df))
+
 ## [0.93.0](https://github.com/salimhamed/jigs/compare/jigs-v0.92.2...jigs-v0.93.0) (2026-10-04)
 
 
