@@ -15,6 +15,13 @@
       "when": 1791153492331,
       "tag": "0001_factories",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1791155181554,
+      "tag": "0002_apps",
+      "breakpoints": true
     }
   ]
 }

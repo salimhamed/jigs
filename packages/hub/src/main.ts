@@ -3,6 +3,7 @@ import { createAuth } from "./auth.ts";
 import { readConfig } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
+import { createGitHubRoutes } from "./github.ts";
 import { MessageWaiters } from "./messages.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
@@ -27,14 +28,14 @@ const web = await createWebApp(
   process.env.NODE_ENV === "development",
 );
 
-const server = createHubApp(auth, createFactoryApi(db, waiters), web).listen(
-  config.port,
-  config.host,
-  () => {
-    const address = server.address() as AddressInfo;
-    console.log(`hub listening on http://${address.address}:${address.port}`);
-  },
-);
+const routers = [
+  createFactoryApi(db, waiters),
+  createGitHubRoutes({ db, waiters, encryptionKey: config.encryptionKey }),
+];
+const server = createHubApp(auth, routers, web).listen(config.port, config.host, () => {
+  const address = server.address() as AddressInfo;
+  console.log(`hub listening on http://${address.address}:${address.port}`);
+});
 
 process.once("SIGTERM", () => {
   waiters.close();

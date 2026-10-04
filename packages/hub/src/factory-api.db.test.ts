@@ -11,6 +11,7 @@ import {
 import { eq, sql } from "drizzle-orm";
 import express from "express";
 import { afterAll, beforeAll, expect } from "vitest";
+import { setAssignments } from "./apps.ts";
 import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
@@ -75,13 +76,37 @@ async function confirm(token: string, position: string) {
   return response.status;
 }
 
-const send = (factoryIds: string[], name = "issues") =>
-  fanOutProviderEvent(
-    db,
-    waiters,
-    { organizationId, provider: "github", name, payload: { action: name } },
-    factoryIds,
-  );
+// One app per set of factories, assigned to exactly those.
+const appsByFactories = new Map<string, string>();
+async function appFor(factoryIds: string[], organization = organizationId) {
+  const key = `${organization}:${factoryIds.join()}`;
+  const known = appsByFactories.get(key);
+  if (known) return known;
+  const [app] = await db
+    .insert(schema.apps)
+    .values({
+      organizationId: organization,
+      provider: "github",
+      name: key,
+      externalId: String(appsByFactories.size + 1),
+      settings: {},
+      secrets: "",
+    })
+    .returning();
+  if (!app) throw new Error("expected an app");
+  await setAssignments(db, organization, app.id, factoryIds);
+  appsByFactories.set(key, app.id);
+  return app.id;
+}
+
+const send = async (factoryIds: string[], name = "issues") =>
+  fanOutProviderEvent(db, waiters, {
+    organizationId,
+    appId: await appFor(factoryIds),
+    provider: "github",
+    name,
+    payload: { action: name },
+  });
 
 async function until(condition: () => boolean) {
   const deadline = Date.now() + 5000;
@@ -244,12 +269,21 @@ dbTest("refuses a held poll once its token is re-issued or its factory removed",
   expect((await again).status).toBe(401);
 });
 
-dbTest("fans an event out only to the Organization's factories that still exist", async () => {
+dbTest("fans an event out only to the factories its app is assigned to", async () => {
   const { factory, token } = await newFactory();
+  const unassigned = await newFactory();
   const removed = await newFactory();
-  await removeFactory(db, waiters, organizationId, removed.factory.id);
   const foreign = await addFactory(db, "other", "theirs");
+  const appId = await appFor([factory.id, removed.factory.id, foreign.factory.id]);
+  await removeFactory(db, waiters, organizationId, removed.factory.id);
+  const assigned = await db
+    .select({ factoryId: schema.assignments.factoryId })
+    .from(schema.assignments)
+    .where(eq(schema.assignments.appId, appId));
+  expect(assigned).toEqual([{ factoryId: factory.id }]);
+
   await send([factory.id, removed.factory.id, foreign.factory.id], "shared");
   expect((await poll(token)).body.messages).toMatchObject([{ event: { name: "shared" } }]);
+  expect((await poll(unassigned.token)).body.messages).toEqual([]);
   expect((await poll(foreign.token)).body.messages).toEqual([]);
 });

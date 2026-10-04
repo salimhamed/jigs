@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { data, Link } from "react-router";
+import { assignedApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { Time } from "../components/time.tsx";
 import { table } from "../components/ui.ts";
@@ -20,14 +21,27 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       )
     : null;
   if (!log) throw data(null, { status: 404, statusText: "Not Found" });
-  return { ...log, paged: before !== null };
+  return { ...log, apps: await assignedApps(context, params.id), paged: before !== null };
 }
 
 export default function Factory({ loaderData }: Route.ComponentProps) {
-  const { name, messages, older, paged } = loaderData;
+  const { name, apps, messages, older, paged } = loaderData;
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">{name}</h1>
+      <p className="text-sm">
+        <span className="text-zinc-500">Apps: </span>
+        {apps.length === 0
+          ? "none, so it receives no provider events"
+          : apps.map((app, index) => (
+              <span key={app.id}>
+                {index > 0 && ", "}
+                <Link to={`/apps/${app.id}`} className="underline">
+                  {app.name}
+                </Link>
+              </span>
+            ))}
+      </p>
       <p className="text-sm text-zinc-500">
         The provider events sent to this factory, newest first.
       </p>

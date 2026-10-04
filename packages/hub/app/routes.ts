@@ -9,6 +9,8 @@ export default [
     index("routes/home.tsx"),
     route("factories", "routes/factories.tsx"),
     route("factories/:id", "routes/factory.tsx"),
+    route("apps", "routes/apps.tsx"),
+    route("apps/:id", "routes/app.tsx"),
     route("members", "routes/members.tsx"),
     route("invites", "routes/invites.tsx"),
     route("settings", "routes/settings.tsx"),
