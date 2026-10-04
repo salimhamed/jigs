@@ -11,6 +11,10 @@ tracker. The hub stays private until it ships.
   ahead of the web app.
 - `app/` is the React Router web app (Vite, Tailwind, Radix). Loaders reach
   server state through the load context that `src/web.ts` builds.
+- `src/auth.ts` is Better Auth: GitHub sign-in, invite-only, and the
+  organization plugin for Organizations, members and invites. It mounts at
+  `/api/auth/*`. Loaders and actions call `context.auth.api` through
+  `app/auth.server.ts`; pages under `routes/organization.tsx` need a member.
 - `src/secrets.ts` encrypts every secret the hub stores with
   `HUB_ENCRYPTION_KEY`. Store secrets only in that encrypted form.
 
@@ -23,8 +27,12 @@ edit the schema, then run
 
 ## Running
 
-Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL` and `HUB_ENCRYPTION_KEY`
-(`openssl rand -base64 32`); `HOST` and `PORT` are optional. `dev` runs the
+Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL`, `HUB_ENCRYPTION_KEY`
+(`openssl rand -base64 32`, which also derives the session secret),
+`HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET` (a GitHub OAuth app whose
+callback is `<HUB_PUBLIC_URL>/api/auth/callback/github`) and `HUB_ADMIN_EMAIL`
+(the GitHub email that may create the first Organization); `HOST` and `PORT`
+are optional. `dev` runs the
 server from source, serves the web app through Vite and reads
 `packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
 (Node will not strip types under `node_modules`) and the web app into `build/`;

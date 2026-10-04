@@ -1,6 +1,8 @@
+import { requireMember } from "../auth.server.ts";
 import type { Route } from "./+types/home.ts";
 
-export function loader({ context }: Route.LoaderArgs) {
+export async function loader({ context, request }: Route.LoaderArgs) {
+  await requireMember(context, request);
   return { publicUrl: context.config.publicUrl.href };
 }
 

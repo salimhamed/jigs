@@ -24,6 +24,9 @@ dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async 
       HUB_PUBLIC_URL: "https://hub.example.com",
       HUB_DATABASE_URL: database.url,
       HUB_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+      HUB_GITHUB_CLIENT_ID: "client",
+      HUB_GITHUB_CLIENT_SECRET: "secret",
+      HUB_ADMIN_EMAIL: "admin@example.com",
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
@@ -41,14 +44,18 @@ dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async 
   expect(health.status).toBe(200);
   expect(await health.json()).toEqual({ status: "ok" });
 
-  const home = await fetch(`${url}/`);
-  expect(home.status).toBe(200);
-  const html = await home.text();
-  expect(html).toContain("https://hub.example.com/");
+  const home = await fetch(`${url}/`, { redirect: "manual" });
+  expect(home.status).toBe(302);
+  expect(home.headers.get("location")).toBe("/sign-in");
+  const signIn = await fetch(`${url}/sign-in`);
+  expect(signIn.status).toBe(200);
+  const html = await signIn.text();
+  expect(html).toContain("Sign in with GitHub");
   const asset = /href="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
   expect((await fetch(`${url}${asset}`)).status).toBe(200);
 
   expect((await fetch(`${url}/missing`)).status).toBe(404);
+  expect((await fetch(`${url}/api/auth/ok`)).status).toBe(200);
 
   const client = new Client({ connectionString: database.url });
   await client.connect();
