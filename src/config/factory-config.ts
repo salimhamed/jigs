@@ -4,10 +4,10 @@ import path from "node:path";
 
 import { z } from "zod";
 import { JigsError } from "../errors.ts";
-import { factorySlug } from "../steps/workspaces/layout.ts";
 import { agentsSchema } from "../workflow/factory.ts";
 import { type MergeApproval, mergeApprovalSchema } from "../workflow/pull-requests/policy.ts";
 import { releaseSchema } from "../workflow/runtime/release.ts";
+import { factorySlug } from "./paths.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 

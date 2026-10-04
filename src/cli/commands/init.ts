@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
+import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../../build/templates.ts";
 import {
   type GithubIdentity,
   githubIdentitySchema,
@@ -10,7 +11,6 @@ import { JigsError } from "../../errors.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { columns, command, heading, note } from "../output.ts";
-import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../templates.ts";
 
 // Scaffolds infrastructure, editable factory code, and the committed generated
 // integration. Existing files are preserved; `jigs generate` explicitly

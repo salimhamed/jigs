@@ -50,10 +50,14 @@ src/
                pagerduty, pull-requests, runtime, workspaces)
   service/    the long-running process: routes, ingress, schedules, release
   cli/        commands
+  build/      the templates and the generated factory files, shared by the
+              CLI and the service build
   checks/     preflight, doctor and just-in-time checks
   providers/  Git, GitHub and Linear clients
   config/     factory config, root, env and paths
 ```
+
+`.dependency-cruiser.cjs` enforces these boundaries; `pnpm lint` runs it.
 
 The Workflow SDK replays a workflow from its first line on every wake, and
 bundles it into a sandbox without Node built-ins. So anything a workflow
