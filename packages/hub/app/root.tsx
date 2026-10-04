@@ -62,6 +62,9 @@ export default function App() {
                 <NavLink to="/factories" className={navLink}>
                   Factories
                 </NavLink>
+                <NavLink to="/apps" className={navLink}>
+                  Apps
+                </NavLink>
                 <NavLink to="/members" className={navLink}>
                   Members
                 </NavLink>

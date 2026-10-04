@@ -1,9 +1,7 @@
 import { type Message, maxMessagesPerResponse, type Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
-import type { HubDatabase } from "./db/database.ts";
-import { factories, factoryMessages, providerEvents } from "./db/schema.ts";
-
-type Transaction = Parameters<Parameters<HubDatabase["transaction"]>[0]>[0];
+import type { HubDatabase, Transaction } from "./db/database.ts";
+import { assignments, factories, factoryMessages, providerEvents } from "./db/schema.ts";
 
 /**
  * Factories holding a long poll open, woken when a message is appended for
@@ -66,24 +64,24 @@ export async function lockAppends(tx: Transaction): Promise<void> {
 
 const APPEND_LOCK = 7_001_661;
 
-/** A provider event the hub received, before it is stored. */
+/** A provider event the hub received through one of an Organization's apps, before it is stored. */
 export interface ReceivedProviderEvent {
   organizationId: string;
+  appId: string;
   provider: Provider;
   name: string;
   payload: unknown;
 }
 
 /**
- * Store a provider event once and append an `event` message for each of the
- * Organization's factories named, skipping any that no longer exist, then wake
- * their long polls. Returns the stored event's id.
+ * Store a provider event once and append an `event` message for each factory
+ * the app is assigned to, then wake their long polls. Returns the stored
+ * event's id.
  */
 export async function fanOutProviderEvent(
   db: HubDatabase,
   waiters: MessageWaiters,
   event: ReceivedProviderEvent,
-  factoryIds: readonly string[],
 ): Promise<string> {
   const { id, appendedTo } = await db.transaction(async (tx) => {
     await lockAppends(tx);
@@ -92,12 +90,12 @@ export async function fanOutProviderEvent(
       .values(event)
       .returning({ id: providerEvents.id });
     if (!stored) throw new Error("storing a provider event returned no row");
-    if (factoryIds.length === 0) return { id: stored.id, appendedTo: [] };
-    // Only this Organization's factories that still exist, so one removed meanwhile drops out.
     const appended = await tx.execute<{ factory_id: string }>(sql`
       insert into ${factoryMessages} (factory_id, kind, provider_event_id)
-      select id, 'event', ${stored.id} from ${factories}
-      where id in ${factoryIds} and organization_id = ${event.organizationId}
+      select ${factories.id}, 'event', ${stored.id} from ${factories}
+      join ${assignments} on ${assignments.factoryId} = ${factories.id}
+      where ${assignments.appId} = ${event.appId}
+        and ${factories.organizationId} = ${event.organizationId}
       returning factory_id
     `);
     return { id: stored.id, appendedTo: appended.rows.map((row) => row.factory_id) };

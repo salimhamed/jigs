@@ -11,6 +11,7 @@ import {
   index,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -159,12 +160,69 @@ export const factories = pgTable(
   (table) => [unique("factories_organization_name").on(table.organizationId, table.name)],
 );
 
+/** An Organization's own identity on a provider, such as a GitHub App. */
+export const apps = pgTable(
+  "apps",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    provider: text("provider").$type<Provider>().notNull(),
+    name: text("name").notNull(),
+    /** The provider's id for the app, which its provider events carry, such as a GitHub App ID. */
+    externalId: text("external_id").notNull(),
+    /** What the provider's own settings show, such as a GitHub App's client ID. */
+    settings: jsonb("settings").notNull(),
+    /** The app's secrets as JSON, encrypted with `encryptSecret`. */
+    secrets: text("secrets").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("apps_provider_external_id").on(table.provider, table.externalId)],
+);
+
+/** Where an app is installed, such as a GitHub account or a Linear workspace. */
+export const installations = pgTable(
+  "installations",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    appId: uuid("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    /** The provider's id for the installation. */
+    externalId: text("external_id").notNull(),
+    /** The account or workspace the app is installed on. */
+    account: text("account").notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [unique("installations_app_external_id").on(table.appId, table.externalId)],
+);
+
+/** An app allowed to a factory: the factory receives the app's provider events. */
+export const assignments = pgTable(
+  "assignments",
+  {
+    appId: uuid("app_id")
+      .notNull()
+      .references(() => apps.id, { onDelete: "cascade" }),
+    factoryId: uuid("factory_id")
+      .notNull()
+      .references(() => factories.id, { onDelete: "cascade" }),
+  },
+  (table) => [
+    primaryKey({ columns: [table.appId, table.factoryId] }),
+    index("assignments_factory_idx").on(table.factoryId),
+  ],
+);
+
 /** One provider event as received, stored once however many factories get it. */
 export const providerEvents = pgTable("provider_events", {
   id: uuid("id").primaryKey().defaultRandom(),
   organizationId: text("organization_id")
     .notNull()
     .references(() => organization.id, { onDelete: "cascade" }),
+  /** The app it came through; `null` once that app is removed. */
+  appId: uuid("app_id").references(() => apps.id, { onDelete: "set null" }),
   provider: text("provider").$type<Provider>().notNull(),
   name: text("name").notNull(),
   receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
