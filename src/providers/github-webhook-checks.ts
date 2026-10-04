@@ -5,10 +5,10 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { GitHubApiError } from "../providers/github-api.ts";
-import { resolveGithubIdentity } from "../providers/github-auth.ts";
-import { inspectRepoWebhook, parseGithubRemote } from "../providers/github-webhook.ts";
-import type { Check, CheckResult } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
+import { resolveGithubIdentity } from "./github-auth.ts";
+import { GitHubApiError } from "./github-http.ts";
+import { inspectRepoWebhook, parseGithubRemote } from "./github-webhook.ts";
 
 export interface WebhookChecksOptions {
   factoryRoot: () => string;

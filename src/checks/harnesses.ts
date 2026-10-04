@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
 import { realCodexAuthPath } from "../steps/agents/harnesses/codex-home.ts";
@@ -15,7 +16,6 @@ import {
   requirementUsers,
   type WorkflowManifests,
 } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
 import type { WorkflowRequires } from "./index.ts";
 

@@ -2,9 +2,9 @@ import { existsSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
+import { packageRoot } from "../../build/templates.ts";
 import { parseFactoryConfig } from "../../config/factory-config.ts";
 import { layoutProblems } from "../output-layout.ts";
-import { packageRoot } from "../templates.ts";
 import { initFactory, resolveIdentityOptions } from "./init.ts";
 
 const APP = {

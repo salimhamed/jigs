@@ -11,7 +11,7 @@
  * @packageDocumentation
  */
 
-export { GitHubApiError } from "../../providers/github-api.ts";
+export { GitHubApiError } from "../../providers/github-http.ts";
 export { callGitHub } from "./call.ts";
 export { fetchPullRequestState } from "./fetch-state.ts";
 export {

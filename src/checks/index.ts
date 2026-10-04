@@ -1,45 +1,35 @@
 import path from "node:path";
-import {
-  FACTORY_CONFIG_FILE,
-  type LinearIdentity,
-  type PagerDutyIdentity,
-  readFactoryConfig,
-  resolveService,
-  type SlackConfig,
-} from "../config/factory-config.ts";
+import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { otherSlackAppHolders } from "../config/slack-apps.ts";
 import { JigsError } from "../errors.ts";
-import { getAuthenticatedUser } from "../providers/github.ts";
-import { resolveGithubIdentities } from "../providers/github-auth.ts";
-import { findUserByEmail, getViewer } from "../providers/linear.ts";
-import { resolveLinearIdentity } from "../providers/linear-auth.ts";
-import { pagerDutyClientFor } from "../providers/pagerduty.ts";
-import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerduty-auth.ts";
-import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
+import { type Check, failedCheck } from "../providers/check.ts";
+import { githubChecks } from "../providers/github-checks.ts";
+import { webhookChecks } from "../providers/github-webhook-checks.ts";
+import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
+import { linearWebhookChecks } from "../providers/linear-webhook-checks.ts";
+import {
+  pagerDutyChecks,
+  pagerDutyFromDoctorChecks,
+  pagerDutyWebhookProbes,
+} from "../providers/pagerduty-checks.ts";
+import { pagerDutyWebhookChecks } from "../providers/pagerduty-webhook-checks.ts";
+import { slackChecks, slackDoctorChecks } from "../providers/slack-checks.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
 import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
 import {
   CHECK_TIMEOUT_MS,
-  type Check,
   type CheckReport,
-  failedCheck,
   neededByUsers,
   requirementUsers,
   runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
-import { type Integration, RESTART_SERVICE } from "./core.ts";
-import {
-  type GithubIdentityProbes,
-  githubIdentityChecks,
-  realGithubIdentityProbes,
-} from "./github-identity.ts";
 import {
   harnessChecks,
   harnessUsers,
@@ -47,88 +37,24 @@ import {
   requiredHarnessKinds,
   usedHarnessChecks,
 } from "./harnesses.ts";
-import {
-  type LinearIdentityProbes,
-  linearIdentityChecks,
-  linearOperatorChecks,
-} from "./linear-identity.ts";
-import { linearWebhookChecks } from "./linear-webhook.ts";
 import { mcpServerChecks } from "./mcp.ts";
-import {
-  type PagerDutyIdentityProbes,
-  pagerDutyFromChecks,
-  pagerDutyIdentityChecks,
-} from "./pagerduty-identity.ts";
-import { pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
-import {
-  type SlackProbes,
-  slackIdentityChecks,
-  slackSharedAppChecks,
-  slackSocketModeChecks,
-} from "./slack.ts";
-import { webhookChecks } from "./webhooks.ts";
 
-export { type BindingChecksOptions, bindingChecks } from "./bindings.ts";
+export { type Check, failedCheck } from "../providers/check.ts";
 export {
-  CHECK_TIMEOUT_MS,
-  type Check,
-  type CheckOutcome,
   type CheckReport,
-  type CheckResult,
   type FailedCheck,
-  failedCheck,
   failedChecks,
   formatFailures,
   runChecks,
 } from "./catalog.ts";
-export { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
-export {
-  type GithubIdentityCheckOptions,
-  type GithubIdentityProbes,
-  githubIdentityChecks,
-  realGithubIdentityProbes,
-} from "./github-identity.ts";
-export {
-  type HarnessRuntime,
-  type HarnessRuntimeDeps,
-  harnessRuntime,
-  harnessRuntimes,
-} from "./harness-runtime.ts";
-export {
-  claudeAuthCheck,
-  codexAuthCheck,
-  type HarnessKind,
-  harnessChecks,
-  harnessRuntimeCheck,
-} from "./harnesses.ts";
-export {
-  type LinearIdentityProbes,
-  type LinearOperatorProbes,
-  linearIdentityChecks,
-  linearOperatorChecks,
-} from "./linear-identity.ts";
-export { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
-export {
-  type PagerDutyIdentityProbes,
-  type PagerDutyUserProbes,
-  pagerDutyFromChecks,
-  pagerDutyIdentityChecks,
-} from "./pagerduty-identity.ts";
-export {
-  doctorSecretChecks,
-  type SecretChecksOptions,
-  secretChecks,
-} from "./secrets.ts";
-export { type SlackProbes, slackIdentityChecks, slackSocketModeChecks } from "./slack.ts";
-export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 
 // A workflow's declared requirements — the manifest side of the computed check
 // list. Hand-maintaining the list is the drift trap this exists to avoid.
 export interface WorkflowRequires {
   agents?: Record<string, Harness>;
-  integrations?: Integration[];
+  integrations?: Provider[];
   bindings?: string[];
   models?: AskableModelSource[];
   aws?: true;
@@ -136,135 +62,9 @@ export interface WorkflowRequires {
   secrets?: string[];
 }
 
-// The real provider clients, so a caller of the catalog states only its own
-// requirements. Substituting a probe stays a seam on each check factory.
-const linearProbes: LinearIdentityProbes = { viewer: getViewer };
-const githubProbes: GithubIdentityProbes = realGithubIdentityProbes(getAuthenticatedUser);
-const pagerDutyProbes: PagerDutyIdentityProbes = {
-  token: async () => {
-    await pagerDutyAuthFor().bearer();
-  },
-  read: () => pagerDutyClientFor().verifyAccess(),
-};
-const slackProbes: SlackProbes = { authTest: slackAuthTest, openConnection: slackOpenConnection };
-
-// Which credential jigs holds and what it is allowed to do with it. Both come
-// from `jigs.config.ts`; where there is none to read, the defaults are what a
-// factory would get, and the credential is still worth checking.
-function githubChecks(): Check[] {
-  try {
-    const { webhooks } = readFactoryConfig(factoryRoot());
-    return githubIdentityChecks(resolveGithubIdentities(), githubProbes, process.env, {
-      webhooks: webhooks?.github.enabled ?? false,
-    });
-  } catch {
-    // A configuration that cannot be read is the binding checks' diagnosis;
-    // the credential is still worth checking, against what a factory that
-    // states nothing would get.
-    return githubIdentityChecks([{ mode: "pat" }], githubProbes);
-  }
-}
-
-// A configuration that cannot be read says nothing about the credential, so it
-// fails as itself rather than as a key Linear rejected.
-function linearChecks(): Check[] {
-  let identity: LinearIdentity;
-  try {
-    identity = resolveLinearIdentity();
-  } catch (err) {
-    return [
-      failedCheck(
-        "linear.identity",
-        "Linear identity",
-        err instanceof Error ? err.message : String(err),
-        `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
-      ),
-    ];
-  }
-  return linearIdentityChecks(identity, linearProbes);
-}
-
-// The bot token is worth checking whatever the config says, so a missing or
-// unreadable slack section falls back to no Socket Mode and no extra scopes.
-// An unreadable config is the binding checks' diagnosis.
-function configuredSlack(): SlackConfig {
-  let slack: SlackConfig | undefined;
-  try {
-    slack = readFactoryConfig(factoryRoot()).slack;
-  } catch {}
-  return slack ?? { socketMode: false, scopes: [] };
-}
-
-function slackDoctorChecks(): Check[] {
-  const slack = configuredSlack();
-  return [
-    ...slackIdentityChecks(slackProbes, slack.scopes),
-    ...slackSocketModeChecks(slack, slackProbes),
-    ...slackSharedAppChecks(slack, otherSlackAppServices),
-  ];
-}
-
-function otherSlackAppServices(): string[] {
-  const token = slackEnvValue("SLACK_APP_TOKEN");
-  if (token === undefined) return [];
-  const { slug } = resolveService(factoryRoot());
-  return otherSlackAppHolders(token, slug).map((holder) => holder.slug);
-}
-
-// An unreadable config is the identity check's diagnosis, so it adds nothing here.
-function linearOperatorDoctorChecks(): Check[] {
-  let identity: LinearIdentity;
-  let operator: string | undefined;
-  try {
-    identity = resolveLinearIdentity();
-    operator = readFactoryConfig(factoryRoot()).linear.operator;
-  } catch {
-    return [];
-  }
-  return linearOperatorChecks(identity, operator, {
-    viewer: getViewer,
-    userByEmail: findUserByEmail,
-  });
-}
-
-// A missing or unreadable pagerduty section fails as itself, with the section
-// to add, rather than as a credential PagerDuty rejected.
-function pagerDutyChecks(): Check[] {
-  let identity: PagerDutyIdentity;
-  try {
-    identity = resolvePagerDutyIdentity();
-  } catch (err) {
-    return [
-      failedCheck(
-        "pagerduty.identity",
-        "PagerDuty identity",
-        err instanceof Error ? err.message : String(err),
-        err instanceof JigsError && err.hint !== undefined
-          ? err.hint
-          : `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
-      ),
-    ];
-  }
-  return pagerDutyIdentityChecks(identity, pagerDutyProbes);
-}
-
-// An unreadable config is the identity check's diagnosis, so it adds nothing here.
-function pagerDutyFromDoctorChecks(): Check[] {
-  let identity: PagerDutyIdentity;
-  try {
-    identity = resolvePagerDutyIdentity();
-  } catch {
-    return [];
-  }
-  return pagerDutyFromChecks(identity, {
-    token: pagerDutyProbes.token,
-    userByEmail: (email) => pagerDutyClientFor().findUserByEmail(email),
-  });
-}
-
 // An agent that acts as the factory on a provider needs that provider's
 // identity, as a step that calls it does.
-function integrationsOf(requires: WorkflowRequires): Integration[] {
+function integrationsOf(requires: WorkflowRequires): Provider[] {
   const agents = Object.values(requires.agents ?? {});
   const opted = AGENT_ACCESS_PROVIDERS.filter((provider) =>
     agents.some((agent) => agent[provider] !== undefined),
@@ -286,9 +86,7 @@ export function preflightChecks(
     ...(integrations.includes("linear") ? linearChecks() : []),
     ...(integrations.includes("github") ? githubChecks() : []),
     ...(integrations.includes("pagerduty") ? pagerDutyChecks() : []),
-    ...(integrations.includes("slack")
-      ? slackIdentityChecks(slackProbes, configuredSlack().scopes)
-      : []),
+    ...(integrations.includes("slack") ? slackChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
     ...harnessChecks(requiredHarnessKinds(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
@@ -309,7 +107,7 @@ export function preflightChecks(
 // section or a slack section is set up on purpose. The key and PAT identities
 // are what every scaffold states, so they ask for nothing. An unreadable config
 // asks for nothing either: the binding checks report it.
-function configuredProviders(): Record<Integration, boolean> {
+function configuredProviders(): Record<Provider, boolean> {
   try {
     const { bindings, webhooks, github, linear, pagerduty, slack } = readFactoryConfig(
       factoryRoot(),
@@ -466,14 +264,14 @@ export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
 // provider its source reads.
 export function doctorChecks(
   workflows: WorkflowManifests,
-  triggers: Record<string, Integration> = {},
+  triggers: Record<string, Provider> = {},
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
     ...integrationsOf(requires),
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();
-  const provider = (name: Integration, checks: () => Check[]): Check[] => {
+  const provider = (name: Provider, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
     return needing.length > 0 || polling.length > 0 || configured[name]
@@ -489,13 +287,7 @@ export function doctorChecks(
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
     ...linearWebhookChecks({ factoryRoot }),
-    ...pagerDutyWebhookChecks({
-      factoryRoot,
-      probes: {
-        token: pagerDutyProbes.token,
-        subscriptions: (url) => pagerDutyClientFor().listWebhookSubscriptions({ url }),
-      },
-    }),
+    ...pagerDutyWebhookChecks({ factoryRoot, probes: pagerDutyWebhookProbes }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
     ...usedHarnessChecks(harnessUsers(workflows)),

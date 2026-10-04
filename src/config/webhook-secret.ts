@@ -1,5 +1,5 @@
 import path from "node:path";
-import type { WebhookProvider } from "./factory-config.ts";
+import type { WebhookProvider } from "../workflow/providers.ts";
 import { factoryEnvValue } from "./factory-env.ts";
 
 const SECRET_VARIABLES: Record<WebhookProvider, string> = {

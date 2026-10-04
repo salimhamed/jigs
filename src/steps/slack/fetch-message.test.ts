@@ -1,4 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resetProviderContext } from "../../providers/credentials.ts";
+import { configureSlack } from "../../providers/slack.ts";
+import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
 
@@ -58,14 +61,12 @@ const usersInfo = {
 
 type Route = (params: URLSearchParams) => unknown;
 let routes: Record<string, Route>;
-let fetchMock: ReturnType<typeof vi.fn>;
+let sent: FetchCall[];
 
 const calls = (method: string) =>
-  fetchMock.mock.calls.filter(([url]) => String(url).endsWith(`/${method}`)).length;
+  sent.filter((call) => call.url.pathname.endsWith(`/${method}`)).length;
 
 beforeEach(() => {
-  vi.stubEnv("SLACK_API_URL", "http://slack.test/api");
-  vi.stubEnv("SLACK_BOT_TOKEN", "xoxb-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
   routes = {
     "auth.test": () => ({ ok: true, ...BOT }),
@@ -75,18 +76,19 @@ beforeEach(() => {
     }),
     "users.info": () => usersInfo,
   };
-  fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-    const method = url.slice(url.lastIndexOf("/") + 1);
+  const fake = fakeFetch((call) => {
+    const method = call.url.pathname.slice(call.url.pathname.lastIndexOf("/") + 1);
     const route = routes[method];
     if (route === undefined) throw new Error(`unexpected ${method}`);
-    return new Response(JSON.stringify(route(new URLSearchParams(String(init.body)))));
+    return new Response(JSON.stringify(route(new URLSearchParams(call.body))));
   });
-  vi.stubGlobal("fetch", fetchMock);
+  sent = fake.calls;
+  configureSlack({ fetch: fake.fetch, env: () => "xoxb-test" });
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  configureSlack({});
+  resetProviderContext();
 });
 
 test("a snapshot is the message, its permalink and its replies in order, with each author", async () => {

@@ -1,11 +1,11 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { packageRoot } from "../../build/templates.ts";
 import { addWorkflow, workflowEntry } from "../../config/config-edit.ts";
 import { FACTORY_CONFIG_FILE } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { command, heading, note } from "../output.ts";
-import { packageRoot } from "../templates.ts";
 
 const recipesRoot = () => path.join(packageRoot(), "recipes");
 

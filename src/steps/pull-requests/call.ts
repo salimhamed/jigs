@@ -15,9 +15,10 @@ import type { JsonValue } from "../../workflow/human/questions.ts";
  * JSON. An answer with no content, such as 204, returns `undefined`.
  *
  * When GitHub answers with an error status, it throws a {@link GitHubApiError}
- * with the `status` and GitHub's message. A step can run more than once, so a
- * call that is not safe to repeat has to accept what a repeat gets back. The
- * App needs whatever permission the endpoint asks for.
+ * with the `status` and GitHub's message. Rate-limited calls are retried. A
+ * step can run more than once, so a call that is not safe to repeat has to
+ * accept what a repeat gets back. The App needs whatever permission the
+ * endpoint asks for.
  *
  * @example
  * ```ts

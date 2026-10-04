@@ -31,5 +31,17 @@
         "organizeImports": "on"
       }
     }
-  }
+  },
+  "overrides": [
+    {
+      "includes": ["src/workflow/**"],
+      "linter": {
+        "rules": {
+          "style": {
+            "noProcessEnv": "error"
+          }
+        }
+      }
+    }
+  ]
 }

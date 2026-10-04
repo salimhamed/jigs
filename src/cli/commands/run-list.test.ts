@@ -80,9 +80,9 @@ test("a trigger's run names the message it was started for before it waits", asy
     runs: [
       run({
         trigger: "trigger:answers",
-        source: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
+        source: { kind: "slack", label: "slack C0123ABCD 1790723244.335019" },
       }),
-      run({ trigger: "trigger:pages", source: { kind: "pagerduty", incident: "Q1ABCDEF" } }),
+      run({ trigger: "trigger:pages", source: { kind: "pagerduty", label: "pagerduty Q1ABCDEF" } }),
     ],
     schedules: [],
     triggers: [],

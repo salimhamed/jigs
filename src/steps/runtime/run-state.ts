@@ -1,6 +1,6 @@
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { describeSuspension, type RunSuspension } from "../../run-suspension.ts";
-import { TICKET_TOKEN_PREFIX } from "../../workflow/linear/ticket-token.ts";
+import { parseHookToken } from "../../workflow/hook-tokens.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import { listResources, type RegistrySql, toRecord } from "./registry.ts";
 
@@ -35,10 +35,13 @@ export interface RunFacts {
   source?: RunSource;
 }
 
-/** The Slack message or PagerDuty incident an event trigger started a run for. */
-export type RunSource =
-  | { kind: "slack"; channel: string; ts: string }
-  | { kind: "pagerduty"; incident: string };
+/** What an event trigger started a run for, as the trigger's source describes it. */
+export interface RunSource {
+  /** The provider the occurrence came from. */
+  kind: string;
+  /** The occurrence in an operator's words. */
+  label: string;
+}
 
 export interface RunStep {
   name: string;
@@ -126,7 +129,7 @@ export function describeRunState(
       iso(run.updatedAt) ?? createdAt,
       ...(steps ?? []).flatMap((step) => [step.completedAt, step.startedAt]),
     ]),
-    claim: tokens.find((token) => token.startsWith(TICKET_TOKEN_PREFIX)) ?? null,
+    claim: tokens.find((token) => parseHookToken(token)?.kind === "ticket-claim") ?? null,
     suspensions: tokens.flatMap((token) => describeSuspension(token, run.ticket) ?? []),
   };
 }

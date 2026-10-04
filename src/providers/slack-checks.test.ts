@@ -1,11 +1,11 @@
 import { expect, test } from "vitest";
-import { SlackApiError, type SlackAuth, type SlackToken } from "../providers/slack.ts";
+import { SlackApiError, type SlackAuth, type SlackToken } from "./slack.ts";
 import {
   type SlackProbes,
   slackIdentityChecks,
   slackSharedAppChecks,
   slackSocketModeChecks,
-} from "./slack.ts";
+} from "./slack-checks.ts";
 
 const AUTH: SlackAuth = {
   userId: "U0C59SU5V29",
@@ -23,8 +23,8 @@ const probes = (overrides: Partial<SlackProbes> = {}): SlackProbes => ({
 
 const env =
   (values: Partial<Record<SlackToken, string>>) =>
-  (name: SlackToken): string | undefined =>
-    values[name];
+  (name: string): string | undefined =>
+    values[name as SlackToken];
 const BOTH = env({ SLACK_BOT_TOKEN: "xoxb-1", SLACK_APP_TOKEN: "xapp-1" });
 
 async function run(socketMode: boolean, p: SlackProbes, lookup = BOTH, scopes: string[] = []) {

@@ -8,7 +8,7 @@ import { getWorld } from "workflow/runtime";
 import type { PullRequestRef } from "../providers/github.ts";
 import { getComment } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import { needsHumanParts, prFromToken, type RunSuspension } from "../run-suspension.ts";
+import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
 import { currentFactory, listResources, registrySql, toRecord } from "../steps/runtime/registry.ts";
 import {
@@ -18,7 +18,9 @@ import {
   type RunState,
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
+import { SOURCES } from "./sources.ts";
 import { occurrencesByAttribute } from "./trigger-store.ts";
 import { lastWake } from "./wake-note.ts";
 
@@ -190,11 +192,12 @@ export async function enrichSuspensions(
 ): Promise<RunSuspension[]> {
   return await Promise.all(
     suspensions.map(async (suspension) => {
-      const pr = prFromToken(suspension.token)?.pr;
-      if (pr !== undefined) return await withPrState(suspension, pr, runId);
-      const halt = needsHumanParts(suspension.token);
-      if (halt === null) return suspension;
-      const comment = await getComment(halt.commentId).catch(() => null);
+      const parsed = parseHookToken(suspension.token);
+      if (parsed?.kind === "pull-request" && parsed.pr !== null) {
+        return await withPrState(suspension, parsed.pr, runId);
+      }
+      if (parsed?.kind !== "needs-human" || parsed.halt === null) return suspension;
+      const comment = await getComment(parsed.halt.commentId).catch(() => null);
       if (comment === null) return suspension;
       return { ...suspension, url: comment.url, question: comment.body };
     }),
@@ -244,10 +247,13 @@ const runFacts = (run: WorldRun): NonNullable<RunFacts["run"]> => ({
 
 /**
  * What the World says about one run, for `readRunState`. A live run's hooks and steps are
- * read; `detail` also reads a finished run's steps and the run's source, which only the
- * single-run route pays for.
+ * read; given `detail`, the factory whose triggers describe the run's source, it also reads
+ * a finished run's steps and that source, which only the single-run route pays for.
  */
-export async function worldRunFacts(runId: string, detail = false): Promise<RunFacts> {
+export async function worldRunFacts(
+  runId: string,
+  detail?: Pick<Factory, "triggers">,
+): Promise<RunFacts> {
   let run: WorldRun;
   try {
     run = await worldRun(runId);
@@ -255,7 +261,7 @@ export async function worldRunFacts(runId: string, detail = false): Promise<RunF
     if (WorkflowRunNotFoundError.is(error)) return { run: null };
     throw error;
   }
-  const source = detail ? (await runSources([run])).get(runId) : undefined;
+  const source = detail ? (await runSources([run], detail)).get(runId) : undefined;
   const facts = { run: runFacts(run), ...(source === undefined ? {} : { source }) };
   if (TERMINAL_RUN_STATUSES.has(run.status)) {
     return detail ? { ...facts, steps: await listRunSteps(runId) } : facts;
@@ -266,26 +272,29 @@ export async function worldRunFacts(runId: string, detail = false): Promise<RunF
 
 /**
  * What each trigger-started run was started for, read from its occurrence row by the run's
- * plaintext occurrence attribute, so it reads the same on a World that encrypts inputs.
+ * plaintext occurrence attribute, so it reads the same on a World that encrypts inputs, and
+ * described by the source of the trigger that recorded the row. A run whose trigger is no
+ * longer configured has no source to describe it.
  */
-async function runSources(runs: readonly WorldRun[]): Promise<Map<string, RunSource>> {
+async function runSources(
+  runs: readonly WorldRun[],
+  factory: Pick<Factory, "triggers">,
+): Promise<Map<string, RunSource>> {
   const attributes = runs.flatMap((run) => run.attributes?.[OCCURRENCE_ATTRIBUTE] ?? []);
   const rows = await occurrencesByAttribute(registrySql(), currentFactory(), attributes);
-  const byAttribute = new Map(rows.map((row) => [row.attribute, sourceOf(row.inputs)]));
+  const byAttribute = new Map(
+    rows.flatMap((row) => {
+      const kind = factory.triggers?.[row.trigger]?.source.kind;
+      const source = kind === undefined ? undefined : SOURCES[kind];
+      return source === undefined ? [] : [[row.attribute, source.describe(row.inputs)] as const];
+    }),
+  );
   return new Map(
     runs.flatMap((run) => {
       const source = byAttribute.get(run.attributes?.[OCCURRENCE_ATTRIBUTE] ?? "");
       return source === undefined ? [] : [[run.runId, source] as const];
     }),
   );
-}
-
-// An occurrence row keeps the reference its source handed the run.
-function sourceOf(inputs: Record<string, unknown>): RunSource | undefined {
-  const { channel, ts, incident } = inputs;
-  if (typeof channel === "string" && typeof ts === "string") return { kind: "slack", channel, ts };
-  if (typeof incident === "string") return { kind: "pagerduty", incident };
-  return undefined;
 }
 
 /** Every run this factory's World holds, described the way `readRunState` describes one. */
@@ -296,7 +305,7 @@ export async function listRuns(factory: Factory): Promise<RunRow[]> {
       factory: currentFactory(),
       runIds: runs.map((run) => run.runId),
     }),
-    runSources(runs),
+    runSources(runs, factory),
   ]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   const rowsByRun = Map.groupBy(rows, (row) => row.runId);

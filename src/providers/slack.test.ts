@@ -1,7 +1,11 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test } from "vitest";
+import { resetProviderContext } from "./credentials.ts";
 import {
+  configureSlack,
+  SLACK_API_URL,
   SlackApiError,
   slackAuthTest,
+  slackBot,
   slackHistory,
   slackOpenConnection,
   slackPermalink,
@@ -9,6 +13,7 @@ import {
   slackReplies,
   slackUser,
 } from "./slack.ts";
+import { type FetchCall, fakeFetch, fakeSleep } from "./test-support.ts";
 
 const BOT_TOKEN = "xoxb-test-bot-token";
 const APP_TOKEN = "xapp-test-app-token";
@@ -33,32 +38,46 @@ function reply(body: unknown, init: { status?: number; headers?: Record<string, 
   });
 }
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let tokens: Record<string, string>;
+let answers: Array<() => Response>;
+let calls: FetchCall[];
+let sleeps: number[];
+
+// Answers each call with the next queued answer, repeating the last.
+function answer(...next: Array<() => Response>) {
+  answers.push(...next);
+}
 
 function sent(index: number): { url: string; auth: string; params: URLSearchParams } {
-  const [url, init] = fetchMock.mock.calls[index] as [string, RequestInit];
+  const call = calls[index];
+  if (call === undefined) throw new Error(`no call ${index}`);
   return {
-    url,
-    auth: new Headers(init.headers).get("authorization") ?? "",
-    params: new URLSearchParams(String(init.body)),
+    url: call.url.toString(),
+    auth: call.headers.authorization ?? "",
+    params: new URLSearchParams(call.body),
   };
 }
 
 beforeEach(() => {
-  vi.stubEnv("SLACK_API_URL", "http://slack.test/api");
-  vi.stubEnv("SLACK_BOT_TOKEN", BOT_TOKEN);
-  vi.stubEnv("SLACK_APP_TOKEN", APP_TOKEN);
-  fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
+  tokens = { SLACK_BOT_TOKEN: BOT_TOKEN, SLACK_APP_TOKEN: APP_TOKEN };
+  answers = [];
+  const fake = fakeFetch(() => {
+    const next = answers.length > 1 ? answers.shift() : answers[0];
+    if (next === undefined) throw new Error("no answer queued");
+    return next();
+  });
+  const sleep = fakeSleep();
+  calls = fake.calls;
+  sleeps = sleep.sleeps;
+  configureSlack({ fetch: fake.fetch, sleep: sleep.sleep, env: (name) => tokens[name] });
 });
 afterEach(() => {
-  vi.useRealTimers();
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  configureSlack({});
+  resetProviderContext();
 });
 
 test("auth.test names the bot and reads its scopes from the response header", async () => {
-  fetchMock.mockResolvedValueOnce(reply(AUTH_OK, { headers: { "x-oauth-scopes": SCOPES } }));
+  answer(() => reply(AUTH_OK, { headers: { "x-oauth-scopes": SCOPES } }));
   expect(await slackAuthTest()).toEqual({
     userId: "U0C59SU5V29",
     botId: "B0C5JPZUW1J",
@@ -67,18 +86,18 @@ test("auth.test names the bot and reads its scopes from the response header", as
     scopes: SCOPES.split(","),
   });
   expect(sent(0)).toMatchObject({
-    url: "http://slack.test/api/auth.test",
+    url: `${SLACK_API_URL}/auth.test`,
     auth: `Bearer ${BOT_TOKEN}`,
   });
 });
 
 test("a response without the scopes header reports no scopes", async () => {
-  fetchMock.mockResolvedValueOnce(reply(AUTH_OK));
+  answer(() => reply(AUTH_OK));
   expect((await slackAuthTest()).scopes).toEqual([]);
 });
 
 test("a Slack error carries its code and never the token", async () => {
-  fetchMock.mockResolvedValueOnce(reply({ ok: false, error: "invalid_auth" }));
+  answer(() => reply({ ok: false, error: "invalid_auth" }));
   const error = await slackAuthTest().catch((err: unknown) => err);
   expect(error).toBeInstanceOf(SlackApiError);
   expect(error).toMatchObject({ code: "invalid_auth", message: "Slack auth.test: invalid_auth" });
@@ -86,7 +105,7 @@ test("a Slack error carries its code and never the token", async () => {
 });
 
 test("a missing scope names the scope Slack asked for", async () => {
-  fetchMock.mockResolvedValueOnce(
+  answer(() =>
     reply({
       ok: false,
       error: "missing_scope",
@@ -102,85 +121,79 @@ test("a missing scope names the scope Slack asked for", async () => {
 });
 
 test("an unset bot token names the .env key before any request", async () => {
-  vi.stubEnv("SLACK_BOT_TOKEN", "");
+  tokens.SLACK_BOT_TOKEN = "";
   await expect(slackAuthTest()).rejects.toThrow("SLACK_BOT_TOKEN is not set");
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(0);
 });
 
 test("a non-JSON answer reports the HTTP status, not the body", async () => {
-  fetchMock.mockResolvedValueOnce(new Response("<html>bad gateway</html>", { status: 502 }));
-  await expect(slackAuthTest()).rejects.toThrow("Slack auth.test answered HTTP 502");
+  answer(() => new Response("<html>bad gateway</html>", { status: 502 }));
+  const error = await slackAuthTest().catch((err: unknown) => err);
+  expect(error).toMatchObject({
+    provider: "slack",
+    status: 502,
+    message: "Slack API 502 on auth.test: answered HTTP 502",
+  });
 });
 
 test("a rate-limited call waits out Retry-After and tries again", async () => {
-  vi.useFakeTimers();
-  fetchMock
-    .mockResolvedValueOnce(
+  answer(
+    () =>
       reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "7" } }),
-    )
-    .mockResolvedValueOnce(reply(AUTH_OK));
-  const pending = slackAuthTest();
-  await vi.advanceTimersByTimeAsync(6_999);
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-  await vi.advanceTimersByTimeAsync(1);
-  expect((await pending).userId).toBe("U0C59SU5V29");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
+    () => reply(AUTH_OK),
+  );
+  expect((await slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect(sleeps).toEqual([7_000]);
+  expect(calls).toHaveLength(2);
 });
 
 test("an unreadable Retry-After waits one second", async () => {
-  vi.useFakeTimers();
-  fetchMock
-    .mockResolvedValueOnce(
+  answer(
+    () =>
       reply(
         { ok: false, error: "ratelimited" },
         { status: 429, headers: { "retry-after": "soon" } },
       ),
-    )
-    .mockResolvedValueOnce(reply(AUTH_OK));
-  const pending = slackAuthTest();
-  await vi.advanceTimersByTimeAsync(1_000);
-  expect((await pending).userId).toBe("U0C59SU5V29");
+    () => reply(AUTH_OK),
+  );
+  expect((await slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect(sleeps).toEqual([1_000]);
 });
 
 test("a Retry-After over a minute fails as ratelimited instead of waiting", async () => {
-  fetchMock.mockResolvedValueOnce(
+  answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "61" } }),
   );
-  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited", status: 429 });
+  expect(calls).toHaveLength(1);
+  expect(sleeps).toEqual([]);
 });
 
 test("a call still rate-limited after its retries fails as ratelimited", async () => {
-  vi.useFakeTimers();
-  fetchMock.mockImplementation(async () =>
+  answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "1" } }),
   );
-  const pending = slackAuthTest().catch((err: unknown) => err);
-  await vi.advanceTimersByTimeAsync(10_000);
-  expect(await pending).toMatchObject({ code: "ratelimited" });
-  expect(fetchMock).toHaveBeenCalledTimes(4);
+  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
+  expect(calls).toHaveLength(4);
+  expect(sleeps).toEqual([1_000, 1_000, 1_000]);
 });
 
-// slackBot's cache is the module's, so each test takes a fresh module.
-async function freshSlackBot() {
-  vi.resetModules();
-  return (await import("./slack.ts")).slackBot;
-}
-
 test("the bot's own identity is read once per process", async () => {
-  const slackBot = await freshSlackBot();
-  fetchMock.mockImplementation(async () => reply(AUTH_OK));
+  answer(() => reply(AUTH_OK));
   const [first, second] = await Promise.all([slackBot(), slackBot()]);
   expect(first).toEqual(second);
   expect(await slackBot()).toMatchObject({ userId: "U0C59SU5V29", botId: "B0C5JPZUW1J" });
-  expect(fetchMock).toHaveBeenCalledTimes(1);
+  expect(calls).toHaveLength(1);
+  resetProviderContext();
+  await slackBot();
+  expect(calls).toHaveLength(2);
 });
 
 test("a failed identity read is not cached", async () => {
-  const slackBot = await freshSlackBot();
-  fetchMock
-    .mockResolvedValueOnce(reply({ ok: false, error: "invalid_auth" }))
-    .mockResolvedValueOnce(reply(AUTH_OK));
+  answer(
+    () => reply({ ok: false, error: "invalid_auth" }),
+    () => reply(AUTH_OK),
+  );
   await expect(slackBot()).rejects.toThrow("invalid_auth");
   expect((await slackBot()).userId).toBe("U0C59SU5V29");
 });
@@ -194,23 +207,22 @@ const message = (ts: string, extra: Record<string, unknown> = {}) => ({
 });
 
 test("history follows the cursor across pages, newest first, from oldest", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  answer(
+    () =>
       reply({
         ok: true,
         messages: [message("1790723478.961719"), message("1790723415.832429")],
         has_more: true,
         response_metadata: { next_cursor: "bmV4dF90czoxNzkwNzIzNDE1ODMyNDI5" },
       }),
-    )
-    .mockResolvedValueOnce(
+    () =>
       reply({
         ok: true,
         messages: [message("1790723400.000100", { subtype: "channel_join" })],
         has_more: false,
         response_metadata: { next_cursor: "" },
       }),
-    );
+  );
   const messages = await slackHistory("C0C5EUZ7P9Q", { oldest: "1790723000.000000" });
   expect(messages.map((m) => m.ts)).toEqual([
     "1790723478.961719",
@@ -227,7 +239,7 @@ test("history follows the cursor across pages, newest first, from oldest", async
 });
 
 test("replies return the parent then its thread, in order", async () => {
-  fetchMock.mockResolvedValueOnce(
+  answer(() =>
     reply({
       ok: true,
       messages: [
@@ -247,9 +259,7 @@ test("replies return the parent then its thread, in order", async () => {
 });
 
 test("posting sends plain text, in the thread when asked, and returns the new ts", async () => {
-  fetchMock.mockImplementation(async () =>
-    reply({ ok: true, channel: "C0C5EUZ7P9Q", ts: "1790724000.000200", message: {} }),
-  );
+  answer(() => reply({ ok: true, channel: "C0C5EUZ7P9Q", ts: "1790724000.000200", message: {} }));
   expect(
     await slackPostMessage({ channel: "C0C5EUZ7P9Q", text: "*hi*", threadTs: "1790723478.961719" }),
   ).toBe("1790724000.000200");
@@ -265,7 +275,7 @@ test("posting sends plain text, in the thread when asked, and returns the new ts
 test("a permalink is read for a message", async () => {
   const permalink =
     "https://junglescout.slack.com/archives/C0C5EUZ7P9Q/p1790723478961719?thread_ts=1790723478.961719&cid=C0C5EUZ7P9Q";
-  fetchMock.mockResolvedValueOnce(reply({ ok: true, permalink, channel: "C0C5EUZ7P9Q" }));
+  answer(() => reply({ ok: true, permalink, channel: "C0C5EUZ7P9Q" }));
   expect(await slackPermalink("C0C5EUZ7P9Q", "1790723478.961719")).toBe(permalink);
   expect(Object.fromEntries(sent(0).params)).toEqual({
     channel: "C0C5EUZ7P9Q",
@@ -274,8 +284,8 @@ test("a permalink is read for a message", async () => {
 });
 
 test("a user reads as their display name and email, falling back to the real name", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  answer(
+    () =>
       reply({
         ok: true,
         user: {
@@ -285,8 +295,7 @@ test("a user reads as their display name and email, falling back to the real nam
           profile: { display_name: "Salim", real_name: "Salim Hamed", email: "salim@example.com" },
         },
       }),
-    )
-    .mockResolvedValueOnce(
+    () =>
       reply({
         ok: true,
         user: {
@@ -296,7 +305,7 @@ test("a user reads as their display name and email, falling back to the real nam
           profile: { display_name: "", real_name: "Salim's jigs" },
         },
       }),
-    );
+  );
   expect(await slackUser("U01PW925E6N")).toEqual({
     id: "U01PW925E6N",
     name: "Salim",
@@ -312,17 +321,29 @@ test("a user reads as their display name and email, falling back to the real nam
 });
 
 test("a Socket Mode connection is opened with the app-level token", async () => {
-  fetchMock.mockResolvedValueOnce(
-    reply({ ok: true, url: "wss://wss-primary.slack.com/link/?ticket=t" }),
-  );
+  answer(() => reply({ ok: true, url: "wss://wss-primary.slack.com/link/?ticket=t" }));
   expect(await slackOpenConnection()).toBe("wss://wss-primary.slack.com/link/?ticket=t");
   expect(sent(0)).toMatchObject({
-    url: "http://slack.test/api/apps.connections.open",
+    url: `${SLACK_API_URL}/apps.connections.open`,
     auth: `Bearer ${APP_TOKEN}`,
   });
 });
 
 test("an unset app token names its .env key", async () => {
-  vi.stubEnv("SLACK_APP_TOKEN", "");
+  tokens.SLACK_APP_TOKEN = "";
   await expect(slackOpenConnection()).rejects.toThrow("SLACK_APP_TOKEN is not set");
+});
+
+test("history stops at a ceiling when every page claims another", async () => {
+  answer(() =>
+    reply({
+      ok: true,
+      messages: [message("1790723478.961719")],
+      response_metadata: { next_cursor: "again" },
+    }),
+  );
+  await expect(slackHistory("C0C5EUZ7P9Q", { oldest: "0" })).rejects.toThrow(
+    "Slack conversations.history kept returning a next cursor past 50 pages",
+  );
+  expect(calls).toHaveLength(50);
 });

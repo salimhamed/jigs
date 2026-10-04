@@ -263,6 +263,10 @@ const factory: Factory = {
       inputs: z.object({}),
     },
   },
+  triggers: {
+    answers: { workflow: "stamped", source: { kind: "slack.messages", params: {} } },
+    pages: { workflow: "stamped", source: { kind: "pagerduty.incidents", params: {} } },
+  },
 };
 
 const worldRun = (over: Partial<StoredRun> = {}): StoredRun => ({
@@ -410,15 +414,15 @@ test("an event trigger's run names its trigger, without the occurrence", async (
 });
 
 // The row the trigger engine recorded for an occurrence, with the reference its source handed the run.
-const occurrenceRow = (attribute: string, inputs: Record<string, unknown>) =>
-  ({ trigger: "pages", occurrence: attribute, inputs, attribute }) as triggerStore.Occurrence;
+const occurrenceRow = (trigger: string, attribute: string, inputs: Record<string, unknown>) =>
+  ({ trigger, occurrence: attribute, inputs, attribute }) as triggerStore.Occurrence;
 
 test("a trigger's run names the message or incident it was started for before it waits", async () => {
   const lookup = vi
     .spyOn(triggerStore, "occurrencesByAttribute")
     .mockResolvedValue([
-      occurrenceRow("attr-msg", { channel: "C0123ABCD", ts: "1790723244.335019" }),
-      occurrenceRow("attr-inc", { incident: "Q1ABCDEF" }),
+      occurrenceRow("answers", "attr-msg", { channel: "C0123ABCD", ts: "1790723244.335019" }),
+      occurrenceRow("pages", "attr-inc", { incident: "Q1ABCDEF" }),
     ]);
   world({
     runs: [
@@ -429,13 +433,12 @@ test("a trigger's run names the message or incident it was started for before it
   const rows = await listRuns(factory);
   expect(lookup).toHaveBeenCalledWith(expect.anything(), "factory-test", ["attr-msg", "attr-inc"]);
   expect(Object.fromEntries(rows.map((row) => [row.runId, row.source]))).toEqual({
-    [RUN_A]: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
-    [RUN_B]: { kind: "pagerduty", incident: "Q1ABCDEF" },
+    [RUN_A]: { kind: "slack", label: "slack C0123ABCD 1790723244.335019" },
+    [RUN_B]: { kind: "pagerduty", label: "pagerduty Q1ABCDEF" },
   });
-  expect((await worldRunFacts(RUN_A, true)).source).toEqual({
+  expect((await worldRunFacts(RUN_A, factory)).source).toEqual({
     kind: "slack",
-    channel: "C0123ABCD",
-    ts: "1790723244.335019",
+    label: "slack C0123ABCD 1790723244.335019",
   });
   // Automatic release reads a run without its detail, and never pays for the lookup.
   lookup.mockClear();
@@ -446,7 +449,15 @@ test("a trigger's run names the message or incident it was started for before it
 test("a run started by hand has no source", async () => {
   world({ runs: [worldRun({ input: storedArgs("manual") })] });
   expect((await listRuns(factory))[0]?.source).toBeNull();
-  expect((await worldRunFacts(RUN_A, true)).source).toBeUndefined();
+  expect((await worldRunFacts(RUN_A, factory)).source).toBeUndefined();
+});
+
+test("a run whose trigger is no longer configured has no source to describe it", async () => {
+  vi.spyOn(triggerStore, "occurrencesByAttribute").mockResolvedValue([
+    occurrenceRow("removed", "attr-msg", { channel: "C0123ABCD", ts: "1790723244.335019" }),
+  ]);
+  world({ runs: [worldRun({ attributes: { "jigs.occurrence": "attr-msg" } })] });
+  expect((await listRuns(factory))[0]?.source).toBeNull();
 });
 
 test("run statuses are read by ID, and a run the World lacks is absent", async () => {

@@ -8,8 +8,8 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { factorySlug } from "../../config/paths.ts";
 import type { JigsError } from "../../errors.ts";
-import { factorySlug } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import type { ServiceHealth, ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";

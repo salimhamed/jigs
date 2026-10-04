@@ -2,8 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import type { LinearWebhook } from "../providers/linear.ts";
-import { linearWebhookChecks } from "./linear-webhook.ts";
+import type { LinearWebhook } from "./linear.ts";
+import { linearWebhookChecks } from "./linear-webhook-checks.ts";
 
 const roots: string[] = [];
 

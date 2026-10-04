@@ -2,10 +2,10 @@ import { existsSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { factorySlug } from "../../config/paths.ts";
 import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
 import { readRunState } from "../../steps/runtime/run-state.ts";
 import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
-import { factorySlug } from "../../steps/workspaces/layout.ts";
 import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";

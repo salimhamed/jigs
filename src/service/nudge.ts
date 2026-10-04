@@ -7,12 +7,9 @@
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
-import { TICKET_TOKEN_PREFIX } from "../workflow/linear/ticket-token.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
-import { SLACK_THREAD_TOKEN_PREFIX } from "../workflow/slack/thread-token.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
-import type { SourceProvider } from "./sources.ts";
 import { recordWake } from "./wake-note.ts";
 
 // Subtracted, never added: the interval is a promise, so the jitter only ever
@@ -22,45 +19,41 @@ const NUDGE_JITTER_FRACTION = 0.1;
 
 type HeldHook = { runId: string; token: string };
 
-interface Subject {
-  label: string;
-  select: (hooks: HeldHook[]) => HeldHook[];
-}
-
-const SUBJECTS: Record<SourceProvider, Subject> = {
-  github: {
-    label: "pull requests",
-    select: (hooks) => hooks.filter((hook) => hook.token.startsWith(PULL_REQUEST_TOKEN_PREFIX)),
-  },
-  linear: {
-    label: "tickets",
-    // A ticket claim is held for the run's whole life, but only a run halted
-    // on a human is waiting on it. Waking the claim of a run parked anywhere
-    // else would queue a replay and a stale hint on every sweep.
-    select: (hooks) => {
-      const halted = new Set(
-        hooks
-          .filter((hook) => hook.token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX))
-          .map((hook) => haltKey(hook.runId, hook.token.slice(NEEDS_HUMAN_TOKEN_PREFIX.length))),
-      );
-      return hooks.filter(
-        (hook) =>
-          hook.token.startsWith(TICKET_TOKEN_PREFIX) &&
-          halted.has(haltKey(hook.runId, hook.token.slice(TICKET_TOKEN_PREFIX.length))),
-      );
-    },
-  },
+const LABELS: Record<Provider, string> = {
+  github: "pull requests",
+  linear: "tickets",
   // No run parks on an incident yet; PagerDuty polls only for its trigger.
-  pagerduty: { label: "PagerDuty incidents", select: () => [] },
-  slack: {
-    label: "Slack threads",
-    select: (hooks) => hooks.filter((hook) => hook.token.startsWith(SLACK_THREAD_TOKEN_PREFIX)),
-  },
+  pagerduty: "PagerDuty incidents",
+  slack: "Slack threads",
 };
 
-// Both tokens lead with the issue UUID; the halt marker's comment id follows it.
-function haltKey(runId: string, rest: string): string {
-  return `${runId} ${rest.split(":")[0]}`;
+/** The held hooks of one provider that a wake would actually reach a waiting run through. */
+function waitingOn(provider: Provider, hooks: HeldHook[]): HeldHook[] {
+  const parsed = hooks.map((hook) => ({ hook, token: parseHookToken(hook.token) }));
+  const halted = new Set(
+    parsed.flatMap(({ hook, token }) =>
+      token?.kind === "needs-human" && token.halt !== null
+        ? [`${hook.runId} ${token.halt.issueId}`]
+        : [],
+    ),
+  );
+  return parsed
+    .filter(({ hook, token }) => {
+      if (token?.provider !== provider) return false;
+      switch (token.kind) {
+        // Nothing resumes the marker; the reply lands on the claim beside it.
+        case "needs-human":
+          return false;
+        // A ticket claim is held for the run's whole life, but only a run halted
+        // on a human is waiting on it. Waking the claim of a run parked anywhere
+        // else would queue a replay and a stale hint on every sweep.
+        case "ticket-claim":
+          return halted.has(`${hook.runId} ${token.issueId}`);
+        default:
+          return true;
+      }
+    })
+    .map(({ hook }) => hook);
 }
 
 export interface NudgeDeps {
@@ -98,15 +91,15 @@ export function nudgeDelay(intervalSeconds: number, random: () => number = Math.
  * call, so nudging a busy run buys nothing and grows its event log.
  */
 export async function nudgeProvider(
-  provider: SourceProvider,
+  provider: Provider,
   deps: NudgeDeps = {},
 ): Promise<NudgeReport> {
-  const { label, select } = SUBJECTS[provider];
+  const label = LABELS[provider];
   const log = deps.log ?? ((line: string) => console.log(line));
   const warn = deps.warn ?? ((line: string) => console.error(line));
   const report: NudgeReport = { held: 0, nudged: 0, busy: 0, gone: 0, failed: 0 };
   try {
-    const held = select(await (deps.hooks ?? listWorldHooks)());
+    const held = waitingOn(provider, await (deps.hooks ?? listWorldHooks)());
     report.held = held.length;
     if (held.length === 0) {
       log(`[nudge] ${label}: none held`);
@@ -153,7 +146,7 @@ export async function nudgeProvider(
 
 /** Sweep each provider on its own repeating timer until stopped, one sweep per provider at a time. */
 export function startNudges(
-  intervalSeconds: Record<SourceProvider, number>,
+  intervalSeconds: Record<Provider, number>,
   deps: NudgeDeps = {},
 ): { stop: () => void } {
   const setTimer =
@@ -164,16 +157,16 @@ export function startNudges(
       timer.unref?.();
       return () => clearTimeout(timer);
     });
-  const cancels = new Map<SourceProvider, () => void>();
+  const cancels = new Map<Provider, () => void>();
   let stopped = false;
-  const schedule = (provider: SourceProvider) => {
+  const schedule = (provider: Provider) => {
     if (stopped) return;
     const fire = () => {
       void nudgeProvider(provider, deps).then(() => schedule(provider));
     };
     cancels.set(provider, setTimer(fire, nudgeDelay(intervalSeconds[provider], deps.random)));
   };
-  for (const provider of Object.keys(SUBJECTS) as SourceProvider[]) schedule(provider);
+  for (const provider of Object.keys(LABELS) as Provider[]) schedule(provider);
   return {
     stop: () => {
       stopped = true;

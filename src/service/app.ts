@@ -18,8 +18,9 @@ import { currentFactory, listResources, registrySql } from "../steps/runtime/reg
 import { readRunState } from "../steps/runtime/run-state.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import {
@@ -264,7 +265,7 @@ export function createApp(factory: Factory): Hono {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const state = await readRunState(registrySql(), currentFactory(), runId, (id) =>
-      worldRunFacts(id, true),
+      worldRunFacts(id, factory),
     );
     const body: Record<string, unknown> = {
       ...state,
@@ -475,7 +476,7 @@ function githubStatus(payload: unknown): {
 // state on every wake, so nothing downstream reads one.
 async function resumeAndLog(
   c: Context,
-  provider: "github" | "linear",
+  provider: Provider,
   tokens: string[],
   event: string | null,
   resume: typeof resumeHook,
@@ -508,5 +509,5 @@ async function runResourceTokens(runId: string): Promise<string[]> {
   const hooks = await (await getWorld()).hooks.list({ runId });
   return hooks.data
     .map((hook) => hook.token)
-    .filter((token) => !token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX));
+    .filter((token) => parseHookToken(token)?.kind !== "needs-human");
 }

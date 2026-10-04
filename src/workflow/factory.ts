@@ -13,6 +13,7 @@ import type {
   webhooksSchema,
 } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
+import type { Provider } from "./providers.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
 /**
@@ -376,7 +377,7 @@ export interface FactoryDefinition {
      * of the interval is taken off at random so services do not all poll at
      * once.
      */
-    pollIntervalSeconds?: { github?: number; linear?: number; slack?: number; pagerduty?: number };
+    pollIntervalSeconds?: Partial<Record<Provider, number>>;
   };
   agents?: AgentsDefinition;
   webhooks?: WebhooksDefinition;

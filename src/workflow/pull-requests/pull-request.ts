@@ -1,8 +1,6 @@
 import type { PullRequestSnapshot } from "../../providers/github.ts";
+import { PULL_REQUEST_TOKEN_PREFIX } from "../hook-tokens.ts";
 import type { ApprovalCoverage } from "./policy.ts";
-
-/** The durable hook-token prefix for pull request activity. */
-export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 
 /**
  * Build the durable hook token shared by a pull request watcher, the service poll and the webhook ingress.

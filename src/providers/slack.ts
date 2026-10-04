@@ -4,14 +4,12 @@
 // connection. Reads env and hits the network, so it is reached from a step, a
 // check or the service, never from workflow code.
 
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../checks/core.ts";
-import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { credentialRoot } from "./credential-root.ts";
+import { type EnvLookup, onProviderReset, requireCredential } from "./credentials.ts";
+import { ProviderApiError, providerRequest } from "./http.ts";
 
-// A test seam.
-const SLACK_API_URL = (): string => process.env.SLACK_API_URL ?? "https://slack.com/api";
+export const SLACK_API_URL = "https://slack.com/api";
 
 /** The bot token scopes jigs needs, in the order setup lists them. */
 export const SLACK_BOT_SCOPES = [
@@ -24,23 +22,9 @@ export const SLACK_BOT_SCOPES = [
 
 export type SlackToken = "SLACK_BOT_TOKEN" | "SLACK_APP_TOKEN";
 
-// Beyond these Slack is refusing on purpose, and waiting longer only holds a step.
-const RATE_LIMITED_ATTEMPTS = 4;
-const MAX_RETRY_AFTER_SECONDS = 60;
-
 // A ceiling for a proxy that answers every page with a cursor, not a real
 // channel's size.
 const MAX_PAGES = 50;
-
-/** A Slack credential from the factory's `.env`, or the shell outside a factory. */
-export function slackEnvValue(name: SlackToken): string | undefined {
-  try {
-    return factoryEnvValue(credentialRoot(), name);
-  } catch {
-    const exported = process.env[name];
-    return exported === "" ? undefined : exported;
-  }
-}
 
 /**
  * Slack answered a Web API call with `ok: false`. Check `code` to handle one
@@ -48,14 +32,24 @@ export function slackEnvValue(name: SlackToken): string | undefined {
  *
  * @group Errors
  */
-export class SlackApiError extends JigsError {
+export class SlackApiError extends ProviderApiError {
   /** Slack's `error` string, such as `invalid_auth` or `already_reacted`. */
-  readonly code: string;
+  declare readonly code: string;
 
-  constructor(method: string, code: string, needed?: string) {
-    super(`Slack ${method}: ${code}${needed === undefined ? "" : ` (needs ${needed})`}`);
+  constructor(
+    method: string,
+    code: string,
+    needed?: string,
+    answer: { status: number; body: string } = { status: 200, body: "" },
+  ) {
+    super({
+      provider: "slack",
+      request: method,
+      code,
+      ...answer,
+      message: `Slack ${method}: ${code}${needed === undefined ? "" : ` (needs ${needed})`}`,
+    });
     this.name = "SlackApiError";
-    this.code = code;
   }
 }
 
@@ -74,53 +68,57 @@ export interface SlackReply {
   response_metadata?: { next_cursor?: string };
 }
 
-const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+export interface SlackDeps {
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+  env?: EnvLookup;
+}
+
+let deps: SlackDeps = {};
+
+/** Replace how this process's Slack calls reach the network and read tokens. For tests. */
+export function configureSlack(next: SlackDeps): void {
+  deps = next;
+}
 
 // Form-encoded, because every Web API method accepts it and not every read
 // method accepts JSON.
-export async function slackCall<T extends SlackReply>(
+export function slackCall<T extends SlackReply>(
   method: string,
   params: SlackParams = {},
   token: SlackToken = "SLACK_BOT_TOKEN",
 ): Promise<{ body: T; headers: Headers }> {
-  const secret = slackEnvValue(token);
-  if (secret === undefined) {
-    throw new JigsError(
-      `${token} is not set`,
-      `set ${token} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
-    );
-  }
   const form = new URLSearchParams();
   for (const [key, value] of Object.entries(params)) {
     if (value !== undefined)
       form.set(key, typeof value === "string" ? value : JSON.stringify(value));
   }
-  for (let attempt = 1; ; attempt += 1) {
-    const res = await fetch(`${SLACK_API_URL()}/${method}`, {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${secret}`,
-        "content-type": "application/x-www-form-urlencoded",
-      },
-      body: form.toString(),
-    });
-    if (res.status === 429) {
-      const seconds = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
-      const wait = Number.isNaN(seconds) ? 1 : seconds;
-      if (attempt < RATE_LIMITED_ATTEMPTS && wait <= MAX_RETRY_AFTER_SECONDS) {
-        await sleep(wait * 1000);
-        continue;
+  return providerRequest({
+    provider: "slack",
+    auth: { bearer: async () => requireCredential(token, undefined, deps.env) },
+    url: `${SLACK_API_URL}/${method}`,
+    method: "POST",
+    request: method,
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: form.toString(),
+    fetch: deps.fetch,
+    sleep: deps.sleep,
+    decode: (res, text, fail) => {
+      let body: T;
+      try {
+        body = JSON.parse(text) as T;
+      } catch {
+        throw fail({ detail: `answered HTTP ${res.status}` });
       }
-    }
-    let body: T;
-    try {
-      body = (await res.json()) as T;
-    } catch {
-      throw new JigsError(`Slack ${method} answered HTTP ${res.status}`);
-    }
-    if (!body.ok) throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed);
-    return { body, headers: res.headers };
-  }
+      if (!body.ok) {
+        throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
+          status: res.status,
+          body: text,
+        });
+      }
+      return { body, headers: res.headers };
+    },
+  });
 }
 
 async function slackPages<T>(method: string, params: SlackParams, key: string): Promise<T[]> {
@@ -166,6 +164,9 @@ export async function slackAuthTest(): Promise<SlackAuth> {
 }
 
 let bot: Promise<SlackAuth> | null = null;
+onProviderReset(() => {
+  bot = null;
+});
 
 /** The factory's own bot, from `auth.test` once per process. */
 export function slackBot(): Promise<SlackAuth> {

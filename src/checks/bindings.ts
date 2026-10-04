@@ -6,13 +6,14 @@ import {
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
+import { type Check, type CheckResult, failedCheck } from "../providers/check.ts";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
 import { parseGithubRemote } from "../providers/github-webhook.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
-import { type Check, type CheckResult, failedCheck, PROBE_TIMEOUT_MS } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 
 export interface BindingChecksOptions {
   // A thunk, not a path: locating the factory repo is itself fallible, and
