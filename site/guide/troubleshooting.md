@@ -97,6 +97,34 @@ A run that shows `running` but whose `ACTIVITY` age keeps growing with no step
 in flight may be stuck. `pnpm exec jigs status <run>` lists any dead queue job
 and how to requeue it.
 
+## A run fails because of files nobody made on purpose
+
+You might see one of these:
+
+- `Cannot publish <branch>: the worktree has uncommitted changes that no review approved`
+- a ticket note saying the builder left uncommitted changes
+
+The cause is usually your repository's tests or other checks, not the agent's
+code.
+
+jigs only publishes work that was reviewed. Before it pushes a branch, it checks
+that the working folder holds nothing beyond the reviewed commit. Agents run
+your tests, linters and builds to check their work, and those tools often leave
+files behind: Python's `__pycache__/`, `.pytest_cache/`, coverage reports, build
+output. If Git would see such a file as new, jigs sees it too, can't tell it from
+real work, and stops rather than guess.
+
+**The fix:** add those files to your repository's `.gitignore`. A good test: run
+your checks in a fresh clone, then run `git status`. If it lists anything you
+didn't write, ignore it. For a Python repository, that is usually:
+
+```gitignore
+__pycache__/
+.pytest_cache/
+```
+
+Then start the run again.
+
 ## Watch an agent step while it runs
 
 An agent step that runs in a worktree writes what the agent does to a stream
