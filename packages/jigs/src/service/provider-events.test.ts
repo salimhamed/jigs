@@ -54,7 +54,7 @@ const github = (name: string, payload: unknown): ProviderEvent => ({
 test("a PR review nobody is listening to is dropped, and dropped again on redelivery", async () => {
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenLastCalledWith(
-    "[ingress] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
   );
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenCalledTimes(2);
@@ -65,7 +65,7 @@ test("a GitHub event matching a hook wakes it, logs its token and notes the wake
   delivers();
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "woken" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github accepted token=github:pr:acme/api#41 event=pull_request_review",
   );
   expect(lastWake("github:pr:acme/api#41", RUN)?.kind).toBe("github pull_request_review");
 });
@@ -88,7 +88,7 @@ test("a GitHub wake failure is not misreported as a missing hook", async () => {
   resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
   );
 });
 
@@ -150,7 +150,7 @@ test("a pending status is ignored without a sha lookup", async () => {
   expect(await route(status("pending"))).toEqual({ outcome: "ignored" });
   expect(fetchMock).not.toHaveBeenCalled();
   expect(resumeHookMock).not.toHaveBeenCalled();
-  expect(log).toHaveBeenCalledWith("[ingress] github ignored reason=pending-status event=status");
+  expect(log).toHaveBeenCalledWith("[events] github ignored reason=pending-status event=status");
 });
 
 test("a status with no open PR is dropped without waking anything", async () => {
@@ -163,7 +163,7 @@ test("a status lookup failure fails rather than throws", async () => {
   useGithubClient({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
   expect(await route(status("failure"))).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledWith(
-    "[ingress] github dropped reason=status-lookup-failed event=status",
+    "[events] github dropped reason=status-lookup-failed event=status",
   );
 });
 
@@ -171,7 +171,7 @@ test("an unroutable GitHub event is ignored", async () => {
   const ping = { zen: "Keep it logically awesome.", hook_id: 1, repository: review.repository };
   expect(await route(github("ping", ping))).toEqual({ outcome: "ignored" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github ignored reason=unrecognized-event event=ping",
+    "[events] github ignored reason=unrecognized-event event=ping",
   );
 });
 
@@ -189,7 +189,7 @@ test("a Linear comment on an unclaimed issue is dropped", async () => {
   const { issueId, event } = comment();
   expect(await route(event)).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
+    `[events] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
   );
 });
 
@@ -198,7 +198,7 @@ test("a Linear comment matching a hook wakes it and logs its token", async () =>
   const { issueId, event } = comment();
   expect(await route(event)).toEqual({ outcome: "woken" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[ingress] linear accepted token=linear:ticket:${issueId} event=Comment`,
+    `[events] linear accepted token=linear:ticket:${issueId} event=Comment`,
   );
 });
 
@@ -206,7 +206,7 @@ test("a Linear event without a body is ignored", async () => {
   expect(await route({ provider: "linear", name: "", payload: null })).toEqual({
     outcome: "ignored",
   });
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear ignored reason=unrecognized-shape");
+  expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored reason=unrecognized-shape");
 });
 
 test("an unroutable Linear resource type is ignored", async () => {
@@ -215,7 +215,7 @@ test("an unroutable Linear resource type is ignored", async () => {
     outcome: "ignored",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] linear ignored reason=unrecognized-event event=Issue",
+    "[events] linear ignored reason=unrecognized-event event=Issue",
   );
 });
 
@@ -234,7 +234,7 @@ test("a PagerDuty event no trigger takes is ignored", async () => {
   payload.event.event_type = "incident.acknowledged";
   expect(await route(page(payload))).toEqual({ outcome: "ignored" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
+    "[events] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
   );
 });
 
@@ -242,7 +242,7 @@ test("a PagerDuty push that fails is a failure, logged", async () => {
   push.mockRejectedValueOnce(new Error("registry unreachable"));
   expect(await route(page())).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
+    "[events] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
   );
 });
 
@@ -301,7 +301,7 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
 
   expect(await route(page())).toEqual({ outcome: "triggered", triggers: ["pages"] });
   expect(log).toHaveBeenCalledWith(
-    "[ingress] pagerduty accepted triggers=pages event=incident.triggered",
+    "[events] pagerduty accepted triggers=pages event=incident.triggered",
   );
   expect(memory.state("pages", "Q1")).toMatchObject({ state: "pending" });
   expect(starts).toEqual([]);

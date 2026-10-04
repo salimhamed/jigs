@@ -259,7 +259,7 @@ test("a GitHub delivery matching a hook is delivered", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: true });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github accepted token=github:pr:acme/api#41 event=pull_request_review",
   );
 });
 
@@ -273,7 +273,7 @@ test("a GitHub delivery failure is not misreported as a missing hook", async () 
   expect(res.status).toBe(404);
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
   );
 });
 
@@ -291,7 +291,7 @@ test("an unroutable github event is acknowledged and ignored", async () => {
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github ignored reason=unrecognized-event event=ping",
+    "[events] github ignored reason=unrecognized-event event=ping",
   );
 });
 
@@ -315,7 +315,7 @@ test("a validly signed Comment delivery for an unclaimed issue is acknowledged",
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
+    `[events] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
   );
 });
 
@@ -327,7 +327,7 @@ test("a validly signed non-JSON linear body is acknowledged and ignored", async 
   });
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear ignored reason=unrecognized-shape");
+  expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored reason=unrecognized-shape");
 });
 
 test("poke of an unknown run is a 404", async () => {
@@ -879,7 +879,7 @@ test("a push that fails is still acknowledged, so PagerDuty keeps the subscripti
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
+    "[events] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
   );
 });
 

@@ -50,11 +50,11 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
   if (event === "status") {
     const status = githubStatus(payload);
     if (status === null) {
-      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
+      console.log(`[events] github ignored reason=unrecognized-event event=${event}`);
       return { outcome: "ignored" } as const;
     }
     if (status.state === "pending") {
-      console.log(`[ingress] github ignored reason=pending-status event=${event}`);
+      console.log(`[events] github ignored reason=pending-status event=${event}`);
       return { outcome: "ignored" } as const;
     }
     let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
@@ -65,11 +65,11 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
         error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
           ? "missing-github-credential"
           : "status-lookup-failed";
-      console.log(`[ingress] github dropped reason=${reason} event=${event}`);
+      console.log(`[events] github dropped reason=${reason} event=${event}`);
       return { outcome: "failed" } as const;
     }
     if (prs.length === 0) {
-      console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
+      console.log(`[events] github dropped reason=no-open-pull-request event=${event}`);
       return { outcome: "dropped" } as const;
     }
     const tokens = prs
@@ -84,7 +84,7 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
   }
   const token = tokenFromGitHubPayload(payload);
   if (token === null) {
-    console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
+    console.log(`[events] github ignored reason=unrecognized-event event=${event}`);
     return { outcome: "ignored" } as const;
   }
   return wakeAndLog("github", [token], event);
@@ -92,14 +92,14 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
 
 async function routeLinear({ name, payload }: ProviderEvent) {
   if (payload === null) {
-    console.log("[ingress] linear ignored reason=unrecognized-shape");
+    console.log("[events] linear ignored reason=unrecognized-shape");
     return { outcome: "ignored" } as const;
   }
   const event = name === "" ? null : sanitizeForLog(name);
   const token = tokenFromLinearPayload(payload);
   if (token === null) {
     console.log(
-      `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
+      `[events] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
     );
     return { outcome: "ignored" } as const;
   }
@@ -114,32 +114,32 @@ async function routePagerDuty({ name, payload }: ProviderEvent, deps: RouteDeps)
   try {
     triggers = await deps.push("pagerduty", payload);
   } catch (error) {
-    console.log(`[ingress] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
+    console.log(`[events] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
     return { outcome: "failed" } as const;
   }
   if (triggers.length === 0) {
-    console.log(`[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
+    console.log(`[events] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
     return { outcome: "ignored" } as const;
   }
-  console.log(`[ingress] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
+  console.log(`[events] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
   return { outcome: "triggered", triggers } as const;
 }
 
 // A message can both start runs and answer a thread a run waits on.
 async function routeSlack({ payload }: ProviderEvent, deps: RouteDeps): Promise<RouteResult> {
-  const [pushed, woke] = await Promise.allSettled([
-    deps.push("slack", payload),
+  const [triggers, woke] = await Promise.all([
+    deps.push("slack", payload).catch((error: unknown) => {
+      const { channel, ts } = payload as { channel?: unknown; ts?: unknown };
+      console.log(
+        `[slack] could not start runs for ${String(channel)}:${String(ts)}: ${String(error)}`,
+      );
+      return null;
+    }),
     wakeSlackThread(payload),
   ]);
-  if (pushed.status === "rejected") {
-    const { channel, ts } = payload as { channel?: unknown; ts?: unknown };
-    console.log(
-      `[slack] could not start runs for ${String(channel)}:${String(ts)}: ${String(pushed.reason)}`,
-    );
-    return { outcome: "failed" };
-  }
-  if (pushed.value.length > 0) return { outcome: "triggered", triggers: pushed.value };
-  return { outcome: woke.status === "fulfilled" && woke.value ? "woken" : "ignored" };
+  if (triggers === null) return { outcome: "failed" };
+  if (triggers.length > 0) return { outcome: "triggered", triggers };
+  return { outcome: woke ? "woken" : "ignored" };
 }
 
 function sanitizeForLog(value: string): string {
@@ -179,10 +179,10 @@ async function wakeAndLog(
     tokens.map(async (token) => {
       const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
       const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
-      if (outcome === "woken") console.log(`[ingress] ${provider} accepted ${correlation}`);
+      if (outcome === "woken") console.log(`[events] ${provider} accepted ${correlation}`);
       else {
         const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
-        console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
+        console.log(`[events] ${provider} dropped reason=${reason} ${correlation}`);
       }
       return outcome;
     }),

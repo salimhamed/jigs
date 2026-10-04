@@ -163,6 +163,9 @@ importers:
         specifier: ^2.9.0
         version: 2.9.0
     devDependencies:
+      '@jigs-ai/hub-protocol':
+        specifier: workspace:*
+        version: link:../hub-protocol
       '@swc/core':
         specifier: 1.15.3
         version: 1.15.3

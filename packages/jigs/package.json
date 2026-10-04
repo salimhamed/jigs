@@ -156,6 +156,7 @@
     }
   },
   "devDependencies": {
+    "@jigs-ai/hub-protocol": "workspace:*",
     "@swc/core": "1.15.3",
     "@types/node": "^26.2.0",
     "@types/pg": "8.23.1",
