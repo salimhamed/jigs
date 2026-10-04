@@ -123,7 +123,7 @@ function psRows(io: Fake): string {
 // verb but the unbuilt-repo test starts from.
 function builtFactory(
   parent = tmp,
-  yml = { service: { port: 9100, dashboardPort: 9200 } },
+  yml = { hub: { url: "https://hub.example.test" }, service: { port: 9100, dashboardPort: 9200 } },
 ): string {
   const root = makeFactoryRepo(parent, yml);
   const beforeBuild = new Date(Date.now() - 60_000);

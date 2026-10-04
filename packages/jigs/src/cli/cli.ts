@@ -11,6 +11,7 @@ import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { downFactory } from "./commands/down.ts";
 import { generateIntegration } from "./commands/generate.ts";
+import { connectHub } from "./commands/hub.ts";
 import {
   type AppIdentityOptions,
   type IdentityMode,
@@ -75,6 +76,9 @@ Set up:
   init                      Scaffold a factory in the current directory
   upgrade                   Move to a newer jigs, run up, then typecheck
   doctor                    Check config, connections and required tools
+  hub connect <url> <token>
+                            Point this factory at its hub; the token goes
+                            in .env
 
 Start and stop:
   up                        Start Postgres and the service, then run doctor
@@ -254,6 +258,19 @@ program
       { ...options, to: options.toVersion },
     );
     if (!result.ok) process.exitCode = 1;
+  });
+
+const hub = program
+  .command("hub")
+  .description("connect this factory to the hub it hears its providers through");
+
+hub
+  .command("connect")
+  .description("set the hub's URL in jigs.config.ts and the factory token in .env")
+  .argument("<url>", "the address the hub is reached at")
+  .argument("<token>", "the factory token the hub showed when this factory was added")
+  .action((url: string, token: string) => {
+    connectHub(url, token, { cwd: process.cwd(), out });
   });
 
 program

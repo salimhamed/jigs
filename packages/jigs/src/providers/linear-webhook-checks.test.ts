@@ -20,7 +20,7 @@ function factoryWith(webhooks: unknown, extra: Record<string, unknown> = {}): st
   roots.push(root);
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    `export default ${JSON.stringify({ service: { dashboardPort: 8991 }, workflows: {}, ...extra, ...(webhooks === null ? {} : { webhooks }) })};`,
+    `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 8991 }, workflows: {}, ...extra, ...(webhooks === null ? {} : { webhooks }) })};`,
   );
   return root;
 }

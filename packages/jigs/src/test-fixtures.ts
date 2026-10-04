@@ -71,7 +71,7 @@ export function makeFactoryRepo(
   const text =
     typeof config === "string"
       ? config
-      : `export default ${JSON.stringify({ service: { port: 8990, dashboardPort: 9090 }, workflows: {}, ...config })};\n`;
+      : `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {}, ...config })};\n`;
   writeFileSync(path.join(dir, "jigs.config.ts"), text);
   return dir;
 }
@@ -103,6 +103,7 @@ export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
     slug: init.slug ?? factorySlug(root),
     get config() {
       config ??= parseFactoryConfig({
+        hub: { url: "https://hub.example.test" },
         service: { port: 8990, dashboardPort: 9090 },
         workflows: {},
         ...init.config,

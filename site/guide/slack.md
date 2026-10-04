@@ -128,6 +128,7 @@ ID at the bottom of its details. The bot must be a member of each one.
 import { defineFactory, slack } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { dashboardPort: 3456 },
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
   slack: { socketMode: true },

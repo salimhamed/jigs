@@ -39,12 +39,6 @@ const REQUIRED_PERMISSIONS: RequiredPermission[] = [
   { name: "statuses", level: "read", why: "read CI commit statuses while polling pull requests" },
 ];
 
-// Only with GitHub webhooks on, and then the one operators miss: `jigs bind`
-// creates the per-repo webhook, and no other credential can do it.
-const WEBHOOK_PERMISSIONS: RequiredPermission[] = [
-  { name: "repository_hooks", level: "write", why: "create the webhook that wakes parked runs" },
-];
-
 const SATISFIES: Record<string, string[]> = { read: ["read", "write"], write: ["write"] };
 
 export interface GithubIdentityProbes {
@@ -66,18 +60,11 @@ const realGithubIdentityProbes = (
   registration: (identity, key) => fetchAppRegistration(identity, key),
 });
 
-/** What else the identity checks need to know about the factory. */
-export interface GithubIdentityCheckOptions {
-  /** Whether GitHub webhooks are on, which makes an App need hook administration. */
-  webhooks?: boolean;
-}
-
 /** The identity check for each configured identity. */
 export function githubIdentityChecks(
   identities: GithubIdentity[],
   probes: GithubIdentityProbes,
   env: EnvLookup,
-  { webhooks = false }: GithubIdentityCheckOptions = {},
 ): Check[] {
   const registrations = new Map<number, Promise<{ slug: string }>>();
   const appProbes: GithubIdentityProbes = {
@@ -92,8 +79,7 @@ export function githubIdentityChecks(
     },
   };
   return identities.map((entry, index) => {
-    const check =
-      entry.mode === "pat" ? patCheck(probes, env) : appCheck(entry, webhooks, appProbes);
+    const check = entry.mode === "pat" ? patCheck(probes, env) : appCheck(entry, appProbes);
     return identities.length === 1
       ? check
       : { ...check, id: `github.identity.${index}`, label: `GitHub identity ${index + 1}` };
@@ -128,7 +114,7 @@ function patCheck(probes: GithubIdentityProbes, env: EnvLookup): Check {
   };
 }
 
-function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdentityProbes): Check {
+function appCheck(identity: AppIdentity, probes: GithubIdentityProbes): Check {
   return {
     id: "github.identity",
     label: "GitHub identity",
@@ -183,26 +169,20 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
             "check the App entry’s appId and installations against the App's settings page and its installation, and that the private key belongs to that App",
         };
       }
-      const requiredPermissions = [
-        ...REQUIRED_PERMISSIONS,
-        ...(webhooks ? WEBHOOK_PERMISSIONS : []),
-      ];
       const missing = installations.flatMap(({ installationId, permissions }) =>
-        requiredPermissions
-          .filter(
-            (required) =>
-              !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
-          )
-          .map((permission) => ({
-            ...permission,
-            installationId,
-          })),
+        REQUIRED_PERMISSIONS.filter(
+          (required) =>
+            !(SATISFIES[required.level] ?? []).includes(permissions[required.name] ?? "none"),
+        ).map((permission) => ({
+          ...permission,
+          installationId,
+        })),
       );
       if (missing.length > 0) {
         return {
           ok: false,
           reason: `the installation is missing ${missing.map((p) => `${p.name}: ${p.level} (to ${p.why}; installation ${p.installationId})`).join(", ")}`,
-          repair: `grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions${missing.some((p) => p.name === "repository_hooks") ? ", where “Repository webhooks” is Read & write" : ""}), then accept the updated permissions on the installation`,
+          repair: `grant the permission on the App (Settings → Developer settings → GitHub Apps → Permissions), then accept the updated permissions on the installation`,
         };
       }
       return {
@@ -219,10 +199,7 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
 export function githubChecks(ctx: FactoryContext): Check[] {
   const probes = realGithubIdentityProbes(getAuthenticatedUser);
   try {
-    const { webhooks } = ctx.config;
-    return githubIdentityChecks(githubIdentities(ctx), probes, ctx.env, {
-      webhooks: webhooks?.github.enabled ?? false,
-    });
+    return githubIdentityChecks(githubIdentities(ctx), probes, ctx.env);
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that

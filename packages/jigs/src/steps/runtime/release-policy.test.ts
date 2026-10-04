@@ -16,6 +16,7 @@ test("built-in, factory and workflow policies resolve in order", () => {
   expect(effectiveReleasePolicy(discard, keep)).toEqual(discard);
   expect(() =>
     parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9000 },
       release: { onSuccess: "oops", onFailure: "keep" },
     }),
@@ -41,6 +42,7 @@ test("two workflows can differ and match compiled IDs rather than config names",
 
 test("resolver combines compiled entry and the factory's own default", async () => {
   const definition = {
+    hub: { url: "https://hub.example.test" },
     service: { dashboardPort: 9000 },
     release: keep,
     workflows: {

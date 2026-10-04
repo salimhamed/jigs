@@ -24,7 +24,7 @@ function factoryWith(pagerduty: unknown): string {
   };
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    `export default ${JSON.stringify({ service: { dashboardPort: 8991 }, workflows: {}, webhooks })};`,
+    `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 8991 }, workflows: {}, webhooks })};`,
   );
   return root;
 }

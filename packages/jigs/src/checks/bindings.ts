@@ -3,7 +3,7 @@ import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
-import { parseGithubRemote } from "../providers/github-webhook.ts";
+import { parseGithubRemote } from "../providers/github-remote.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";

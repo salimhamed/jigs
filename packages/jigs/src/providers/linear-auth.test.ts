@@ -39,7 +39,7 @@ const tokenResponse = (token: string) =>
 function writeFactory(identity: unknown, env: string): void {
   writeFileSync(
     path.join(tmp, "jigs.config.ts"),
-    `export default ${JSON.stringify({ service: { dashboardPort: 9090 }, linear: { identity } })}`,
+    `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity } })}`,
   );
   writeFileSync(path.join(tmp, ".env"), env);
 }

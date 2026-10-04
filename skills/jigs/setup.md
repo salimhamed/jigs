@@ -55,9 +55,13 @@ path; adjust them in `jigs.config.ts` if they are taken.
 ```sh
 pnpm install
 cp .env.example .env
+pnpm exec jigs hub connect <hub-url> <token>
 ```
 
-`hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
+Every factory hears GitHub through a hub. Ask the user for the hub URL and the
+factory token the hub showed when they added this factory; `hub connect` writes
+the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
+`jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
 `WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
 before adding a workflow that declares those integrations; the configuration
 guide's `.env` table lists each variable.
@@ -135,8 +139,7 @@ jigs up
 
 `jigs bind` adds the binding to `jigs.config.ts`, creates the factory's
 `bindings/<name>/` folder with a README when it is missing, and, with the
-configured identity, creates the `jigs:approved` label and, when GitHub webhooks
-are on, the webhook. The service clones each binding into
+configured identity, creates the `jigs:approved` label. The service clones each binding into
 `~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`
 above is what makes a new binding usable. That data folder is jigs's own and is
 separate from the factory's `bindings/<name>/`, whose files `copy` lists for
@@ -145,10 +148,10 @@ described in the configuration guide.
 
 ## 5. Webhooks are optional
 
-A parked run wakes without webhooks: the service re-reads each waiting pull
-request and ticket every `service.pollIntervalSeconds.github` / `.linear`
-seconds (default 300), and `jigs poke <run-id>` wakes one sooner. Webhooks
-only make the wake immediate. They need a public tunnel URL, a
+GitHub events always come through the hub. For the other providers, a parked
+run wakes without webhooks: the service re-reads each waiting ticket every
+`service.pollIntervalSeconds.linear` seconds (default 300), and
+`jigs poke <run-id>` wakes one sooner. Webhooks only make the wake immediate. They need a public tunnel URL, a
 `webhooks` section in `jigs.config.ts` and a secret per provider in `.env`; the
 configuration guide's webhooks section has the steps.
 

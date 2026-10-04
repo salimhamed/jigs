@@ -47,7 +47,9 @@ following the pull request, runs in four jigs routines the workflow calls.
   The merge method is the first one the repository allows on GitHub: squash,
   then merge commit, then rebase.
 
-[Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
+GitHub events reach the run through the factory's
+[hub](https://salimhamed.github.io/jigs/guide/configuration#hub). Linear
+[webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
 optional.
 
 ## Pull request titles

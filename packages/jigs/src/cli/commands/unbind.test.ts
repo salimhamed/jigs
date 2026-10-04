@@ -16,7 +16,7 @@ beforeEach(() => {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
     `export default {
- service: { port: 8990, dashboardPort: 9090 },
+ hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 },
  bindings: {
   // api service
   api: { remote: "git@github.com:acme/api.git" },

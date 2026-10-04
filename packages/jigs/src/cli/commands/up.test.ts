@@ -152,7 +152,7 @@ test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async 
   const root = factory({
     port,
     githubIdentity: "app",
-    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\n",
+    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\n",
   });
   expect((await up(root, io)).ok).toBe(true);
   const printed = lines.join("\n");
@@ -165,7 +165,7 @@ test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () =>
   const port = await fakeService(io.procs);
   const root = factory({
     port,
-    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\n",
+    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\n",
   });
   expect((await up(root, io)).ok).toBe(true);
   expect(lines).toContain(
@@ -404,12 +404,26 @@ test("no .env and no .env.example points back at jigs init", async () => {
   expect(io.exec.calls).toHaveLength(0);
 });
 
+test("a .env without the hub token stops at env, naming hub connect", async () => {
+  const root = factory({
+    port: 1,
+    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\n",
+  });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+
+  const result = await up(root, io);
+
+  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
+  expect(result.steps[1]?.repair).toContain("pnpm exec jigs hub connect <url> <token>");
+  expect(io.exec.calls).toHaveLength(0);
+});
+
 test("an existing .env is kept and its credentials are not reported when set", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const port = await fakeService(io.procs);
   const root = factory({
     port,
-    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\nGITHUB_TOKEN=ghp\n",
+    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\nGITHUB_TOKEN=ghp\n",
   });
 
   await up(root, io);
@@ -506,7 +520,7 @@ test("no docker-compose.yml fails compose before docker runs", async () => {
 });
 
 test("bootstrap refuses to run without a World URL in .env", async () => {
-  const root = factory({ port: 1, env: "LINEAR_API_KEY=lin\n" });
+  const root = factory({ port: 1, env: "JIGS_HUB_TOKEN=hub\nLINEAR_API_KEY=lin\n" });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);

@@ -2,7 +2,6 @@ import path from "node:path";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { githubChecks } from "../providers/github-checks.ts";
-import { webhookChecks } from "../providers/github-webhook-checks.ts";
 import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
 import { linearWebhookChecks } from "../providers/linear-webhook-checks.ts";
 import {
@@ -30,6 +29,7 @@ import {
 } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
 import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
+import { hubChecks } from "./hub.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
@@ -91,7 +91,7 @@ export function preflightChecks(
 }
 
 // Beyond what a workflow requires, the configuration can ask for a provider
-// itself: a binding or a GitHub webhook needs GitHub, a Linear webhook needs
+// itself: a binding needs GitHub, a Linear webhook needs
 // Linear, a PagerDuty webhook needs PagerDuty, and an App identity, a pagerduty
 // section or a slack section is set up on purpose. The key and PAT identities
 // are what every scaffold states, so they ask for nothing. An unreadable config
@@ -102,7 +102,6 @@ function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
     return {
       github:
         Object.keys(bindings).length > 0 ||
-        (webhooks?.github.enabled ?? false) ||
         github.identities.some((identity) => identity.mode === "app"),
       linear:
         (webhooks?.linear.enabled ?? false) ||
@@ -256,6 +255,7 @@ export function doctorChecks(
   };
   const aws = users.get("aws") ?? [];
   return [
+    ...hubChecks(ctx),
     ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
     ...provider("github", () => githubChecks(ctx)),
     ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
@@ -265,7 +265,6 @@ export function doctorChecks(
     ...linearWebhookChecks({ context: ctx }),
     ...pagerDutyWebhookChecks({ context: ctx, probes: pagerDutyWebhookProbes(ctx) }),
     ...bindingChecks({ context: ctx }),
-    ...webhookChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),
     ...requiredMcpServerChecks(workflows, ctx),

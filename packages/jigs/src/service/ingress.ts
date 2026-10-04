@@ -12,18 +12,6 @@ function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-// GitHub: `x-hub-signature-256: sha256=<hex hmac of the raw body>`.
-export function verifyGithubSignature(
-  rawBody: string,
-  signatureHeader: string | undefined,
-  secret: string,
-): boolean {
-  if (signatureHeader === undefined || !signatureHeader.startsWith("sha256=")) {
-    return false;
-  }
-  return hmacMatches(rawBody, signatureHeader.slice("sha256=".length), secret);
-}
-
 // Linear: `linear-signature: <hex hmac of the raw body>`, no prefix.
 export function verifyLinearSignature(
   rawBody: string,

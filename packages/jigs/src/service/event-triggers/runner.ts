@@ -102,5 +102,6 @@ export async function pushEvent(provider: Provider, event: unknown): Promise<str
 }
 
 async function configuredIntervals(): Promise<Record<Provider, number>> {
-  return currentFactoryContext().config.service.pollIntervalSeconds;
+  // No trigger source reads GitHub, which the service never polls.
+  return currentFactoryContext().config.service.pollIntervalSeconds as Record<Provider, number>;
 }

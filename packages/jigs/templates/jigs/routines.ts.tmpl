@@ -138,7 +138,7 @@ const pullRequests = bindPullRequestSteps({ fetchPullRequestState, commentOnPull
  * @group Pull requests
  *
  * @remarks
- * Reads once immediately, then rereads on service polls, webhooks and `jigs poke`.
+ * Reads once immediately, then rereads on each GitHub event from the hub and on `jigs poke`.
  * Duplicate wakes and reordered collections with unchanged facts do not yield again.
  * Snapshots include comments regardless of author or jigs markers; the workflow
  * owns decisions, action limits and merging. A closed snapshot is yielded once.

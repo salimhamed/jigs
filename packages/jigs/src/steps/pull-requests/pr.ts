@@ -20,7 +20,7 @@ import {
 } from "../../providers/github.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
-import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";

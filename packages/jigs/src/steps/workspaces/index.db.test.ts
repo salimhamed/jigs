@@ -39,7 +39,7 @@ const dirs = { factoryRoot, bindingName: "api" };
 const { remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
-  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
 );
 
 const sql = () => registrySql();

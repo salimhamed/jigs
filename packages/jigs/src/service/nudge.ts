@@ -2,11 +2,12 @@
 // timer per provider, the service wakes each held hook through the same
 // `wake` the ingress and `jigs poke` use, and the woken routine re-reads the provider
 // from scratch: the wake carries nothing, so a nudge and a delivery are the
-// same event. With webhooks on, this is the floor under a lost delivery —
-// GitHub never retries one it failed to make.
+// same event. With webhooks on, this is the floor under a lost delivery.
+// GitHub has no timer: its events come through the hub, which sweeps its
+// waiting runs once when it says the factory fell behind.
 
 import { parseHookToken } from "../workflow/hook-tokens.ts";
-import type { Provider } from "../workflow/providers.ts";
+import { POLLED_PROVIDERS, type PolledProvider, type Provider } from "../workflow/providers.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
 import { wake } from "./wake.ts";
 
@@ -130,7 +131,7 @@ export async function nudgeProvider(
 
 /** Sweep each provider on its own repeating timer until stopped, one sweep per provider at a time. */
 export function startNudges(
-  intervalSeconds: Record<Provider, number>,
+  intervalSeconds: Record<PolledProvider, number>,
   deps: NudgeDeps = {},
 ): { stop: () => void } {
   const setTimer =
@@ -141,16 +142,16 @@ export function startNudges(
       timer.unref?.();
       return () => clearTimeout(timer);
     });
-  const cancels = new Map<Provider, () => void>();
+  const cancels = new Map<PolledProvider, () => void>();
   let stopped = false;
-  const schedule = (provider: Provider) => {
+  const schedule = (provider: PolledProvider) => {
     if (stopped) return;
     const fire = () => {
       void nudgeProvider(provider, deps).then(() => schedule(provider));
     };
     cancels.set(provider, setTimer(fire, nudgeDelay(intervalSeconds[provider], deps.random)));
   };
-  for (const provider of Object.keys(LABELS) as Provider[]) schedule(provider);
+  for (const provider of POLLED_PROVIDERS) schedule(provider);
   return {
     stop: () => {
       stopped = true;

@@ -25,6 +25,8 @@ The rest of this page shows the same process manually.
 - **Node.js 24 or newer**
 - **pnpm**
 - **Docker**, with Docker running
+- **A jigs hub**, with this factory added to it. The hub shows the factory's
+  URL and token once, when you add it.
 
 `hello` doesn't use a model or coding agent, so you don't need any model
 credentials or agent CLIs yet.
@@ -58,10 +60,12 @@ registers it under the name `hello`.
 ```sh
 pnpm install
 cp .env.example .env
+pnpm exec jigs hub connect <hub-url> <token>
 pnpm exec jigs up
 ```
 
-`hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
+`hub connect` points the factory at its [hub](/guide/configuration#hub).
+Beyond that, `hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
 needs and checks that it is ready. When it finishes, the service and dashboard
 are available. Open the dashboard URL it prints to inspect workflow runs and
 individual steps.

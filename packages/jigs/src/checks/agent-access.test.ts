@@ -31,7 +31,7 @@ test("doctor leaves a hosted server reading an agent token to the step's own pro
   });
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    "export default { service: { dashboardPort: 9090 } }",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   const triager = harnesses.claude({

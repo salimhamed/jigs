@@ -25,6 +25,7 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 | `jigs up` | Install, start Postgres, build, start the service, wait until ready, then run `jigs doctor`. |
 | `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
 | `jigs doctor` | Check configuration, credentials and tools against the running service. |
+| `jigs hub connect <url> <token>` | Point the factory at its [hub](/guide/configuration#hub): the URL into `jigs.config.ts`, the token into `.env`. |
 | `jigs upgrade` | Move the factory to the latest jigs and bring it up. |
 
 ## Runs
@@ -62,7 +63,7 @@ before any run is created.
 
 | Command | What it does |
 | --- | --- |
-| `jigs bind <remote-url>` | Add a binding for a repository, create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing, create the `jigs:approved` label, and create its webhook when configured. |
+| `jigs bind <remote-url>` | Add a binding for a repository, create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing, and create the `jigs:approved` label. |
 | `jigs bindings` | List bindings, their clone paths and whether each clone exists. |
 | `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete, and so does the factory's `bindings/<name>/` folder. |
 

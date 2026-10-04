@@ -240,7 +240,7 @@ test("an existing file is kept, never overwritten", async () => {
   await init(dir);
   writeFileSync(
     path.join(dir, "jigs.config.ts"),
-    "export default { service: { port: 9999 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 9999 }, workflows: {} };",
   );
 
   const again = await init(dir);
@@ -349,7 +349,11 @@ test.each([
     expect(config.linear).toEqual({ identity: { mode: linearMode } });
     expect(config.linear).toEqual(expectations.linear);
     // And what it declares is what jigs accepts, so the first `jigs up` loads.
-    const parsed = parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config });
+    const parsed = parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      ...config,
+    });
     expect(parsed.github).toEqual({
       ...(expectations.github as object),
       mergeApproval: mode === "app" ? "review" : "label",
@@ -413,8 +417,11 @@ test("repeatable installations scaffold a loadable account map", async () => {
   const dir = scaffold("installation-map");
   await initFactory({ cwd: dir, out: () => {}, identity });
   expect(
-    parseFactoryConfig({ service: { dashboardPort: 9090 }, ...scaffoldedConfig(dir) }).github
-      .identities,
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      ...scaffoldedConfig(dir),
+    }).github.identities,
   ).toEqual([identity]);
   expect(() =>
     resolveIdentityOptions("app", { ...options, githubAppInstallation: ["Other=1", "other=2"] }),

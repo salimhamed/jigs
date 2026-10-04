@@ -216,6 +216,7 @@ test("accounts select independent cached installation tokens across Apps", async
   writeFileSync(
     path.join(tmp, "jigs.config.ts"),
     `export default ${JSON.stringify({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       github: {
         identities: [
@@ -234,7 +235,7 @@ test("accounts select independent cached installation tokens across Apps", async
   // The process keeps its factory configuration after the file changes.
   writeFileSync(
     path.join(tmp, "jigs.config.ts"),
-    'export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
+    'export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
   );
   expect(await githubAuthFor("first", ctx).bearer()).toBe("token-1");
   expect(await githubAuthFor("Second", ctx).bearer()).toBe("token-2");

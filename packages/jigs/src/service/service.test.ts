@@ -15,17 +15,21 @@ vi.mock("./automatic-release.ts", () => ({ startAutomaticRelease: vi.fn() }));
 afterEach(() => {
   delete (globalThis as Record<symbol, unknown>)[Symbol.for("jigs.factory-context")];
 });
-inTestFactory({ service: { port: 8990, dashboardPort: 9090 } });
+inTestFactory({
+  hub: { url: "https://hub.example.test" },
+  service: { port: 8990, dashboardPort: 9090 },
+});
 
 test("the service runs on the configuration it was built with, whatever jigs.config.ts says now", () => {
   const { root } = currentFactoryContext();
   startService({ workflows: {} } as unknown as Factory, {
+    hub: { url: "https://hub.example.test" },
     service: { port: 7001, dashboardPort: 7002 },
     workflows: {},
   });
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { service: { port: 8001, dashboardPort: 8002 }, workflows: {} };\n",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 8001, dashboardPort: 8002 }, workflows: {} };\n",
   );
 
   expect(currentFactoryContext().config.service.port).toBe(7001);

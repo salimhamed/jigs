@@ -54,7 +54,7 @@ let factory: string;
 function configure(identity: string) {
   writeFileSync(
     `${factory}/jigs.config.ts`,
-    `export default { service: { dashboardPort: 9090 }, github: { identities: [${identity}] } }`,
+    `export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [${identity}] } }`,
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
 }

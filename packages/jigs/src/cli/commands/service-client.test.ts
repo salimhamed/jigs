@@ -23,6 +23,7 @@ afterEach(() => {
 // fills the option before the action runs.
 test("an explicit --service-url / JIGS_SERVICE_URL wins over the factory config", () => {
   const factory = makeFactoryRepo(tmp, {
+    hub: { url: "https://hub.example.test" },
     service: { port: 9100, dashboardPort: 9200 },
   });
   expect(resolveServiceUrl(factory, "http://elsewhere:1234")).toBe("http://elsewhere:1234");
@@ -30,6 +31,7 @@ test("an explicit --service-url / JIGS_SERVICE_URL wins over the factory config"
 
 test("without an explicit url the factory the user stands in names its service", () => {
   const factory = makeFactoryRepo(tmp, {
+    hub: { url: "https://hub.example.test" },
     service: { port: 9100, dashboardPort: 9200 },
   });
   expect(resolveServiceUrl(factory)).toBe("http://localhost:9100");
@@ -39,6 +41,7 @@ test("without an explicit url the factory the user stands in names its service",
 // warning speaks about, so `JIGS_SERVICE_URL=` has to read as unset in both.
 test("an empty --service-url / JIGS_SERVICE_URL names no service at all", () => {
   const factory = makeFactoryRepo(tmp, {
+    hub: { url: "https://hub.example.test" },
     service: { port: 9100, dashboardPort: 9200 },
   });
   expect(usesFactoryService("")).toBe(true);

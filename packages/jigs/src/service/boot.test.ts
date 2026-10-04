@@ -10,6 +10,7 @@ import {
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
+  gateOnHubToken,
   gateOnRegistry,
   gateOnSlackAppToken,
   gateOnWebhookSecrets,
@@ -460,46 +461,45 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
 
 const WEBHOOKS = {
   url: "https://factory.example.ts.net",
-  github: { enabled: true },
-  linear: { enabled: false },
+  linear: { enabled: true },
   pagerduty: { enabled: false },
 };
 
 test("an enabled provider without its secret refuses the boot and names the variable", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
   const exit = vi.fn();
   const error = vi.fn();
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit, error })).toBe(false);
   expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("GITHUB_WEBHOOK_SECRET"));
-  expect(error.mock.calls[0]?.[0]).not.toContain("LINEAR_WEBHOOK_SECRET");
+  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("LINEAR_WEBHOOK_SECRET"));
+  expect(error.mock.calls[0]?.[0]).not.toContain("PAGERDUTY_WEBHOOK_SECRET");
 });
 
 test("both providers on and unsigned name both variables", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
   const error = vi.fn();
   await gateOnWebhookSecrets({
-    webhooks: async () => ({ ...WEBHOOKS, linear: { enabled: true } }),
+    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
     exit: vi.fn(),
     error,
   });
-  expect(error.mock.calls[0]?.[0]).toContain("GITHUB_WEBHOOK_SECRET and LINEAR_WEBHOOK_SECRET");
+  expect(error.mock.calls[0]?.[0]).toContain("LINEAR_WEBHOOK_SECRET and PAGERDUTY_WEBHOOK_SECRET");
 });
 
 test.each([
   ["no webhooks section", undefined],
-  ["both providers off", { ...WEBHOOKS, github: { enabled: false } }],
+  ["both providers off", { ...WEBHOOKS, linear: { enabled: false } }],
 ])("%s needs no secret to boot", async (_name, webhooks) => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
   const exit = vi.fn();
   expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
   expect(exit).not.toHaveBeenCalled();
 });
 
 test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "signed");
   vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
   const exit = vi.fn();
   const error = vi.fn();
@@ -515,8 +515,24 @@ test("PagerDuty webhooks switched on without their secret refuse the boot", asyn
 });
 
 test("an enabled provider with its secret boots", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
+  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "signed");
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
+});
+
+test("without its hub token the service refuses the boot and says how to connect", async () => {
+  const exit = vi.fn();
+  const error = vi.fn();
+  expect(await gateOnHubToken({ env: async () => () => undefined, exit, error })).toBe(false);
+  expect(exit).toHaveBeenCalledWith(1);
+  expect(error).toHaveBeenCalledExactlyOnceWith(
+    expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
+  );
+});
+
+test("a hub token lets the boot continue", async () => {
+  const exit = vi.fn();
+  expect(await gateOnHubToken({ env: async () => () => "token", exit })).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
 });
 
 test("Socket Mode without its app-level token refuses the boot and names the variable", async () => {

@@ -290,7 +290,7 @@ export type SlackDefinition = z.input<typeof slackSchema>;
  *
  * const webhooks = {
  *   url: "https://factory.example.ts.net",
- *   github: { enabled: true },
+ *   linear: { enabled: true },
  * } satisfies WebhooksDefinition;
  * ```
  *

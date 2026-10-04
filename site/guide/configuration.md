@@ -18,6 +18,7 @@ the repository URL with your own:
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
   bindings: {
     app: { remote: "git@github.com:owner/app.git" },
@@ -33,6 +34,32 @@ export default defineFactory({
 The sections below show properties to add or replace **inside the existing
 `defineFactory({ ... })` object** in `jigs.config.ts`. Keep the other properties
 from your configuration. These smaller blocks are configuration excerpts.
+
+## `hub` {#hub}
+
+Every factory hears GitHub through a hub. The hub receives GitHub's events
+and holds them until the factory's service collects them, so nothing is lost
+while the service is down.
+
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+hub: { url: "https://hub.example.com" },
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `url` | required | The address the hub is reached at. |
+
+The hub shows a factory token once, when you add the factory to it. Set both
+with:
+
+```sh
+pnpm exec jigs hub connect https://hub.example.com <token>
+```
+
+It writes `url` here and the token to `.env` as `JIGS_HUB_TOKEN`. Then run
+`pnpm exec jigs up`. Without the token, `jigs up` stops and the service
+refuses to start.
 
 ## `workflows`
 
@@ -98,7 +125,6 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | --- | --- | --- |
 | `port` | `8990` | Where the service listens. The CLI talks to it here. |
 | `dashboardPort` | required | Where the service hosts the run dashboard. |
-| `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
 | `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
 | `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels, and runs waiting on a thread reply re-read it. Minimum 30. |
 | `pollIntervalSeconds.pagerduty` | `300` | How often [event triggers](#triggers) on PagerDuty look for new incidents. Minimum 30. |
@@ -164,6 +190,7 @@ This trigger starts `respond` for every high-urgency incident on one service:
 import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
   pagerduty: {
     identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
@@ -272,8 +299,7 @@ github: { identities: [{ mode: "pat" }] },
 Put a personal access token in `.env` as `GITHUB_TOKEN`. Pull requests jigs
 opens are authored by you, so GitHub will not let you approve them: jigs uses
 [label approval](#merging). You can still send work back with review comments or a comment on the
-pull request. A classic token needs `repo` (or `public_repo`), plus
-`admin:repo_hook` if you turn on GitHub webhooks.
+pull request. A classic token needs `repo` (or `public_repo`).
 
 #### App: jigs acts as a bot
 
@@ -301,8 +327,8 @@ set one up:
 1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
    Leave OAuth and device flow off, and turn its webhook off.
 2. **Grant repository permissions**: Contents, Pull requests and Issues read
-   and write; Metadata, Checks and Commit statuses read. Add Repository
-   webhooks read and write if you turn on GitHub webhooks. `jigs doctor` names any that are missing.
+   and write; Metadata, Checks and Commit statuses read. `jigs doctor` names
+   any that are missing.
 3. **`appId`** is the App ID on its settings page.
 4. **`privateKeyPath`** is the key GitHub generates under Private keys. Save it
    in the factory (`.gitignore` already excludes `*.private-key.pem`) and run
@@ -513,37 +539,33 @@ To start runs from Slack messages, see
 
 ## Webhooks {#webhooks}
 
-Webhooks improve latency, not correctness. Without them, the built-in GitHub
-and Linear waits, and [event triggers](#triggers) on PagerDuty, continue to
-poll at [`pollIntervalSeconds`](#service). A lost webhook delivery only delays
-the next check. See
+GitHub events always arrive through the [hub](#hub). Linear and PagerDuty
+webhooks reach the service directly, and improve latency, not correctness.
+Without them, the built-in Linear waits, and [event triggers](#triggers) on
+PagerDuty, continue to poll at [`pollIntervalSeconds`](#service). A lost
+webhook delivery only delays the next check. See
 [Waiting and external events](/guide/waiting-and-events) for how runs wait.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
 webhooks: {
   url: "https://my-machine.my-tailnet.ts.net",
-  github: { enabled: true },
+  linear: { enabled: true },
 },
 ```
 
 Name each provider that sends webhooks with `enabled: true`. A provider you
-leave out (here `linear` and `pagerduty`) is off and keeps polling.
+leave out (here `pagerduty`) is off and keeps polling.
 
 1. **Expose the service port** with a tunnel, for example
    `tailscale funnel --bg <servicePort>` or
    `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is
    `webhooks.url`.
-2. **GitHub**: create a secret with `openssl rand -hex 32`, put it in `.env` as
-   `GITHUB_WEBHOOK_SECRET`, set `github: { enabled: true }`, run
-   `jigs up`, then run `jigs bind` again for each repository.
-   `bind` creates or repairs the repository's webhook. It needs hook permissions: `admin:repo_hook` for a PAT, or
-   Repository webhooks read and write for an App.
-3. **Linear**: create the webhook yourself in Linear under Settings → API →
+2. **Linear**: create the webhook yourself in Linear under Settings → API →
    Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
    only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET`, set
    `linear: { enabled: true }` and run `jigs up`.
-4. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
+3. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
    and add a subscription on the service or team your triggers watch, for the
    `incident.triggered` event only, delivering to
    `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
@@ -552,8 +574,8 @@ leave out (here `linear` and `pagerduty`) is off and keeps polling.
    seconds instead of at the next poll, and never starts a second one.
 
 A provider that is enabled without its secret stops the service from starting.
-`jigs doctor` checks the secrets, whether recent GitHub deliveries were
-rejected, and whether the PagerDuty subscription exists and is active. PagerDuty
+`jigs doctor` checks the secrets, and whether the PagerDuty subscription
+exists and is active. PagerDuty
 switches a subscription off after repeated failed deliveries; enable it again
 on its page under **Integrations → Generic Webhooks (v3)**.
 
@@ -564,7 +586,8 @@ is missing, and lists the credentials still empty.
 
 | Variable | When you need it |
 | --- | --- |
-| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. A new factory needs nothing else. |
+| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. |
 | `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
 | `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
@@ -574,7 +597,6 @@ is missing, and lists the credentials still empty.
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
-| `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
 | `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
 | `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 

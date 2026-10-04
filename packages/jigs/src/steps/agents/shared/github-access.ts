@@ -5,7 +5,7 @@ import {
   type GithubAuth,
   githubAuthFor,
 } from "../../../providers/github-auth.ts";
-import { parseGithubRemote } from "../../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../../providers/github-remote.ts";
 import { AGENT_TOKEN_ENV } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { JigsError } from "../../../workflow/errors.ts";

@@ -324,18 +324,29 @@ function factoryWith(config: string): string {
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
   factoryWith(
-    '{ service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
   );
   for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
     vi.stubEnv(name, "");
   vi.stubEnv("LINEAR_API_KEY", "set-but-unused");
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const report = await runChecks(doctorChecks({ hello: {} }));
-  expect(report).toEqual({ ok: true, checks: [] });
+  expect(report).toEqual({ ok: true, checks: [{ id: "hub.token", label: "hub token", ok: true }] });
+});
+
+test("doctor fails a factory without its hub token, naming hub connect", async () => {
+  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  const report = await runChecks(doctorChecks({ hello: {} }));
+  expect(report.checks.find((c) => c.id === "hub.token")).toMatchObject({
+    ok: false,
+    repair: expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
+  });
 });
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
   factoryWith(
-    '{ service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
   );
   for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
     vi.stubEnv(name, "");
@@ -359,22 +370,23 @@ test("doctor checks each provider a workflow requires and names the workflows", 
 
 test("doctor checks the factory's Linear operator, preflight never does", () => {
   factoryWith(
-    '{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
   );
   const linear = { integrations: ["linear" as const] };
   expect(
     doctorChecks({
       ship: { requires: linear },
     }).map((check) => check.id),
-  ).toEqual(["linear.identity", "linear.operator"]);
+  ).toEqual(["hub.token", "linear.identity", "linear.operator"]);
   expect(preflightIds(linear)).toEqual(["linear.identity"]);
 });
 
 test("doctor checks a set Linear operator even when no workflow requires Linear", () => {
   factoryWith(
-    '{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
   );
   expect(doctorChecks({ hello: {} }).map((check) => check.id)).toEqual([
+    "hub.token",
     "linear.identity",
     "linear.operator",
   ]);
@@ -383,27 +395,35 @@ test("doctor checks a set Linear operator even when no workflow requires Linear"
 test("doctor checks a provider the factory configuration asks for", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(
-    '{ service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
   );
   expect(ids()).toContain("github.identity");
   expect(ids()).not.toContain("linear.identity");
-  factoryWith('{ service: { dashboardPort: 9090 }, linear: { identity: { mode: "app" } } }');
+  factoryWith(
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "app" } } }',
+  );
   expect(ids()).toContain("linear.identity");
   expect(ids()).not.toContain("github.identity");
 });
 
 test("a slack section asks doctor for the Slack checks, and Socket Mode adds its own", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   expect(ids()).not.toContain("slack.identity");
-  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: false } }");
-  expect(ids()).toEqual(["slack.identity"]);
-  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: true } }");
-  expect(ids()).toEqual(["slack.identity", "slack.socket-mode"]);
+  factoryWith(
+    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: { socketMode: false } }",
+  );
+  expect(ids()).toEqual(["hub.token", "slack.identity"]);
+  factoryWith(
+    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: { socketMode: true } }",
+  );
+  expect(ids()).toEqual(["hub.token", "slack.identity", "slack.socket-mode"]);
 });
 
 test("a workflow requiring slack preflights the bot token, never the Socket Mode connection", async () => {
-  factoryWith("{ service: { dashboardPort: 9090 }, slack: { socketMode: true } }");
+  factoryWith(
+    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: { socketMode: true } }",
+  );
   vi.stubEnv("SLACK_BOT_TOKEN", "");
   vi.stubEnv("SLACK_APP_TOKEN", "");
   const slack = { integrations: ["slack" as const] };
@@ -420,7 +440,7 @@ test("a factory config that cannot be read fails the Linear check as itself", as
   onTestFinished(() => removeTmpDir(factory));
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { service: { dashboardPort: 9090 }, linear: { identity: { mode: "nope" } } }',
+    'export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "nope" } } }',
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   vi.stubEnv("LINEAR_API_KEY", "configured");
@@ -475,7 +495,7 @@ const PAGERDUTY =
   'pagerduty: { identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" } }';
 
 test("a workflow requiring PagerDuty in a factory without a pagerduty section fails preflight with the section to add", async () => {
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   const report = await runChecks(preflightChecks({ integrations: ["pagerduty"] }));
   expect(report.checks).toEqual([
     expect.objectContaining({
@@ -488,12 +508,15 @@ test("a workflow requiring PagerDuty in a factory without a pagerduty section fa
 });
 
 test("preflight checks the PagerDuty identity only, doctor adds the from user", async () => {
-  factoryWith(`{ service: { dashboardPort: 9090 }, ${PAGERDUTY} }`);
+  factoryWith(
+    `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
+  );
   vi.stubEnv("PAGERDUTY_CLIENT_ID", "");
   vi.stubEnv("PAGERDUTY_CLIENT_SECRET", "");
   const pagerduty = { integrations: ["pagerduty" as const] };
   expect(preflightIds(pagerduty)).toEqual(["pagerduty.identity"]);
   expect(doctorChecks({ triage: { requires: pagerduty } }).map((check) => check.id)).toEqual([
+    "hub.token",
     "pagerduty.identity",
     "pagerduty.from",
   ]);
@@ -506,14 +529,16 @@ test("preflight checks the PagerDuty identity only, doctor adds the from user", 
 
 test("doctor checks PagerDuty when the factory configures it, and not otherwise", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
-  factoryWith(`{ service: { dashboardPort: 9090 }, ${PAGERDUTY} }`);
-  expect(ids()).toEqual(["pagerduty.identity", "pagerduty.from"]);
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith(
+    `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
+  );
+  expect(ids()).toEqual(["hub.token", "pagerduty.identity", "pagerduty.from"]);
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   expect(ids().filter((id) => id.startsWith("pagerduty."))).toEqual([]);
 });
 
 test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", async () => {
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   const checks = doctorChecks({ hello: {} }, { pages: "pagerduty" });
   expect(checks.map((check) => check.id).filter((id) => id.startsWith("pagerduty."))).toEqual([
     "pagerduty.identity",
@@ -539,7 +564,9 @@ const probeServer = (credential: string) => ({
 });
 
 test("doctor probes each MCP server a required agent declares, from the factory root", async () => {
-  const factory = factoryWith("{ service: { dashboardPort: 9090 } }");
+  const factory = factoryWith(
+    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
+  );
   copyFileSync(PROBE_SERVER, path.join(factory, "mcp-probe-server.mjs"));
   vi.stubEnv("PROBE_SOURCE", "from-factory");
   const builder = harnesses.claude({
@@ -555,7 +582,7 @@ test("doctor probes each MCP server a required agent declares, from the factory 
 });
 
 test("doctor names the workflows whose agents declare a failing MCP server", async () => {
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   const builder = harnesses.claude({
     model: "opus",
     mcpServers: { github: probeServer("MISSING_PROBE_TOKEN") },
@@ -579,7 +606,7 @@ test("doctor names the workflows whose agents declare a failing MCP server", asy
 });
 
 test("doctor reports an agent whose environment cannot be planned, rather than failing", async () => {
-  factoryWith("{ service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   // Built by hand: the harness builder would have filled in `compat`.
   const builder = {
     kind: "pi",

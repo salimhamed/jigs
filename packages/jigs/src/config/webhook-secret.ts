@@ -3,13 +3,11 @@ import type { WebhookProvider } from "../workflow/providers.ts";
 import type { FactoryContext } from "./factory-context.ts";
 
 const SECRET_VARIABLES: Record<WebhookProvider, string> = {
-  github: "GITHUB_WEBHOOK_SECRET",
   linear: "LINEAR_WEBHOOK_SECRET",
   pagerduty: "PAGERDUTY_WEBHOOK_SECRET",
 };
 
 const SECRET_SOURCES: Record<WebhookProvider, string> = {
-  github: "generate a secret: `openssl rand -hex 32`",
   linear: "copy the signing secret from the Linear webhook's settings page",
   // PagerDuty shows it once, when the subscription is created.
   pagerduty:
