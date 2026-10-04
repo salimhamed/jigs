@@ -35,9 +35,9 @@ following the pull request, runs in four jigs routines the workflow calls.
 - **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
   `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
-  `"human"`, so the run waits for you to merge. Set it to `"jigs"` to have jigs
-  merge once the pull request is approved and CI is green. jigs never merges in
-  a repository with no CI. The workflow passes it to jigs as
+  `"jigs"`, so jigs merges once the pull request is approved and CI is green.
+  Set it to `"human"` to have the run wait for you to merge. jigs never merges
+  in a repository with no CI: add CI, or set `"human"` and merge yourself. The workflow passes it to jigs as
   `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
   merging only with a label, check the snapshot `mergeWhen` receives instead.
   `approvalCovers`, next to it, is `"latest-commit"`,
@@ -49,6 +49,20 @@ following the pull request, runs in four jigs routines the workflow calls.
 
 [Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
 optional.
+
+## Pull request titles
+
+Every pull request title is a
+[conventional commit](https://www.conventionalcommits.org) subject, such as
+`feat: add a flag` or `fix(api): retry a timeout`. Pull requests usually merge
+as one squashed commit named after the title, and release tooling and
+title-lint checks read that commit. The writer is told the rule in `prompts.ts`;
+a title that breaks it is sent back once with the problem, and a second bad
+title stops the run before anything is pushed, with a note on the ticket.
+
+To allow any title, delete the `check` passed to `describePullRequest` in
+`linear-ticket-to-pr.ts`, along with `titleProblems` and the title rule in the
+`describe` prompt.
 
 ## Launch a run
 
@@ -201,7 +215,8 @@ export async function deliverTicket(
 - **`describePullRequest`** has the builder write the title and body. A title
   that is not one plain line, or a body with a "Title:" or "Description:" label
   line, is sent back once with the reasons; a second bad answer fails the run.
-  Pass `check` to add your own rules, such as a title convention, the same way.
+  `check` adds your own rules the same way; the workflow passes one that requires
+  a conventional commit title.
 - **`publishPullRequest`** pushes exactly the given commit and opens the pull
   request with the title and body it is given, so a failed description pushes
   nothing. No agent runs, and it needs no review: any clean HEAD commit can be
@@ -222,15 +237,15 @@ export async function deliverTicket(
   `onNeedsHuman` with facts, never the same facts twice in a row, and keeps
   watching. To move the ticket back to `Todo` as well, do it inside
   `onNeedsHuman`.
-  With `mergedBy: "human"` the recipe waits for you to merge. With `"jigs"` it
-  checks merge readiness after every watcher yield and every builder turn,
-  whatever the builder last reported: the configured GitHub approval (read with
-  `approvalCovers`), green CI, a clean merge state, no unseen wake facts, and
-  published local work. A transient merge refusal is retried after a durable
-  wait, up to ten tries. When GitHub reports an approved, green pull request as
-  `blocked`, `onNeedsHuman` receives `merge-blocked` with the head; the recipe
-  posts a note on the pull request, marked with the delivery's scope so it does
-  not wake the builder and a later run does not post it again.
+  With `mergedBy: "jigs"`, the default, the recipe checks merge readiness after
+  every watcher yield and every builder turn, whatever the builder last
+  reported: the configured GitHub approval (read with `approvalCovers`), green
+  CI, a clean merge state, no unseen wake facts, and published local work. A
+  transient merge refusal is retried after a durable wait, up to ten tries. When
+  GitHub reports an approved, green pull request as `blocked`, `onNeedsHuman`
+  receives `merge-blocked` with the head; the recipe posts a note on the pull
+  request, marked with the delivery's scope so it does not wake the builder and
+  a later run does not post it again. With `"human"` it waits for you to merge.
   The watcher never merges, and the agent is instructed not to merge or approve;
   see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
   for what actually holds a merge back.

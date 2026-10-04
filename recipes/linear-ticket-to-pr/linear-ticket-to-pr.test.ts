@@ -42,7 +42,7 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
     notes: [],
     ledger: [],
   })),
-  describePullRequest: vi.fn(async () => ({ title: "Add a flag", body: "Adds it." })),
+  describePullRequest: vi.fn(async () => ({ title: "feat: add a flag", body: "Adds it." })),
   publishPullRequest: vi.fn(async () => pr),
   followPullRequestToOutcome: vi.fn(async () => ({ outcome: "merged" as const })),
 }));
@@ -99,10 +99,12 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(handed()?.work).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.work.instructions).toContain("## Implementation brief\nUse the flag.");
   expect(routines.buildAndReview).toHaveBeenCalledWith(expect.anything(), { rounds: 3 });
-  expect(routines.describePullRequest).toHaveBeenCalledWith(handed());
+  expect(routines.describePullRequest).toHaveBeenCalledWith(handed(), {
+    check: expect.any(Function),
+  });
   expect(routines.publishPullRequest).toHaveBeenCalledWith(handed(), {
     commit: "h1",
-    title: "Add a flag",
+    title: "feat: add a flag",
     body: "Adds it.",
   });
   expect(following()).toMatchObject({
@@ -110,7 +112,58 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
     wake: builderWakeFacts,
     approvalCovers: "latest-commit",
   });
-  expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(false);
+  expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(true);
+});
+
+test("a title that is not a conventional commit is sent back to the writer with the problem", async () => {
+  await run();
+  const check = vi.mocked(routines.describePullRequest).mock.calls[0]?.[1]?.check;
+  expect(check?.({ title: "feat(cli)!: add a flag", body: "" })).toEqual([]);
+  expect(check?.({ title: "Add a flag", body: "" })).toEqual([
+    expect.stringContaining('The title "Add a flag" is not a conventional commit subject'),
+  ]);
+});
+
+test("a second unconventional title stops the run before anything is pushed", async () => {
+  vi.mocked(routines.describePullRequest).mockImplementationOnce(async (_delivery, options) => {
+    options?.check?.({ title: "Add a flag", body: "Adds it." });
+    options?.check?.({ title: "Adds a flag", body: "Adds it." });
+    throw new Error("still has problems");
+  });
+
+  await expect(run()).rejects.toThrow(
+    "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+  );
+
+  expect(posted()).toEqual([
+    {
+      headline:
+        "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+      notes: [
+        "Proposed titles: Add a flag, then Adds a flag",
+        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+      ],
+      closing:
+        "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
+    },
+  ]);
+  expect(steps.pushBranch).not.toHaveBeenCalled();
+  expect(routines.publishPullRequest).not.toHaveBeenCalled();
+  expect(statuses()).toEqual(["In Progress", "Todo"]);
+});
+
+test("any other describe failure fails the run without a ticket note", async () => {
+  vi.mocked(routines.describePullRequest).mockRejectedValueOnce(new Error("writer crashed"));
+
+  await expect(run()).rejects.toThrow("writer crashed");
+  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+});
+
+test("the describe prompt asks for a conventional-commit title", () => {
+  const work = { key: "ABC-123", title: "Ship it", url: snapshot.url, instructions: "Do it." };
+  expect(prompts.describe({ work, worktree, diff: "" })).toContain(
+    "The title must be a conventional commit subject",
+  );
 });
 
 test("a run picks its builder and reviewer by name, each in its own session", async () => {
@@ -148,7 +201,7 @@ test("the reviewer's notes are appended to the pull request body", async () => {
   });
   await run();
   expect(vi.mocked(routines.publishPullRequest).mock.calls[0]?.[1]).toMatchObject({
-    title: "Add a flag",
+    title: "feat: add a flag",
     body: "Adds it.\n\n## Reviewer notes\n\n- Rename x",
   });
 });

@@ -27,7 +27,7 @@ keeps existing files and registrations.
 Reads a Linear ticket, asks a builder agent to implement the change, then asks
 a reviewer agent to review it. It publishes a pull request and lets the builder
 continue responding to feedback and CI. Merging follows the policy in the copied
-workflow: by default, a person merges.
+workflow: by default, jigs merges an approved pull request once CI is green.
 
 #### Requires
 
@@ -70,9 +70,11 @@ the workflow passes them its prompts, budgets and merge policy, and writes every
 note itself. The agent names above select entries defined in that source,
 rather than accepting a model name at runtime.
 
-`mergedBy` chooses who merges: `"human"` by default, or `"jigs"` once jigs
-verifies approval, CI, mergeability and that the builder's local work is
-published. `approvalCovers` chooses which commits an approving review covers:
+`mergedBy` chooses who merges: `"jigs"` by default, once jigs verifies
+approval, CI, mergeability and that the builder's local work is published, or
+`"human"` to leave every merge to you. Pull request titles must be
+conventional commit subjects; the writer gets one retry, and a second bad title
+stops the run. To allow any title, delete the check in the copied workflow. `approvalCovers` chooses which commits an approving review covers:
 `"latest-commit"` by default, or `"any-commit"` to let an approval carry over
 later pushes. If GitHub blocks an approved, green pull request, the recipe
 leaves one note on it for each commit and keeps waiting. When the pull request
