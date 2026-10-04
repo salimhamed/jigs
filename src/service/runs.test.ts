@@ -6,13 +6,16 @@ import { z } from "zod";
 import * as factoryContext from "../config/factory-context.ts";
 import * as github from "../providers/github.ts";
 import * as githubAuth from "../providers/github-auth.ts";
+import * as linear from "../providers/linear.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
+import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
+import { slackThreadToken } from "../workflow/slack/thread-token.ts";
 import * as triggerStore from "./event-triggers/store.ts";
 import {
   enrichSuspensions,
@@ -29,7 +32,7 @@ import {
   type WorldRun,
   worldRunFacts,
 } from "./runs.ts";
-import { clearWakes, recordWake } from "./wake-note.ts";
+import { clearWakes, recordWake } from "./wake.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -152,6 +155,30 @@ test("a run reads the wake it was sent, and never another run's", async () => {
   recordWake(PARK_TOKEN, RUN_A, "nudge sweep", new Date("2026-09-16T10:06:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
     kind: "nudge sweep",
+    at: "2026-09-16T10:06:00.000Z",
+  });
+});
+
+test("a run parked on a human reads the wake its ticket claim was sent", async () => {
+  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear unavailable"));
+  const halted = describeSuspension(needsHumanToken("issue-1", "comment-1"));
+  recordWake(ticketToken("issue-1"), RUN_B, "linear Comment", new Date("2026-09-16T10:05:00Z"));
+  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toBeUndefined();
+
+  recordWake(ticketToken("issue-1"), RUN_A, "linear Comment", new Date("2026-09-16T10:06:00Z"));
+  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toEqual({
+    kind: "linear Comment",
+    at: "2026-09-16T10:06:00.000Z",
+  });
+});
+
+test("a run parked on a Slack thread reads the wake that thread was sent", async () => {
+  const token = slackThreadToken("C0C5EUZ7P9Q", "1790723478.961719");
+  recordWake(token, RUN_A, "slack reply", new Date("2026-09-16T10:06:00Z"));
+  expect(
+    (await enrichSuspensions([describeSuspension(token) as RunSuspension], RUN_A))[0]?.lastWake,
+  ).toEqual({
+    kind: "slack reply",
     at: "2026-09-16T10:06:00.000Z",
   });
 });

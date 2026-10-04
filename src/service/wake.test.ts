@@ -1,5 +1,5 @@
 import { beforeEach, expect, test } from "vitest";
-import { clearWakes, lastWake, recordWake } from "./wake-note.ts";
+import { clearWakes, lastWake, recordWake } from "./wake.ts";
 
 const TOKEN = "github:pr:acme/api#41";
 const RUN_A = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";

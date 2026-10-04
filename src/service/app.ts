@@ -2,8 +2,7 @@
 
 import type { World } from "@workflow/world";
 import { type Context, Hono } from "hono";
-import { getRun, resumeHook } from "workflow/api";
-import { HookNotFoundError } from "workflow/errors";
+import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import { doctorChecks, failedChecks, runDoctorChecks } from "../checks/index.ts";
@@ -41,7 +40,7 @@ import {
   worldRunFacts,
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
-import { noteWake, recordWake } from "./wake-note.ts";
+import { wake } from "./wake.ts";
 
 /** What the routes reach beyond the request. Each defaults to the service's own. */
 export interface AppDeps {
@@ -191,21 +190,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
       return c.json({ error: "run has no suspensions to poke" }, 409);
     }
     const poked = await Promise.all(
-      tokens.map((token) =>
-        resumeHook(token, undefined).then(
-          () => {
-            recordWake(token, run.runId, "poke");
-            return { token, outcome: "woken" as const };
-          },
-          // A hook disposed between list and resume is a report, not an error.
-          // Anything else is named, or a World that cannot be reached reads as
-          // a run that already finished.
-          (error: unknown) =>
-            HookNotFoundError.is(error)
-              ? { token, outcome: "gone" as const }
-              : { token, outcome: "failed" as const, error: String(error) },
-        ),
-      ),
+      tokens.map(async (token) => ({ token, ...(await wake(token, "poke")) })),
     );
     return c.json({ runId: run.runId, poked });
   });
@@ -387,14 +372,14 @@ function mountGithubIngress(app: Hono, deps: IngressDeps): void {
           }),
         )
         .filter((token): token is string => token !== null);
-      return resumeAndLog(c, "github", tokens, event, resumeHook);
+      return wakeAndLog(c, "github", tokens, event);
     }
     const token = tokenFromGitHubPayload(payload);
     if (token === null) {
       console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
       return c.json({ ignored: true });
     }
-    return resumeAndLog(c, "github", [token], event, resumeHook);
+    return wakeAndLog(c, "github", [token], event);
   });
 }
 
@@ -420,7 +405,7 @@ function mountLinearIngress(app: Hono, deps: IngressDeps): void {
       );
       return c.json({ ignored: true });
     }
-    return resumeAndLog(c, "linear", [token], event, resumeHook);
+    return wakeAndLog(c, "linear", [token], event);
   });
 }
 
@@ -519,32 +504,21 @@ function githubStatus(payload: unknown): {
 
 // A wake carries no payload: the suspension primitives re-check provider
 // state on every wake, so nothing downstream reads one.
-async function resumeAndLog(
-  c: Context,
-  provider: Provider,
-  tokens: string[],
-  event: string | null,
-  resume: typeof resumeHook,
-) {
-  const results = await Promise.all(
+async function wakeAndLog(c: Context, provider: Provider, tokens: string[], event: string | null) {
+  const outcomes = await Promise.all(
     tokens.map(async (token) => {
       const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
-      // Before the resume, while the run that is about to be woken is still
-      // the one holding the hook.
-      await noteWake(token, event === null ? provider : `${provider} ${event}`);
-      try {
-        await resume(token, undefined);
-        console.log(`[ingress] ${provider} accepted ${correlation}`);
-        return "delivered" as const;
-      } catch (error) {
-        const reason = HookNotFoundError.is(error) ? "no-matching-hook" : "delivery-failed";
+      const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
+      if (outcome === "woken") console.log(`[ingress] ${provider} accepted ${correlation}`);
+      else {
+        const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
         console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
-        return reason;
       }
+      return outcome;
     }),
   );
-  if (results.includes("delivered")) return c.json({ delivered: true });
-  return c.json({ delivered: false }, results.includes("delivery-failed") ? 404 : 200);
+  if (outcomes.includes("woken")) return c.json({ delivered: true });
+  return c.json({ delivered: false }, outcomes.includes("failed") ? 404 : 200);
 }
 
 // The hooks that name an external resource: what another run can be blocked

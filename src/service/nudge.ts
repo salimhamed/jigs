@@ -1,16 +1,14 @@
 // How a parked run hears from its provider when no webhook tells it. On a
-// timer per provider, the service resumes each held hook through the same path
-// the ingress and `jigs poke` use, and the woken routine re-reads the provider
+// timer per provider, the service wakes each held hook through the same
+// `wake` the ingress and `jigs poke` use, and the woken routine re-reads the provider
 // from scratch: the wake carries nothing, so a nudge and a delivery are the
 // same event. With webhooks on, this is the floor under a lost delivery —
 // GitHub never retries one it failed to make.
 
-import { resumeHook } from "workflow/api";
-import { HookNotFoundError } from "workflow/errors";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
 import type { Provider } from "../workflow/providers.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
-import { recordWake } from "./wake-note.ts";
+import { wake } from "./wake.ts";
 
 // Subtracted, never added: the interval is a promise, so the jitter only ever
 // makes a sweep early. It exists so restarted services do not all sweep on the
@@ -60,7 +58,6 @@ export interface NudgeDeps {
   hooks?: () => Promise<HeldHook[]>;
   /** Which of these runs is mid-turn. */
   busyRuns?: (runIds: string[]) => Promise<string[]>;
-  resume?: (token: string) => Promise<unknown>;
   log?: (line: string) => void;
   warn?: (line: string) => void;
   random?: () => number;
@@ -74,7 +71,7 @@ export interface NudgeReport {
   busy: number;
   /** Hooks whose run moved on between the listing and the resume. */
   gone: number;
-  /** Resumes that failed for any other reason; each one is warned about. */
+  /** Wakes that failed for any other reason; `wake` logs each one. */
   failed: number;
 }
 
@@ -108,27 +105,14 @@ export async function nudgeProvider(
     const busy = new Set(
       await (deps.busyRuns ?? runsWithActiveStep)([...new Set(held.map((hook) => hook.runId))]),
     );
-    const resume = deps.resume ?? ((token: string) => resumeHook(token, undefined));
     for (const hook of held) {
       if (busy.has(hook.runId)) {
         report.busy += 1;
         continue;
       }
-      try {
-        await resume(hook.token);
-        recordWake(hook.token, hook.runId, "nudge sweep");
-        report.nudged += 1;
-      } catch (error) {
-        // A hook disposed between the listing and the resume is a report: its
-        // run has moved on. Anything else is this run losing its wake, and
-        // nothing else would say so.
-        if (HookNotFoundError.is(error)) {
-          report.gone += 1;
-        } else {
-          report.failed += 1;
-          warn(`[nudge] could not resume ${hook.token}: ${String(error)}`);
-        }
-      }
+      const { outcome } = await wake(hook.token, "nudge sweep");
+      if (outcome === "woken") report.nudged += 1;
+      else report[outcome] += 1;
     }
     log(
       `[nudge] ${label}: ${report.held} held, ${report.nudged} nudged, ${report.busy} mid-turn, ${report.gone} gone, ${report.failed} failed`,
