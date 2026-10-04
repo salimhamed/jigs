@@ -92,7 +92,7 @@ managing only the service.
 
 | Command | What it does |
 | --- | --- |
-| `jigs service start` | Start the service from the current build and wait until it is ready. Refuses when `jigs.config.ts` changed since the build; run `jigs up` instead. |
+| `jigs service start` | Start the service from the current build and wait until it is ready. |
 | `jigs service stop` | Stop the service and everything it started, giving in-flight work up to 10 seconds to finish. Postgres keeps running. |
 | `jigs service restart` | Stop, then start. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
