@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.101.0](https://github.com/salimhamed/jigs/compare/jigs-v0.100.1...jigs-v0.101.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove compatibility branches, read settings through one function, unify wakes ([#568](https://github.com/salimhamed/jigs/issues/568))
+
+### Code Refactoring
+
+* remove compatibility branches, read settings through one function, unify wakes ([#568](https://github.com/salimhamed/jigs/issues/568)) ([21ac64a](https://github.com/salimhamed/jigs/commit/21ac64a06e5f106dc604b43bbe29f7b9d97f8cfd))
+
 ## [0.100.1](https://github.com/salimhamed/jigs/compare/jigs-v0.100.0...jigs-v0.100.1) (2026-10-04)
 
 
