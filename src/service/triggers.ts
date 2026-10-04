@@ -1,8 +1,4 @@
-/**
- * Start runs from the event triggers a factory declares, and inspect them.
- *
- * @packageDocumentation
- */
+// Start runs from the event triggers a factory declares, and inspect them.
 
 import { createHash } from "node:crypto";
 import type { z } from "zod";

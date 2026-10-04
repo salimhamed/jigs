@@ -600,7 +600,7 @@ test("health names the factory that answers here, and the injected workflows", a
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     ok: true,
-    // No start-world plugin has run here, so the boot has not begun: live,
+    // No startService has run here, so the boot has not begun: live,
     // but not what `jigs service start` waits for.
     ready: false,
     phase: "starting",

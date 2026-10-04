@@ -1,8 +1,4 @@
-/**
- * Create the HTTP application that serves a factory's workflow and webhook endpoints.
- *
- * @packageDocumentation
- */
+// Create the HTTP application that serves a factory's workflow and webhook endpoints.
 
 import type { World } from "@workflow/world";
 import { type Context, Hono } from "hono";

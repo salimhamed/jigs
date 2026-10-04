@@ -33,37 +33,17 @@
       "types": "./dist/index.d.ts",
       "default": "./dist/index.js"
     },
-    "./app": {
-      "types": "./dist/app.d.ts",
-      "default": "./dist/app.js"
-    },
     "./nitro": {
       "types": "./dist/nitro.d.ts",
       "default": "./dist/nitro.js"
-    },
-    "./schedules": {
-      "types": "./dist/schedules.d.ts",
-      "default": "./dist/schedules.js"
-    },
-    "./triggers": {
-      "types": "./dist/triggers.d.ts",
-      "default": "./dist/triggers.js"
-    },
-    "./automatic-release": {
-      "types": "./dist/automatic-release.d.ts",
-      "default": "./dist/automatic-release.js"
     },
     "./build": {
       "types": "./dist/build.d.ts",
       "default": "./dist/build.js"
     },
-    "./plugins/start-world": {
-      "types": "./dist/plugins/start-world.d.ts",
-      "default": "./dist/plugins/start-world.js"
-    },
-    "./plugins/start-dashboard": {
-      "types": "./dist/plugins/start-dashboard.d.ts",
-      "default": "./dist/plugins/start-dashboard.js"
+    "./service": {
+      "types": "./dist/service.d.ts",
+      "default": "./dist/service.js"
     },
     "./routines": {
       "types": "./dist/routines.d.ts",

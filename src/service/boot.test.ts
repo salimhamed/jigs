@@ -1,10 +1,10 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import { JigsError } from "../../errors.ts";
-import type { HarnessRuntime } from "../../steps/agents/shared/harness-runtime.ts";
-import type { RegistrySql } from "../../steps/runtime/registry.ts";
-import { inTestFactory } from "../../test-fixtures.ts";
-import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
+import { JigsError } from "../errors.ts";
+import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
+import type { RegistrySql } from "../steps/runtime/registry.ts";
+import { inTestFactory } from "../test-fixtures.ts";
+import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import {
   announceSlackApp,
   fenceTerminalWorkflowDeliveries,
@@ -14,7 +14,7 @@ import {
   gateOnSlackAppToken,
   gateOnWebhookSecrets,
   gateOnWorldStart,
-} from "./start-world.ts";
+} from "./boot.ts";
 
 const RUN = "wrun_01M2Z000000000000000000000";
 

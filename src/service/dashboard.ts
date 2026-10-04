@@ -1,19 +1,13 @@
-/**
- * Start the factory's Workflow dashboard when its port is configured.
- *
- * @packageDocumentation
- */
-
 import type { Server } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { onShutdown } from "../shutdown.ts";
+import { onShutdown } from "./shutdown.ts";
 
 // Hosted here rather than run standalone: a second process opening this World
 // runs a second queue worker, which steals the service's jobs.
 /** Start the optional Workflow dashboard and register its shutdown cleanup. */
-export default async function startDashboard() {
+export async function startDashboard() {
   const port = Number(process.env.JIGS_DASHBOARD_PORT);
   if (!Number.isInteger(port) || port <= 0) {
     console.log("[service] dashboard skipped: JIGS_DASHBOARD_PORT unset");

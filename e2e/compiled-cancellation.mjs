@@ -441,7 +441,7 @@ export async function runCompiledCancellationMatrix({
 
     const automatic = JSON.parse(
       runNode(
-        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));
@@ -529,7 +529,7 @@ await (await getWorld()).close?.();`,
 
     const reconciled = JSON.parse(
       runNode(
-        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));
@@ -691,7 +691,7 @@ await (await getWorld()).close?.();`,
   function reconcile() {
     return JSON.parse(
       runNode(
-        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/automatic-release";
+        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));

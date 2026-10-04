@@ -1,8 +1,4 @@
-/**
- * Start and inspect the recurring schedules declared by a factory.
- *
- * @packageDocumentation
- */
+// Start and inspect the recurring schedules declared by a factory.
 
 import { Cron } from "croner";
 import type { z } from "zod";
