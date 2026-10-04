@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.99.0](https://github.com/salimhamed/jigs/compare/jigs-v0.98.0...jigs-v0.99.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* one service entry point and smaller service files ([#560](https://github.com/salimhamed/jigs/issues/560))
+
+### Code Refactoring
+
+* one service entry point and smaller service files ([#560](https://github.com/salimhamed/jigs/issues/560)) ([00c01ce](https://github.com/salimhamed/jigs/commit/00c01ce794e2b9d13cb6782e8c1f1c0218cbe0bd))
+
 ## [0.98.0](https://github.com/salimhamed/jigs/compare/jigs-v0.97.0...jigs-v0.98.0) (2026-10-04)
 
 
