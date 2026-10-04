@@ -1,6 +1,7 @@
 import { type LanguageModel, wrapLanguageModel } from "ai";
 import { formatFailures, runChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
+import { abortable } from "../../providers/http.ts";
 import { JitCheckError } from "../../workflow/agents/agent.ts";
 import type { Harness } from "../../workflow/agents/harness-config.ts";
 import { type AgentSessionRef, extractAgentSession } from "../../workflow/agents/result.ts";
@@ -8,7 +9,7 @@ import type { RunMetadata } from "../runtime/run-context.ts";
 import type { Driver, HarnessTarget } from "./drivers/index.ts";
 import { agentStepEnv } from "./harnesses/env.ts";
 import { acquireFileLock, FileLockTimeoutError, lockPathFor } from "./lock.ts";
-import { type RunCancellation, watchRunCancellation } from "./run-cancellation.ts";
+import { watchRunCancellation } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
 
@@ -54,10 +55,12 @@ const LOCK_STALE_MS = 4 * 60 * 60_000 + 60_000;
 
 // Everything the built-in agent step does before it reaches the harness. Throws
 // AgentSessionError for a session recorded on another harness and JitCheckError
-// for a failed just-in-time check; the lock is held until `release`.
+// for a failed just-in-time check; the lock is held until `release`. A run
+// cancelled while provider tokens are minted stops waiting on them.
 export async function prepareAgentRun(
   target: HarnessTarget,
   seams: ExecutionSeams,
+  signal?: AbortSignal,
 ): Promise<PreparedRun> {
   const { harness, cwd, resume } = target;
   const driver = seams.resolveDriver(harness.kind);
@@ -71,8 +74,8 @@ export async function prepareAgentRun(
   }
   // Built once, so the JIT checks probe exactly what the harness gets.
   const base = agentStepEnv(driver, target, seams.factoryEnv());
-  const env = { ...base, ...(await seams.accessEnv(target, base)) };
-  const requestReport = await runChecks(driver.requestChecks(target));
+  const env = { ...base, ...(await abortable(seams.accessEnv(target, base), signal)) };
+  const requestReport = await runChecks(driver.descriptorChecks(harness));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const jitFailure = await seams.jitFailures(target, env);
   if (jitFailure !== undefined) throw new JitCheckError(jitFailure);
@@ -157,13 +160,17 @@ export async function openAgentRunner(
       "createAgentRunner cannot open a Pi harness: Pi has no AI SDK provider model. Run Pi with runAgent from #jigs/routines",
     );
   const target: HarnessTarget = { harness, cwd: options.cwd, resume: options.resume };
-  const prepared = await prepareAgentRun(target, seams);
+  const cancellation = await watchRunCancellation(options.run.workflowRunId, seams.runStatus);
+  let prepared: PreparedRun;
+  try {
+    prepared = await prepareAgentRun(target, seams, cancellation.signal);
+  } catch (err) {
+    cancellation.dispose();
+    throw cancellation.classify(err);
+  }
   const { driver } = prepared;
-  let watch: RunCancellation | undefined;
   try {
     if (driver.open === undefined) throw new JigsError(`the ${harness.kind} driver cannot run`);
-    watch = await watchRunCancellation(options.run.workflowRunId, seams.runStatus);
-    const cancellation = watch;
     const opened = await driver.open(target, {
       metadata: options.run,
       env: prepared.env,
@@ -185,9 +192,9 @@ export async function openAgentRunner(
       },
     };
   } catch (err) {
-    watch?.dispose();
+    cancellation.dispose();
     prepared.release();
-    throw watch === undefined ? err : watch.classify(err);
+    throw cancellation.classify(err);
   }
 }
 

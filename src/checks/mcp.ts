@@ -3,6 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { scrubCredentials } from "../providers/git.ts";
 import { checkWorktreeCodexMcpConfig } from "../steps/agents/harnesses/codex-config-guard.ts";
 import {
@@ -15,8 +16,8 @@ import type {
   McpToolProbe,
   PiMcpServerConfig,
 } from "../workflow/agents/harness-config.ts";
-import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+import { CHECK_TIMEOUT_MS } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 // A step runs these when its agent starts, and doctor runs them for the agents
 // a workflow declares under `requires.agents`. Preflight does not: a step can

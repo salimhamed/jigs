@@ -3,13 +3,11 @@
 // registry, keyed by the descriptor's `kind`, is what the engine runs.
 
 import type { z } from "zod";
-import type { FactoryConfig } from "../config/factory-config.ts";
+import type { RunSource } from "../steps/runtime/run-state.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../workflow/pagerduty/source.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "./slack-sources.ts";
-
-/** A provider with its own `service.pollIntervalSeconds` entry. */
-export type SourceProvider = keyof FactoryConfig["service"]["pollIntervalSeconds"];
 
 /** One occurrence as a source reports it: the reference the run reads, and when it happened. */
 export interface SourceOccurrence {
@@ -17,23 +15,36 @@ export interface SourceOccurrence {
   at: Date;
 }
 
-export interface Source<P = unknown> {
-  provider: SourceProvider;
+/** What a poll found, and how far the source has now read. */
+export interface SourcePoll<C> {
+  occurrences: SourceOccurrence[];
+  cursor: C;
+}
+
+export interface Source<P = unknown, C = unknown> {
+  provider: Provider;
   /** Validates the descriptor's `params`. */
   params: z.ZodType<P>;
+  /** Validates the cursor an earlier poll returned, as the store hands it back. */
+  cursor: z.ZodType<C>;
   /** A representative of the inputs this source hands every run, which doctor checks the
    *  trigger's workflow accepts. */
   sampleInputs: Record<string, unknown>;
   /** The occurrence key, read off the inputs so a polled and a pushed occurrence cannot disagree. */
   occurrence(inputs: Record<string, unknown>): string;
-  /** Occurrences since the given time. Overlap with an earlier poll is harmless. */
-  poll(params: P, since: Date): Promise<SourceOccurrence[]>;
+  /**
+   * Occurrences since the cursor an earlier poll returned, or since `floor` when there is none.
+   * Never reads from before `floor`. Overlap with an earlier poll is harmless.
+   */
+  poll(params: P, cursor: C | undefined, floor: Date): Promise<SourcePoll<C>>;
   /** The same occurrence from a pushed provider event, or null when the event is not one. */
   fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
+  /** What a run this source started was started for, read off the inputs it handed the run. */
+  describe(inputs: Record<string, unknown>): RunSource;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: each kind has its own params
-export type SourceRegistry = Readonly<Record<string, Source<any>>>;
+// biome-ignore lint/suspicious/noExplicitAny: each kind has its own params and cursor
+export type SourceRegistry = Readonly<Record<string, Source<any, any>>>;
 
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,

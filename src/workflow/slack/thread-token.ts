@@ -1,5 +1,4 @@
-/** Prefix for the hook a run parks on while it waits for a reply in a Slack thread. */
-export const SLACK_THREAD_TOKEN_PREFIX = "slack:thread:";
+import { SLACK_THREAD_TOKEN_PREFIX } from "../hook-tokens.ts";
 
 /** Build the hook token for the thread under the message `threadTs`. */
 export function slackThreadToken(channel: string, threadTs: string): string {

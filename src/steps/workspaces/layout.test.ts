@@ -1,11 +1,11 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { factorySlug } from "../../config/paths.ts";
 import {
   bindingFilesDir,
   branchDirname,
   cloneDir,
   cloneRepoDir,
-  factorySlug,
   worktreeParentDir,
   worktreePath,
 } from "./layout.ts";
@@ -18,16 +18,6 @@ beforeEach(() => vi.stubEnv("XDG_DATA_HOME", "/xdg-data"));
 afterEach(() => vi.unstubAllEnvs());
 
 const options = { factoryRoot: "/f/acme", bindingName: "api" };
-
-test("factorySlug embeds the dirname and is stable for equal paths", () => {
-  const slug = factorySlug("/home/x/factories/acme");
-  expect(slug).toMatch(/^acme-[0-9a-f]{8}$/);
-  expect(factorySlug("/home/x/factories/acme")).toBe(slug);
-});
-
-test("factorySlug distinguishes same-named factories at different paths", () => {
-  expect(factorySlug("/a/factory")).not.toBe(factorySlug("/b/factory"));
-});
 
 test("branchDirname maps slashes to dashes", () => {
   expect(branchDirname("salim/age-308-worktrees")).toBe("salim-age-308-worktrees");

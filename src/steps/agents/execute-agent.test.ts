@@ -96,11 +96,11 @@ type Captured = {
   piHome?: { runId: string; model: unknown; skills: readonly string[] };
 };
 
-// Pi's request checks probe the nested model endpoint and credentials, which
+// Pi's descriptor checks probe the nested model endpoint and credentials, which
 // most tests neither stub nor care about; the ones that do opt back in.
 function makeDeps(
   generation: Partial<Awaited<ReturnType<ExecutionSeams["generateText"]>>> = {},
-  options: { piRequestChecks?: boolean } = {},
+  options: { piDescriptorChecks?: boolean } = {},
 ): {
   deps: ExecutionSeams;
   captured: Captured;
@@ -178,7 +178,7 @@ function makeDeps(
     }),
     pi: {
       ...createPiDriver(piDeps),
-      ...(options.piRequestChecks === true ? {} : { requestChecks: () => [] }),
+      ...(options.piDescriptorChecks === true ? {} : { descriptorChecks: () => [] }),
     },
   };
   const deps: ExecutionSeams = {
@@ -858,7 +858,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
   expect(captured.options).toBeUndefined();
 });
 
-test("request checks run by phase even when an installation check has the same id", async () => {
+test("descriptor checks run by phase even when an installation check has the same id", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
@@ -886,7 +886,7 @@ test("request checks run by phase even when an installation check has the same i
               run: async () => ({ ok: true as const }),
             },
           ],
-          requestChecks: () => [
+          descriptorChecks: () => [
             {
               id: "shared-diagnostic",
               label: "Request diagnostic",
@@ -924,8 +924,8 @@ test("claude ask step disables built-in tools, sees no MCP universe and loads no
 });
 
 test("askAgent rejects Codex, a Pi allowlist and a model source before any check or launch", async () => {
-  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
-  const requestChecks = vi.spyOn(drivers.openrouter, "requestChecks");
+  const { deps, captured } = makeDeps({}, { piDescriptorChecks: true });
+  const descriptorChecks = vi.spyOn(drivers.openrouter, "descriptorChecks");
   const ask = (harness: unknown) =>
     ({ harness, prompt: "never reached" }) as unknown as Parameters<typeof executeAgentWith>[0];
   const metadata = { workflowRunId: "run-1" };
@@ -943,7 +943,7 @@ test("askAgent rejects Codex, a Pi allowlist and a model source before any check
   await expect(executeAgentWith(ask(models.openrouter("m")), metadata, deps)).rejects.toThrow(
     "openrouter is a model source, not an agent harness",
   );
-  expect(requestChecks).not.toHaveBeenCalled();
+  expect(descriptorChecks).not.toHaveBeenCalled();
   expect(captured.homeRunIds).toEqual([]);
   expect(captured.piHome).toBeUndefined();
   expect(captured.options).toBeUndefined();
@@ -1030,7 +1030,7 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
   vi.stubGlobal("fetch", async () => {
     throw new Error("connection refused");
   });
-  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+  const { deps, captured } = makeDeps({}, { piDescriptorChecks: true });
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openaiCompatible({
@@ -1050,7 +1050,7 @@ test("pi ask rejects an unreachable nested endpoint before executing Pi", async 
 
 test("pi ask rejects missing nested authentication before executing Pi", async () => {
   vi.stubEnv("PI_TEST_OPENROUTER_KEY", "");
-  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+  const { deps, captured } = makeDeps({}, { piDescriptorChecks: true });
   const wire = buildAskAgentRequest({
     harness: harnesses.pi(
       models.openrouter("openai/gpt-oss", { apiKeyEnv: "PI_TEST_OPENROUTER_KEY" }),
@@ -1073,7 +1073,7 @@ test("pi maps only the selected OpenRouter credential to the provider variable",
     ),
     prompt: "hello",
   });
-  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+  const { deps, captured } = makeDeps({}, { piDescriptorChecks: true });
 
   await agentStep(wire, { workflowRunId: "run-pi-custom-key" }, deps);
 
@@ -1252,7 +1252,7 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
     cwd: worktree,
     prompt: "never reached",
   });
-  const run = makeDeps({}, { piRequestChecks: true });
+  const run = makeDeps({}, { piDescriptorChecks: true });
   run.deps.jitFailures = vi.fn(async () => undefined);
 
   await expect(
@@ -1270,7 +1270,7 @@ test("pi rejects unsupported MCP and ask configurations before probes or model c
     },
     prompt: "never reached",
   } as unknown as Parameters<typeof executeAgentWith>[0];
-  const ask = makeDeps({}, { piRequestChecks: true });
+  const ask = makeDeps({}, { piDescriptorChecks: true });
   await expect(
     executeAgentWith(invalidAsk, { workflowRunId: "invalid-ask" }, ask.deps),
   ).rejects.toThrow("askAgent() has no MCP universe");
@@ -1307,7 +1307,7 @@ test.each([
       cwd: worktree,
       prompt: "never reached",
     });
-    const run = makeDeps({}, { piRequestChecks: true });
+    const run = makeDeps({}, { piDescriptorChecks: true });
     run.deps.jitFailures = executionSeams.jitFailures;
 
     const result = await executeAgentWith(wire, { workflowRunId: "missing-mcp-secret" }, run.deps);
@@ -1543,7 +1543,7 @@ test("pi run rejects an unreachable nested endpoint before spawning Pi", async (
     cwd: worktree,
     prompt: "implement it",
   });
-  const { deps, captured } = makeDeps({}, { piRequestChecks: true });
+  const { deps, captured } = makeDeps({}, { piDescriptorChecks: true });
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-pi-offline" }, deps)).rejects.toThrow(
     /offline-studio model endpoint: offline-studio is unreachable/,
@@ -1620,7 +1620,7 @@ test("the JIT checks and the harness get the same environment, built from the ba
   let runEnv: Record<string, string> | undefined;
   const driver = {
     ...createClaudeDriver(),
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     envAllowlist: () => ["DRIVER_VAR"],
     open: async (_target: unknown, context: { env: Record<string, string> }) => {
       runEnv = context.env;
@@ -1664,7 +1664,7 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
   const jitEnvs: Record<string, string>[] = [];
   const driver = {
     ...createClaudeDriver(),
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     open: async (_target: unknown, context: { env: Record<string, string> }) => {
       envs.push(context.env);
       return { model: new MockLanguageModelV4(), close: async () => {} };
@@ -1720,7 +1720,7 @@ const usage = {
 function sdkSeams(model: MockLanguageModelV4, stream?: StepStream): ExecutionSeams {
   const driver = {
     ...createClaudeDriver(),
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     open: async () => ({ model, close: async () => {} }),
   };
   return {

@@ -29,6 +29,13 @@
       "when": 1791504000000,
       "tag": "0003_trigger_attribute_index",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1791590400000,
+      "tag": "0004_trigger_cursor",
+      "breakpoints": true
     }
   ]
 }

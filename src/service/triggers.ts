@@ -10,6 +10,7 @@ import { type Check, type CheckReport, failedCheck, failedChecks } from "../chec
 import { plainHint } from "../errors.ts";
 import { currentFactory, registrySql } from "../steps/runtime/registry.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { nudgeDelay } from "./nudge.ts";
 import { whenReady } from "./readiness.ts";
 import {
@@ -21,13 +22,7 @@ import {
   runStatuses,
 } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
-import {
-  SOURCES,
-  type Source,
-  type SourceOccurrence,
-  type SourceProvider,
-  type SourceRegistry,
-} from "./sources.ts";
+import { SOURCES, type Source, type SourceOccurrence, type SourceRegistry } from "./sources.ts";
 import { type PreparedRun, prepareRun } from "./trigger.ts";
 import {
   type Occurrence,
@@ -63,12 +58,12 @@ export interface TriggerDeps {
 
 /** One factory's valid event triggers, ready to poll, take pushes and start runs. */
 export interface TriggerEngine {
-  readonly triggers: ReadonlyArray<{ name: string; provider: SourceProvider }>;
+  readonly triggers: ReadonlyArray<{ name: string; provider: Provider }>;
   /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
   poll(name: string): Promise<void>;
   /** Record the occurrence a pushed event is for, and return the triggers that took it. */
-  push(provider: SourceProvider, event: unknown): Promise<string[]>;
+  push(provider: Provider, event: unknown): Promise<string[]>;
   /** Start waiting occurrences, oldest first, up to each trigger's cap. */
   drain(): Promise<void>;
   /** Start nothing more, and settle once the drain in flight has. */
@@ -475,13 +470,25 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       try {
         await markers();
         const marker = entry.marker as TriggerMarker;
-        // Taken before the read, so an occurrence landing during it is in the
-        // next window too; the overlap is deduplicated.
-        const through = now();
-        const polled = await entry.source.poll(entry.params, marker.polledThrough);
+        const stored = entry.source.cursor.safeParse(marker.cursor);
+        if (marker.cursor !== null && !stored.success)
+          log(`[trigger] ${name} reads from its lookback: its stored cursor is not one it wrote`);
+        // Nothing before the trigger was enabled is its business, and nothing
+        // older than the lookback would start a run.
+        const floor = new Date(
+          Math.max(
+            floorToSecond(marker.enabledAt),
+            now().getTime() - entry.lookbackMinutes * 60_000,
+          ),
+        );
+        const polled = await entry.source.poll(
+          entry.params,
+          stored.success ? stored.data : undefined,
+          floor,
+        );
         let fresh = 0;
-        let failedAt: Date | undefined;
-        for (const seen of polled) {
+        let lost = 0;
+        for (const seen of polled.occurrences) {
           // An occurrence the source cannot key would fail the same way on every
           // poll, so it is passed over rather than held for.
           let occurrence: string;
@@ -494,26 +501,19 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
           try {
             if (await observe(entry, seen, occurrence)) fresh += 1;
           } catch (error) {
-            if (failedAt === undefined || seen.at < failedAt) failedAt = seen.at;
+            lost += 1;
             log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
           }
         }
-        // An occurrence the store could not record keeps the window open
-        // behind it, so the next poll sees it again, but never further back
-        // than the lookback: anything older would only be skipped.
-        const next =
-          failedAt === undefined
-            ? through
-            : new Date(
-                Math.max(
-                  marker.polledThrough.getTime(),
-                  Math.min(through.getTime(), failedAt.getTime() - 1),
-                  now().getTime() - entry.lookbackMinutes * 60_000,
-                ),
-              );
-        await store().advance(name, next);
-        entry.marker = { ...marker, polledThrough: next };
-        log(`[trigger] ${name}: polled, ${polled.length} seen, ${fresh} new`);
+        // The cursor stays put, so the next poll reads the lost occurrence
+        // again; what this poll did record is deduplicated then.
+        if (lost === 0) {
+          await store().advance(name, polled.cursor);
+          entry.marker = { ...marker, cursor: polled.cursor };
+        } else {
+          log(`[trigger] ${name}: ${lost} not recorded, reading them again next poll`);
+        }
+        log(`[trigger] ${name}: polled, ${polled.occurrences.length} seen, ${fresh} new`);
       } catch (error) {
         log(`[trigger] ${name} poll failed: ${String(error)}`);
         return;
@@ -544,7 +544,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
 /** Injectable timers, readiness and intervals, on top of the engine's own dependencies. */
 export interface StartTriggersDeps extends TriggerDeps {
-  intervalSeconds?: () => Promise<Record<SourceProvider, number>>;
+  intervalSeconds?: () => Promise<Record<Provider, number>>;
   ready?: () => Promise<void>;
   random?: () => number;
   /** Schedules one call and returns its canceller. */
@@ -627,11 +627,11 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
  * provider. It returns once the occurrence is recorded, before any run starts,
  * with the names of the triggers that took it.
  */
-export async function pushEvent(provider: SourceProvider, event: unknown): Promise<string[]> {
+export async function pushEvent(provider: Provider, event: unknown): Promise<string[]> {
   return running === undefined ? [] : running.push(provider, event);
 }
 
-async function configuredIntervals(): Promise<Record<SourceProvider, number>> {
+async function configuredIntervals(): Promise<Record<Provider, number>> {
   const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
     import("../config/factory-config.ts"),
     import("../config/factory-root.ts"),
@@ -759,7 +759,7 @@ export function triggerChecks(
 export function triggerProviders(
   factory: Factory,
   sources: SourceRegistry = SOURCES,
-): Record<string, SourceProvider> {
+): Record<string, Provider> {
   return Object.fromEntries(
     Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
       const source = sources[trigger.source.kind];

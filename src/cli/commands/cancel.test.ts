@@ -114,6 +114,16 @@ test("without a recorded ticket or pull request, the labels still avoid the toke
   ]);
 });
 
+test("a Slack thread wait is named by its thread, not its token", async () => {
+  respondLookup({ ...parked, ticket: null });
+  respondCancel(["slack:thread:C0123ABCD:1790723244.335019"]);
+  await cancelRun(RUN, deps());
+  expect(lines).toEqual([
+    `${RUN}  cancelled`,
+    "  stopped waiting for the Slack thread 1790723244.335019 in C0123ABCD",
+  ]);
+});
+
 test("a minimum-retention hook is reported as still held", async () => {
   respondLookup({ ...parked, ticket: "AGE-317" });
   fetchMock.mockResolvedValueOnce(

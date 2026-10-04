@@ -11,7 +11,8 @@ import type {
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
 
-import { GitHubApiError, githubGet, githubGetAll, githubRequest } from "./github-api.ts";
+import { githubGet, githubGetAll, githubRequest } from "./github-api.ts";
+import { GitHubApiError } from "./github-http.ts";
 
 export type {
   CheckRun,
@@ -94,7 +95,10 @@ export async function findOpenPullRequestByBranch(
       isThisRepo(pull.base.repo),
   );
   if (matches.length > 1) {
-    throw new Error(
+    throw new GitHubApiError(
+      200,
+      `/repos/${repository.owner}/${repository.repo}/pulls`,
+      "",
       `GitHub reports ${matches.length} open pull requests for ${repository.owner}/${repository.repo} ${head} into ${base}: ${matches.map((pull) => `#${pull.number}`).join(", ")}`,
     );
   }

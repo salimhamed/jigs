@@ -10,12 +10,14 @@
  * @packageDocumentation
  */
 
-export type { Check, CheckResult } from "../checks/catalog.ts";
+export type { Check, CheckResult } from "../checks/check.ts";
+export { ProviderApiError } from "../providers/http.ts";
 export type {
   DecisionGeneration,
   Driver,
   DriverContext,
   DriverDependencies,
+  DriverDescriptor,
   DriverRequest,
   EvaluationGeneration,
   ExecutorGeneration,

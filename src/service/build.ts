@@ -6,9 +6,9 @@
 
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { checkFactoryIntegration } from "../cli/integration.ts";
+import { checkFactoryIntegration } from "../build/integration.ts";
 
-export { generateFactoryIntegration } from "../cli/integration.ts";
+export { generateFactoryIntegration } from "../build/integration.ts";
 
 /** Where `prepare()` writes the generated sources, relative to the factory
  *  root. `nitro.ts` imports them to point its route and plugin at the same

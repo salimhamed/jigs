@@ -4,13 +4,20 @@
 // only reached from a step, a check or the CLI — never from workflow code.
 
 import { type LinearIdentity, readFactoryConfig } from "../config/factory-config.ts";
-import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
-import { credentialRoot, setCredentialRoot } from "./credential-root.ts";
+import {
+  credentialRoot,
+  credentialValue,
+  type EnvLookup,
+  onProviderReset,
+  RESTART_SERVICE,
+  requireCredential,
+  SERVICE_ENV_FILE,
+} from "./credentials.ts";
+import type { ProviderAuth } from "./http.ts";
 
-// A test seam, and the origin the OAuth token endpoint is derived from.
-export const LINEAR_API_URL = (): string =>
-  process.env.LINEAR_API_URL ?? "https://api.linear.app/graphql";
+export const LINEAR_API_URL = "https://api.linear.app/graphql";
+export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 
 // Minting with a different scope set revokes every live token for the app, so
 // a running factory hits one 401 after a release that changes this.
@@ -22,35 +29,22 @@ export const LINEAR_IDENTITY_VARIABLES = {
   app: ["LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"],
 } as const satisfies Record<LinearIdentity["mode"], readonly string[]>;
 
-export type EnvLookup = (name: string) => string | undefined;
-
 type FetchLike = typeof fetch;
-
-/** A Linear credential from the factory's `.env`, or the shell outside a factory. */
-export function linearEnvValue(name: string): string | undefined {
-  try {
-    return factoryEnvValue(credentialRoot(), name);
-  } catch {
-    const exported = process.env[name];
-    return exported === "" ? undefined : exported;
-  }
-}
 
 /** The variables the identity needs that are unset. */
 export function missingLinearVariables(
   identity: LinearIdentity,
-  env: EnvLookup = linearEnvValue,
+  env: EnvLookup = credentialValue,
 ): string[] {
   return LINEAR_IDENTITY_VARIABLES[identity.mode].filter((name) => !env(name));
 }
 
-/** Exchange an OAuth application's client id and secret for a token that acts as the app. */
-export async function mintLinearAppToken(
+async function mintLinearAppToken(
   clientId: string,
   clientSecret: string,
-  doFetch: FetchLike = fetch,
+  doFetch: FetchLike,
 ): Promise<string> {
-  const res = await doFetch(`${new URL(LINEAR_API_URL()).origin}/oauth/token`, {
+  const res = await doFetch(LINEAR_TOKEN_URL, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -60,27 +54,31 @@ export async function mintLinearAppToken(
       client_secret: clientSecret,
     }).toString(),
   });
+  const text = await res.text().catch(() => "");
   if (!res.ok) {
     throw new JigsError(
-      `Linear refused a client-credentials token (HTTP ${res.status}): ${await res.text()}`,
-      "check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in the factory repo's .env against the Linear OAuth application, and that client credentials are enabled on it, then: `pnpm exec jigs service restart`",
+      `Linear refused a client-credentials token (HTTP ${res.status}): ${text.replaceAll(clientSecret, "[redacted]")}`,
+      `check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the Linear OAuth application, and that client credentials are enabled on it, then: \`${RESTART_SERVICE}\``,
     );
   }
-  const body = (await res.json()) as { access_token?: unknown };
+  let body: { access_token?: unknown };
+  try {
+    body = JSON.parse(text) as typeof body;
+  } catch {
+    throw new JigsError(`Linear's token response (HTTP ${res.status}) was not JSON`);
+  }
   if (typeof body.access_token !== "string" || body.access_token === "") {
     throw new JigsError("Linear's token response carried no access_token");
   }
   return body.access_token;
 }
 
-export interface LinearAuth {
+export interface LinearAuth extends ProviderAuth {
   identity: LinearIdentity;
-  /** The `authorization` header value for a GraphQL call, minted as needed. */
-  authorization(): Promise<string>;
   /** The bare credential: the API key, or the app's token, minted as needed. */
-  token(): Promise<string>;
-  /** Forget a minted token, so the next call mints a fresh one. */
-  invalidate(): void;
+  bearer(): Promise<string>;
+  /** App mode only: forget `stale` if it is still the cached token, so the next call mints afresh. */
+  invalidate?(stale: string): void;
 }
 
 export interface LinearAuthDeps {
@@ -89,47 +87,35 @@ export interface LinearAuthDeps {
 }
 
 export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps = {}): LinearAuth {
-  const env = deps.env ?? linearEnvValue;
-  const required = (name: string): string => {
-    const value = env(name);
-    if (value === undefined || value === "") {
-      throw new JigsError(
-        `${name} is not set, and linear.identity mode "${identity.mode}" needs it`,
-        `set ${name} in the factory repo's .env, then: \`pnpm exec jigs service restart\``,
-      );
-    }
-    return value;
-  };
+  const env = deps.env ?? credentialValue;
+  const required = (name: string): string =>
+    requireCredential(name, `linear.identity mode "${identity.mode}"`, env);
+  if (identity.mode === "key") {
+    return { identity, bearer: async () => required("LINEAR_API_KEY") };
+  }
   // The token Linear issues lasts 30 days; its expires_in is not trusted, and
-  // a 401 is what retires it.
+  // a rejection is what retires it.
   let cached: string | null = null;
-  // The mint in flight, so concurrent calls share one token.
   let minting: Promise<string> | null = null;
-  const token = async (): Promise<string> => {
-    if (identity.mode === "key") return required("LINEAR_API_KEY");
-    if (cached !== null) return cached;
-    if (minting === null) {
-      minting = mintLinearAppToken(
-        required("LINEAR_CLIENT_ID"),
-        required("LINEAR_CLIENT_SECRET"),
-        deps.fetch,
-      ).finally(() => {
-        minting = null;
-      });
-    }
-    const pending = minting;
-    cached = await pending;
-    return cached;
-  };
   return {
     identity,
-    token,
-    async authorization(): Promise<string> {
-      const credential = await token();
-      return identity.mode === "key" ? credential : `Bearer ${credential}`;
+    async bearer(): Promise<string> {
+      if (cached !== null) return cached;
+      if (minting === null) {
+        minting = mintLinearAppToken(
+          required("LINEAR_CLIENT_ID"),
+          required("LINEAR_CLIENT_SECRET"),
+          deps.fetch ?? fetch,
+        ).finally(() => {
+          minting = null;
+        });
+      }
+      cached = await minting;
+      return cached;
     },
-    invalidate(): void {
-      cached = null;
+    // A late rejection of an old token must not discard one minted since.
+    invalidate(stale: string): void {
+      if (cached === stale) cached = null;
     },
   };
 }
@@ -148,23 +134,14 @@ export function resolveLinearIdentity(root?: string): LinearIdentity {
   return readFactoryConfig(dir).linear.identity;
 }
 
-const processAuth = new Map<LinearIdentity["mode"], LinearAuth>();
-let processIdentity: LinearIdentity | null = null;
+let processAuth: LinearAuth | null = null;
 
 /** This process's Linear credential, cached once per process. */
 export function linearAuthFor(): LinearAuth {
-  processIdentity ??= resolveLinearIdentity();
-  let auth = processAuth.get(processIdentity.mode);
-  if (!auth) {
-    auth = createLinearAuth(processIdentity);
-    processAuth.set(processIdentity.mode, auth);
-  }
-  return auth;
+  processAuth ??= createLinearAuth(resolveLinearIdentity());
+  return processAuth;
 }
 
-/** Drop cached credentials so the next call re-reads configuration. */
-export function resetLinearAuth(): void {
-  processAuth.clear();
-  processIdentity = null;
-  setCredentialRoot(null);
-}
+onProviderReset(() => {
+  processAuth = null;
+});

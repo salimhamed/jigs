@@ -1,5 +1,6 @@
 import { factoryEnvValue } from "../../config/factory-env.ts";
 import { locateFactoryRoot } from "../../config/factory-root.ts";
+import { factorySlug } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { RunFacts } from "../../steps/runtime/run-state.ts";
@@ -386,7 +387,7 @@ async function withDatabase<T>(
       "set it in the factory's .env\nresource commands read the database directly, without the service",
     );
   }
-  const { connectRegistry, factorySlug } = await modules();
+  const { connectRegistry } = await modules();
   const sql = (deps.connect ?? ((value) => connectRegistry(value, { max: 1 })))(url);
   try {
     return await action(sql, factorySlug(root));

@@ -1,10 +1,5 @@
 import type { WakeNote } from "./service/wake-note.ts";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "./workflow/linear/halt-for-human.ts";
-import { TICKET_TOKEN_PREFIX } from "./workflow/linear/ticket-token.ts";
-import {
-  PULL_REQUEST_TOKEN_PREFIX,
-  type PullRequestRef,
-} from "./workflow/pull-requests/pull-request.ts";
+import { describeHookToken, type HookKind } from "./workflow/hook-tokens.ts";
 import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-requests/snapshot.ts";
 
 /**
@@ -15,7 +10,7 @@ import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-request
  */
 export interface RunSuspension {
   token: string;
-  kind: "pull-request" | "needs-human" | "external";
+  kind: Exclude<HookKind, "ticket-claim"> | "external";
   /** What the run is waiting for, in the words an operator acts on. */
   reason: string;
   /** Where to go and act: the pull request, or the ticket comment that asked. */
@@ -48,54 +43,7 @@ export interface RunSuspension {
  * ticket an operator knows rather than the issue UUID inside the token.
  */
 export function describeSuspension(token: string, ticket?: string | null): RunSuspension | null {
-  if (token.startsWith(TICKET_TOKEN_PREFIX)) return null;
-  const pr = prFromToken(token);
-  if (pr !== null) {
-    return {
-      token,
-      kind: "pull-request",
-      reason: `waiting for pull request activity on ${pr.slug}`,
-      url: pr.url,
-    };
-  }
-  // The prefix alone decides the kind: a marker jigs minted is a halt even
-  // when the rest of it is unreadable, and calling that external would point
-  // an operator at the wrong thing to do about it.
-  if (token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) {
-    const where = ticket ?? needsHumanParts(token)?.issueId;
-    return {
-      token,
-      kind: "needs-human",
-      reason:
-        where === undefined
-          ? `waiting for a human reply, on a ticket this halt marker does not name (${token})`
-          : `waiting for a human reply on ${where}`,
-    };
-  }
-  return { token, kind: "external", reason: `waiting for an external event (${token})` };
-}
-
-/** `github:pr:owner/repo#N` as the two things an operator needs from it. A
- *  slug this shape does not fit names no page to link to. */
-export function prFromToken(
-  token: string,
-): { slug: string; url?: string; pr?: PullRequestRef } | null {
-  if (!token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) return null;
-  const slug = token.slice(PULL_REQUEST_TOKEN_PREFIX.length);
-  const parsed = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug);
-  if (parsed === null) return { slug };
-  const [, owner, repo, number] = parsed;
-  if (owner === undefined || repo === undefined || number === undefined) return { slug };
-  return {
-    slug,
-    url: `https://github.com/${owner}/${repo}/pull/${number}`,
-    pr: { owner, repo, number: Number(number) },
-  };
-}
-
-/** `jigs:needs-human:<issue>:<comment>` — the halt marker, taken apart. */
-export function needsHumanParts(token: string): { issueId: string; commentId: string } | null {
-  if (!token.startsWith(NEEDS_HUMAN_TOKEN_PREFIX)) return null;
-  const [issueId, commentId] = token.slice(NEEDS_HUMAN_TOKEN_PREFIX.length).split(":");
-  return issueId === undefined || commentId === undefined ? null : { issueId, commentId };
+  const { kind, reason, url } = describeHookToken(token, ticket);
+  if (kind === "ticket-claim") return null;
+  return { token, kind, reason, ...(url === undefined ? {} : { url }) };
 }

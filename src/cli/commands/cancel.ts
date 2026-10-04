@@ -1,6 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import { TICKET_TOKEN_PREFIX } from "../../workflow/linear/ticket-token.ts";
-import { PULL_REQUEST_TOKEN_PREFIX } from "../../workflow/pull-requests/pull-request.ts";
+import { describeHookToken, parseHookToken } from "../../workflow/hook-tokens.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import { detail, displayPath, hint, indent, runHeading } from "../output.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
@@ -103,19 +102,22 @@ export function hookSubject(
   token: string,
   run: Pick<CancelledRun, "ticket" | "resources"> = {},
 ): { kind: keyof typeof HOLDING; label: string } {
-  if (token.startsWith(TICKET_TOKEN_PREFIX)) {
+  const parsed = parseHookToken(token);
+  if (parsed?.kind === "ticket-claim") {
     // Without the identifier the run was launched with, the issue ID is all the token has.
     const label =
       run.ticket == null
-        ? `the Linear ticket ${detail(token.slice(TICKET_TOKEN_PREFIX.length))}`
+        ? `the Linear ticket ${detail(parsed.issueId)}`
         : `Linear ticket ${run.ticket}`;
     return { kind: "claim", label };
   }
-  if (!token.startsWith(PULL_REQUEST_TOKEN_PREFIX)) return { kind: "other", label: token };
-  const slug = token.slice(PULL_REQUEST_TOKEN_PREFIX.length);
+  if (parsed?.kind !== "pull-request") {
+    return { kind: "other", label: describeHookToken(token, run.ticket).label };
+  }
   // The token lowercases the repository; the recorded pull request keeps its real name.
   const recorded = run.resources?.find(
-    (resource) => resource.kind === "pull-request" && resource.identity.toLowerCase() === slug,
+    (resource) =>
+      resource.kind === "pull-request" && resource.identity.toLowerCase() === parsed.slug,
   );
-  return { kind: "pull-request", label: `pull request ${recorded?.identity ?? slug}` };
+  return { kind: "pull-request", label: `pull request ${recorded?.identity ?? parsed.slug}` };
 }

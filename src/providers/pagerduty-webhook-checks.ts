@@ -1,12 +1,13 @@
+import type { Check, CheckResult } from "../checks/check.ts";
 import { readFactoryConfig, type WebhooksConfig } from "../config/factory-config.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { PagerDutyApiError, type PagerDutyWebhookSubscription } from "../providers/pagerduty.ts";
-import type { Check, CheckResult } from "./catalog.ts";
-import { RESTART_SERVICE } from "./core.ts";
+import { RESTART_SERVICE } from "./credentials.ts";
+import { ProviderApiError } from "./http.ts";
+import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";
 
 /** The PagerDuty lookups the webhook check makes. */
 export interface PagerDutyWebhookProbes {
@@ -69,8 +70,7 @@ async function checkSubscription(
   try {
     found = await probes.subscriptions(url);
   } catch (err) {
-    const forbidden =
-      err instanceof PagerDutyApiError && (err.status === 401 || err.status === 403);
+    const forbidden = err instanceof ProviderApiError && (err.status === 401 || err.status === 403);
     return {
       ok: false,
       reason: `could not list PagerDuty webhook subscriptions: ${err instanceof Error ? err.message : String(err)}`,

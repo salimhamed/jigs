@@ -1,23 +1,24 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { GitHubApiError } from "../../providers/github-api.ts";
 import { resetGithubAuth } from "../../providers/github-auth.ts";
+import { GitHubApiError } from "../../providers/github-http.ts";
+import { useGithubClient } from "../../providers/test-fixtures.ts";
+import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { callGitHub } from "./call.ts";
 
-let fetchMock: ReturnType<typeof vi.fn>;
+let calls: FetchCall[];
 let reply: () => Response;
 
 beforeEach(() => {
-  vi.stubEnv("GITHUB_API_URL", "http://github.test");
   vi.stubEnv("GITHUB_TOKEN", "ghp-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
-  fetchMock = vi.fn(async () => reply());
-  vi.stubGlobal("fetch", fetchMock);
+  const fake = fakeFetch(() => reply());
+  calls = fake.calls;
+  useGithubClient({ fetch: fake.fetch });
 });
 afterEach(() => {
   resetGithubAuth();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
 });
 
 test("any endpoint is called with the factory's token and returns GitHub's JSON", async () => {
@@ -29,11 +30,11 @@ test("any endpoint is called with the factory's token and returns GitHub's JSON"
     { body: { reviewers: ["octocat"] } },
   );
   expect(body).toEqual({ number: 7, requested_reviewers: [{ login: "octocat" }] });
-  const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe("http://github.test/repos/acme/app/pulls/7/requested_reviewers");
-  expect(init.method).toBe("POST");
-  expect(new Headers(init.headers).get("authorization")).toBe("Bearer ghp-test");
-  expect(JSON.parse(String(init.body))).toEqual({ reviewers: ["octocat"] });
+  const call = calls[0] as FetchCall;
+  expect(call.url.href).toBe("https://api.github.com/repos/acme/app/pulls/7/requested_reviewers");
+  expect(call.method).toBe("POST");
+  expect(call.headers.authorization).toBe("Bearer ghp-test");
+  expect(call.json).toEqual({ reviewers: ["octocat"] });
 });
 
 test("a no-content answer returns undefined", async () => {
@@ -71,5 +72,5 @@ test("a path without a leading slash is refused before any request", async () =>
   await expect(callGitHub("GET", "repos/acme/app/pulls")).rejects.toThrow(
     "GitHub path repos/acme/app/pulls must start with /",
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(calls).toHaveLength(0);
 });

@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
-import { type Check, failedCheck, formatFailures, runChecks } from "./catalog.ts";
+import { formatFailures, runChecks } from "./catalog.ts";
+import { type Check, failedCheck } from "./check.ts";
 import { doctorChecks, jitChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
 const passing = (id: string): Check => ({
@@ -139,6 +140,80 @@ test("preflight installs only the harnesses declared by the workflow", () => {
   expect(ids).toContain("harness.claude-cli");
   expect(ids).not.toContain("harness.codex-cli");
   expect(ids).not.toContain("harness.pi-cli");
+});
+
+test("preflight checks the model source each Pi agent carries, each check once", () => {
+  const ids = preflightIds({
+    agents: {
+      a: harnesses.pi(models.openrouter("x", { apiKeyEnv: "TEAM_KEY" })),
+      b: harnesses.pi(models.openaiCodex("gpt")),
+      c: harnesses.pi(models.openrouter("y", { apiKeyEnv: "TEAM_KEY" })),
+    },
+  });
+  expect(ids).toEqual(["harness.pi-cli", "model.team-key", "harness.pi-openai-codex-auth"]);
+});
+
+test("preflight checks a Pi agent's OpenAI-compatible endpoint and key", () => {
+  const ids = preflightIds({
+    agents: {
+      local: harnesses.pi(
+        models.openaiCompatible({
+          name: "studio",
+          baseUrl: "http://localhost:1234/v1",
+          model: "local",
+          apiKeyEnv: "STUDIO_TOKEN",
+        }),
+      ),
+    },
+  });
+  expect(ids).toEqual(["harness.pi-cli", "model.openai-compatible-studio", "model.studio-token"]);
+});
+
+test("preflight lists a credential shared by a model and a Pi agent once", () => {
+  const ids = preflightIds({
+    agents: { a: harnesses.pi(models.openrouter("x")) },
+    models: [models.openrouter("y")],
+  });
+  expect(ids.filter((id) => id === "model.openrouter-api-key")).toHaveLength(1);
+});
+
+test("doctor checks the model source each Pi agent carries and names the workflows", async () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  vi.stubEnv("TEAM_KEY", "");
+  const checks = doctorChecks({
+    one: {
+      requires: { agents: { a: harnesses.pi(models.openrouter("x", { apiKeyEnv: "TEAM_KEY" })) } },
+    },
+    two: {
+      requires: {
+        agents: {
+          b: harnesses.pi(models.openrouter("y", { apiKeyEnv: "TEAM_KEY" })),
+          c: harnesses.pi(models.openaiCodex("gpt")),
+        },
+      },
+    },
+  });
+  const ids = checks.map((check) => check.id);
+  expect(ids.filter((id) => id.startsWith("harness.") || id.startsWith("model."))).toEqual([
+    "harness.pi-cli",
+    "model.team-key",
+    "harness.pi-openai-codex-auth",
+  ]);
+  const key = (await runChecks(checks.filter((check) => check.id === "model.team-key"))).checks;
+  expect(key).toEqual([
+    expect.objectContaining({
+      ok: false,
+      reason: expect.stringContaining("(needed by workflows one, two)"),
+    }),
+  ]);
+});
+
+test("doctor checks the model sources a workflow declares", () => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  const ids = doctorChecks({
+    triage: { requires: { models: [models.openrouter("m", { apiKeyEnv: "TEAM_KEY" })] } },
+  }).map((check) => check.id);
+  expect(ids).toContain("model.team-key");
 });
 
 test("model-source requirements check the descriptor's exact credential", () => {

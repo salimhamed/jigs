@@ -1,5 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { SlackApiError } from "../../providers/slack.ts";
+import { useSlackClient } from "../../providers/test-fixtures.ts";
+import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { callSlack } from "./call.ts";
 
 const CHANNEL = "C0C5EUZ7P9Q";
@@ -7,25 +9,22 @@ const TS = "1790723478.961719";
 
 type Route = (params: URLSearchParams) => unknown;
 let routes: Record<string, Route>;
-let fetchMock: ReturnType<typeof vi.fn>;
+let calls: FetchCall[];
 
 beforeEach(() => {
-  vi.stubEnv("SLACK_API_URL", "http://slack.test/api");
-  vi.stubEnv("SLACK_BOT_TOKEN", "xoxb-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
   routes = {};
-  fetchMock = vi.fn(async (url: string, init: RequestInit) => {
-    const method = url.slice(url.lastIndexOf("/") + 1);
+  const fake = fakeFetch((call) => {
+    const method = call.url.pathname.slice(call.url.pathname.lastIndexOf("/") + 1);
     const route = routes[method];
     if (route === undefined) throw new Error(`unexpected ${method}`);
-    return new Response(JSON.stringify(route(new URLSearchParams(String(init.body)))));
+    return new Response(JSON.stringify(route(new URLSearchParams(call.body))));
   });
-  vi.stubGlobal("fetch", fetchMock);
+  calls = fake.calls;
+  useSlackClient({ fetch: fake.fetch, env: () => "xoxb-test" });
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
 });
 
 test("any method is called as the bot, with non-string params JSON-encoded", async () => {
@@ -43,8 +42,7 @@ test("any method is called as the bot, with non-string params JSON-encoded", asy
     thread_ts: undefined,
   });
   expect(body).toEqual({ ok: true, channel: CHANNEL, ts: TS, text: "Shipped" });
-  const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
-  expect(new Headers(init.headers).get("authorization")).toBe("Bearer xoxb-test");
+  expect(calls[0]?.headers.authorization).toBe("Bearer xoxb-test");
   expect(Object.fromEntries(sent ?? [])).toEqual({
     channel: CHANNEL,
     ts: TS,

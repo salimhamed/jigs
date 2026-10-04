@@ -15,8 +15,8 @@ import {
   postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
-import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
+import { GitHubApiError } from "../../providers/github-http.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";

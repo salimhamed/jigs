@@ -8,9 +8,17 @@ import {
   type PagerDutyIdentity,
   readFactoryConfig,
 } from "../config/factory-config.ts";
-import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
-import { credentialRoot } from "./credential-root.ts";
+import {
+  credentialRoot,
+  credentialValue,
+  type EnvLookup,
+  onProviderReset,
+  RESTART_SERVICE,
+  requireCredential,
+  SERVICE_ENV_FILE,
+} from "./credentials.ts";
+import type { ProviderAuth } from "./http.ts";
 
 export const PAGERDUTY_TOKEN_URL = "https://identity.pagerduty.com/oauth/token";
 
@@ -30,20 +38,9 @@ export const PAGERDUTY_IDENTITY_VARIABLES = [
   "PAGERDUTY_CLIENT_SECRET",
 ] as const;
 
-export type EnvLookup = (name: string) => string | undefined;
 type FetchLike = typeof fetch;
 
-/** A PagerDuty credential from the factory's `.env`, or the shell outside a factory. */
-export function pagerDutyEnvValue(name: string): string | undefined {
-  try {
-    return factoryEnvValue(credentialRoot(), name);
-  } catch {
-    const exported = process.env[name];
-    return exported === "" ? undefined : exported;
-  }
-}
-
-export function missingPagerDutyVariables(env: EnvLookup = pagerDutyEnvValue): string[] {
+export function missingPagerDutyVariables(env: EnvLookup = credentialValue): string[] {
   return PAGERDUTY_IDENTITY_VARIABLES.filter((name) => !env(name));
 }
 
@@ -91,7 +88,7 @@ async function mintPagerDutyToken(
     const detail = await refusal(res, clientSecret);
     throw new JigsError(
       `PagerDuty refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
-      `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in the factory repo's .env against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`pnpm exec jigs service restart\``,
+      `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`${RESTART_SERVICE}\``,
     );
   }
   let body: { access_token?: unknown; expires_in?: unknown };
@@ -107,7 +104,7 @@ async function mintPagerDutyToken(
   return { token: body.access_token, expiresAt: now() + lifetimeSeconds * 1000 };
 }
 
-export interface PagerDutyAuth {
+export interface PagerDutyAuth extends ProviderAuth {
   identity: PagerDutyIdentity;
   /** The bearer token for a REST call, minted as needed so it lives `minLifetimeMs` longer. */
   bearer(minLifetimeMs?: number): Promise<string>;
@@ -127,18 +124,9 @@ export function createPagerDutyAuth(
   identity: PagerDutyIdentity,
   deps: PagerDutyAuthDeps = {},
 ): PagerDutyAuth {
-  const env = deps.env ?? pagerDutyEnvValue;
+  const env = deps.env ?? credentialValue;
   const now = deps.now ?? Date.now;
-  const required = (name: string): string => {
-    const value = env(name);
-    if (value === undefined || value === "") {
-      throw new JigsError(
-        `${name} is not set, and the PagerDuty identity needs it`,
-        `set ${name} in the factory repo's .env, then: \`pnpm exec jigs service restart\``,
-      );
-    }
-    return value;
-  };
+  const required = (name: string): string => requireCredential(name, "the PagerDuty identity", env);
   let cached: MintedToken | null = null;
   let minting: Promise<MintedToken> | null = null;
   return {
@@ -186,7 +174,6 @@ export function pagerDutyAuthFor(): PagerDutyAuth {
   return processAuth;
 }
 
-/** Drop the cached credential so the next call re-reads configuration. */
-export function resetPagerDutyAuth(): void {
+onProviderReset(() => {
   processAuth = null;
-}
+});

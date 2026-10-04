@@ -3,14 +3,22 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
-import type { AppIdentity, GithubIdentity, ResolvedAppIdentity } from "../config/factory-config.ts";
+import type { Check, CheckResult } from "../checks/check.ts";
+import {
+  type AppIdentity,
+  type GithubIdentity,
+  type ResolvedAppIdentity,
+  readFactoryConfig,
+} from "../config/factory-config.ts";
+import { factoryRoot } from "../config/factory-root.ts";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
+import { getAuthenticatedUser } from "./github.ts";
 import {
   fetchAppInstallation,
   fetchAppRegistration,
   readAppPrivateKey,
-} from "../providers/github-auth.ts";
-import type { Check, CheckResult } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+  resolveGithubIdentities,
+} from "./github-auth.ts";
 
 // What jigs needs of an installation, and why.
 interface RequiredPermission {
@@ -50,7 +58,7 @@ export interface GithubIdentityProbes {
   registration(identity: AppIdentity, key: string): Promise<{ slug: string }>;
 }
 
-export const realGithubIdentityProbes = (
+const realGithubIdentityProbes = (
   whoami: () => Promise<{ login: string }>,
 ): GithubIdentityProbes => ({
   whoami,
@@ -204,4 +212,22 @@ function appCheck(identity: AppIdentity, webhooks: boolean, probes: GithubIdenti
       };
     },
   };
+}
+
+// Which credential jigs holds and what it is allowed to do with it. Both come
+// from `jigs.config.ts`; where there is none to read, the defaults are what a
+// factory would get, and the credential is still worth checking.
+export function githubChecks(): Check[] {
+  const probes = realGithubIdentityProbes(getAuthenticatedUser);
+  try {
+    const { webhooks } = readFactoryConfig(factoryRoot());
+    return githubIdentityChecks(resolveGithubIdentities(), probes, process.env, {
+      webhooks: webhooks?.github.enabled ?? false,
+    });
+  } catch {
+    // A configuration that cannot be read is the binding checks' diagnosis;
+    // the credential is still worth checking, against what a factory that
+    // states nothing would get.
+    return githubIdentityChecks([{ mode: "pat" }], probes);
+  }
 }

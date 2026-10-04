@@ -1,14 +1,10 @@
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { locateTemplates, packageRoot } from "./templates.ts";
+import { locateTemplates, packageRoot } from "../build/templates.ts";
 
 // Names jigs reads that a factory never puts in .env.
 const NOT_IN_ENV_EXAMPLE = new Set([
-  // Test seams that point a client at a fake server.
-  "GITHUB_API_URL",
-  "LINEAR_API_URL",
-  "SLACK_API_URL",
   // Set by jigs on the service process.
   "JIGS_DASHBOARD_PORT",
   "JIGS_FACTORY_ROOT",

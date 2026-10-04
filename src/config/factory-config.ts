@@ -4,10 +4,11 @@ import path from "node:path";
 
 import { z } from "zod";
 import { JigsError } from "../errors.ts";
-import { factorySlug } from "../steps/workspaces/layout.ts";
 import { agentsSchema } from "../workflow/factory.ts";
+import { PROVIDERS, perProvider, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
 import { type MergeApproval, mergeApprovalSchema } from "../workflow/pull-requests/policy.ts";
 import { releaseSchema } from "../workflow/runtime/release.ts";
+import { factorySlug } from "./paths.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
 
@@ -58,12 +59,7 @@ const serviceSchema = z.strictObject({
   // only the floor under a lost delivery.
   pollIntervalSeconds: z.preprocess(
     (section) => section ?? {},
-    z.strictObject({
-      github: pollIntervalSchema,
-      linear: pollIntervalSchema,
-      slack: pollIntervalSchema,
-      pagerduty: pollIntervalSchema,
-    }),
+    z.strictObject(perProvider(PROVIDERS, pollIntervalSchema)),
   ),
 });
 
@@ -74,9 +70,7 @@ const webhookProviderSchema = z.strictObject({ enabled: z.boolean() }).default({
 
 export const webhooksSchema = z.strictObject({
   url: z.url(),
-  github: webhookProviderSchema,
-  linear: webhookProviderSchema,
-  pagerduty: webhookProviderSchema,
+  ...perProvider(WEBHOOK_PROVIDERS, webhookProviderSchema),
 });
 
 // Who jigs is on GitHub. `pat` is the operator's own token, so every pull
@@ -240,7 +234,8 @@ export function installationFor(
   );
 }
 
-const factoryConfigSchema = z.looseObject({
+// Strict so a misspelled section fails instead of falling back to defaults.
+const factoryConfigSchema = z.strictObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL), and
   // which providers send them. Absent, the service only polls.
@@ -261,12 +256,16 @@ const factoryConfigSchema = z.looseObject({
   release: releaseSchema.optional(),
   // Service variables every agent harness receives beyond jigs' base set.
   agents: z.preprocess((section) => section ?? {}, agentsSchema),
+  // The service loads these from the module itself; they are listed only so
+  // the strict root accepts them.
+  workflows: z.unknown().optional(),
+  schedules: z.unknown().optional(),
+  triggers: z.unknown().optional(),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
-export type WebhookProvider = "github" | "linear" | "pagerduty";
 export type SlackConfig = z.output<typeof slackSchema>;
 
 export type GithubIdentity = z.output<typeof githubIdentitySchema>;

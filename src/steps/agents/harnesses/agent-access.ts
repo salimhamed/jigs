@@ -19,7 +19,7 @@ export interface AgentAccessDeps {
 
 const defaultDeps: AgentAccessDeps = {
   github: (target, env) => agentGithubEnv(target, env),
-  linearToken: () => linearAuthFor().token(),
+  linearToken: () => linearAuthFor().bearer(),
   pagerdutyToken: () => pagerDutyAuthFor().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
 };
 

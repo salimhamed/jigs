@@ -1,8 +1,8 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { checkFactoryIntegration } from "../../build/integration.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { checkFactoryIntegration } from "../integration.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type Call, execError, fakeExec, factory as scaffold } from "./test-fixtures.ts";
 import { upFactory } from "./up.ts";

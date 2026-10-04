@@ -8,9 +8,10 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
+import { resetProviderContext } from "../providers/credentials.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
-import { resetLinearAuth } from "../providers/linear-auth.ts";
+import { useGithubClient } from "../providers/test-fixtures.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
@@ -123,12 +124,11 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
   vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
   vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "pd-hook-secret");
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
   resetGithubAuth();
-  resetLinearAuth();
+  resetProviderContext();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -137,7 +137,7 @@ afterEach(() => {
   // again from the data dir above.
   setWorld(undefined);
   resetGithubAuth();
-  resetLinearAuth();
+  resetProviderContext();
 });
 
 const sign = (body: string, secret: string) =>
@@ -365,7 +365,7 @@ test("a signed status delivery resolves every matching PR and routes by base rep
       ]),
     ),
   );
-  vi.stubGlobal("fetch", fetchMock);
+  useGithubClient({ fetch: fetchMock });
   resumeHookMock
     .mockResolvedValueOnce({} as never)
     .mockRejectedValueOnce(new HookNotFoundError("unclaimed"));
@@ -385,7 +385,7 @@ test("a signed status delivery resolves every matching PR and routes by base rep
 
 test("pending status is ignored without a sha lookup", async () => {
   const fetchMock = vi.fn();
-  vi.stubGlobal("fetch", fetchMock);
+  useGithubClient({ fetch: fetchMock });
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
   const res = await postStatus(statusPayload("pending"));
@@ -397,7 +397,7 @@ test("pending status is ignored without a sha lookup", async () => {
 });
 
 test("status with no open PR is dropped without waking a gate", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("[]")));
+  useGithubClient({ fetch: vi.fn().mockResolvedValue(new Response("[]")) });
   const res = await postStatus(statusPayload("success"));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
@@ -405,7 +405,7 @@ test("status with no open PR is dropped without waking a gate", async () => {
 });
 
 test("a status lookup failure is acknowledged as unroutable rather than a 500", async () => {
-  vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new Error("network down")));
+  useGithubClient({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const res = await postStatus(statusPayload("failure"));
   expect(res.status).toBe(404);
@@ -895,6 +895,26 @@ test("a poke that landed is the wake the run's status reports", async () => {
   await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
   expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
+});
+
+test("a poke the World cannot deliver says so instead of calling the wait gone", async () => {
+  runHolding(CLAIM);
+  resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(await res.json()).toEqual({
+    runId: RUN,
+    poked: [{ token: CLAIM, outcome: "failed", error: "Error: database unavailable" }],
+  });
+});
+
+test("a poke whose hook is gone reports it gone", async () => {
+  runHolding(CLAIM);
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: CLAIM, outcome: "gone" }] });
 });
 
 test("cancel reports observed hook release, retained worktrees, and no queue-deletion count", async () => {

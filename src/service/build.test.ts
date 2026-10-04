@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { generateFactoryIntegration } from "../cli/integration.ts";
+import { generateFactoryIntegration } from "../build/integration.ts";
 import { GENERATED_DIR, prepare } from "./build.ts";
 
 const factory = () => {

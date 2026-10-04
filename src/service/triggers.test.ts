@@ -5,8 +5,10 @@ import { z } from "zod";
 import type { CheckReport } from "../checks/index.ts";
 import { coerceInputs, splitInputs } from "../cli/commands/run.ts";
 import { hintLines } from "../cli/output.ts";
+import * as slackApi from "../providers/slack.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { eventTriggerId, runIdTime } from "./runs.ts";
+import { slackSources } from "./slack-sources.ts";
 import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 import type { PreparedRun } from "./trigger.ts";
@@ -38,26 +40,32 @@ const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
 // A source whose provider hands back whatever the test queued, and whose
-// pushed events are `{ page }` objects.
-function fakeSource() {
+// pushed events are `{ page }` objects. Its cursor is when it last polled, and
+// `polls` records where each poll began reading.
+function fakeSource(now: () => Date = () => T0) {
   const queued: SourceOccurrence[] = [];
   const polls: Date[] = [];
-  const source: Source<{ service: string }> = {
+  const source: Source<{ service: string }, string> = {
     provider: "github",
     params: z.object({ service: z.string() }),
+    cursor: z.iso.datetime(),
     sampleInputs: { page: "P0" },
     occurrence: (inputs) => {
       if (typeof inputs.page !== "string") throw new Error("no page id in the event");
       return inputs.page;
     },
-    poll: async (_params, since) => {
-      polls.push(since);
-      return queued.splice(0);
+    poll: async (_params, cursor, floor) => {
+      const through = now();
+      polls.push(
+        new Date(Math.max(cursor === undefined ? 0 : Date.parse(cursor), floor.getTime())),
+      );
+      return { occurrences: queued.splice(0), cursor: through.toISOString() };
     },
     fromPush: async (_params, event) => {
       const page = (event as { page?: unknown }).page;
       return typeof page === "string" ? { inputs: { page }, at: minutes(1) } : null;
     },
+    describe: (inputs) => ({ kind: "github", label: `page ${String(inputs.page)}` }),
   };
   return { source, queued, polls };
 }
@@ -130,10 +138,12 @@ function harness(
     modes?: StartMode[];
     store?: TriggerStore;
     memory?: ReturnType<typeof memoryStore>;
+    /** Sources beside the fake one. */
+    sources?: SourceRegistry;
   } = {},
 ) {
-  const { source, queued, polls } = fakeSource();
   let clock = T0;
+  const { source, queued, polls } = fakeSource(() => clock);
   const memory = options.memory ?? memoryStore(() => clock);
   const lines: string[] = [];
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
@@ -141,7 +151,7 @@ function harness(
   const modes = options.modes ?? [];
   const cancelled: string[] = [];
   const cancelFailures = { before: 0, after: 0 };
-  const sources: SourceRegistry = { "fake.pages": source };
+  const sources: SourceRegistry = { "fake.pages": source, ...options.sources };
   const held = () => runs.filter((run) => run.inWorld);
   const deps = {
     store: options.store ?? memory.store,
@@ -410,15 +420,17 @@ test("an occurrence stamped in the second its trigger was enabled is admitted, a
   expect(h.memory.state("pages", "SAME")).toMatchObject({ state: "started", occurredAt: T0 });
 });
 
-test("after downtime, occurrences past the lookback are skipped and recent ones start", async () => {
+test("after downtime, the source reads from the lookback, past it is skipped and recent ones start", async () => {
   const h = harness({ trigger: { ...pagesTrigger, lookbackMinutes: 30 } });
   await h.memory.store.enable("pages", minutes(-600));
+  await h.memory.store.advance("pages", minutes(-500).toISOString());
   h.at(minutes(0));
   await h.engine.arm();
+  // A source may hand back occurrences from behind its floor, as PagerDuty's overlap does.
   h.queued.push(occurrenceAt("STALE", minutes(-45)), occurrenceAt("FRESH", minutes(-10)));
   await h.engine.poll("pages");
 
-  expect(h.polls).toEqual([minutes(-600)]);
+  expect(h.polls).toEqual([minutes(-30)]);
   expect(h.memory.state("pages", "STALE")?.state).toBe("skipped");
   expect(h.memory.state("pages", "FRESH")?.state).toBe("started");
   expect(h.starts).toHaveLength(1);
@@ -445,7 +457,21 @@ test("each poll reads from where the last one began", async () => {
   expect(h.polls).toEqual([T0, minutes(5)]);
 });
 
-test("a failed poll leaves the window where it was", async () => {
+test("a stored cursor the source does not recognise reads from the floor", async () => {
+  const h = harness();
+  await h.memory.store.enable("pages", T0);
+  await h.memory.store.advance("pages", { channel: "not this source's" });
+  await h.engine.arm();
+  h.at(minutes(5));
+  await h.engine.poll("pages");
+  expect(h.polls).toEqual([T0]);
+  expect(h.memory.marks.get("pages")?.cursor).toBe(minutes(5).toISOString());
+  expect(h.lines).toContain(
+    "[trigger] pages reads from its lookback: its stored cursor is not one it wrote",
+  );
+});
+
+test("a failed poll leaves the cursor where it was", async () => {
   const h = harness();
   await h.engine.arm();
   const poll = h.sources["fake.pages"] as Source;
@@ -1087,7 +1113,7 @@ test("an occurrence the source cannot key is passed over, not held", async () =>
   );
 });
 
-test("a window held for an unrecorded occurrence never reaches back past the lookback", async () => {
+test("a cursor held for an unrecorded occurrence never reaches back past the lookback", async () => {
   const memory = memoryStore();
   const failing: TriggerStore = {
     ...memory.store,
@@ -1097,11 +1123,75 @@ test("a window held for an unrecorded occurrence never reaches back past the loo
   };
   const h = harness({ store: failing });
   await memory.store.enable("pages", minutes(-600));
+  await memory.store.advance("pages", minutes(-300).toISOString());
   await h.engine.arm();
-  h.queued.push(occurrenceAt("P1", minutes(-100)));
-  await h.engine.poll("pages");
-  await h.engine.poll("pages");
-  expect(h.polls).toEqual([minutes(-600), minutes(-60)]);
+  for (let poll = 0; poll < 2; poll += 1) {
+    h.queued.push(occurrenceAt("P1", minutes(-30)));
+    await h.engine.poll("pages");
+  }
+  expect(h.polls).toEqual([minutes(-60), minutes(-60)]);
+  expect(memory.marks.get("pages")?.cursor).toBe(minutes(-300).toISOString());
+  expect(h.lines).toContain("[trigger] pages: 1 not recorded, reading them again next poll");
+});
+
+test("a Slack channel that fails one poll holds back only itself, and its message starts on the next", async () => {
+  const message = (at: Date) => ({
+    type: "message",
+    user: "U0HUMAN01",
+    ts: (at.getTime() / 1000).toFixed(6),
+  });
+  const first = message(minutes(7));
+  const second = message(minutes(5));
+  const channels: Record<string, Array<ReturnType<typeof message>>> = {
+    C0FIRST01: [first],
+    C0SECOND1: [second],
+  };
+  const reads: Array<[string, string]> = [];
+  let failing = true;
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(slackApi, "slackBot").mockResolvedValue({
+    userId: "U0BOT0001",
+    botId: "B0BOT0001",
+    user: "jigs",
+    team: "T",
+    scopes: [],
+  });
+  vi.spyOn(slackApi, "slackHistory").mockImplementation(async (channel, { oldest = "" }) => {
+    reads.push([channel, oldest]);
+    if (channel === "C0SECOND1" && failing) {
+      failing = false;
+      throw new slackApi.SlackApiError("conversations.history", "ratelimited");
+    }
+    return (channels[channel] ?? []).filter((message) => Number(message.ts) > Number(oldest));
+  });
+  try {
+    let clock = () => T0;
+    const h = harness({
+      sources: slackSources(() => clock()),
+      trigger: {
+        workflow: "respond",
+        source: { kind: "slack.messages", params: { channels: ["C0FIRST01", "C0SECOND1"] } },
+        inputs: { page: "slack", team: "infra" },
+      },
+    });
+    clock = h.deps.now;
+    const started = () => h.starts.map((start) => (start.inputs as { channel: string }).channel);
+    await h.engine.arm();
+    h.at(minutes(10));
+    await h.engine.poll("pages");
+    expect(started()).toEqual(["C0FIRST01"]);
+
+    h.at(minutes(20));
+    await h.engine.poll("pages");
+    expect(started()).toEqual(["C0FIRST01", "C0SECOND1"]);
+    const ts = (at: Date) => (at.getTime() / 1000).toFixed(6);
+    expect(reads.slice(2)).toEqual([
+      ["C0FIRST01", ts(minutes(10))],
+      ["C0SECOND1", ts(T0)],
+    ]);
+  } finally {
+    vi.restoreAllMocks();
+  }
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {
@@ -1293,5 +1383,5 @@ test("the service arms, polls each trigger at once and again on its provider's i
   });
   await vi.waitFor(() => expect(timers.map((timer) => timer.ms).sort()).toEqual([30_000, 300_000]));
   expect(polls).toEqual([T0]);
-  expect(memory.marks.get("pages")).toEqual({ enabledAt: T0, polledThrough: T0 });
+  expect(memory.marks.get("pages")).toEqual({ enabledAt: T0, cursor: T0.toISOString() });
 });

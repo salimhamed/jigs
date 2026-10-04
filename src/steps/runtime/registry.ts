@@ -5,8 +5,8 @@ import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { Pool, type PoolConfig } from "pg";
 import { factoryRoot } from "../../config/factory-root.ts";
+import { factorySlug } from "../../config/paths.ts";
 import type { ResourceRecord, ResourceState } from "../../workflow/runtime/resources.ts";
-import { factorySlug } from "../workspaces/layout.ts";
 
 // Several factories may share one database, so every row names its factory and
 // every query filters on it: a row here is this factory's proof of ownership.

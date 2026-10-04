@@ -17,12 +17,13 @@ export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
   const failures = { attempt: 0, started: 0 };
   const store: TriggerStore = {
     enable: async (trigger, now) => {
-      if (!marks.has(trigger)) marks.set(trigger, { enabledAt: now, polledThrough: now });
+      if (!marks.has(trigger)) marks.set(trigger, { enabledAt: now, cursor: null });
       return marks.get(trigger) as TriggerMarker;
     },
-    advance: async (trigger, polledThrough) => {
+    // Through JSON, as the jsonb column would.
+    advance: async (trigger, cursor) => {
       const mark = marks.get(trigger);
-      if (mark) marks.set(trigger, { ...mark, polledThrough });
+      if (mark) marks.set(trigger, { ...mark, cursor: JSON.parse(JSON.stringify(cursor)) });
     },
     record: async (row) => {
       if (rows.has(key(row.trigger, row.occurrence))) return false;

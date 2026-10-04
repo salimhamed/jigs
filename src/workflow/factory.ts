@@ -13,6 +13,7 @@ import type {
   webhooksSchema,
 } from "../config/factory-config.ts";
 import { JigsError } from "./errors.ts";
+import type { Provider } from "./providers.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
 /**
@@ -376,7 +377,7 @@ export interface FactoryDefinition {
      * of the interval is taken off at random so services do not all poll at
      * once.
      */
-    pollIntervalSeconds?: { github?: number; linear?: number; slack?: number; pagerduty?: number };
+    pollIntervalSeconds?: Partial<Record<Provider, number>>;
   };
   agents?: AgentsDefinition;
   webhooks?: WebhooksDefinition;
@@ -396,7 +397,10 @@ export interface FactoryDefinition {
  *
  * @group Factory and workflows
  */
-export function defineFactory<const T extends FactoryDefinition>(factory: T): T {
+export function defineFactory<const T extends FactoryDefinition>(
+  // A generic parameter skips excess-property checks, so a misspelled section needs this to fail in tsc.
+  factory: T & Record<Exclude<keyof T, keyof FactoryDefinition>, never>,
+): T {
   const agents = agentsSchema.safeParse(factory.agents ?? {});
   if (!agents.success)
     throw new JigsError(

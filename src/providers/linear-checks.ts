@@ -1,13 +1,22 @@
-import { FACTORY_CONFIG_FILE, type LinearIdentity } from "../config/factory-config.ts";
-import type { LinearUser } from "../providers/linear.ts";
+import { type Check, failedCheck } from "../checks/check.ts";
 import {
+  FACTORY_CONFIG_FILE,
+  type LinearIdentity,
+  readFactoryConfig,
+} from "../config/factory-config.ts";
+import { factoryRoot } from "../config/factory-root.ts";
+import {
+  credentialValue,
   type EnvLookup,
+  RESTART_SERVICE,
+  SERVICE_ENV_FILE,
+} from "./credentials.ts";
+import { findUserByEmail, getViewer, type LinearUser } from "./linear.ts";
+import {
   LINEAR_IDENTITY_VARIABLES,
-  linearEnvValue,
   missingLinearVariables,
-} from "../providers/linear-auth.ts";
-import type { Check } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+  resolveLinearIdentity,
+} from "./linear-auth.ts";
 
 // A probe is a provider client; the catalog owns the repair text, which is
 // what makes preflight and doctor say the same thing.
@@ -24,7 +33,7 @@ const SOURCE: Record<LinearIdentity["mode"], string> = {
 export function linearIdentityChecks(
   identity: LinearIdentity,
   probes: LinearIdentityProbes,
-  env: EnvLookup = linearEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   const { mode } = identity;
   const variables = LINEAR_IDENTITY_VARIABLES[mode].join(" and ");
@@ -112,4 +121,39 @@ export function linearOperatorChecks(
       },
     },
   ];
+}
+
+// A configuration that cannot be read says nothing about the credential, so it
+// fails as itself rather than as a key Linear rejected.
+export function linearChecks(): Check[] {
+  let identity: LinearIdentity;
+  try {
+    identity = resolveLinearIdentity();
+  } catch (err) {
+    return [
+      failedCheck(
+        "linear.identity",
+        "Linear identity",
+        err instanceof Error ? err.message : String(err),
+        `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
+      ),
+    ];
+  }
+  return linearIdentityChecks(identity, { viewer: getViewer });
+}
+
+// An unreadable config is the identity check's diagnosis, so it adds nothing here.
+export function linearOperatorDoctorChecks(): Check[] {
+  let identity: LinearIdentity;
+  let operator: string | undefined;
+  try {
+    identity = resolveLinearIdentity();
+    operator = readFactoryConfig(factoryRoot()).linear.operator;
+  } catch {
+    return [];
+  }
+  return linearOperatorChecks(identity, operator, {
+    viewer: getViewer,
+    userByEmail: findUserByEmail,
+  });
 }

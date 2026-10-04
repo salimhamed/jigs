@@ -3,9 +3,10 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { stringEnv } from "../steps/agents/harnesses/env.ts";
-import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
+import { PROBE_TIMEOUT_MS } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 const execFileAsync = promisify(execFile);
 

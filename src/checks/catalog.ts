@@ -3,28 +3,8 @@
 // the same text at launch and mid-run.
 
 import { plainHint } from "../errors.ts";
+import type { Check, CheckResult } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";
-
-/**
- * A check's outcome: a pass with an optional `detail`, or a failure with its repair. A repair
- * quotes each command to run in backticks.
- *
- * @group Advanced driver contracts
- */
-export type CheckResult =
-  | { ok: true; detail?: string }
-  | { ok: false; reason: string; repair: string };
-
-/**
- * One requirement check with a stable id and a label for reports.
- *
- * @group Advanced driver contracts
- */
-export interface Check {
-  id: string;
-  label: string;
-  run(): Promise<CheckResult>;
-}
 
 /** `unanswered` marks a failure the check did not give: it threw, or did not answer in time. */
 export type CheckOutcome = { id: string; label: string; unanswered?: true } & CheckResult;
@@ -86,10 +66,6 @@ export function formatFailures(report: CheckReport): string {
   return failedChecks(report)
     .map((failure) => `${failure.label}: ${failure.reason}\n${plainHint(failure.repair)}`)
     .join("\n");
-}
-
-export function failedCheck(id: string, label: string, reason: string, repair: string): Check {
-  return { id, label, run: async () => ({ ok: false, reason, repair }) };
 }
 
 /** A factory's workflows by name, as far as the check catalog reads them. */

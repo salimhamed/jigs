@@ -11,6 +11,8 @@ import {
   readAppPrivateKey,
   resetGithubAuth,
 } from "./github-auth.ts";
+import { useGithubClient } from "./test-fixtures.ts";
+import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 const { privateKey } = generateKeyPairSync("rsa", {
   modulusLength: 2048,
@@ -32,15 +34,25 @@ const decode = (segment: string) => JSON.parse(Buffer.from(segment, "base64url")
 let tmp: string;
 beforeEach(() => {
   tmp = makeTmpDir();
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
 });
 afterEach(() => {
-  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   removeTmpDir(tmp);
 });
 
 const tokenResponse = (token: string, expiresAt: number) =>
-  new Response(JSON.stringify({ token, expires_at: new Date(expiresAt).toISOString() }));
+  jsonResponse({ token, expires_at: new Date(expiresAt).toISOString() });
+
+// GitHub answering each call with the next reply, in order.
+function github(...replies: Response[]) {
+  const fake = fakeFetch(() => {
+    const reply = replies.shift();
+    if (reply === undefined) throw new Error("no reply left");
+    return reply;
+  });
+  useGithubClient({ fetch: fake.fetch });
+  return fake;
+}
 
 test("the JWT is RS256, backdated a minute, and expires inside GitHub's ten", () => {
   const [header, payload, signature] = mintAppJwt(APP.appId, privateKey, NOW).split(".");
@@ -54,26 +66,25 @@ test("the JWT is RS256, backdated a minute, and expires inside GitHub's ten", ()
 });
 
 test("the installation token is exchanged for the JWT at the installation's endpoint", async () => {
-  const doFetch = vi.fn().mockResolvedValue(tokenResponse("ghs_minted", NOW + 3_600_000));
-  const minted = await mintInstallationToken(APP, privateKey, { now: () => NOW, fetch: doFetch });
+  const { calls } = github(tokenResponse("ghs_minted", NOW + 3_600_000));
+  const minted = await mintInstallationToken(APP, privateKey, { now: () => NOW });
 
   expect(minted).toEqual({ token: "ghs_minted", expiresAt: NOW + 3_600_000 });
-  const [url, init] = doFetch.mock.calls[0] as [string, RequestInit];
-  expect(url).toBe(`http://mock.test/github/app/installations/${APP.installationId}/access_tokens`);
-  expect(init.method).toBe("POST");
-  const authorization = String((init.headers as Record<string, string>).authorization);
-  expect(authorization).toBe(`Bearer ${mintAppJwt(APP.appId, privateKey, NOW)}`);
+  expect(calls[0]?.url.href).toBe(
+    `https://api.github.com/app/installations/${APP.installationId}/access_tokens`,
+  );
+  expect(calls[0]?.method).toBe("POST");
+  expect(calls[0]?.headers.authorization).toBe(`Bearer ${mintAppJwt(APP.appId, privateKey, NOW)}`);
 });
 
 test("a minted token is reused until five minutes are left, then re-minted", async () => {
   let now = NOW;
-  const doFetch = vi
-    .fn()
-    .mockResolvedValueOnce(tokenResponse("first", NOW + 3_600_000))
-    .mockResolvedValueOnce(tokenResponse("second", NOW + 7_200_000));
+  const { calls } = github(
+    tokenResponse("first", NOW + 3_600_000),
+    tokenResponse("second", NOW + 7_200_000),
+  );
   const auth = createGithubAuth(APP, {
     now: () => now,
-    fetch: doFetch,
     readPrivateKey: () => ({ key: privateKey }),
   });
 
@@ -84,18 +95,17 @@ test("a minted token is reused until five minutes are left, then re-minted", asy
   // Inside the margin: renew while there is still time to fail and retry.
   now += 2;
   expect(await auth.bearer()).toBe("second");
-  expect(doFetch).toHaveBeenCalledTimes(2);
+  expect(calls).toHaveLength(2);
 });
 
 test("a caller can ask for a token with more time left than jigs' own margin", async () => {
   let now = NOW;
-  const doFetch = vi
-    .fn()
-    .mockResolvedValueOnce(tokenResponse("first", NOW + 3_600_000))
-    .mockResolvedValueOnce(tokenResponse("second", NOW + 600_000 + 3_600_000));
+  const { calls } = github(
+    tokenResponse("first", NOW + 3_600_000),
+    tokenResponse("second", NOW + 600_000 + 3_600_000),
+  );
   const auth = createGithubAuth(APP, {
     now: () => now,
-    fetch: doFetch,
     readPrivateKey: () => ({ key: privateKey }),
   });
   expect(await auth.bearer()).toBe("first");
@@ -105,33 +115,31 @@ test("a caller can ask for a token with more time left than jigs' own margin", a
   // jigs' own calls would keep the first token for another 45 minutes.
   expect(await auth.bearer(55 * 60_000)).toBe("second");
   expect(await auth.bearer()).toBe("second");
-  expect(doFetch).toHaveBeenCalledTimes(2);
+  expect(calls).toHaveLength(2);
 });
 
 test("the App's bot is looked up once per App, as <slug>[bot] with its user id", async () => {
   resetGithubAuth();
-  const doFetch = vi.fn(async (url: string) =>
-    url.endsWith("/app")
-      ? new Response(JSON.stringify({ slug: "jigs-dev", name: "jigs dev" }))
-      : new Response(JSON.stringify({ id: 4242, login: "jigs-dev[bot]" })),
+  const { calls } = github(
+    jsonResponse({ slug: "jigs-dev", name: "jigs dev" }),
+    jsonResponse({ id: 4242, login: "jigs-dev[bot]" }),
   );
   const bearer = vi.fn(async () => "ghs_token");
-  const deps = { fetch: doFetch as typeof fetch, readPrivateKey: () => ({ key: privateKey }) };
+  const deps = { readPrivateKey: () => ({ key: privateKey }) };
   const bot = await appBotFor(APP, bearer, deps);
   expect(bot).toEqual({ login: "jigs-dev[bot]", id: 4242 });
   expect(await appBotFor({ ...APP, installationId: 7 }, bearer, deps)).toBe(bot);
-  expect(doFetch.mock.calls.map(([url]) => url)).toEqual([
-    "http://mock.test/github/app",
-    "http://mock.test/github/users/jigs-dev%5Bbot%5D",
+  expect(calls.map((call) => call.url.href)).toEqual([
+    "https://api.github.com/app",
+    "https://api.github.com/users/jigs-dev%5Bbot%5D",
   ]);
   resetGithubAuth();
 });
 
 test("a rejected exchange names the configuration, and never the token", async () => {
-  const doFetch = vi.fn().mockResolvedValue(new Response("nope", { status: 401 }));
+  github(new Response("nope", { status: 401 }));
   const failure: unknown = await mintInstallationToken(APP, privateKey, {
     now: () => NOW,
-    fetch: doFetch,
   }).catch((err: unknown) => err);
 
   expect(failure).toMatchObject({
@@ -143,9 +151,9 @@ test("a rejected exchange names the configuration, and never the token", async (
 test("no minted token ever reaches a log line or an error message", async () => {
   const logged: unknown[] = [];
   const log = vi.spyOn(console, "log").mockImplementation((...args) => logged.push(...args));
+  github(tokenResponse("ghs_secret_value", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
     now: () => NOW,
-    fetch: vi.fn().mockResolvedValue(tokenResponse("ghs_secret_value", NOW + 3_600_000)),
     readPrivateKey: () => ({ key: privateKey }),
   });
   expect(await auth.bearer()).toBe("ghs_secret_value");
@@ -154,9 +162,10 @@ test("no minted token ever reaches a log line or an error message", async () => 
 });
 
 test("pat mode is the environment's token, and says so when there is none", async () => {
-  const auth = createGithubAuth({ mode: "pat" }, { patToken: () => "ghp_from_env" });
+  const auth = createGithubAuth({ mode: "pat" }, { env: () => "ghp_from_env" });
   expect(await auth.bearer()).toBe("ghp_from_env");
-  const empty = createGithubAuth({ mode: "pat" }, { patToken: () => "" });
+  expect(auth.invalidate).toBeUndefined();
+  const empty = createGithubAuth({ mode: "pat" }, { env: () => "" });
   await expect(empty.bearer()).rejects.toThrow("GITHUB_TOKEN is not set");
 });
 
@@ -176,26 +185,21 @@ test("a missing or non-PEM key file names the repair", () => {
 });
 
 test("callers that arrive together share one mint rather than each making their own", async () => {
-  const doFetch = vi.fn().mockResolvedValue(tokenResponse("shared", NOW + 3_600_000));
+  const { calls } = github(tokenResponse("shared", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
     now: () => NOW,
-    fetch: doFetch,
     readPrivateKey: () => ({ key: privateKey }),
   });
   // What a snapshot does: six reads, none of them waiting for the others.
   const tokens = await Promise.all(Array.from({ length: 6 }, () => auth.bearer()));
   expect(tokens).toEqual(Array(6).fill("shared"));
-  expect(doFetch).toHaveBeenCalledTimes(1);
+  expect(calls).toHaveLength(1);
 });
 
 test("a failed mint is not cached, so the next caller tries again", async () => {
-  const doFetch = vi
-    .fn()
-    .mockResolvedValueOnce(new Response("nope", { status: 401 }))
-    .mockResolvedValueOnce(tokenResponse("second-time", NOW + 3_600_000));
+  github(new Response("nope", { status: 401 }), tokenResponse("second-time", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
     now: () => NOW,
-    fetch: doFetch,
     readPrivateKey: () => ({ key: privateKey }),
   });
   await expect(auth.bearer()).rejects.toThrow();
@@ -203,7 +207,8 @@ test("a failed mint is not cached, so the next caller tries again", async () => 
 });
 
 test("accounts select independent cached installation tokens across Apps", async () => {
-  const { githubAuthFor, useFactoryRoot, resetGithubAuth } = await import("./github-auth.ts");
+  const { githubAuthFor, resetGithubAuth } = await import("./github-auth.ts");
+  const { useFactoryRoot } = await import("./credentials.ts");
   const { installationId: _, ...app } = APP;
   writeFileSync(path.join(tmp, "key.pem"), privateKey, { mode: 0o600 });
   writeFileSync(
@@ -218,14 +223,10 @@ test("accounts select independent cached installation tokens across Apps", async
       },
     })}`,
   );
-  const calls: string[] = [];
-  vi.stubGlobal(
-    "fetch",
-    vi.fn(async (url: string) => {
-      calls.push(url);
-      return tokenResponse(`token-${calls.length}`, Date.now() + 3_600_000);
-    }),
+  const { fetch: doFetch, calls } = fakeFetch(() =>
+    tokenResponse(`token-${calls.length}`, Date.now() + 3_600_000),
   );
+  useGithubClient({ fetch: doFetch });
   useFactoryRoot(tmp);
   try {
     expect(await githubAuthFor("FIRST").bearer()).toBe("token-1");
@@ -238,14 +239,44 @@ test("accounts select independent cached installation tokens across Apps", async
     expect(await githubAuthFor("Second").bearer()).toBe("token-2");
     expect(await githubAuthFor("Third").bearer()).toBe("token-3");
     expect(calls).toHaveLength(3);
-    expect(calls[0]).toContain("/installations/10/access_tokens");
-    expect(calls[1]).toContain("/installations/20/access_tokens");
+    expect(calls[0]?.url.pathname).toBe("/app/installations/10/access_tokens");
+    expect(calls[1]?.url.pathname).toBe("/app/installations/20/access_tokens");
     expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
     // Resetting the credential cache does not reload the process's config.
     useFactoryRoot(tmp);
     expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
   } finally {
     resetGithubAuth();
-    vi.unstubAllGlobals();
   }
+});
+
+test("a token GitHub rejects is minted again once, so a revoked token does not wait out its hour", async () => {
+  const { calls } = github(
+    tokenResponse("revoked", NOW + 3_600_000),
+    jsonResponse({ message: "Bad credentials" }, 401),
+    tokenResponse("fresh", NOW + 3_600_000),
+    jsonResponse({ id: 1 }),
+  );
+  const auth = createGithubAuth(APP, {
+    now: () => NOW,
+    readPrivateKey: () => ({ key: privateKey }),
+  });
+  const { githubSend } = await import("./github-http.ts");
+  await expect(githubSend({ auth, apiPath: "/repos/acme/api" })).resolves.toEqual({ id: 1 });
+  expect(calls.map((call) => call.headers.authorization)).toEqual([
+    expect.stringMatching(/^Bearer ey/),
+    "Bearer revoked",
+    expect.stringMatching(/^Bearer ey/),
+    "Bearer fresh",
+  ]);
+});
+
+test("a rejected personal token is not retried", async () => {
+  const { calls } = github(jsonResponse({ message: "Bad credentials" }, 401));
+  const auth = createGithubAuth({ mode: "pat" }, { env: () => "ghp_revoked" });
+  const { githubSend, GitHubApiError } = await import("./github-http.ts");
+  const failure = await githubSend({ auth, apiPath: "/repos/acme/api" }).catch((e: unknown) => e);
+  expect(failure).toBeInstanceOf(GitHubApiError);
+  expect(failure).toMatchObject({ status: 401, githubMessage: "Bad credentials" });
+  expect(calls).toHaveLength(1);
 });
