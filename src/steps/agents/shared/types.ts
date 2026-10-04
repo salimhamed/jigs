@@ -19,38 +19,25 @@ import type { RunMetadata } from "../../runtime/run-context.ts";
 
 /**
  * What a driver's call returns: the reply text, provider metadata and any structured output.
- *
- * @group Advanced driver contracts
  */
 export type ExecutorGeneration = ModelGeneration & { output?: unknown };
 /**
  * What a driver's `decide` returns: one answer per question.
- *
- * @group Advanced driver contracts
  */
 export type DecisionGeneration<QUESTIONS extends JevQuestions = JevQuestions> = {
   answers: JevAnswers<QUESTIONS>;
 };
 
-/**
- * @internal
- *
- * @group Advanced driver contracts
- */
 export type EvaluationGeneration = {
   answers: Record<string, unknown>;
   providerMetadata?: Record<string, Record<string, unknown>> | null;
 };
 /**
  * An agent request that runs in a worktree.
- *
- * @group Advanced driver contracts
  */
 export type RunRequest = Extract<AgentRequest, { cwd: string }>;
 /**
  * A harness to open in a worktree, resuming a session when one is given.
- *
- * @group Advanced driver contracts
  */
 export type HarnessTarget = {
   harness: Harness;
@@ -59,8 +46,6 @@ export type HarnessTarget = {
 };
 /**
  * Any request a driver's environment allowlist is asked about.
- *
- * @group Advanced driver contracts
  */
 export type DriverRequest =
   | AgentRequest
@@ -70,8 +55,6 @@ export type DriverRequest =
 
 /**
  * The descriptor a driver of kind `K` runs: a harness for a harness kind, a model source otherwise.
- *
- * @group Advanced driver contracts
  */
 export type DriverDescriptor<K extends HarnessKind | ModelKind> = K extends HarnessKind
   ? Extract<Harness, { kind: K }>
@@ -80,8 +63,6 @@ export type DriverDescriptor<K extends HarnessKind | ModelKind> = K extends Harn
 /**
  * What a driver's `open` receives: the run, the harness environment jigs built, and a signal
  * that aborts once the run is cancelled.
- *
- * @group Advanced driver contracts
  */
 export interface OpenContext {
   metadata: RunMetadata;
@@ -92,8 +73,6 @@ export interface OpenContext {
 
 /**
  * A live provider model and what closing it releases.
- *
- * @group Advanced driver contracts
  */
 export interface OpenedModel {
   model: LanguageModel;
@@ -104,9 +83,6 @@ export interface OpenedModel {
  * The AI SDK calls a driver makes through jigs rather than importing them, so a
  * test can replace them.
  *
- * @internal
- *
- * @group Advanced driver contracts
  */
 export interface DriverDependencies {
   generateText(options: {
@@ -128,13 +104,10 @@ export interface DriverDependencies {
  * What a driver receives for one call: the run it belongs to, the harness
  * environment jigs built for it, for a structured call the output spec a
  * provider model consumes, and for a harness call a signal that aborts once the
- * run is cancelled. `deps` is jigs' own wiring, not part of the contract.
- *
- * @group Advanced driver contracts
+ * run is cancelled. `deps` lets a test replace the AI SDK calls.
  */
 export interface DriverContext {
   metadata: RunMetadata;
-  /** @internal */
   deps: DriverDependencies;
   env: Record<string, string>;
   output?: OutputInterface<unknown, unknown, never>;
@@ -148,15 +121,7 @@ export interface DriverContext {
 /**
  * How jigs runs one harness or model-source kind: its checks, the environment
  * it may see, and how it asks, runs or opens a provider model. Each kind a
- * descriptor can name has exactly one driver inside jigs; a factory cannot
- * register another.
- *
- * @remarks
- * A factory reads this to know what `createAgentRunner` does before it
- * hands back a model. The shape is a published contract: changing it is a
- * breaking release.
- *
- * @group Advanced driver contracts
+ * descriptor can name has exactly one driver.
  */
 export interface Driver<K extends HarnessKind | ModelKind> {
   kind: K;

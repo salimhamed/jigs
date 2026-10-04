@@ -2,6 +2,7 @@ import { existsSync } from "node:fs";
 import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Project } from "ts-morph";
 import { expect, test } from "vitest";
 import tsdownConfig from "../tsdown.config.ts";
 
@@ -315,4 +316,19 @@ test("every barrel exports exactly the values its subpath promises", async () =>
     const module = await import(path.join(packageDir, "src", file));
     expect(Object.keys(module).sort(), file).toEqual(names.sort());
   }
+});
+
+test("the steps entry publishes the agent runner and nothing a factory cannot use", () => {
+  const project = new Project({ skipAddingFilesFromTsConfig: true });
+  const entry = project.addSourceFileAtPath(path.join(packageDir, "src/steps/index.ts"));
+  expect([...entry.getExportedDeclarations().keys()].sort()).toEqual(
+    [
+      "AgentRunner",
+      "AgentRunnerOptions",
+      "AgentSessionError",
+      "ProviderApiError",
+      "RunMetadata",
+      "createAgentRunner",
+    ].sort(),
+  );
 });
