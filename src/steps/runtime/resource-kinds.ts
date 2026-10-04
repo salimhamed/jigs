@@ -35,7 +35,7 @@ type RunResourceState = Pick<ResourceRow, "kind" | "state">;
  * it recorded: the run ID, the identity, and a worktree's clone and branch. A decision's checks
  * change nothing; the removal it returns acts on exactly what they checked.
  */
-type ResourceKind = (
+type DecideRelease = (
   row: ResourceRow,
   run: readonly RunResourceState[],
 ) => Promise<ReleaseDecision>;
@@ -44,7 +44,7 @@ const keep = (reason: string): ReleaseOutcome => ({ state: "kept", reason });
 const released = (reason: string): ReleaseOutcome => ({ state: "released", reason });
 
 const removeDirectory =
-  (directory: (runId: string) => string): ResourceKind =>
+  (directory: (runId: string) => string): DecideRelease =>
   async (row) =>
   async () => {
     await rm(directory(row.runId), { recursive: true, force: true });
@@ -58,7 +58,7 @@ function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: 
   return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
 }
 
-const worktree: ResourceKind = async (row) => {
+const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
   return async () => {
@@ -91,7 +91,7 @@ const worktree: ResourceKind = async (row) => {
 // Harness homes hold the agent sessions that resume work in the run's worktree,
 // so they wait for its outcome and stay when it stays.
 const harnessHome =
-  (directory: (runId: string) => string): ResourceKind =>
+  (directory: (runId: string) => string): DecideRelease =>
   async (row, run) => {
     const trees = run.filter((other) => other.kind === "worktree");
     if (trees.some((tree) => tree.state === "kept")) return keep("kept with the run's worktree");
@@ -101,15 +101,31 @@ const harnessHome =
     return removeDirectory(directory)(row, run);
   };
 
+interface KindRules {
+  decide: DecideRelease;
+  /** Whether a keep policy leaves it in place for a person to inspect. */
+  inspectable: boolean;
+}
+
 // Release visits kinds in RELEASABLE_KINDS order, so a worktree's outcome is
 // known before the harness homes that depend on it.
-const KINDS: Record<ReleasableKind, ResourceKind> = {
-  worktree,
-  "run-directory": removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
-  "codex-home": harnessHome((runId) => codexRunStatePath(runId)),
-  "pi-home": harnessHome((runId) => piRunStatePath(runId)),
-  "claude-plugins": removeDirectory((runId) => claudePluginsPath(runId)),
+const KINDS: Record<ReleasableKind, KindRules> = {
+  worktree: { decide: worktree, inspectable: true },
+  "run-directory": {
+    decide: removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
+    inspectable: true,
+  },
+  "codex-home": { decide: harnessHome((runId) => codexRunStatePath(runId)), inspectable: true },
+  "pi-home": { decide: harnessHome((runId) => piRunStatePath(runId)), inspectable: true },
+  // Copies of factory files, with nothing to inspect after the run.
+  "claude-plugins": {
+    decide: removeDirectory((runId) => claudePluginsPath(runId)),
+    inspectable: false,
+  },
 };
+
+/** Whether a keep policy keeps this kind; one with nothing to inspect is always released. */
+export const keptByPolicy = (kind: string): boolean => releasable(kind) && KINDS[kind].inspectable;
 
 /** The releasable rows, in the order release must visit them; recorded-only kinds are left out. */
 export const releaseOrder = (rows: readonly ResourceRow[]): ResourceRow[] => {
@@ -123,5 +139,5 @@ export async function decideRelease(
   run: readonly RunResourceState[],
 ): Promise<ReleaseDecision> {
   if (!releasable(row.kind)) throw new Error(`jigs does not release ${row.kind} resources`);
-  return KINDS[row.kind](row, run);
+  return KINDS[row.kind].decide(row, run);
 }
