@@ -34,6 +34,20 @@ import { RunCancelledError } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import type { AgentStreamPart, StepStream } from "./step-stream.ts";
 
+// The Claude driver wraps the model it opens, so its settings are read where
+// the driver builds them.
+const claudeSettings = vi.hoisted(() => [] as ClaudeCodeSettings[]);
+vi.mock("ai-sdk-provider-claude-code", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai-sdk-provider-claude-code")>();
+  return {
+    ...actual,
+    claudeCode: (modelId: string, settings: ClaudeCodeSettings) => {
+      claudeSettings.push(settings);
+      return actual.claudeCode(modelId, settings);
+    },
+  };
+});
+
 // The settings look for the CLI eagerly, so these tests would need a codex
 // installed. Claude's half is stubbed below, through JIGS_CLAUDE_EXECUTABLE.
 vi.mock("./harnesses/executables.ts", async (importOriginal) => ({
@@ -66,6 +80,7 @@ afterAll(() => {
   else process.env.XDG_DATA_HOME = savedDataHome;
 });
 afterEach(() => {
+  claudeSettings.length = 0;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -228,9 +243,8 @@ async function agentStep(
   return result;
 }
 
-function claudeSettingsOf(captured: Captured): ClaudeCodeSettings {
-  const model = captured.options?.model as { settings?: ClaudeCodeSettings };
-  const settings = model.settings;
+function claudeSettingsOf(): ClaudeCodeSettings {
+  const settings = claudeSettings.at(-1);
   if (settings === undefined) throw new Error("no claude settings captured");
   return settings;
 }
@@ -272,7 +286,7 @@ test("claude agent step hydrates from wire config with the harness invariants fo
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf(captured);
+  const settings = claudeSettingsOf();
   expect(settings.cwd).toBe(worktree);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
@@ -430,7 +444,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
     { workflowRunId: "run-1" },
     claudeRun.deps,
   );
-  expect("effort" in claudeSettingsOf(claudeRun.captured)).toBe(false);
+  expect("effort" in claudeSettingsOf()).toBe(false);
 
   const codexRun = makeDeps();
   await agentStep(
@@ -528,7 +542,7 @@ test("a claude resume rides on the settings' resume field", async () => {
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(claudeSettingsOf(captured).resume).toBe("s-42");
+  expect(claudeSettingsOf().resume).toBe("s-42");
   expect(captured.options?.providerOptions).toBeUndefined();
 });
 
@@ -539,7 +553,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
     prompt: "answer the review",
     resume: { harness: "claude", id: "summaryless-session", descriptor: "" },
   });
-  const { deps, captured } = makeDeps();
+  const { deps } = makeDeps();
   const summaryless = createClaudeDriver({
     sessionMessages: async () => [{ type: "user", message: "interrupted first turn" }],
   });
@@ -549,7 +563,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(claudeSettingsOf(captured).resume).toBe("summaryless-session");
+  expect(claudeSettingsOf().resume).toBe("summaryless-session");
 });
 
 test("a missing Claude transcript reports resumeFailed before launch", async () => {
@@ -622,11 +636,11 @@ test("Claude steps always run with bypass", async () => {
     cwd: worktree,
     prompt: "judge it",
   });
-  const { deps, captured } = makeDeps();
+  const { deps } = makeDeps();
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf(captured);
+  const settings = claudeSettingsOf();
   expect(settings.permissionMode).toBe("bypassPermissions");
   expect(settings.allowDangerouslySkipPermissions).toBe(true);
 });
@@ -764,11 +778,11 @@ test("the step env is built, not copied: no API credentials, process.env untouch
       cwd: worktree,
       prompt: "go",
     });
-    const { deps, captured } = makeDeps();
+    const { deps } = makeDeps();
 
     await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-    expect(claudeSettingsOf(captured).env?.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(claudeSettingsOf().env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-scrub");
   } finally {
     delete process.env.ANTHROPIC_API_KEY;
@@ -862,7 +876,7 @@ test("claude ask step disables built-in tools, sees no MCP universe and loads no
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf(captured);
+  const settings = claudeSettingsOf();
   expect(settings.tools).toEqual([]);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.mcpServers).toEqual({});

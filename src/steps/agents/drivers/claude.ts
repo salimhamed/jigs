@@ -1,3 +1,4 @@
+import { wrapLanguageModel } from "ai";
 import {
   type McpServerConfig as ClaudeMcpServerConfig,
   claudeCode,
@@ -20,6 +21,7 @@ import {
   type SkillsPlugin,
 } from "../harnesses/skills.ts";
 import { AgentSessionError } from "../session-error.ts";
+import { acceptedStructuredAnswer } from "./claude-structured-output.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
 import type { Driver, DriverRequest, ExecutorGeneration, OpenedModel } from "./types.ts";
@@ -105,7 +107,10 @@ export function createClaudeDriver(
             : { plugins: [{ type: "local", path: plugin.path, skipMcpDiscovery: true }] }),
         });
         return {
-          model: claudeCode(harness.model, settings),
+          model: wrapLanguageModel({
+            model: claudeCode(harness.model, settings),
+            middleware: acceptedStructuredAnswer,
+          }),
           close: async () => {
             try {
               await settings.spawnClaudeCodeProcess.close();

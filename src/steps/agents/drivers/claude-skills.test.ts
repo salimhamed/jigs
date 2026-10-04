@@ -11,6 +11,20 @@ import { createClaudeDriver } from "./claude.ts";
 const registry = vi.hoisted(() => ({ recordRunDirectory: vi.fn(async () => {}) }));
 vi.mock("../../runtime/registry.ts", () => registry);
 
+// The Claude driver wraps the model it opens, so its settings are read where
+// the driver builds them.
+const claudeSettings = vi.hoisted(() => [] as ClaudeCodeSettings[]);
+vi.mock("ai-sdk-provider-claude-code", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("ai-sdk-provider-claude-code")>();
+  return {
+    ...actual,
+    claudeCode: (modelId: string, settings: ClaudeCodeSettings) => {
+      claudeSettings.push(settings);
+      return actual.claudeCode(modelId, settings);
+    },
+  };
+});
+
 let tmp: string;
 let worktree: string;
 let skill: string;
@@ -27,6 +41,7 @@ beforeEach(() => {
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "/fake/claude");
 });
 afterEach(() => {
+  claudeSettings.length = 0;
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
@@ -42,6 +57,11 @@ const context = () => ({
   env: {},
   signal: new AbortController().signal,
 });
+const openedSettings = () => {
+  const settings = claudeSettings.at(-1);
+  if (settings === undefined) throw new Error("no claude settings captured");
+  return settings;
+};
 const settingsOf = (model: unknown) => (model as { settings: ClaudeCodeSettings }).settings;
 
 test("open loads the declared skills as a private plugin that close removes", async () => {
@@ -49,7 +69,7 @@ test("open loads the declared skills as a private plugin that close removes", as
     { harness: harnesses.claude({ model: "opus", skills: [skill] }), cwd: worktree },
     context(),
   );
-  const settings = settingsOf(opened?.model);
+  const settings = openedSettings();
   const plugin = settings.plugins?.[0];
   expect(plugin).toMatchObject({ type: "local", skipMcpDiscovery: true });
   expect(existsSync(path.join(plugin?.path ?? "", "skills", "snowflake", "SKILL.md"))).toBe(true);
@@ -76,7 +96,7 @@ test("the plugin lives in a per-run folder recorded as the run's claude-plugins 
     "wrun_skills",
     runFolder,
   );
-  expect(path.dirname(settingsOf(opened?.model).plugins?.[0]?.path ?? "")).toBe(runFolder);
+  expect(path.dirname(openedSettings().plugins?.[0]?.path ?? "")).toBe(runFolder);
   await opened?.close();
   expect(readdirSync(runFolder)).toEqual([]);
 });
@@ -86,7 +106,7 @@ test("open without skills builds no plugin", async () => {
     { harness: harnesses.claude({ model: "opus" }), cwd: worktree },
     context(),
   );
-  expect(settingsOf(opened?.model).plugins).toBeUndefined();
+  expect(openedSettings().plugins).toBeUndefined();
   await opened?.close();
   expect(existsSync(pluginBase)).toBe(false);
 });
