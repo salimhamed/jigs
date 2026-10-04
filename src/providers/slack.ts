@@ -4,11 +4,10 @@
 // connection. Reads env and hits the network, so it is reached from a step, a
 // check or the service, never from workflow code.
 
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../checks/core.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { credentialRoot } from "./credential-root.ts";
+import { credentialRoot, RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 
 // A test seam.
 const SLACK_API_URL = (): string => process.env.SLACK_API_URL ?? "https://slack.com/api";

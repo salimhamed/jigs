@@ -1,7 +1,9 @@
-import { expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
-import { createPagerDutyClient, PAGERDUTY_API_URL, PagerDutyApiError } from "./pagerduty.ts";
+import { ProviderApiError } from "./http.ts";
+import { createPagerDutyClient, PAGERDUTY_API_URL } from "./pagerduty.ts";
 import type { PagerDutyAuth } from "./pagerduty-auth.ts";
+import { type FetchCall, fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
 async function rejection<E>(promise: Promise<unknown>): Promise<E> {
   try {
@@ -47,13 +49,6 @@ const subscription = (id: string, url: string, filter: Record<string, string>) =
 });
 const USER = { id: "PUSER01", type: "user", name: "On Call", email: "oncall@example.com" };
 
-interface Call {
-  method: string;
-  url: URL;
-  headers: Record<string, string>;
-  body?: unknown;
-}
-
 function fakeAuth() {
   let minted = 0;
   const auth: PagerDutyAuth & { minted: () => number } = {
@@ -67,32 +62,15 @@ function fakeAuth() {
   return auth;
 }
 
-function server(handle: (call: Call) => Response) {
-  const calls: Call[] = [];
-  const doFetch = vi.fn(async (input: string, init: RequestInit = {}) => {
-    const call: Call = {
-      method: init.method ?? "GET",
-      url: new URL(input),
-      headers: init.headers as Record<string, string>,
-      body: init.body === undefined ? undefined : JSON.parse(init.body as string),
-    };
-    calls.push(call);
-    return handle(call);
-  });
-  const sleeps: number[] = [];
+function server(handle: (call: FetchCall) => Response) {
+  const { fetch, calls } = fakeFetch(handle);
+  const { sleep, sleeps } = fakeSleep();
   const auth = fakeAuth();
-  const client = createPagerDutyClient(IDENTITY, {
-    auth,
-    fetch: doFetch as unknown as typeof fetch,
-    sleep: async (ms) => {
-      sleeps.push(ms);
-    },
-  });
+  const client = createPagerDutyClient(IDENTITY, { auth, fetch, sleep });
   return { client, calls, sleeps, auth };
 }
 
-const json = (body: unknown, status = 200, headers: Record<string, string> = {}) =>
-  new Response(JSON.stringify(body), { status, headers });
+const json = jsonResponse;
 
 test("reads carry the bearer token and the v2 media type, and no From", async () => {
   const { client, calls } = server(() => json({ incident: INCIDENT }));
@@ -137,7 +115,7 @@ test("every write names the from user, and a note comes back with its author", a
       "content-type": "application/json",
       from: "oncall@example.com",
     },
-    body: { note: { content: "jigs is looking" } },
+    json: { note: { content: "jigs is looking" } },
   });
   expect(calls[0]?.url.pathname).toBe("/incidents/Q1ABCDEF/notes");
 });
@@ -164,9 +142,9 @@ test("a second 401 is the caller's error, not another retry", async () => {
   const { client, calls } = server(() =>
     json({ error: { message: "Unauthorized", code: 2006 } }, 401),
   );
-  const err = await rejection<PagerDutyApiError>(client.getIncident("Q1"));
-  expect(err).toBeInstanceOf(PagerDutyApiError);
-  expect(err).toMatchObject({ status: 401 });
+  const err = await rejection<ProviderApiError>(client.getIncident("Q1"));
+  expect(err).toBeInstanceOf(ProviderApiError);
+  expect(err).toMatchObject({ provider: "pagerduty", status: 401 });
   expect(calls).toHaveLength(2);
 });
 
@@ -205,9 +183,8 @@ test("a 400 carries PagerDuty's error and the request", async () => {
   const { client } = server(() =>
     json({ error: { message: "Invalid Input Provided", code: 1027, errors: ["From"] } }, 400),
   );
-  const err = await rejection<PagerDutyApiError>(client.createNote("Q1", "x"));
+  const err = await rejection<ProviderApiError>(client.createNote("Q1", "x"));
   expect(err.status).toBe(400);
-  expect(err).not.toHaveProperty("body");
   expect(err.message).toContain("POST /incidents/Q1/notes");
   expect(err.message).toContain("1027");
   expect(err.message).not.toContain("token-1");

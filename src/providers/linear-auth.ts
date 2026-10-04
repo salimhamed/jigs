@@ -6,7 +6,7 @@
 import { type LinearIdentity, readFactoryConfig } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
-import { credentialRoot, setCredentialRoot } from "./credential-root.ts";
+import { credentialRoot, onProviderReset, setCredentialRoot } from "./credentials.ts";
 
 // A test seam, and the origin the OAuth token endpoint is derived from.
 export const LINEAR_API_URL = (): string =>
@@ -168,3 +168,5 @@ export function resetLinearAuth(): void {
   processIdentity = null;
   setCredentialRoot(null);
 }
+
+onProviderReset(resetLinearAuth);

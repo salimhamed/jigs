@@ -5,6 +5,7 @@
 
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
+import { providerRequest } from "./http.ts";
 import { type PagerDutyAuth, pagerDutyAuthFor } from "./pagerduty-auth.ts";
 
 export const PAGERDUTY_API_URL = "https://api.pagerduty.com";
@@ -13,11 +14,7 @@ const PAGE_LIMIT = 100;
 // PagerDuty's offset pagination stops at 10,000 records; past that a query
 // needs narrowing, not more pages.
 const MAX_PAGES = 100;
-const RATE_LIMIT_RETRIES = 3;
-// A wait longer than this belongs to the caller's schedule, not a blocked call.
-const MAX_RATE_LIMIT_WAIT_SECONDS = 60;
 const DEFAULT_RATE_LIMIT_WAIT_SECONDS = 5;
-const MAX_ERROR_BODY = 1_000;
 
 export interface PagerDutyReference {
   id: string;
@@ -74,17 +71,6 @@ export interface WebhookSubscriptionMatch {
   filter?: { type?: string; id?: string };
 }
 
-// Carries the status and body so a caller can tell a rejected token, a missing
-// scope and a rate limit apart.
-export class PagerDutyApiError extends JigsError {
-  readonly status: number;
-
-  constructor(status: number, request: string, body: string, detail?: string) {
-    super(`PagerDuty API ${status} on ${request}: ${detail ?? body.slice(0, MAX_ERROR_BODY)}`);
-    this.status = status;
-  }
-}
-
 export interface PagerDutyClient {
   identity: PagerDutyIdentity;
   getIncident(id: string): Promise<PagerDutyIncident>;
@@ -125,49 +111,24 @@ export function createPagerDutyClient(
   identity: PagerDutyIdentity,
   deps: PagerDutyClientDeps = {},
 ): PagerDutyClient {
-  const doFetch = deps.fetch ?? fetch;
-  const sleep = deps.sleep ?? ((ms: number) => new Promise((resolve) => setTimeout(resolve, ms)));
   const auth = (): PagerDutyAuth => deps.auth ?? pagerDutyAuthFor();
 
-  async function request<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
-    const label = `${method} ${apiPath.split("?")[0]}`;
-    let reauthorized = false;
-    let rateLimited = 0;
-    for (;;) {
-      const token = await auth().bearer();
-      const res = await doFetch(`${PAGERDUTY_API_URL}${apiPath}`, {
-        method,
-        headers: {
-          authorization: `Bearer ${token}`,
-          accept: "application/vnd.pagerduty+json;version=2",
-          // PagerDuty refuses a write that names no user (error 1027).
-          ...(method === "GET" ? {} : { from: identity.from }),
-          ...(body === undefined ? {} : { "content-type": "application/json" }),
-        },
-        body: body === undefined ? undefined : JSON.stringify(body),
-      });
-      if (res.ok) return (res.status === 204 ? undefined : await res.json()) as T;
-      const text = await res.text();
-      // A day-long token can be revoked early, by a re-mint with other scopes.
-      if (res.status === 401 && !reauthorized) {
-        reauthorized = true;
-        auth().invalidate(token);
-        continue;
-      }
-      if (res.status === 429) {
-        const wait = rateLimitWaitSeconds(res);
-        if (wait > MAX_RATE_LIMIT_WAIT_SECONDS) {
-          throw new PagerDutyApiError(429, label, text, `rate limited for ${wait}s`);
-        }
-        if (rateLimited < RATE_LIMIT_RETRIES) {
-          rateLimited += 1;
-          await sleep(wait * 1000);
-          continue;
-        }
-      }
-      throw new PagerDutyApiError(res.status, label, text);
-    }
-  }
+  const request = <T>(method: string, apiPath: string, body?: unknown): Promise<T> =>
+    providerRequest<T>({
+      provider: "pagerduty",
+      auth: auth(),
+      url: `${PAGERDUTY_API_URL}${apiPath}`,
+      method,
+      headers: {
+        accept: "application/vnd.pagerduty+json;version=2",
+        // PagerDuty refuses a write that names no user (error 1027).
+        ...(method === "GET" ? {} : { from: identity.from }),
+      },
+      json: body,
+      retryAfter: rateLimitWaitSeconds,
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+    });
 
   async function listAll<T>(
     apiPath: string,

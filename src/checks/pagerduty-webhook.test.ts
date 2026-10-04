@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
-import { PagerDutyApiError, type PagerDutyWebhookSubscription } from "../providers/pagerduty.ts";
+import { ProviderApiError } from "../providers/http.ts";
+import type { PagerDutyWebhookSubscription } from "../providers/pagerduty.ts";
 import { type PagerDutyWebhookProbes, pagerDutyWebhookChecks } from "./pagerduty-webhook.ts";
 
 const roots: string[] = [];
@@ -83,7 +84,12 @@ test("no subscription, or one without incident.triggered, says how to create it"
 test("a refused listing names the scope, and a failed token defers to the identity check", async () => {
   expect(
     await run(async () => {
-      throw new PagerDutyApiError(403, "GET /webhook_subscriptions", "forbidden");
+      throw new ProviderApiError({
+        provider: "pagerduty",
+        status: 403,
+        request: "GET /webhook_subscriptions",
+        body: "forbidden",
+      });
     }),
   ).toMatchObject({ ok: false, repair: expect.stringContaining("webhook_subscriptions.read") });
   expect(

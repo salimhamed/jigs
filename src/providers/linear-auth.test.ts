@@ -2,7 +2,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { useFactoryRoot } from "./github-auth.ts";
+import { useFactoryRoot } from "./credentials.ts";
 import { getViewer } from "./linear.ts";
 import {
   createLinearAuth,

@@ -1,10 +1,10 @@
 import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../config/factory-config.ts";
-import { PagerDutyApiError, type PagerDutyUser } from "../providers/pagerduty.ts";
+import { credentialValue, type EnvLookup } from "../providers/credentials.ts";
+import { ProviderApiError } from "../providers/http.ts";
+import type { PagerDutyUser } from "../providers/pagerduty.ts";
 import {
-  type EnvLookup,
   missingPagerDutyVariables,
   PAGERDUTY_IDENTITY_VARIABLES,
-  pagerDutyEnvValue,
 } from "../providers/pagerduty-auth.ts";
 import type { Check } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
@@ -21,13 +21,13 @@ export interface PagerDutyIdentityProbes {
 const VARIABLES = PAGERDUTY_IDENTITY_VARIABLES.join(" and ");
 
 const forbidden = (err: unknown): boolean =>
-  err instanceof PagerDutyApiError && (err.status === 401 || err.status === 403);
+  err instanceof ProviderApiError && (err.status === 401 || err.status === 403);
 
 /** Whether the PagerDuty app's credentials are present, mint a token, and can read incidents. */
 export function pagerDutyIdentityChecks(
   identity: PagerDutyIdentity,
   probes: PagerDutyIdentityProbes,
-  env: EnvLookup = pagerDutyEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   const account = `${identity.subdomain} (${identity.region})`;
   return [

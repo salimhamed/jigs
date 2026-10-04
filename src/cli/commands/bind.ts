@@ -16,8 +16,9 @@ import {
   webhookSecretRepair,
 } from "../../config/webhook-secret.ts";
 import { JigsError } from "../../errors.ts";
+import { useFactoryRoot } from "../../providers/credentials.ts";
 import { GitHubApiError } from "../../providers/github-api.ts";
-import { resolveGithubIdentity, useFactoryRoot } from "../../providers/github-auth.ts";
+import { resolveGithubIdentity } from "../../providers/github-auth.ts";
 import {
   type EnsureRepoLabelOptions,
   ensureRepoLabel,

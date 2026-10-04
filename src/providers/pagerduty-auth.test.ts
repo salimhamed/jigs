@@ -3,15 +3,13 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { setCredentialRoot } from "./credential-root.ts";
-import { useFactoryRoot } from "./github-auth.ts";
+import { resetProviderContext, useFactoryRoot } from "./credentials.ts";
 import {
   createPagerDutyAuth,
   missingPagerDutyVariables,
   PAGERDUTY_TOKEN_URL,
   pagerDutyAuthFor,
   pagerDutyScope,
-  resetPagerDutyAuth,
   resolvePagerDutyIdentity,
 } from "./pagerduty-auth.ts";
 
@@ -56,8 +54,7 @@ beforeEach(() => {
   for (const name of Object.keys(ENV)) vi.stubEnv(name, "");
 });
 afterEach(() => {
-  resetPagerDutyAuth();
-  setCredentialRoot(null);
+  resetProviderContext();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });

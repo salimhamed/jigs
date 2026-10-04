@@ -17,9 +17,7 @@ import {
 } from "../config/factory-config.ts";
 import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
-import { credentialRoot, setCredentialRoot } from "./credential-root.ts";
-import { resetLinearAuth } from "./linear-auth.ts";
-import { resetPagerDutyAuth } from "./pagerduty-auth.ts";
+import { credentialRoot, onProviderReset, setCredentialRoot } from "./credentials.ts";
 
 export const GITHUB_API_BASE = (): string => process.env.GITHUB_API_URL ?? "https://api.github.com";
 
@@ -233,14 +231,6 @@ function environmentPat(): string | undefined {
   }
 }
 
-/** Point every provider credential at one factory, for a CLI verb run outside it. */
-export function useFactoryRoot(root: string): void {
-  resetGithubAuth();
-  resetLinearAuth();
-  resetPagerDutyAuth();
-  setCredentialRoot(root);
-}
-
 /**
  * The identity this factory is configured with, with the private key path
  * resolved against the factory root. Outside a factory there is no config to
@@ -335,3 +325,5 @@ export function resetGithubAuth(): void {
   processIdentities = null;
   setCredentialRoot(null);
 }
+
+onProviderReset(resetGithubAuth);

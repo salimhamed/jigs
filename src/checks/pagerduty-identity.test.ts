@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import type { PagerDutyIdentity } from "../config/factory-config.ts";
-import { PagerDutyApiError } from "../providers/pagerduty.ts";
+import { ProviderApiError } from "../providers/http.ts";
 import { runChecks } from "./catalog.ts";
 import {
   type PagerDutyIdentityProbes,
@@ -76,7 +76,12 @@ test("a refused token names the .env keys and the account, never the secret", as
 test("a read the token may not make names the missing scope", async () => {
   const { probes: p, calls } = probes({
     read: async () => {
-      throw new PagerDutyApiError(403, "GET /incidents", '{"error":{"message":"Forbidden"}}');
+      throw new ProviderApiError({
+        provider: "pagerduty",
+        status: 403,
+        request: "GET /incidents",
+        body: '{"error":{"message":"Forbidden"}}',
+      });
     },
   });
   expect(await outcome(IDENTITY, ENV, p)).toMatchObject({
@@ -140,7 +145,12 @@ test("a user lookup the token may not make names users.read", async () => {
       pagerDutyFromChecks(
         IDENTITY,
         userProbes(async () => {
-          throw new PagerDutyApiError(403, "GET /users", "{}");
+          throw new ProviderApiError({
+            provider: "pagerduty",
+            status: 403,
+            request: "GET /users",
+            body: "{}",
+          });
         }),
       ),
     )
@@ -154,8 +164,19 @@ test("a user lookup the token may not make names users.read", async () => {
 
 test("a lookup PagerDuty did not answer says to retry", async () => {
   for (const err of [
-    new PagerDutyApiError(429, "GET /users", "{}", "rate limited for 600s"),
-    new PagerDutyApiError(503, "GET /users", "unavailable"),
+    new ProviderApiError({
+      provider: "pagerduty",
+      status: 429,
+      request: "GET /users",
+      body: "{}",
+      detail: "rate limited for 600s",
+    }),
+    new ProviderApiError({
+      provider: "pagerduty",
+      status: 503,
+      request: "GET /users",
+      body: "unavailable",
+    }),
     new TypeError("fetch failed"),
   ]) {
     const [result] = (

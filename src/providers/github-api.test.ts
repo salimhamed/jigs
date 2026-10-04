@@ -11,7 +11,8 @@ test("repository paths and GraphQL select their target accounts", async () => {
   const { vi } = await import("vitest");
   const { makeTmpDir, removeTmpDir } = await import("../test-fixtures.ts");
   const { writeFileSync } = await import("node:fs");
-  const { useFactoryRoot, resetGithubAuth } = await import("./github-auth.ts");
+  const { resetGithubAuth } = await import("./github-auth.ts");
+  const { useFactoryRoot } = await import("./credentials.ts");
   const dir = makeTmpDir();
   writeFileSync(
     `${dir}/jigs.config.ts`,

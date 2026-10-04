@@ -203,7 +203,8 @@ test("a failed mint is not cached, so the next caller tries again", async () => 
 });
 
 test("accounts select independent cached installation tokens across Apps", async () => {
-  const { githubAuthFor, useFactoryRoot, resetGithubAuth } = await import("./github-auth.ts");
+  const { githubAuthFor, resetGithubAuth } = await import("./github-auth.ts");
+  const { useFactoryRoot } = await import("./credentials.ts");
   const { installationId: _, ...app } = APP;
   writeFileSync(path.join(tmp, "key.pem"), privateKey, { mode: 0o600 });
   writeFileSync(
