@@ -11,7 +11,12 @@ import {
 import { JigsError } from "../errors.ts";
 import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { perContext } from "./credentials.ts";
-import { providerRequest } from "./http.ts";
+import {
+  MAX_RATE_LIMIT_WAIT_SECONDS,
+  ProviderApiError,
+  rateLimitWait,
+  reauthorize,
+} from "./http.ts";
 import {
   type PagerDutyAuth,
   pagerDutyAuthFor,
@@ -114,7 +119,7 @@ function queryString(query: Record<string, QueryValue>): string {
   return text === "" ? "" : `?${text}`;
 }
 
-function rateLimitWaitSeconds(res: Response): number {
+function rateLimitResetSeconds(res: Response): number {
   const reset = Number(res.headers.get("ratelimit-reset"));
   return Number.isFinite(reset) && reset > 0 ? Math.ceil(reset) : DEFAULT_RATE_LIMIT_WAIT_SECONDS;
 }
@@ -126,23 +131,48 @@ export function createPagerDutyClient(
   const ctx = () => deps.context ?? currentFactoryContext();
   const auth = (): PagerDutyAuth => deps.auth ?? pagerDutyAuthFor(ctx());
 
-  const request = <T>(method: string, apiPath: string, body?: unknown): Promise<T> =>
-    providerRequest<T>({
-      provider: "pagerduty",
-      auth: auth(),
-      url: `${PAGERDUTY_API_URL}${apiPath}`,
-      method,
-      headers: {
-        accept: "application/vnd.pagerduty+json;version=2",
-        // PagerDuty refuses a write that names no user (error 1027).
-        ...(method === "GET" ? {} : { from: identity.from }),
-      },
-      json: body,
-      retryAfter: rateLimitWaitSeconds,
-      fetch: deps.fetch,
-      sleep: deps.sleep,
-      signal: deps.context?.runSignal ?? runSignal,
-    });
+  async function request<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
+    const url = `${PAGERDUTY_API_URL}${apiPath}`;
+    const callAuth = auth();
+    let reauthorized = false;
+    let waits = 0;
+    for (;;) {
+      const credential = await callAuth.bearer();
+      const res = await (deps.fetch ?? fetch)(url, {
+        method,
+        headers: {
+          authorization: `Bearer ${credential}`,
+          ...(body === undefined ? {} : { "content-type": "application/json" }),
+          accept: "application/vnd.pagerduty+json;version=2",
+          // PagerDuty refuses a write that names no user (error 1027).
+          ...(method === "GET" ? {} : { from: identity.from }),
+        },
+        body: body === undefined ? undefined : JSON.stringify(body),
+      });
+      const text = await res.text();
+      if (res.status === 401 && !reauthorized && reauthorize(callAuth, credential)) {
+        reauthorized = true;
+        continue;
+      }
+      let detail: string | undefined;
+      if (res.status === 429) {
+        const seconds = rateLimitResetSeconds(res);
+        const watch = deps.context?.runSignal ?? runSignal;
+        if (await rateLimitWait("pagerduty", seconds, waits++, watch, deps.sleep)) continue;
+        if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${seconds}s`;
+      }
+      if (!res.ok) {
+        throw new ProviderApiError({
+          provider: "pagerduty",
+          status: res.status,
+          request: `${method} ${new URL(url).pathname}`,
+          body: text,
+          detail,
+        });
+      }
+      return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
+    }
+  }
 
   async function listAll<T>(
     apiPath: string,
