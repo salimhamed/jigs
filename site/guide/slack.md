@@ -142,7 +142,9 @@ export default defineFactory({
 
 Each run gets the inputs `{ channel, ts }`, the message's channel and
 timestamp, merged over the trigger's own `inputs`. They are a reference: the
-run reads the message itself. The workflow's inputs must accept them:
+run reads the message itself. `jigs status` shows them as
+`slack <channel> <ts>` from the moment the run starts, so you can tell which
+post a run is for. The workflow's inputs must accept them:
 
 ```ts
 // workflows/answer/answer.ts

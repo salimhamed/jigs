@@ -104,6 +104,19 @@ export interface TriggerStore {
   summary(trigger: string, failures: number): Promise<TriggerSummary>;
 }
 
+/** The rows, of any trigger, whose occurrence attribute is one of these. */
+export async function occurrencesByAttribute(
+  db: RegistrySql,
+  factory: string,
+  attributes: readonly string[],
+): Promise<Occurrence[]> {
+  if (attributes.length === 0) return [];
+  return db
+    .select()
+    .from(occurrences)
+    .where(and(eq(occurrences.factory, factory), inArray(occurrences.attribute, [...attributes])));
+}
+
 export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
   const row = (trigger: string, occurrence: string) =>
     and(

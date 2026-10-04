@@ -28,6 +28,7 @@ const result = (over: Partial<StatusResult> = {}): StatusResult => ({
   runId: RUN,
   status: "running",
   trigger: "manual",
+  source: null,
   ticket: null,
   createdAt: "2026-09-04T10:00:00.000Z",
   lastActivityAt: "2026-09-04T10:09:00.000Z",
@@ -80,6 +81,22 @@ test("status says what the run waits for, where to act, and what was asked", asy
     "  asked:",
     "    Which binding?",
     "    A. api",
+  ]);
+});
+
+test("a trigger's run names the Slack message it was started for, with its link", async () => {
+  const link = "https://acme.slack.com/archives/C0123ABCD/p1790723244335019";
+  respond(
+    result({
+      trigger: "trigger:answers",
+      source: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019", url: link },
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showRunStatus(RUN, deps(), { now: NOW });
+  expect(lines.slice(1, 3)).toEqual([
+    "  trigger        trigger:answers",
+    `  source         slack C0123ABCD 1790723244.335019 → ${link}`,
   ]);
 });
 

@@ -48,6 +48,7 @@ function run(status: string): RunState {
     status,
     workflowName: "workflow//./workflows/ship//ship",
     trigger: "manual",
+    source: null,
     ticket: null,
     createdAt: null,
     lastActivityAt: null,

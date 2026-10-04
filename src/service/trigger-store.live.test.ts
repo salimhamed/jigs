@@ -2,7 +2,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test } from "vitest";
 import type { CheckReport } from "../checks/index.ts";
 import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
-import { triggerStore } from "./trigger-store.ts";
+import { occurrencesByAttribute, triggerStore } from "./trigger-store.ts";
 
 // A database of its own, like the registry suite: never a factory's World.
 const adminUrl = new URL(
@@ -139,4 +139,21 @@ test("a row never attempted is not adopted late", async () => {
   await store.adoptLate("pages", "P2", "wrun_x", at(1));
   expect((await store.byAttribute("pages", ["attr-P2"]))[0]?.state).toBe("failed");
   expect(await store.byAttribute("pages", [])).toEqual([]);
+});
+
+test("rows are found by attribute across every trigger, and only in their own factory", async () => {
+  const row = (trigger: string, attribute: string) => ({
+    trigger,
+    occurrence: attribute,
+    state: "started" as const,
+    inputs: { channel: "C1", ts: "1.0" },
+    attribute,
+    occurredAt: at(0),
+  });
+  await triggerStore(db, "factory-g").record(row("answers", "attr-g1"));
+  await triggerStore(db, "factory-g").record(row("pages", "attr-g2"));
+  await triggerStore(db, "factory-h").record(row("answers", "attr-g3"));
+  const found = await occurrencesByAttribute(db, "factory-g", ["attr-g1", "attr-g2", "attr-g3"]);
+  expect(found.map((r) => r.trigger).sort()).toEqual(["answers", "pages"]);
+  expect(await occurrencesByAttribute(db, "factory-g", [])).toEqual([]);
 });

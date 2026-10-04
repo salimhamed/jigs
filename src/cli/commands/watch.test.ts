@@ -23,6 +23,7 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   workflow: "deliver-feature",
   status: "running",
   trigger: "manual",
+  source: null,
   ticket: "AGE-317",
   createdAt: "2026-08-26T11:30:00.000Z",
   lastActivityAt: "2026-08-26T11:59:00.000Z",

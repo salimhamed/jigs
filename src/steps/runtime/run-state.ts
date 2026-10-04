@@ -31,7 +31,17 @@ export interface RunFacts {
   tokens?: readonly string[];
   /** The run's steps, oldest first, where the caller read them. */
   steps?: readonly RunStepFact[];
+  /** What an event trigger started the run for, where the caller read it. */
+  source?: RunSource;
 }
+
+/**
+ * The Slack message or PagerDuty incident an event trigger started a run for. A Slack
+ * message's `url` is read from Slack, so only the single-run route has it.
+ */
+export type RunSource =
+  | { kind: "slack"; channel: string; ts: string; url?: string }
+  | { kind: "pagerduty"; incident: string };
 
 export interface RunStep {
   name: string;
@@ -46,8 +56,10 @@ export interface RunState {
   status: string | null;
   /** The workflow ID the World stores, or null where it was not read. */
   workflowName: string | null;
-  /** Which schedule launched the run, or `manual`. */
+  /** Which schedule or event trigger launched the run, or `manual`. */
   trigger: string | null;
+  /** What an event trigger started the run for, or null for any other run. */
+  source: RunSource | null;
   /** The ticket the run was launched with, as the operator typed it. */
   ticket: string | null;
   createdAt: string | null;
@@ -94,6 +106,7 @@ export function describeRunState(
     status: run?.status ?? null,
     workflowName: run?.workflowName ?? null,
     trigger: run?.trigger ?? null,
+    source: facts.source ?? null,
     ticket: run?.ticket ?? null,
     createdAt,
     lastActivityAt: iso(run?.completedAt) ?? iso(run?.updatedAt) ?? createdAt,

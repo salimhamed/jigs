@@ -30,6 +30,7 @@ const run = (over: Partial<RunListRun> = {}): RunListRun => ({
   workflow: "deliver-feature",
   status: "running",
   trigger: "manual",
+  source: null,
   ticket: null,
   createdAt: "2026-08-26T11:30:00.000Z",
   lastActivityAt: "2026-08-26T11:59:00.000Z",
@@ -66,11 +67,28 @@ test("a parked run names its ticket and what it waits for", async () => {
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe(
-    "RUN                              WORKFLOW         TICKET   STATUS   TRIGGER  AGE  ACTIVITY  WAITING",
+    "RUN                              WORKFLOW         TICKET   STATUS   TRIGGER  SOURCE  AGE  ACTIVITY  WAITING",
   );
   expect(lines[1]).toBe(
-    `${RUN}  deliver-feature  AGE-317  running  manual   30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
+    `${RUN}  deliver-feature  AGE-317  running  manual   -       30m  1m        waiting for an approving review and green CI on acme/api#41 → https://github.com/acme/api/pull/41`,
   );
+});
+
+test("a trigger's run names the message it was started for before it waits", async () => {
+  respond({
+    runs: [
+      run({
+        trigger: "trigger:answers",
+        source: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
+      }),
+      run({ trigger: "trigger:pages", source: { kind: "pagerduty", incident: "Q1ABCDEF" } }),
+    ],
+    schedules: [],
+    triggers: [],
+  });
+  await showRuns(deps(), { now: NOW });
+  expect(lines[1]).toContain("trigger:answers  slack C0123ABCD 1790723244.335019  30m");
+  expect(lines[2]).toContain("trigger:pages    pagerduty Q1ABCDEF");
 });
 
 test("runs are distinguished by SDK status", async () => {
