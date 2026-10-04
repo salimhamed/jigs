@@ -142,6 +142,9 @@ export interface FakeProcesses {
   dieOnSpawn: boolean;
 }
 
+// The fake service answers /health as the process the fakes spawned last.
+let lastSpawnedPid = 0;
+
 export function fakeProcesses(): FakeProcesses {
   let nextPid = 4242;
   const state: FakeProcesses = {
@@ -155,6 +158,7 @@ export function fakeProcesses(): FakeProcesses {
     spawn(spec) {
       state.spawns.push(spec);
       const pid = nextPid++;
+      lastSpawnedPid = pid;
       if (state.dieOnSpawn) {
         mkdirSync(path.dirname(spec.logPath), { recursive: true });
         writeFileSync(spec.logPath, "cloning binding api\nfatal: repo gone\n");
@@ -193,7 +197,7 @@ export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
     if (version !== null) res.setHeader(VERSION_HEADER, version);
     if (req.url === "/health") {
       res.statusCode = routes.health ?? 200;
-      res.end(JSON.stringify({ ok: true }));
+      res.end(JSON.stringify({ ok: true, ready: true, phase: "ready", pid: lastSpawnedPid }));
     } else if (req.url === "/api/runs") {
       const at = new Date().toISOString();
       res.end(

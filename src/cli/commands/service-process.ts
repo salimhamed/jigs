@@ -61,11 +61,11 @@ export interface ServiceProcesses extends ProcessControl {
 }
 
 // What the service's /health says about its boot; null when it does not
-// answer at all. `pid` is null for a service built before /health named it.
+// answer at all. `pid` is undefined when whatever answered named none.
 export interface ServiceHealth {
   ready: boolean;
   phase: string;
-  pid: number | null;
+  pid: number | undefined;
 }
 
 export interface ServiceLifecycleDeps {
@@ -263,10 +263,11 @@ export async function awaitReady(
     // The new process never gets the port while another holds it, and nitro
     // keeps it running without a listener; trusting the other process's
     // answer would send every request for this factory to it.
-    if (health !== null && health.pid !== null && health.pid !== pid) {
+    if (health !== null && health.pid !== pid) {
       await stopRecorded(deps, slug, { processGroup: pid });
+      const other = health.pid === undefined ? "one that reports no pid" : `pid ${health.pid}`;
       throw new JigsError(
-        `${serviceUrl} is already served by another process (pid ${health.pid}), so the ${slug} service could not listen there and was stopped`,
+        `${serviceUrl} is already served by another process (${other}), so the ${slug} service could not listen there and was stopped`,
         "stop that process, or give this factory another `service.port` in jigs.config.ts",
       );
     }
@@ -307,13 +308,15 @@ async function healthProbe(url: string): Promise<ServiceHealth | null> {
     const res = await fetch(url, { signal: AbortSignal.timeout(1_000) });
     if (!res.ok) return null;
     const body = (await res.json().catch(() => ({}))) as {
-      ready?: boolean;
-      phase?: string;
-      pid?: number;
+      ready?: unknown;
+      phase?: unknown;
+      pid?: unknown;
     };
-    // A service built before /health reported readiness answers with neither
-    // field; answering at all was its whole readiness.
-    return { ready: body.ready ?? true, phase: body.phase ?? "up", pid: body.pid ?? null };
+    return {
+      ready: body.ready === true,
+      phase: String(body.phase),
+      pid: typeof body.pid === "number" ? body.pid : undefined,
+    };
   } catch {
     return null;
   }

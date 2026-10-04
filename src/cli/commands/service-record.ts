@@ -1,5 +1,6 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import { z } from "zod";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import {
@@ -7,7 +8,6 @@ import {
   type ProcessControl,
   type ProcessEntry,
   parsePs,
-  type ServiceRecord,
 } from "../../service/process-tree.ts";
 
 // Supervision is one record under the jigs data dir, keyed by factory slug.
@@ -16,31 +16,42 @@ import {
 // and command tell the service apart from a later process that got the same
 // pid.
 
+const serviceRunSchema = z.object({
+  /** Where this run's output starts in the shared log. */
+  logOffset: z.number().int().nonnegative(),
+  deathDetectedAt: z.string().optional(),
+  signal: z.string().optional(),
+});
+
+const supervisionRecordSchema = z.object({
+  process: z
+    .object({
+      /** The service's pid, which is also its process group ID. */
+      processGroup: z.number().int().positive(),
+      bootId: z.string(),
+      startTime: z.string(),
+      command: z.string(),
+      /**
+       * Set when the process is known to have exited during boot: a live
+       * process at its pid is then someone else's, not one to refuse over.
+       */
+      exited: z.literal(true).optional(),
+      /** Which bundle the process was started from. */
+      bundle: z.string().optional(),
+    })
+    .optional(),
+  run: serviceRunSchema.optional(),
+});
+
 /**
  * Everything jigs keeps about a factory's service. The process fields are
  * absent once nothing it started can be running; what the last run left
  * behind (its log offset, and when its death was noticed) outlives them, for
  * `jigs service status`.
  */
-export interface SupervisionRecord {
-  process?: ServiceRecord & {
-    /**
-     * Set when the process is known to have exited during boot: a live
-     * process at its pid is then someone else's, not one to refuse over.
-     */
-    exited?: true;
-    /** Which bundle the process was started from. */
-    bundle?: string;
-  };
-  run?: ServiceRun;
-}
+export type SupervisionRecord = z.infer<typeof supervisionRecordSchema>;
 
-export interface ServiceRun {
-  /** Where this run's output starts in the shared log. */
-  logOffset: number;
-  deathDetectedAt?: string;
-  signal?: string;
-}
+export type ServiceRun = z.infer<typeof serviceRunSchema>;
 
 export function serviceLogPath(slug: string): string {
   return path.join(jigsDataDir(), "services", `${slug}.log`);
@@ -74,9 +85,7 @@ export function writeServiceRecord(slug: string, record: SupervisionRecord): voi
     return;
   }
   mkdirSync(path.dirname(file), { recursive: true });
-  // Flat, so a record written before the process and run fields shared one
-  // file still reads as the process it names.
-  writeFileSync(file, `${JSON.stringify({ ...record.process, ...record.run })}\n`);
+  writeFileSync(file, `${JSON.stringify(record)}\n`);
 }
 
 /** Drop the process from the record, keeping what status reports about its last run. */
@@ -85,41 +94,12 @@ export function forgetServiceProcess(slug: string): void {
   writeServiceRecord(slug, { run });
 }
 
-type StoredRecord = Partial<NonNullable<SupervisionRecord["process"]>> & Partial<ServiceRun>;
-
 function parseRecord(text: string): SupervisionRecord | undefined {
-  let value: StoredRecord;
   try {
-    value = JSON.parse(text);
+    return supervisionRecordSchema.parse(JSON.parse(text));
   } catch {
     return undefined;
   }
-  if (typeof value !== "object" || value === null) return undefined;
-  const record: SupervisionRecord = {};
-  const { processGroup, bootId, startTime, command, exited, bundle } = value;
-  if ([processGroup, bootId, startTime, command].some((field) => field !== undefined)) {
-    if (!Number.isInteger(processGroup) || (processGroup as number) <= 0) return undefined;
-    if (typeof bootId !== "string" || typeof startTime !== "string") return undefined;
-    if (typeof command !== "string") return undefined;
-    record.process = {
-      processGroup: processGroup as number,
-      bootId,
-      startTime,
-      command,
-      ...(exited === true ? { exited } : {}),
-      ...(typeof bundle === "string" ? { bundle } : {}),
-    };
-  }
-  // A run state that cannot be read only costs status its detail.
-  const { logOffset, deathDetectedAt, signal } = value;
-  if (typeof logOffset === "number" && logOffset >= 0) {
-    record.run = {
-      logOffset,
-      ...(typeof deathDetectedAt === "string" ? { deathDetectedAt } : {}),
-      ...(typeof signal === "string" ? { signal } : {}),
-    };
-  }
-  return record;
 }
 
 /**
