@@ -24,7 +24,7 @@ import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import * as queue from "./queue.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
-import { clearWakes, lastWake } from "./wake-note.ts";
+import { clearWakes, lastWake } from "./wake.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -77,8 +77,8 @@ vi.mock("workflow/api", async (importActual) => ({
   resumeHook: vi.fn(),
 }));
 const resumeHookMock = vi.mocked(resumeHook);
-// The ingress reads only whether the resume landed, never the hook it returns.
-const delivers = () => resumeHookMock.mockResolvedValueOnce({} as never);
+// The wake is noted for the run the resumed hook names.
+const delivers = () => resumeHookMock.mockResolvedValueOnce({ runId: RUN } as never);
 
 const app = createApp(fixture, deps);
 
@@ -275,6 +275,16 @@ test("a GitHub delivery matching a hook logs acceptance with its token", async (
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
   );
+});
+
+test("a delivery that lands is the wake the run's status reports", async () => {
+  clearWakes();
+  delivers();
+  await postGithub(reviewPayload, {
+    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
+    "x-github-event": "pull_request_review",
+  });
+  expect(lastWake("github:pr:acme/api#41", RUN)?.kind).toBe("github pull_request_review");
 });
 
 test("a delivery in GitHub's canonical casing resumes a hook claimed from a lowercase remote", async () => {

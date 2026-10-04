@@ -404,15 +404,14 @@ async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
   const hold = await holdFactorySlackApp(ctx);
   const socket = startSlackSocket({
     onMessage: async (event) => {
-      const [pushed, woken] = await Promise.allSettled([
+      const [pushed] = await Promise.allSettled([
         pushEvent("slack", event),
         wakeSlackThread(event),
       ]);
-      const where = `${event.channel}:${event.ts}`;
       if (pushed.status === "rejected")
-        console.log(`[slack] could not start runs for ${where}: ${String(pushed.reason)}`);
-      if (woken.status === "rejected")
-        console.log(`[slack] could not wake the thread of ${where}: ${String(woken.reason)}`);
+        console.log(
+          `[slack] could not start runs for ${event.channel}:${event.ts}: ${String(pushed.reason)}`,
+        );
     },
   });
   onShutdown(

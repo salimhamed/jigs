@@ -25,10 +25,11 @@ import {
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
+import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
 import { occurrencesByAttribute } from "./event-triggers/store.ts";
-import { lastWake } from "./wake-note.ts";
+import { lastWake } from "./wake.ts";
 
 // The SDK mints run IDs as `wrun_` + a ULID. Anything else names no run, and
 // never reaches the World as a lookup key.
@@ -188,19 +189,27 @@ export async function cancelRun(runId: string): Promise<void> {
 
 /**
  * What the providers say about one run's suspensions: the pull request the
- * run is watching, and the comment a halt is waiting on. Failures leave
- * a suspension exactly as its token described it — observability must never
- * break the route — so this is for the single-run read only, never the listing.
+ * run is watching, the comment a halt is waiting on, and what last woke each
+ * wait. Failures leave a suspension exactly as its token described it —
+ * observability must never break the route — so this is for the single-run
+ * read only, never the listing.
  */
 export async function enrichSuspensions(
   suspensions: readonly RunSuspension[],
   runId: string,
 ): Promise<RunSuspension[]> {
   return await Promise.all(
-    suspensions.map(async (suspension) => {
-      const parsed = parseHookToken(suspension.token);
+    suspensions.map(async (bare) => {
+      const parsed = parseHookToken(bare.token);
+      // A halt is woken through its ticket claim, never through the marker.
+      const woken =
+        parsed?.kind === "needs-human" && parsed.halt !== null
+          ? ticketToken(parsed.halt.issueId)
+          : bare.token;
+      const wake = lastWake(woken, runId);
+      const suspension = wake === undefined ? bare : { ...bare, lastWake: wake };
       if (parsed?.kind === "pull-request" && parsed.pr !== null) {
-        return await withPrState(suspension, parsed.pr, runId);
+        return await withPrState(suspension, parsed.pr);
       }
       if (parsed?.kind !== "needs-human" || parsed.halt === null) return suspension;
       const comment = await getComment(parsed.halt.commentId).catch(() => null);
@@ -214,17 +223,11 @@ export async function enrichSuspensions(
  * The pull request as the merge step sees it: the same refusal the step merges
  * on, so what an operator reads here and what jigs is doing cannot disagree. `blocker` is why it will not merge, in the words of the refusal.
  */
-async function withPrState(
-  suspension: RunSuspension,
-  pr: PullRequestRef,
-  runId: string,
-): Promise<RunSuspension> {
-  const wake = lastWake(suspension.token, runId);
-  const withWake = wake === undefined ? suspension : { ...suspension, lastWake: wake };
+async function withPrState(suspension: RunSuspension, pr: PullRequestRef): Promise<RunSuspension> {
   try {
     const snapshot = await readPullRequestSnapshot(pr);
     return {
-      ...withWake,
+      ...suspension,
       headSha: snapshot.headSha.slice(0, 7),
       ci: snapshot.ci,
       approval: snapshot.approval.state,
@@ -233,7 +236,7 @@ async function withPrState(
       blocker: mergeRefusal(snapshot, snapshot.headSha)?.reason ?? "nothing — it can merge",
     };
   } catch {
-    return withWake;
+    return suspension;
   }
 }
 
