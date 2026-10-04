@@ -12,7 +12,7 @@ import {
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
 import { perContext, requireCredential } from "./credentials.ts";
-import { ProviderApiError, rateLimitWait, retryAfterSeconds } from "./http.ts";
+import { ProviderApiError, rateLimitWaits, retryAfterSeconds } from "./http.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
 
@@ -123,7 +123,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
       if (value !== undefined)
         form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-    let waits = 0;
+    const rateLimit = rateLimitWaits("slack", runSignal, deps.sleep);
     for (;;) {
       const credential = requireCredential(token, undefined, ctx().env);
       const res = await (deps.fetch ?? fetch)(`${SLACK_API_URL}/${method}`, {
@@ -135,12 +135,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         body: form.toString(),
       });
       const text = await res.text();
-      if (
-        res.status === 429 &&
-        (await rateLimitWait("slack", retryAfterSeconds(res), waits++, runSignal, deps.sleep))
-      ) {
-        continue;
-      }
+      if (res.status === 429 && (await rateLimit.wait(retryAfterSeconds(res)))) continue;
       let body: T;
       try {
         body = JSON.parse(text) as T;

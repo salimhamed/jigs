@@ -63,9 +63,9 @@ const statuses = (result: Awaited<ReturnType<typeof upFactory>>) =>
   result.steps.map((step) => `${step.name}:${step.status}`);
 
 test("from a freshly scaffolded factory, every step runs once, in order", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
 
   const result = await up(root, io);
 
@@ -116,21 +116,20 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
 });
 
 test("a container compose cannot name is left out of the summary, not guessed", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = {
     exec: fakeExec((call) => (call.args[1] === "ps" ? execError(1) : undefined)),
     procs: fakeProcesses(),
   };
+  const root = factory({ port: await fakeService(io.procs) });
 
   expect((await up(root, io)).ok).toBe(true);
   expect(lines).toContain("  postgres   localhost:5555");
 });
 
 test("an app Linear identity names its client variables as the empty slots", async () => {
-  const port = await fakeService();
-  const root = factory({ port, linearIdentity: "app" });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port, linearIdentity: "app" });
   expect((await up(root, io)).ok).toBe(true);
   expect(lines.join("\n")).toContain(
     "LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, GITHUB_TOKEN empty in .env",
@@ -138,9 +137,9 @@ test("an app Linear identity names its client variables as the empty slots", asy
 });
 
 test("a pagerduty section names its client variables as empty slots", async () => {
-  const port = await fakeService();
-  const root = factory({ port, pagerduty: true });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port, pagerduty: true });
   expect((await up(root, io)).ok).toBe(true);
   expect(lines.join("\n")).toContain(
     "LINEAR_API_KEY, GITHUB_TOKEN, PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env",
@@ -148,13 +147,13 @@ test("a pagerduty section names its client variables as empty slots", async () =
 });
 
 test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async () => {
-  const port = await fakeService();
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
   const root = factory({
     port,
     githubIdentity: "app",
     env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\n",
   });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
   expect((await up(root, io)).ok).toBe(true);
   const printed = lines.join("\n");
   expect(printed).toContain("LINEAR_API_KEY empty in .env");
@@ -162,12 +161,12 @@ test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async 
 });
 
 test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () => {
-  const port = await fakeService();
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
   const root = factory({
     port,
     env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\n",
   });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
   expect((await up(root, io)).ok).toBe(true);
   expect(lines).toContain(
     "  GITHUB_TOKEN empty in .env (fill them in before a workflow needs them)",
@@ -175,9 +174,9 @@ test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () =>
 });
 
 test("bootstrap is handed the World URL from .env explicitly", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
 
   const migrate = vi.fn(async (url: string) => {
     expect(io.exec.calls.some((call) => path.basename(call.file) === "bootstrap")).toBe(true);
@@ -193,9 +192,9 @@ test("bootstrap is handed the World URL from .env explicitly", async () => {
 });
 
 test("a second up on an unchanged factory leaves the running service alone", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
   await up(root, io);
   lines = [];
 
@@ -209,9 +208,9 @@ test("a second up on an unchanged factory leaves the running service alone", asy
 });
 
 test("a changed bundle restarts the service; --restart-service forces one", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
   await up(root, io);
 
   io.exec.bundle = "bundle v2";
@@ -226,14 +225,14 @@ test("a changed bundle restarts the service; --restart-service forces one", asyn
 });
 
 test("a restart over in-flight runs asks first, refuses without a TTY, and stays owed", async () => {
-  const port = await fakeService({
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs, {
     runs: [
       { runId: "wrun_01", workflow: "example", status: "running" },
       { runId: "wrun_02", workflow: "example", status: "completed" },
     ],
   });
   const root = factory({ port });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
   await up(root, io);
   io.exec.bundle = "bundle v2";
 
@@ -270,13 +269,13 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
 // After an upgrade the new CLI meets the service the old jigs built; its run
 // list may have another shape, so up cannot see its runs.
 test("a restart over a service on another jigs warns that its runs are unknown, and restarts", async () => {
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
   const root = factory({
-    port: await fakeService({
+    port: await fakeService(io.procs, {
       runs: [{ runId: "wrun_01", workflow: "example", status: "running" }],
       version: null,
     }),
   });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
   await up(root, io, {}, { doctor: false });
   io.exec.bundle = "bundle v2";
 
@@ -290,11 +289,11 @@ test("a restart over a service on another jigs warns that its runs are unknown, 
 });
 
 test("a restart whose service answers nothing is not asked about", async () => {
-  const port = await fakeService({
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs, {
     runs: [{ runId: "wrun_01", workflow: "example", status: "running" }],
   });
   const root = factory({ port });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
   await up(root, io);
 
   // The pid is alive but the port is silent — the boot window. No run list
@@ -311,9 +310,9 @@ test("a restart whose service answers nothing is not asked about", async () => {
 });
 
 test("--no-doctor skips the last step and says so", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
 
   const result = await up(root, io, {}, { doctor: false });
 
@@ -323,7 +322,8 @@ test("--no-doctor skips the last step and says so", async () => {
 });
 
 test("a red doctor is the final failing line, with its checks indented above", async () => {
-  const port = await fakeService({
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs, {
     doctor: {
       ok: false,
       checks: [
@@ -338,7 +338,6 @@ test("a red doctor is the final failing line, with its checks indented above", a
     },
   });
   const root = factory({ port });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);
 
@@ -363,9 +362,9 @@ test("a service that exits during boot fails ready and prints its log", async ()
 });
 
 test("a service that never listens fails ready with the boot hint", async () => {
-  const port = await fakeService({ health: 503 });
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs, { health: 503 });
+  const root = factory({ port });
 
   const result = await up(root, io, { readyTimeoutMs: 30 });
 
@@ -406,12 +405,12 @@ test("no .env and no .env.example points back at jigs init", async () => {
 });
 
 test("an existing .env is kept and its credentials are not reported when set", async () => {
-  const port = await fakeService();
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
   const root = factory({
     port,
     env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\nGITHUB_TOKEN=ghp\n",
   });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   await up(root, io);
 
@@ -434,8 +433,8 @@ test("a missing .env fails env with the copy as its repair, and copies nothing",
 });
 
 test("docker compose output is streamed under the compose step as it prints", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
+  const procs = fakeProcesses();
+  const root = factory({ port: await fakeService(procs) });
   const exec = fakeExec();
   const execFile = exec.execFile;
   exec.execFile = async (file, args, options) => {
@@ -443,7 +442,7 @@ test("docker compose output is streamed under the compose step as it prints", as
     return await execFile(file, args, options);
   };
 
-  await up(root, { exec, procs: fakeProcesses() });
+  await up(root, { exec, procs });
 
   const compose = lines.findIndex((line) => line.startsWith("ok   compose"));
   expect(lines[compose - 1]).toBe("  Container acme-factory-postgres-1  Healthy");
@@ -564,9 +563,9 @@ test("a failing build is nitro's failure, echoed, and nothing starts", async () 
 });
 
 test("a jigs migration failure stops bootstrap before the build or service start", async () => {
-  const port = await fakeService();
-  const root = factory({ port });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const port = await fakeService(io.procs);
+  const root = factory({ port });
   const result = await up(root, io, {
     migrate: async () => {
       throw new Error("migration failed");

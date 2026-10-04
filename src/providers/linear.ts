@@ -13,7 +13,7 @@ import {
   MAX_RATE_LIMIT_WAIT_SECONDS,
   ProviderApiError,
   type ProviderApiErrorInit,
-  rateLimitWait,
+  rateLimitWaits,
   reauthorize,
   retryAfterSeconds,
 } from "./http.ts";
@@ -169,7 +169,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
   async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
     const auth = deps.auth ?? linearAuthFor(ctx());
     let reauthorized = false;
-    let waits = 0;
+    const rateLimit = rateLimitWaits("linear", runSignal, deps.sleep);
     for (;;) {
       const credential = await auth.bearer();
       const res = await (deps.fetch ?? fetch)(LINEAR_API_URL, {
@@ -189,7 +189,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       let detail: string | undefined;
       if (res.status === 429) {
         const seconds = retryAfterSeconds(res);
-        if (await rateLimitWait("linear", seconds, waits++, runSignal, deps.sleep)) continue;
+        if (await rateLimit.wait(seconds)) continue;
         if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${seconds}s`;
       }
       const fail: Fail = (extra = {}) =>

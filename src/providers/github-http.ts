@@ -3,7 +3,7 @@
 // live beside the per-account credential choice in github-api.ts.
 
 import { runSignal } from "../config/factory-context.ts";
-import { ProviderApiError, type ProviderAuth, rateLimitWait, reauthorize } from "./http.ts";
+import { ProviderApiError, type ProviderAuth, rateLimitWaits, reauthorize } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -98,7 +98,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
     outlivesRun,
   }: GithubSend): Promise<T> {
     let reauthorized = false;
-    let waits = 0;
+    const rateLimit = rateLimitWaits("github", outlivesRun ? null : runSignal, deps.sleep);
     for (;;) {
       const credential = await auth.bearer();
       const res = await (deps.fetch ?? fetch)(`${GITHUB_API_URL}${apiPath}`, {
@@ -116,13 +116,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         reauthorized = true;
         continue;
       }
-      const watch = outlivesRun ? null : runSignal;
-      if (
-        isRateLimited(res) &&
-        (await rateLimitWait("github", rateLimitSeconds(res), waits++, watch, deps.sleep))
-      ) {
-        continue;
-      }
+      if (isRateLimited(res) && (await rateLimit.wait(rateLimitSeconds(res)))) continue;
       if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
       // 204 on a POST that adds nothing to say — assignees and labels do this.
       return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
