@@ -34,12 +34,12 @@ afterAll(async () => {
 });
 
 // What the GitHub callback does once GitHub names the account's email.
-async function signIn(email: string): Promise<Headers> {
+async function signIn(email: string, emailVerified = true): Promise<Headers> {
   const context = await auth.$context;
   const user =
     (await context.internalAdapter.findUserByEmail(email))?.user ??
     (await context.internalAdapter.createUser(
-      { email, name: email, emailVerified: true },
+      { email, name: email, emailVerified },
       { method: "oauth", oauth: { providerId: "github" } },
     ));
   const { token } = await context.internalAdapter.createSession(user.id);
@@ -55,6 +55,7 @@ dbTest("bootstraps the admin, invites a member and keeps an admin", async () => 
   await expect(signIn("stranger@example.com")).rejects.toMatchObject(refused);
   expect(await db.select().from(schema.user)).toEqual([]);
 
+  await expect(signIn("admin@example.com", false)).rejects.toMatchObject(refused);
   const admin = await signIn("admin@example.com");
   await expect(auth.api.getActiveMember({ headers: admin })).rejects.toThrow();
   await auth.api.createOrganization({ headers: admin, body: { name: "Acme", slug: "acme" } });
@@ -75,6 +76,7 @@ dbTest("bootstraps the admin, invites a member and keeps an admin", async () => 
   });
 
   await expect(signIn("carol@example.com")).rejects.toMatchObject(refused);
+  await expect(signIn("bob@example.com", false)).rejects.toMatchObject(refused);
   const bob = await signIn("bob@example.com");
   await auth.api.acceptInvitation({ headers: bob, body: { invitationId: invite.id } });
   const bobMember = await auth.api.getActiveMember({ headers: bob });

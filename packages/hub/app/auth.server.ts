@@ -1,7 +1,7 @@
 import { APIError } from "better-auth/api";
-import { and, eq, gt } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import { type AppLoadContext, redirect } from "react-router";
-import { mayCreateOrganization } from "../src/auth.ts";
+import { mayCreateOrganization, pendingInvitation } from "../src/auth.ts";
 import { invitation, organization } from "../src/db/schema.ts";
 import type { Role } from "../src/roles.ts";
 
@@ -71,8 +71,11 @@ export async function signInWithGitHub(
 }
 
 /** Whether this user may create the hub's first Organization. */
-export function mayCreate(context: AppLoadContext, email: string) {
-  return mayCreateOrganization(context.config, context.db, email);
+export function mayCreate(
+  context: AppLoadContext,
+  user: { email: string; emailVerified: boolean },
+) {
+  return mayCreateOrganization(context.config, context.db, user);
 }
 
 /** A pending invitation and the name of its Organization, or `null`. */
@@ -81,12 +84,6 @@ export async function findPendingInvitation(context: AppLoadContext, id: string)
     .select({ role: invitation.role, organization: organization.name })
     .from(invitation)
     .innerJoin(organization, eq(organization.id, invitation.organizationId))
-    .where(
-      and(
-        eq(invitation.id, id),
-        eq(invitation.status, "pending"),
-        gt(invitation.expiresAt, new Date()),
-      ),
-    );
+    .where(and(eq(invitation.id, id), pendingInvitation()));
   return invite ? { role: invite.role as Role, organization: invite.organization } : null;
 }

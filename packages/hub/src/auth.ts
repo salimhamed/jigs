@@ -16,17 +16,15 @@ export type HubAuth = ReturnType<typeof createAuth>;
 
 /** Better Auth for the hub: GitHub sign-in, invite-only, with Organizations, members and invites. */
 export function createAuth(config: HubConfig, db: HubDatabase) {
-  const mayEnter = async (email: string, userId?: string) => {
-    if (userId && (await firstOrganizationId(db, userId))) return true;
+  // An unverified email could claim someone else's invitation or the admin email.
+  const mayEnter = async (user: Person & { id?: string }) => {
+    if (!user.emailVerified) return false;
+    if (user.id && (await firstOrganizationId(db, user.id))) return true;
     const invited = await db.query.invitation.findFirst({
-      where: and(
-        eq(schema.invitation.email, email.toLowerCase()),
-        eq(schema.invitation.status, "pending"),
-        gt(schema.invitation.expiresAt, new Date()),
-      ),
+      where: and(eq(schema.invitation.email, user.email.toLowerCase()), pendingInvitation()),
     });
     if (invited) return true;
-    return mayCreateOrganization(config, db, email);
+    return mayCreateOrganization(config, db, user);
   };
   const refuse = () => {
     throw new APIError("FORBIDDEN", {
@@ -48,6 +46,7 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
     ),
     database: drizzleAdapter(db, { provider: "pg", schema }),
     telemetry: { enabled: false },
+    account: { encryptOAuthTokens: true },
     socialProviders: {
       github: {
         clientId: config.githubClientId,
@@ -58,7 +57,7 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
       user: {
         create: {
           before: async (user) => {
-            if (!(await mayEnter(user.email))) refuse();
+            if (!(await mayEnter(user))) refuse();
           },
         },
       },
@@ -68,7 +67,7 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
             const user = await db.query.user.findFirst({
               where: eq(schema.user.id, session.userId),
             });
-            if (!user || !(await mayEnter(user.email, user.id))) refuse();
+            if (!user || !(await mayEnter(user))) refuse();
             return {
               data: {
                 ...session,
@@ -84,7 +83,8 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
         creatorRole: "admin",
         roles: { admin: adminAc, member: memberAc },
         disableOrganizationDeletion: true,
-        allowUserToCreateOrganization: (user) => mayCreateOrganization(config, db, user.email),
+        requireEmailVerificationOnInvitation: true,
+        allowUserToCreateOrganization: (user) => mayCreateOrganization(config, db, user),
         organizationHooks: {
           beforeCreateInvitation: async ({ invitation }) => checkRole(invitation.role),
           beforeUpdateMemberRole: async ({ newRole }) => checkRole(newRole),
@@ -94,10 +94,18 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
   });
 }
 
+type Person = { email: string; emailVerified?: boolean | null };
+
 /** Only the first admin creates an Organization, and only before the hub has one. */
-export async function mayCreateOrganization(config: HubConfig, db: HubDatabase, email: string) {
-  if (email.toLowerCase() !== config.adminEmail.toLowerCase()) return false;
+export async function mayCreateOrganization(config: HubConfig, db: HubDatabase, user: Person) {
+  if (!user.emailVerified) return false;
+  if (user.email.toLowerCase() !== config.adminEmail.toLowerCase()) return false;
   return (await db.query.organization.findFirst({ columns: { id: true } })) === undefined;
+}
+
+/** Matches an invitation that can still be accepted. */
+export function pendingInvitation() {
+  return and(eq(schema.invitation.status, "pending"), gt(schema.invitation.expiresAt, new Date()));
 }
 
 async function firstOrganizationId(db: HubDatabase, userId: string) {

@@ -49,3 +49,9 @@ test("names every missing or malformed value at once", () => {
     ].join("\n"),
   );
 });
+
+test("serves the hub at the root of its public URL", () => {
+  expect(() => readConfig({ ...env, HUB_PUBLIC_URL: "https://example.com/hub" })).toThrow(
+    "HUB_PUBLIC_URL must be an origin with no path, not https://example.com/hub",
+  );
+});

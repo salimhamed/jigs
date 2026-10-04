@@ -10,7 +10,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   if (await getActiveMember(context, request)) throw redirect("/");
   return {
     email: session.user.email,
-    mayCreate: await mayCreate(context, session.user.email),
+    mayCreate: await mayCreate(context, session.user),
   };
 }
 

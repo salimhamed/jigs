@@ -32,6 +32,8 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
   const publicUrl = URL.parse(publicUrlValue);
   if (publicUrlValue && publicUrl === null) {
     problems.push(`HUB_PUBLIC_URL must be a URL, not ${publicUrlValue}`);
+  } else if (publicUrl && publicUrl.href !== `${publicUrl.origin}/`) {
+    problems.push(`HUB_PUBLIC_URL must be an origin with no path, not ${publicUrlValue}`);
   }
 
   const databaseUrl = required("HUB_DATABASE_URL");
