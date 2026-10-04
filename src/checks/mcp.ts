@@ -5,12 +5,12 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { scrubCredentials } from "../providers/git.ts";
-import { checkWorktreeCodexMcpConfig } from "../steps/agents/harnesses/codex-config-guard.ts";
+import { checkWorktreeCodexMcpConfig } from "../steps/agents/codex/config-guard.ts";
 import {
   mcpCredentialProblem,
   type ResolvedMcpServer,
   resolveMcpServer,
-} from "../steps/agents/harnesses/mcp-credentials.ts";
+} from "../steps/agents/shared/mcp-credentials.ts";
 import type {
   McpServerConfig,
   McpToolProbe,

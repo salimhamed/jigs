@@ -17,7 +17,7 @@ import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
-import { stringEnv } from "../../steps/agents/harnesses/env.ts";
+import { stringEnv } from "../../steps/agents/shared/env.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, indent, layout, note } from "../output.ts";
 import {

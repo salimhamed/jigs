@@ -524,7 +524,7 @@ test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", 
 });
 
 const PROBE_SERVER = fileURLToPath(
-  new URL("../steps/agents/harnesses/live/fixtures/mcp-probe-server.mjs", import.meta.url),
+  new URL("../steps/agents/shared/fixtures/mcp-probe-server.mjs", import.meta.url),
 );
 
 // A relative path, so the probe passes only where doctor starts the server

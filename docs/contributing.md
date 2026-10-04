@@ -80,6 +80,17 @@ src/
 
 `.dependency-cruiser.cjs` enforces these boundaries; `pnpm lint` runs it.
 
+`src/steps/agents/` has one folder per harness, `claude/`, `codex/` and `pi/`,
+each holding that harness's driver, process launcher, checks, home handling,
+fixtures and tests. `models/` holds the model-source drivers (OpenRouter,
+OpenAI-compatible). `shared/` holds what every harness uses: the driver
+registry and types, the environment builder, process groups, executables,
+skills and MCP credentials, the agent runner and the execute functions.
+
+Tests sit beside the module they test. A test that needs a real login, network
+or service ends in `.live.test.ts` and runs only under `pnpm test:live`; every
+other test runs offline in `pnpm test`.
+
 The Workflow SDK replays a workflow from its first line on every wake, and
 bundles it into a sandbox without Node built-ins. So anything a workflow
 imports (`workflow/`) must be side-effect free, and real work goes in steps. No

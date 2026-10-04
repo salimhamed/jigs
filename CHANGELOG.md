@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.97.0](https://github.com/salimhamed/jigs/compare/jigs-v0.96.0...jigs-v0.97.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* one folder per harness, and a steps contract factories can use ([#557](https://github.com/salimhamed/jigs/issues/557))
+
+### Code Refactoring
+
+* one folder per harness, and a steps contract factories can use ([#557](https://github.com/salimhamed/jigs/issues/557)) ([651fbc3](https://github.com/salimhamed/jigs/commit/651fbc3ec2bac2d4194d0630fbfc39d059858850))
+
+## [0.96.0](https://github.com/salimhamed/jigs/compare/jigs-v0.95.0...jigs-v0.96.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* resolve the factory context once per entry point ([#555](https://github.com/salimhamed/jigs/issues/555))
+
+### Code Refactoring
+
+* resolve the factory context once per entry point ([#555](https://github.com/salimhamed/jigs/issues/555)) ([917a18b](https://github.com/salimhamed/jigs/commit/917a18b340ff02974d3405ccfad63f87ca116886))
+
 ## [0.95.0](https://github.com/salimhamed/jigs/compare/jigs-v0.94.0...jigs-v0.95.0) (2026-10-04)
 
 
