@@ -7,9 +7,9 @@ import {
   type ResourceState,
   releasable,
 } from "../../workflow/runtime/resources.ts";
-import { codexRunStatePath } from "../agents/harnesses/codex-home.ts";
-import { piRunStatePath } from "../agents/harnesses/pi-home.ts";
-import { claudePluginsPath } from "../agents/harnesses/skills.ts";
+import { codexRunStatePath } from "../agents/codex/home.ts";
+import { piRunStatePath } from "../agents/pi/home.ts";
+import { claudePluginsPath } from "../agents/shared/skills.ts";
 import { fetchOriginDefault } from "../workspaces/create.ts";
 import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import type { ResourceRow } from "./registry.ts";

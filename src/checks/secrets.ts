@@ -1,7 +1,7 @@
 import type { FactoryContext } from "../config/factory-context.ts";
 import { readFactoryEnv } from "../config/factory-env.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
-import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/harnesses/mcp-credentials.ts";
+import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/shared/mcp-credentials.ts";
 import { neededByUsers, type WorkflowManifests } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";

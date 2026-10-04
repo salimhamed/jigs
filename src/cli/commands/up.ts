@@ -6,7 +6,7 @@ import { JigsError } from "../../errors.ts";
 import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import { stringEnv } from "../../steps/agents/harnesses/env.ts";
+import { stringEnv } from "../../steps/agents/shared/env.ts";
 import type {
   GithubIdentity,
   LinearIdentity,

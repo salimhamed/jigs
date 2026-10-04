@@ -12,6 +12,12 @@
 
 export type { Check, CheckResult } from "../checks/check.ts";
 export { ProviderApiError } from "../providers/http.ts";
+export {
+  type AgentRunner,
+  type AgentRunnerOptions,
+  createAgentRunner,
+} from "./agents/shared/runner.ts";
+export { AgentSessionError } from "./agents/shared/session-error.ts";
 export type {
   DecisionGeneration,
   Driver,
@@ -25,7 +31,5 @@ export type {
   OpenContext,
   OpenedModel,
   RunRequest,
-} from "./agents/drivers/types.ts";
-export { type AgentRunner, type AgentRunnerOptions, createAgentRunner } from "./agents/runner.ts";
-export { AgentSessionError } from "./agents/session-error.ts";
+} from "./agents/shared/types.ts";
 export type { RunMetadata } from "./runtime/run-context.ts";

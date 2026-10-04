@@ -11,7 +11,7 @@ import { codexWorktreeConfigCheck, mcpServerChecks } from "./mcp.ts";
 // A real stdio MCP server child process, not a mock: the whole point of the
 // JIT check is that only a real tool call is evidence.
 const PROBE_SERVER = fileURLToPath(
-  new URL("../steps/agents/harnesses/live/fixtures/mcp-probe-server.mjs", import.meta.url),
+  new URL("../steps/agents/shared/fixtures/mcp-probe-server.mjs", import.meta.url),
 );
 
 let tmp: string;

@@ -1,0 +1,74 @@
+import {
+  experimental_evaluate,
+  generateText,
+  type LanguageModel,
+  type OutputInterface,
+  streamText,
+  type TextStreamPart,
+  type ToolSet,
+} from "ai";
+import {
+  type FailedCheck,
+  failedChecks,
+  JIT_TIMEOUT_MS,
+  jitChecks,
+  runChecks,
+} from "../../../checks/index.ts";
+import { type RunStatusReader, worldRunStatus } from "../../../run-cancellation.ts";
+import { agentAccessEnv } from "./agent-access.ts";
+import {
+  type DriverDependencies,
+  type DriverResolver,
+  driverFor,
+  type ExecutorGeneration,
+  type HarnessTarget,
+} from "./drivers.ts";
+import { factoryAgentEnv } from "./env.ts";
+import { openStepStream, type StepStream } from "./step-stream.ts";
+
+/** The parts of a `streamText` result an agent run reads. */
+export interface AgentTextStream {
+  fullStream: AsyncIterable<TextStreamPart<ToolSet>>;
+  text: PromiseLike<string>;
+  output: PromiseLike<unknown>;
+  providerMetadata: PromiseLike<ExecutorGeneration["providerMetadata"]>;
+}
+
+// What the agent and model steps reach outside themselves. Tests replace it
+// through the internal entry points; the public steps take none.
+export interface ExecutionSeams extends DriverDependencies {
+  streamText(options: {
+    model: LanguageModel;
+    prompt: string;
+    output?: OutputInterface<unknown, unknown, never>;
+    abortSignal?: AbortSignal | undefined;
+  }): AgentTextStream;
+  openStepStream(): StepStream | undefined;
+  resolveDriver: DriverResolver;
+  /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
+  factoryEnv(): readonly string[];
+  /** What the providers a harness opts in to add to its agent's environment `env`. */
+  accessEnv(target: HarnessTarget, env: Record<string, string>): Promise<Record<string, string>>;
+  jitFailures(
+    target: HarnessTarget,
+    env: Record<string, string>,
+  ): Promise<FailedCheck[] | undefined>;
+  /** Where an agent call reads its run's status to watch for cancellation. */
+  runStatus: RunStatusReader;
+}
+
+export const executionSeams: ExecutionSeams = {
+  generateText: (options) => generateText(options),
+  // The run rethrows the stream's error itself; the SDK's default would also log it.
+  streamText: (options) => streamText({ ...options, onError: () => {} }),
+  openStepStream,
+  evaluate: (options) => experimental_evaluate(options),
+  resolveDriver: driverFor,
+  factoryEnv: factoryAgentEnv,
+  accessEnv: agentAccessEnv,
+  jitFailures: async (target, env) => {
+    const report = await runChecks(jitChecks(target, env), JIT_TIMEOUT_MS);
+    return report.ok ? undefined : failedChecks(report);
+  },
+  runStatus: worldRunStatus,
+};
