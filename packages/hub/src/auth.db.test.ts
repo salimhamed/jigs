@@ -24,6 +24,7 @@ beforeAll(async () => {
     githubClientId: "client",
     githubClientSecret: "secret",
     adminEmail: "Admin@example.com",
+    retentionDays: 7,
   };
   auth = createAuth(config, db);
 });

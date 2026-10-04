@@ -31,8 +31,9 @@ Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL`, `HUB_ENCRYPTION_KEY`
 (`openssl rand -base64 32`, which also derives the session secret),
 `HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET` (a GitHub OAuth app whose
 callback is `<HUB_PUBLIC_URL>/api/auth/callback/github`) and `HUB_ADMIN_EMAIL`
-(the GitHub email that may create the first Organization); `HOST` and `PORT`
-are optional. `dev` runs the
+(the GitHub email that may create the first Organization); `HOST`, `PORT` and
+`HUB_RETENTION_DAYS` (how long factory messages are kept, default 7) are
+optional. `dev` runs the
 server from source, serves the web app through Vite and reads
 `packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
 (Node will not strip types under `node_modules`) and the web app into `build/`;
@@ -46,3 +47,11 @@ connections close, so its process manager can stop it.
 
 Messages the hub exchanges with a factory belong in `@jigs-ai/hub-protocol`,
 not here, so jigs can share them.
+
+## Factory messages
+
+`src/factory-api.ts` serves the factory's long poll and cursor. Every message
+for every factory takes its position from one sequence, so any transaction
+that appends messages calls `lockAppends` first (see `src/messages.ts`).
+`fanOutProviderEvent` stores a provider event and wakes the factories it was
+appended for; `src/retention.ts` deletes expired messages hourly.

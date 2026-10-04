@@ -13,7 +13,7 @@ const env = {
 };
 
 test("reads the hub's environment", () => {
-  expect(readConfig({ ...env, HOST: "0.0.0.0", PORT: "8080" })).toEqual({
+  expect(readConfig({ ...env, HOST: "0.0.0.0", PORT: "8080", HUB_RETENTION_DAYS: "3" })).toEqual({
     host: "0.0.0.0",
     port: 8080,
     publicUrl: new URL("https://hub.example.com"),
@@ -22,8 +22,9 @@ test("reads the hub's environment", () => {
     githubClientId: "Iv1.abc",
     githubClientSecret: "github secret",
     adminEmail: "admin@example.com",
+    retentionDays: 3,
   });
-  expect(readConfig(env)).toMatchObject({ host: "127.0.0.1", port: 3000 });
+  expect(readConfig(env)).toMatchObject({ host: "127.0.0.1", port: 3000, retentionDays: 7 });
 });
 
 test("names every missing or malformed value at once", () => {
@@ -39,13 +40,20 @@ test("names every missing or malformed value at once", () => {
     ].join("\n"),
   );
   expect(() =>
-    readConfig({ ...env, PORT: "http", HUB_PUBLIC_URL: "hub", HUB_ENCRYPTION_KEY: "c2hvcnQ=" }),
+    readConfig({
+      ...env,
+      PORT: "http",
+      HUB_PUBLIC_URL: "hub",
+      HUB_ENCRYPTION_KEY: "c2hvcnQ=",
+      HUB_RETENTION_DAYS: "0",
+    }),
   ).toThrow(
     [
       "The hub cannot start:",
       "  - PORT must be a port number, not http",
       "  - HUB_PUBLIC_URL must be a URL, not hub",
       "  - HUB_ENCRYPTION_KEY must be 32 bytes in base64 (openssl rand -base64 32)",
+      "  - HUB_RETENTION_DAYS must be a whole number of days, not 0",
     ].join("\n"),
   );
 });
