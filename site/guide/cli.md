@@ -4,7 +4,8 @@ Run every command inside your factory, as `pnpm exec jigs <command>`, so it uses
 that factory's installed version of jigs. The exception is `init`, which runs
 before there is a factory:
 `pnpm dlx @jigs-ai/jigs init`.
-Add `--help` to a command to see its options.
+Add `--help` to a command to see its options, and run `jigs --version` to see
+which jigs is installed.
 
 ::: tip Installing a very recent release
 If pnpm's minimum release age blocks a release you want to use, run:

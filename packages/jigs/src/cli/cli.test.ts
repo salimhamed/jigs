@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { readFactoryConfig } from "../config/factory-config.ts";
+import { JIGS_VERSION } from "../version.ts";
 
 const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
 const run = (cwd: string, ...args: string[]) =>
@@ -114,6 +115,19 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
     expect(noArgs.stdout).not.toMatch(/jigs (ps|sweep)\b/);
     expect(noArgs.stdout).not.toMatch(/^\s*jigs logs\b/m);
     expect(existsSync(path.join(cwd, "package.json"))).toBe(false);
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("--version prints the installed jigs version", () => {
+  const cwd = mkdtempSync(path.join(tmpdir(), "jigs-version-"));
+  try {
+    for (const flag of ["--version", "-V"]) {
+      const result = run(cwd, flag);
+      expect(result.status).toBe(0);
+      expect(result.stdout).toBe(`${JIGS_VERSION}\n`);
+    }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }

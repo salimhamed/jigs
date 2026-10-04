@@ -2,6 +2,7 @@
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { JigsError } from "../errors.ts";
+import { JIGS_VERSION } from "../version.ts";
 import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
@@ -119,10 +120,13 @@ In a factory, run every command as
 pnpm exec jigs <command>; add --help for its options.
 
 Options:
+  -V, --version                      Print the installed jigs version.
   -h, --help                         Display help.
 `;
 
-const program = new Command("jigs").showHelpAfterError("(add --help for additional information)");
+const program = new Command("jigs")
+  .version(JIGS_VERSION, "-V, --version")
+  .showHelpAfterError("(add --help for additional information)");
 
 // Root help is a user journey rather than Commander's registration order.
 // Overriding only this command leaves every command's generated help intact.
