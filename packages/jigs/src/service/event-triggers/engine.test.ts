@@ -42,7 +42,7 @@ function fakeSource(now: () => Date = () => T0) {
   const queued: SourceOccurrence[] = [];
   const polls: Date[] = [];
   const source: Source<{ service: string }, string> = {
-    provider: "pagerduty",
+    provider: "github",
     params: z.object({ service: z.string() }),
     cursor: z.iso.datetime(),
     sampleInputs: { page: "P0" },
@@ -280,7 +280,7 @@ test("an occurrence seen twice, polled then pushed, starts one run", async () =>
   h.at(minutes(2));
   h.queued.push(occurrenceAt("P1", minutes(1)));
   await h.engine.poll("pages");
-  expect(await h.engine.push("pagerduty", { page: "P1" })).toEqual([]);
+  expect(await h.engine.push("github", { page: "P1" })).toEqual([]);
   h.queued.push(occurrenceAt("P1", minutes(1)));
   await h.engine.poll("pages");
   await h.engine.drain();
@@ -308,7 +308,7 @@ test("a pushed event is recorded and started, and answers before the run starts"
   await h.engine.arm();
   h.at(minutes(2));
 
-  expect(await h.engine.push("pagerduty", { page: "P7" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", { page: "P7" })).toEqual(["pages"]);
   expect(h.memory.state("pages", "P7")?.state).toBe("pending");
   release();
   await h.engine.drain();
@@ -319,7 +319,7 @@ test("a push for another provider, or not an occurrence, is not taken", async ()
   const h = harness();
   await h.engine.arm();
   expect(await h.engine.push("linear", { page: "P1" })).toEqual([]);
-  expect(await h.engine.push("pagerduty", { other: true })).toEqual([]);
+  expect(await h.engine.push("github", { other: true })).toEqual([]);
   expect(h.memory.rows.size).toBe(0);
 });
 
@@ -350,7 +350,7 @@ test("runs this trigger did not start do not count against its cap", async () =>
   const h = harness({ runs, trigger: { ...pagesTrigger, maxActive: 1 } });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", { page: "P1" });
+  await h.engine.push("github", { page: "P1" });
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
 });
@@ -507,7 +507,7 @@ test("a start that fails preflight is recorded failed with its report, and never
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", { page: "P5" });
+  await h.engine.push("github", { page: "P5" });
   await h.engine.drain();
   await h.engine.drain();
 
@@ -528,7 +528,7 @@ test("inputs the workflow rejects at start are recorded failed with a repair", a
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", { page: "P6" });
+  await h.engine.push("github", { page: "P6" });
   await h.engine.drain();
   const report = h.memory.state("pages", "P6")?.report;
   expect(report?.checks[0]).toMatchObject({
@@ -548,7 +548,7 @@ test("a preflight that throws is retried without an attempt, and keeps its own c
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", { page: "P1" });
+  await h.engine.push("github", { page: "P1" });
   await h.engine.drain();
   // The push's own drain, then this one: each a plain retry.
   expect(calls).toBe(2);
@@ -1063,7 +1063,7 @@ test("a push after a restart answers without waiting for the leftover backlog to
   h.at(minutes(2));
 
   // The leftover start is still held behind its gate.
-  expect(await h.engine.push("pagerduty", { page: "P2" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", { page: "P2" })).toEqual(["pages"]);
   open();
   await h.engine.drain();
   expect(h.memory.state("pages", "P2")?.state).toBe("started");
@@ -1199,7 +1199,7 @@ test("one trigger's failing start holds up no other trigger", async () => {
   });
   await h.engine.arm();
   h.at(minutes(2));
-  expect(await h.engine.push("pagerduty", { page: "P1" })).toEqual(["alpha", "beta"]);
+  expect(await h.engine.push("github", { page: "P1" })).toEqual(["alpha", "beta"]);
   await h.engine.drain();
   expect(h.memory.state("alpha", "P1")?.state).toBe("pending");
   expect(h.memory.state("beta", "P1")?.state).toBe("started");
@@ -1216,8 +1216,8 @@ test("stopping waits for the start in flight and starts nothing after", async ()
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", { page: "P1" });
-  await h.engine.push("pagerduty", { page: "P2" });
+  await h.engine.push("github", { page: "P1" });
+  await h.engine.push("github", { page: "P2" });
   await vi.waitFor(() => expect(starts).toBe(1));
 
   let settled = false;
@@ -1246,7 +1246,7 @@ test("an unknown source kind is refused at boot with its repair, and the rest st
       store: memoryStore().store,
     },
   );
-  expect(engine.triggers).toEqual([{ name: "pages", provider: "pagerduty" }]);
+  expect(engine.triggers).toEqual([{ name: "pages", provider: "github" }]);
   expect(lines).toEqual([
     '[trigger] broken not started: source "nope.things" is not a source this jigs version provides',
     "  → set triggers.broken.source in jigs.config.ts to one of: fake.pages",

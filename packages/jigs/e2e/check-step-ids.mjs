@@ -1260,7 +1260,23 @@ async function startHub(adminUrl) {
     },
     stdio: ["ignore", "pipe", "inherit"],
   });
-  process.once("exit", () => child.kill("SIGKILL"));
+  // Any other way out, fail() or a throw, still removes the hub and its database.
+  let stopped = false;
+  process.once("exit", () => {
+    if (stopped) return;
+    child.kill("SIGKILL");
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        "import { Client } from \"pg\"; const c = new Client({ connectionString: process.argv[1] }); await c.connect(); await c.query('DROP DATABASE IF EXISTS \"' + process.argv[2] + '\" WITH (FORCE)'); await c.end();",
+        adminUrl,
+        database,
+      ],
+      { cwd: packageRoot, stdio: "inherit" },
+    );
+  });
   const listening = await Promise.race([
     once(child.stdout.setEncoding("utf8"), "data").then(() => true),
     once(child, "exit").then(() => false),
@@ -1278,8 +1294,6 @@ async function startHub(adminUrl) {
     "INSERT INTO factories (organization_id, name, token_hash) VALUES ('e2e', 'e2e', $1) RETURNING id",
     [createHash("sha256").update(token).digest("hex")],
   );
-  // Every service the checks below boot reads it from here, whatever its .env holds.
-  process.env.JIGS_HUB_TOKEN = token;
   return {
     url,
     token,
@@ -1305,6 +1319,7 @@ async function startHub(adminUrl) {
         fail(`the hub exited with code ${code} on SIGTERM, not 0`, "see its output above");
       await admin.query(`DROP DATABASE "${database}"`);
       await admin.end();
+      stopped = true;
     },
   };
 }

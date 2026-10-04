@@ -11,11 +11,12 @@ export const POLLED_PROVIDERS = PROVIDERS.filter(
   (provider): provider is PolledProvider => provider !== "github",
 );
 
-// Slack delivers over Socket Mode, so it has no webhook or signing secret.
-export type WebhookProvider = Exclude<PolledProvider, "slack">;
+// GitHub reaches the factory through its hub, and Slack over Socket Mode, so
+// neither has a webhook or signing secret.
+export type WebhookProvider = Exclude<Provider, "github" | "slack">;
 
-export const WEBHOOK_PROVIDERS = POLLED_PROVIDERS.filter(
-  (provider): provider is WebhookProvider => provider !== "slack",
+export const WEBHOOK_PROVIDERS = PROVIDERS.filter(
+  (provider): provider is WebhookProvider => provider !== "github" && provider !== "slack",
 );
 
 /** An object with one `value` per provider, for building per-provider config schemas. */

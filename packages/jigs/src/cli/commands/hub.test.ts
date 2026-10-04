@@ -51,6 +51,20 @@ test("a factory without a hub section gets one, and a .env without the slot gets
   expect(read(".env")).toBe("WORKFLOW_POSTGRES_URL=postgres://x\nJIGS_HUB_TOKEN=t\n");
 });
 
+test("a hub section added to a config goes above the first property's comment", () => {
+  write(
+    "jigs.config.ts",
+    `export default defineFactory({\n  // where the service listens\n  service: { dashboardPort: 9090 },\n  workflows: {},\n});\n`,
+  );
+  write(".env", "");
+
+  connectHub("https://hub.acme.test", "t", deps());
+
+  expect(read("jigs.config.ts")).toBe(
+    `export default defineFactory({\n  hub: { url: "https://hub.acme.test" },\n  // where the service listens\n  service: { dashboardPort: 9090 },\n  workflows: {},\n});\n`,
+  );
+});
+
 test("a URL that is not one, or an empty token, changes nothing", () => {
   write(".env", "JIGS_HUB_TOKEN=\n");
   const config = read("jigs.config.ts");

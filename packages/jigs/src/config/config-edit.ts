@@ -244,7 +244,8 @@ export function setHubUrl(text: string, url: string): string {
     const entry = `hub: { url: ${JSON.stringify(url)} },`;
     const first = root.getProperties()[0];
     if (!first) return fail("the configuration object is empty");
-    const at = first.getStart();
+    // Before any comment above the first property, which belongs to it.
+    const at = first.getLeadingCommentRanges()[0]?.getPos() ?? first.getStart();
     const separator =
       text.lastIndexOf("\n", at - 1) < root.getStart() ? " " : `\n${leadingWhitespace(text, at)}`;
     return `${text.slice(0, at)}${entry}${separator}${text.slice(at)}`;
