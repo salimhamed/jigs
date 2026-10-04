@@ -3,6 +3,7 @@
 // Hook administration is a permission in its own right — an App needs
 // "Repository webhooks: read & write" before any of this works.
 
+import type { FactoryContext } from "../config/factory-context.ts";
 import { githubRequest } from "./github-api.ts";
 
 // Reviews, inline review comments, conversation comments, and the check-run
@@ -45,6 +46,7 @@ export function parseGithubRemote(url: string): GitHubRepoRef | null {
 export interface EnsureRepoWebhookOptions extends GitHubRepoRef {
   webhooksUrl: string;
   secret: string;
+  context?: FactoryContext;
 }
 
 interface RepoHook {
@@ -88,10 +90,13 @@ export async function ensureRepoWebhook({
   repo,
   webhooksUrl,
   secret,
+  context,
 }: EnsureRepoWebhookOptions): Promise<EnsureRepoWebhookResult> {
   const hookUrl = githubWebhookUrl(webhooksUrl);
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
-  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
+  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`, undefined, {
+    context,
+  });
   const existing = hooks.find((hook) => hook.config.url === hookUrl);
   const otherHosts = [
     ...new Set(
@@ -106,12 +111,12 @@ export async function ensureRepoWebhook({
     active: true,
   };
   if (existing === undefined) {
-    await githubRequest("POST", hooksPath, desired);
+    await githubRequest("POST", hooksPath, desired, { context });
     return { outcome: "created", otherHosts };
   }
   // GitHub never returns a hook's secret, so a rotated local one is invisible
   // here: always re-send it rather than trusting the settings that do show.
-  await githubRequest("PATCH", `${hooksPath}/${existing.id}`, desired);
+  await githubRequest("PATCH", `${hooksPath}/${existing.id}`, desired, { context });
   return { outcome: matchesDesired(existing, hookUrl) ? "verified" : "updated", otherHosts };
 }
 
@@ -136,9 +141,12 @@ export async function inspectRepoWebhook({
   owner,
   repo,
   webhooksUrl,
+  context,
 }: Omit<EnsureRepoWebhookOptions, "secret">): Promise<RepoWebhookState> {
   const hooksPath = `/repos/${owner}/${repo}/hooks`;
-  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`);
+  const hooks = await githubRequest<RepoHook[]>("GET", `${hooksPath}?per_page=100`, undefined, {
+    context,
+  });
   const hookUrl = githubWebhookUrl(webhooksUrl);
   const hook = hooks.find(
     (candidate) =>
@@ -150,6 +158,8 @@ export async function inspectRepoWebhook({
   const deliveries = await githubRequest<HookDelivery[]>(
     "GET",
     `${hooksPath}/${hook.id}/deliveries?per_page=${DELIVERY_SAMPLE}`,
+    undefined,
+    { context },
   );
   const newestFirst = [...deliveries].sort((a, b) => b.delivered_at.localeCompare(a.delivered_at));
   if (newestFirst[0]?.status_code !== 401) return { state: "ok" };

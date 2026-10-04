@@ -11,7 +11,6 @@ import {
   fakeExec,
   fakeProcesses,
   fakeService,
-  type ServiceRoutes,
   factory as scaffold,
 } from "./test-fixtures.ts";
 import { type UpDeps, type UpOptions, upFactory } from "./up.ts";

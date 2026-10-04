@@ -1,13 +1,8 @@
 import type { Check } from "../checks/check.ts";
-import { readFactoryConfig, resolveService, type SlackConfig } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import { otherSlackAppHolders } from "../config/slack-apps.ts";
-import {
-  credentialValue,
-  type EnvLookup,
-  RESTART_SERVICE,
-  SERVICE_ENV_FILE,
-} from "./credentials.ts";
+import type { SlackConfig } from "../workflow/factory-schema.ts";
+import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 import {
   SLACK_BOT_SCOPES,
   SlackApiError,
@@ -42,8 +37,8 @@ const SOCKET_MODE_FIX: Record<string, string> = {
  */
 export function slackIdentityChecks(
   probes: SlackProbes,
-  extraScopes: readonly string[] = [],
-  env: EnvLookup = credentialValue,
+  extraScopes: readonly string[],
+  env: EnvLookup,
 ): Check[] {
   const scopes = [...new Set([...SLACK_BOT_SCOPES, ...extraScopes])];
   return [
@@ -99,7 +94,7 @@ export function slackIdentityChecks(
 export function slackSocketModeChecks(
   slack: Pick<SlackConfig, "socketMode">,
   probes: SlackProbes,
-  env: EnvLookup = credentialValue,
+  env: EnvLookup,
 ): Check[] {
   if (!slack.socketMode) return [];
   return [
@@ -143,7 +138,7 @@ export type SlackAppHoldersProbe = () => readonly string[];
 export function slackSharedAppChecks(
   slack: Pick<SlackConfig, "socketMode">,
   otherHolders: SlackAppHoldersProbe,
-  env: EnvLookup = credentialValue,
+  env: EnvLookup,
 ): Check[] {
   if (!slack.socketMode || env("SLACK_APP_TOKEN") === undefined) return [];
   return [
@@ -169,31 +164,30 @@ const slackProbes: SlackProbes = { authTest: slackAuthTest, openConnection: slac
 // The bot token is worth checking whatever the config says, so a missing or
 // unreadable slack section falls back to no Socket Mode and no extra scopes.
 // An unreadable config is the binding checks' diagnosis.
-function configuredSlack(): SlackConfig {
+function configuredSlack(ctx: FactoryContext): SlackConfig {
   let slack: SlackConfig | undefined;
   try {
-    slack = readFactoryConfig(factoryRoot()).slack;
+    slack = ctx.config.slack;
   } catch {}
   return slack ?? { socketMode: false, scopes: [] };
 }
 
 /** The bot token checks a run that uses Slack needs. */
-export function slackChecks(): Check[] {
-  return slackIdentityChecks(slackProbes, configuredSlack().scopes);
+export function slackChecks(ctx: FactoryContext): Check[] {
+  return slackIdentityChecks(slackProbes, configuredSlack(ctx).scopes, ctx.env);
 }
 
-export function slackDoctorChecks(): Check[] {
-  const slack = configuredSlack();
+export function slackDoctorChecks(ctx: FactoryContext): Check[] {
+  const slack = configuredSlack(ctx);
   return [
-    ...slackIdentityChecks(slackProbes, slack.scopes),
-    ...slackSocketModeChecks(slack, slackProbes),
-    ...slackSharedAppChecks(slack, otherSlackAppServices),
+    ...slackIdentityChecks(slackProbes, slack.scopes, ctx.env),
+    ...slackSocketModeChecks(slack, slackProbes, ctx.env),
+    ...slackSharedAppChecks(slack, () => otherSlackAppServices(ctx), ctx.env),
   ];
 }
 
-function otherSlackAppServices(): string[] {
-  const token = credentialValue("SLACK_APP_TOKEN");
+function otherSlackAppServices(ctx: FactoryContext): string[] {
+  const token = ctx.env("SLACK_APP_TOKEN");
   if (token === undefined) return [];
-  const { slug } = resolveService(factoryRoot());
-  return otherSlackAppHolders(token, slug).map((holder) => holder.slug);
+  return otherSlackAppHolders(token, ctx.slug).map((holder) => holder.slug);
 }

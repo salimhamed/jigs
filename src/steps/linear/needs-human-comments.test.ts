@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { beforeEach, expect, test, vi } from "vitest";
+import { inTestFactory } from "../../test-fixtures.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
@@ -60,6 +61,8 @@ const operator = (email: string): Pick<FactoryDefinition, "linear"> => ({
 });
 
 const body = (): string => createComment.mock.calls[0]?.[1] ?? "";
+
+inTestFactory();
 
 beforeEach(() => {
   vi.stubEnv("JIGS_DASHBOARD_PORT", "9040");

@@ -1,5 +1,4 @@
 import { afterAll, describe, expect, test, vi } from "vitest";
-import type { PagerDutyIdentity } from "../../config/factory-config.ts";
 import {
   createPagerDutyClient,
   PAGERDUTY_API_URL,
@@ -7,6 +6,7 @@ import {
   pagerDutyClientFor,
 } from "../../providers/pagerduty.ts";
 import { createPagerDutyAuth } from "../../providers/pagerduty-auth.ts";
+import type { PagerDutyIdentity } from "../../workflow/factory-schema.ts";
 import { fetchIncidentSnapshot } from "./fetch-snapshot.ts";
 import { postIncidentNote } from "./notes.ts";
 

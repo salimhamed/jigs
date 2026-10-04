@@ -1,29 +1,27 @@
 import type { Check, CheckResult } from "../checks/check.ts";
-import {
-  type LinearIdentity,
-  readFactoryConfig,
-  type WebhooksConfig,
-} from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
+import type { LinearIdentity, WebhooksConfig } from "../workflow/factory-schema.ts";
 import { type LinearWebhook, listWebhooks } from "./linear.ts";
 
 export interface LinearWebhookChecksOptions {
-  factoryRoot: () => string;
+  context: FactoryContext;
   list?: () => Promise<LinearWebhook[]>;
 }
 
 export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[] {
+  const ctx = options.context;
   let webhooks: WebhooksConfig | undefined;
   let identity: LinearIdentity;
   try {
     ({
       webhooks,
       linear: { identity },
-    } = readFactoryConfig(options.factoryRoot()));
+    } = ctx.config);
   } catch {
     // The binding catalog owns the single factory-config failure.
     return [];
@@ -37,13 +35,12 @@ export function linearWebhookChecks(options: LinearWebhookChecksOptions): Check[
       id: "linear.webhook-secret",
       label: "Linear webhook secret",
       run: async () => {
-        const root = options.factoryRoot();
-        return webhookSecret("linear", root) !== undefined
+        return webhookSecret("linear", ctx) !== undefined
           ? { ok: true }
           : {
               ok: false,
-              reason: `webhooks.linear is enabled but ${missingWebhookSecret("linear", root)}`,
-              repair: webhookSecretRepair("linear", root),
+              reason: `webhooks.linear is enabled but ${missingWebhookSecret("linear", ctx.root)}`,
+              repair: webhookSecretRepair("linear", ctx.root),
             };
       },
     },

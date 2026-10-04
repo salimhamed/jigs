@@ -2,13 +2,13 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import {
   type AutomaticReleaseDeps,
   reconcileAutomaticRelease,
 } from "../../service/automatic-release.ts";
 import type { Factory } from "../../workflow/factory.ts";
 import {
-  currentFactory,
   ensureRegistry,
   listResources,
   registrySql,
@@ -47,7 +47,7 @@ writeFileSync(
 
 const sql = () => registrySql();
 const states = async (runId: string) =>
-  (await listResources(sql(), { factory: currentFactory(), runId })).map((row) => [
+  (await listResources(sql(), { factory: currentFactoryContext().slug, runId })).map((row) => [
     row.kind,
     row.state,
     row.reason,
@@ -86,7 +86,7 @@ test("explicit release keeps, then removes, through the real registry", async ()
   const directory = await createRunDirectory({ workflowRunId: runId });
   const release = (action: "release" | "keep") =>
     withRunResourceLock(sql(), runId, (locked) =>
-      releaseRun(locked, currentFactory(), runId, action, "success"),
+      releaseRun(locked, currentFactoryContext().slug, runId, action, "success"),
     );
 
   await release("keep");
@@ -111,7 +111,7 @@ test("automatic release uses the same release and preserves dirty work", async (
   const directory = await createRunDirectory({ workflowRunId: runId });
   writeFileSync(path.join(tree.path, "uncommitted.txt"), "keep me\n");
   const readState = (id: string) =>
-    readRunState(sql(), currentFactory(), id, async () => ({
+    readRunState(sql(), currentFactoryContext().slug, id, async () => ({
       run: {
         status: "completed",
         workflowName: "workflow//./workflows/ship//ship",
@@ -128,7 +128,7 @@ test("automatic release uses the same release and preserves dirty work", async (
     policy: () => "release",
     withLock: (id, action) => withRunResourceLock(sql(), id, action),
     release: (locked, runId, action, outcome) =>
-      releaseRun(locked, currentFactory(), runId, action, outcome),
+      releaseRun(locked, currentFactoryContext().slug, runId, action, outcome),
     ready: () => true,
     log: () => undefined,
     warn: () => undefined,

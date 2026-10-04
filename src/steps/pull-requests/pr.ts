@@ -1,5 +1,5 @@
-import { type MergeMethod, resolveBinding } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
+import { resolveBinding } from "../../config/factory-config.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import {
   assignPullRequest,
   createPr,
@@ -15,9 +15,10 @@ import {
   postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
-import { resolveGithubIdentity } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import type { MergeMethod } from "../../workflow/factory-schema.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -34,7 +35,7 @@ export type OpenedPullRequest = PullRequestRef & {
 };
 
 function repositoryOf(binding: string) {
-  const { remote } = resolveBinding(factoryRoot(), binding);
+  const { remote } = resolveBinding(currentFactoryContext().config, binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
     throw new Error(
@@ -63,7 +64,7 @@ export async function createPullRequest(request: {
   const { worktree, title, body, draft } = request;
   const repo = repositoryOf(worktree.binding);
   const { branch: head, defaultBranch: base } = worktree;
-  const identity = resolveGithubIdentity(repo.owner);
+  const { identity } = githubAuthFor(repo.owner);
   // In App mode the pull request's author is the bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
@@ -194,7 +195,7 @@ export async function mergePullRequest(
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
   const refusal = mergeRefusal(before, expectedHeadSha);
   if (refusal !== null) return { merged: false, ...refusal };
-  const method = resolveBinding(factoryRoot(), worktree.binding).mergeMethod;
+  const method = resolveBinding(currentFactoryContext().config, worktree.binding).mergeMethod;
   const message = await suppliedCommitMessageBody(pr, method);
   try {
     const result = await mergePr(pr, {
@@ -243,7 +244,7 @@ async function suppliedCommitMessageBody(
   pr: PullRequestRef,
   method: MergeMethod,
 ): Promise<undefined | string> {
-  const identity = resolveGithubIdentity(pr.owner);
+  const { identity } = githubAuthFor(pr.owner);
   if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {
     return undefined;
   }

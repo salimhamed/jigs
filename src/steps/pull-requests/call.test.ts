@@ -1,14 +1,16 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resetGithubAuth } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { useGithubClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
+import { removeTmpDir, useTestFactory } from "../../test-fixtures.ts";
 import { callGitHub } from "./call.ts";
 
 let calls: FetchCall[];
 let reply: () => Response;
+let factory: string;
 
 beforeEach(() => {
+  factory = useTestFactory();
   vi.stubEnv("GITHUB_TOKEN", "ghp-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
   const fake = fakeFetch(() => reply());
@@ -16,9 +18,9 @@ beforeEach(() => {
   useGithubClient({ fetch: fake.fetch });
 });
 afterEach(() => {
-  resetGithubAuth();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
+  removeTmpDir(factory);
 });
 
 test("any endpoint is called with the factory's token and returns GitHub's JSON", async () => {

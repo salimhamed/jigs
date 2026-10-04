@@ -1,21 +1,19 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
-import {
-  type GithubIdentity,
-  type LinearIdentity,
-  type PagerDutyIdentity,
-  type ResolvedService,
-  readFactoryConfig,
-  resolveService,
-} from "../../config/factory-config.ts";
+import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
+import type {
+  GithubIdentity,
+  LinearIdentity,
+  PagerDutyIdentity,
+} from "../../workflow/factory-schema.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
@@ -210,11 +208,11 @@ function locate(cwd: string): {
   github: GithubIdentity[];
   pagerduty: PagerDutyIdentity | undefined;
 } {
-  const factoryRoot = locateFactoryRoot(cwd);
-  const service = resolveService(factoryRoot);
-  const config = readFactoryConfig(factoryRoot);
+  const ctx = factoryContextAt(cwd);
+  const service = resolveService(ctx);
+  const { config } = ctx;
   return {
-    factoryRoot,
+    factoryRoot: ctx.root,
     service,
     linear: config.linear.identity,
     github: config.github.identities,

@@ -1,3 +1,4 @@
+import type { FactoryContext } from "../config/factory-context.ts";
 import { readFactoryEnv } from "../config/factory-env.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/harnesses/mcp-credentials.ts";
@@ -6,9 +7,7 @@ import { type Check, failedCheck } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";
 
 export interface SecretChecksOptions {
-  // A thunk: without a factory root the check still answers from the
-  // environment, it just cannot say where a value came from.
-  factoryRoot: () => string;
+  context: FactoryContext;
   env?: Record<string, string | undefined>;
 }
 
@@ -61,7 +60,7 @@ function secretCheck(name: string, options: SecretChecksOptions): Check {
         };
       let declared: string | undefined;
       try {
-        declared = readFactoryEnv(options.factoryRoot())[name];
+        declared = readFactoryEnv(options.context.root)[name];
       } catch {
         return { ok: true };
       }

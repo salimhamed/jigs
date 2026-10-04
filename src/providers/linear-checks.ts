@@ -1,22 +1,9 @@
 import { type Check, failedCheck } from "../checks/check.ts";
-import {
-  FACTORY_CONFIG_FILE,
-  type LinearIdentity,
-  readFactoryConfig,
-} from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
-import {
-  credentialValue,
-  type EnvLookup,
-  RESTART_SERVICE,
-  SERVICE_ENV_FILE,
-} from "./credentials.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
+import { FACTORY_CONFIG_FILE, type LinearIdentity } from "../workflow/factory-schema.ts";
+import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 import { findUserByEmail, getViewer, type LinearUser } from "./linear.ts";
-import {
-  LINEAR_IDENTITY_VARIABLES,
-  missingLinearVariables,
-  resolveLinearIdentity,
-} from "./linear-auth.ts";
+import { LINEAR_IDENTITY_VARIABLES, missingLinearVariables } from "./linear-auth.ts";
 
 // A probe is a provider client; the catalog owns the repair text, which is
 // what makes preflight and doctor say the same thing.
@@ -33,7 +20,7 @@ const SOURCE: Record<LinearIdentity["mode"], string> = {
 export function linearIdentityChecks(
   identity: LinearIdentity,
   probes: LinearIdentityProbes,
-  env: EnvLookup = credentialValue,
+  env: EnvLookup,
 ): Check[] {
   const { mode } = identity;
   const variables = LINEAR_IDENTITY_VARIABLES[mode].join(" and ");
@@ -125,10 +112,10 @@ export function linearOperatorChecks(
 
 // A configuration that cannot be read says nothing about the credential, so it
 // fails as itself rather than as a key Linear rejected.
-export function linearChecks(): Check[] {
+export function linearChecks(ctx: FactoryContext): Check[] {
   let identity: LinearIdentity;
   try {
-    identity = resolveLinearIdentity();
+    identity = ctx.config.linear.identity;
   } catch (err) {
     return [
       failedCheck(
@@ -139,16 +126,15 @@ export function linearChecks(): Check[] {
       ),
     ];
   }
-  return linearIdentityChecks(identity, { viewer: getViewer });
+  return linearIdentityChecks(identity, { viewer: getViewer }, ctx.env);
 }
 
 // An unreadable config is the identity check's diagnosis, so it adds nothing here.
-export function linearOperatorDoctorChecks(): Check[] {
+export function linearOperatorDoctorChecks(ctx: FactoryContext): Check[] {
   let identity: LinearIdentity;
   let operator: string | undefined;
   try {
-    identity = resolveLinearIdentity();
-    operator = readFactoryConfig(factoryRoot()).linear.operator;
+    ({ identity, operator } = ctx.config.linear);
   } catch {
     return [];
   }

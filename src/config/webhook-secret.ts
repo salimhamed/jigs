@@ -1,6 +1,6 @@
 import path from "node:path";
 import type { WebhookProvider } from "../workflow/providers.ts";
-import { factoryEnvValue } from "./factory-env.ts";
+import type { FactoryContext } from "./factory-context.ts";
 
 const SECRET_VARIABLES: Record<WebhookProvider, string> = {
   github: "GITHUB_WEBHOOK_SECRET",
@@ -24,12 +24,11 @@ export function webhookSecretVariable(provider: WebhookProvider): string {
 // The factory's `.env` is the only local copy of a provider's signing secret,
 // and jigs never generates one. Bind, doctor, the boot gate and the ingress
 // all ask here whether it is configured.
-export function webhookSecret(provider: WebhookProvider, factoryRoot?: string): string | undefined {
-  const variable = SECRET_VARIABLES[provider];
-  // The service runs with `.env` already loaded, so it passes no root.
-  if (factoryRoot !== undefined) return factoryEnvValue(factoryRoot, variable);
-  const value = process.env[variable];
-  return value === undefined || value === "" ? undefined : value;
+export function webhookSecret(
+  provider: WebhookProvider,
+  ctx: Pick<FactoryContext, "env">,
+): string | undefined {
+  return ctx.env(SECRET_VARIABLES[provider]);
 }
 
 export function missingWebhookSecret(provider: WebhookProvider, factoryRoot: string): string {

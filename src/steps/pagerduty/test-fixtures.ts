@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { vi } from "vitest";
-import type { PagerDutyIdentity } from "../../config/factory-config.ts";
 import { createPagerDutyClient, type PagerDutyClient } from "../../providers/pagerduty.ts";
+import type { PagerDutyIdentity } from "../../workflow/factory-schema.ts";
 
 // Recorded from api.pagerduty.com against a sandbox incident, with the account
 // and the responder's name replaced.

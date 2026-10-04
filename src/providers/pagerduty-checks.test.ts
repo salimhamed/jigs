@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { runChecks } from "../checks/catalog.ts";
-import type { PagerDutyIdentity } from "../config/factory-config.ts";
+import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { ProviderApiError } from "./http.ts";
 import {
   type PagerDutyIdentityProbes,

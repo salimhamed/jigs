@@ -8,11 +8,10 @@
 
 import { pathToFileURL } from "node:url";
 import { resolveBinding } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
-  currentFactory,
   recordResource,
   registrySql,
   setResourceState,
@@ -56,11 +55,12 @@ export async function provisionWorktree(
   metadata: RunMetadata,
 ): Promise<Worktree> {
   const runId = metadata.workflowRunId;
-  const sql = registrySql();
+  const ctx = currentFactoryContext();
+  const sql = registrySql(ctx);
 
   return withRunResourceLock(sql, runId, async (lockedSql) => {
-    const binding = resolveBinding(factoryRoot(), request.binding);
-    const dirs = { factoryRoot: factoryRoot(), bindingName: binding.name };
+    const binding = resolveBinding(ctx.config, request.binding);
+    const dirs = { factoryRoot: ctx.root, bindingName: binding.name };
     const repoDir = cloneRepoDir(dirs);
     const branch = runBranch(request.branch, runId);
     const target = worktreePath({ ...dirs, branch });
@@ -82,7 +82,7 @@ export async function provisionWorktree(
       ...((await findWorktree(cut)) ?? (await createWorktree(cut))),
     };
 
-    const own = { factory: currentFactory(), runId, kind: "worktree", identity: facts.path };
+    const own = { factory: ctx.slug, runId, kind: "worktree", identity: facts.path };
     await recordResource(lockedSql, {
       ...own,
       url: pathToFileURL(facts.path).href,

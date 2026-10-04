@@ -3,17 +3,12 @@
 // Reads the environment and the network, so it is only reached from a step, a
 // check, the service or the CLI — never from workflow code.
 
-import {
-  FACTORY_CONFIG_FILE,
-  type PagerDutyIdentity,
-  readFactoryConfig,
-} from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
+import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import {
-  credentialRoot,
-  credentialValue,
   type EnvLookup,
-  onProviderReset,
+  perContext,
   RESTART_SERVICE,
   requireCredential,
   SERVICE_ENV_FILE,
@@ -40,7 +35,7 @@ export const PAGERDUTY_IDENTITY_VARIABLES = [
 
 type FetchLike = typeof fetch;
 
-export function missingPagerDutyVariables(env: EnvLookup = credentialValue): string[] {
+export function missingPagerDutyVariables(env: EnvLookup): string[] {
   return PAGERDUTY_IDENTITY_VARIABLES.filter((name) => !env(name));
 }
 
@@ -97,7 +92,7 @@ export interface PagerDutyAuth extends ProviderAuth {
 
 export interface PagerDutyAuthDeps {
   fetch?: FetchLike;
-  env?: EnvLookup;
+  env: EnvLookup;
   now?: () => number;
 }
 
@@ -105,9 +100,9 @@ export interface PagerDutyAuthDeps {
 // costs one request a day.
 export function createPagerDutyAuth(
   identity: PagerDutyIdentity,
-  deps: PagerDutyAuthDeps = {},
+  deps: PagerDutyAuthDeps,
 ): PagerDutyAuth {
-  const env = deps.env ?? credentialValue;
+  const env = deps.env;
   const now = deps.now ?? Date.now;
   const required = (name: string): string => requireCredential(name, "the PagerDuty identity", env);
   let cached: MintedToken | null = null;
@@ -138,8 +133,8 @@ export function createPagerDutyAuth(
 }
 
 /** The PagerDuty identity this factory is configured with. */
-export function resolvePagerDutyIdentity(root?: string): PagerDutyIdentity {
-  const pagerduty = readFactoryConfig(root ?? credentialRoot()).pagerduty;
+export function resolvePagerDutyIdentity(ctx: FactoryContext): PagerDutyIdentity {
+  const pagerduty = ctx.config.pagerduty;
   if (pagerduty === undefined) {
     throw new JigsError(
       `${FACTORY_CONFIG_FILE} has no pagerduty section`,
@@ -149,14 +144,7 @@ export function resolvePagerDutyIdentity(root?: string): PagerDutyIdentity {
   return pagerduty.identity;
 }
 
-let processAuth: PagerDutyAuth | null = null;
-
-/** This process's PagerDuty credential, cached once per process. */
-export function pagerDutyAuthFor(): PagerDutyAuth {
-  processAuth ??= createPagerDutyAuth(resolvePagerDutyIdentity());
-  return processAuth;
-}
-
-onProviderReset(() => {
-  processAuth = null;
-});
+/** The factory's PagerDuty credential, cached once per factory context. */
+export const pagerDutyAuthFor = perContext((ctx) =>
+  createPagerDutyAuth(resolvePagerDutyIdentity(ctx), { env: ctx.env }),
+);

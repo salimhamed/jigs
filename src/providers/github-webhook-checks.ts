@@ -1,24 +1,25 @@
 import type { Check, CheckResult } from "../checks/check.ts";
-import type { ResolvedGithubIdentity } from "../config/factory-config.ts";
-import { readFactoryConfig } from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { resolveGithubIdentity } from "./github-auth.ts";
+import type { FactoryConfig, ResolvedGithubIdentity } from "../workflow/factory-schema.ts";
+import { githubAuthFor } from "./github-auth.ts";
 import { GitHubApiError } from "./github-http.ts";
 import { inspectRepoWebhook, parseGithubRemote } from "./github-webhook.ts";
 
 export interface WebhookChecksOptions {
-  factoryRoot: () => string;
+  context: FactoryContext;
   identity?: () => ResolvedGithubIdentity;
 }
 
 export function webhookChecks(options: WebhookChecksOptions): Check[] {
-  let config: ReturnType<typeof readFactoryConfig>;
+  const ctx = options.context;
+  let config: FactoryConfig;
   try {
-    config = readFactoryConfig(options.factoryRoot());
+    config = ctx.config;
   } catch {
     // The binding checks own config diagnostics; do not duplicate them.
     return [];
@@ -30,13 +31,12 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
     id: "webhook.secret",
     label: "GitHub webhook secret",
     run: async () => {
-      const root = options.factoryRoot();
-      return webhookSecret("github", root) !== undefined
+      return webhookSecret("github", ctx) !== undefined
         ? { ok: true }
         : {
             ok: false,
-            reason: `webhooks.github is enabled but ${missingWebhookSecret("github", root)}`,
-            repair: `${webhookSecretRepair("github", root)}\nthen bind each repo again: \`pnpm exec jigs bind <remote-url>\``,
+            reason: `webhooks.github is enabled but ${missingWebhookSecret("github", ctx.root)}`,
+            repair: `${webhookSecretRepair("github", ctx.root)}\nthen bind each repo again: \`pnpm exec jigs bind <remote-url>\``,
           };
     },
   };
@@ -52,11 +52,11 @@ export function webhookChecks(options: WebhookChecksOptions): Check[] {
               label: `webhook ${name}`,
               run: () =>
                 checkWebhook(
+                  ctx,
                   binding.remote,
                   webhooksUrl,
                   repo,
-                  options.identity ??
-                    (() => resolveGithubIdentity(repo.owner, options.factoryRoot())),
+                  options.identity ?? (() => githubAuthFor(repo.owner, ctx).identity),
                 ),
             },
           ];
@@ -80,6 +80,7 @@ function hookPermissionRepair(
 }
 
 async function checkWebhook(
+  context: FactoryContext,
   remote: string,
   webhooksUrl: string,
   repo: { owner: string; repo: string },
@@ -87,7 +88,7 @@ async function checkWebhook(
 ): Promise<CheckResult> {
   const bindRepair = `bind it again: \`pnpm exec jigs bind ${remote}\``;
   try {
-    const hook = await inspectRepoWebhook({ ...repo, webhooksUrl });
+    const hook = await inspectRepoWebhook({ ...repo, webhooksUrl, context });
     if (hook.state === "ok") return { ok: true };
     if (hook.state === "missing") {
       return {

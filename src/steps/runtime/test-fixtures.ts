@@ -1,3 +1,5 @@
+import type { FactoryContext } from "../../config/factory-context.ts";
+import { testFactoryContext } from "../../test-fixtures.ts";
 import type { ResourceFilter, ResourceKey, ResourceRow } from "./registry.ts";
 
 /** The rows behind {@link memoryRegistry}; tests read and seed them directly. */
@@ -19,7 +21,6 @@ const same = (row: ResourceRow, key: ResourceKey) =>
 export function memoryRegistry() {
   return {
     registrySql: () => ({}),
-    currentFactory: () => "factory-a",
     withRunResourceLock: <T>(db: never, runId: string, action: (db: never) => Promise<T>) => {
       memoryLock.taken?.(runId);
       return action(db);
@@ -71,6 +72,35 @@ export function memoryRegistry() {
         { state, reason, updatedAt: new Date() },
         attempts === undefined ? {} : { attempts },
       );
+    },
+  };
+}
+
+/**
+ * The factory-context module with the process's context recorded under `factory-a`, the factory
+ * {@link memoryRows} are seeded for, for `vi.mock`. Outside a factory the context is an empty one.
+ */
+export async function memoryFactoryContext(
+  original: () => Promise<typeof import("../../config/factory-context.ts")>,
+) {
+  const actual = await original();
+  const slugged = new Map<FactoryContext, FactoryContext>();
+  const outside = testFactoryContext({ slug: "factory-a" });
+  return {
+    ...actual,
+    currentFactoryContext: (): FactoryContext => {
+      const ctx = actual.currentFactoryContext();
+      try {
+        void ctx.root;
+      } catch {
+        return outside;
+      }
+      let named = slugged.get(ctx);
+      if (named === undefined) {
+        named = Object.create(ctx, { slug: { value: "factory-a" } }) as FactoryContext;
+        slugged.set(ctx, named);
+      }
+      return named;
     },
   };
 }

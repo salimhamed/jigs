@@ -1,3 +1,4 @@
+import type { FactoryContext } from "../config/factory-context.ts";
 import { APPROVED_LABEL } from "../workflow/pull-requests/policy.ts";
 import { githubGet, githubRequest } from "./github-api.ts";
 import { GitHubApiError } from "./github-http.ts";
@@ -19,6 +20,7 @@ export interface EnsureRepoLabelOptions {
   owner: string;
   repo: string;
   label: JigsLabel;
+  context?: FactoryContext;
 }
 
 /** Create a repository label when absent, leaving an existing label untouched. */
@@ -26,15 +28,16 @@ export async function ensureRepoLabel({
   owner,
   repo,
   label,
+  context,
 }: EnsureRepoLabelOptions): Promise<"created" | "verified"> {
   const labelPath = `/repos/${owner}/${repo}/labels/${encodeURIComponent(label.name)}`;
   try {
-    await githubGet(labelPath);
+    await githubGet(labelPath, context);
     return "verified";
   } catch (err) {
     if (!(err instanceof GitHubApiError) || err.status !== 404) throw err;
   }
 
-  await githubRequest("POST", `/repos/${owner}/${repo}/labels`, label);
+  await githubRequest("POST", `/repos/${owner}/${repo}/labels`, label, { context });
   return "created";
 }

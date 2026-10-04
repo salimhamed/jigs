@@ -1,5 +1,5 @@
+import { tmpdir } from "node:os";
 import { afterAll, expect, test, vi } from "vitest";
-import { credentialValue } from "../../providers/credentials.ts";
 import { SlackApiError, slackHistory } from "../../providers/slack.ts";
 import { waitForSlackReply } from "../../workflow/slack/wait-for-reply.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
@@ -8,6 +8,8 @@ import { postSlackMessage } from "./post-message.ts";
 // Posts to the test channel, then deletes what it posted. Set SLACK_BOT_TOKEN
 // to a test app's that is in the channel.
 const configured = Boolean(process.env.SLACK_BOT_TOKEN);
+// The shell's token wins over any factory's .env, so any root serves.
+vi.stubEnv("JIGS_FACTORY_ROOT", tmpdir());
 const channel = "C0C5EUZ7P9Q";
 
 // A hook that never wakes: the wait either finds a reply on its first read or parks.
@@ -28,7 +30,7 @@ async function deleteMessage(ts: string) {
   const res = await fetch("https://slack.com/api/chat.delete", {
     method: "POST",
     headers: {
-      authorization: `Bearer ${credentialValue("SLACK_BOT_TOKEN")}`,
+      authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ channel, ts }),

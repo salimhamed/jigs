@@ -11,6 +11,9 @@ vi.mock("../runtime/registry.ts", async (original) => ({
   ...(await original<typeof import("../runtime/registry.ts")>()),
   ...(await import("../runtime/test-fixtures.ts")).memoryRegistry(),
 }));
+vi.mock("../../config/factory-context.ts", async (original) =>
+  (await import("../runtime/test-fixtures.ts")).memoryFactoryContext(original as never),
+);
 
 const { provisionWorktree } = await import("./index.ts");
 

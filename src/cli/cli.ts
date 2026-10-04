@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
-import type { LinearIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
+import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";

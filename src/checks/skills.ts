@@ -1,6 +1,6 @@
 import { existsSync, statSync } from "node:fs";
 import path from "node:path";
-import { factoryRoot } from "../config/factory-root.ts";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { skillFolder, skillName } from "../steps/agents/harnesses/skills.ts";
 import type { Check, CheckResult } from "./check.ts";
@@ -62,7 +62,10 @@ function inspect(skills: readonly string[], index: number, root: () => string): 
  * One check per declared skill path: the folder exists, holds a `SKILL.md`, and has a name no
  * earlier path in the list already uses.
  */
-export function skillChecks(skills: readonly string[], root: () => string = factoryRoot): Check[] {
+export function skillChecks(
+  skills: readonly string[],
+  root: () => string = () => currentFactoryContext().root,
+): Check[] {
   return skills.map((entry, index) => ({
     id: `skills.${entry}`,
     label: `skill ${entry}`,

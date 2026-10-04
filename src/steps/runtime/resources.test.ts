@@ -4,10 +4,12 @@ const recorded = vi.hoisted(() => vi.fn());
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_active" }) }));
 vi.mock("./registry.ts", async (original) => ({
   ...(await original<typeof import("./registry.ts")>()),
-  currentFactory: () => "factory-a",
   recordResource: recorded,
   registrySql: () => ({}),
 }));
+vi.mock("../../config/factory-context.ts", async (original) =>
+  (await import("./test-fixtures.ts")).memoryFactoryContext(original as never),
+);
 
 const { registerResource } = await import("./resources.ts");
 

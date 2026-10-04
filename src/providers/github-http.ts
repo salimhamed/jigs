@@ -2,7 +2,8 @@
 // rate-limit signals. Credential minting sends through here too, so it cannot
 // live beside the per-account credential choice in github-api.ts.
 
-import { ProviderApiError, type ProviderAuth, providerRequest } from "./http.ts";
+import { type FactoryContext, runSignal } from "../config/factory-context.ts";
+import { ProviderApiError, type ProviderAuth, providerRequest, type WaitSignal } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -75,16 +76,22 @@ export interface GithubSend {
   json?: unknown;
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
-  /** Ends a rate-limit wait early; `null` keeps it going even when the calling run is cancelled. */
+  /**
+   * Ends a rate-limit wait early. Defaults to the calling run's cancellation; `null` keeps the wait
+   * going, for work shared between runs such as a token mint.
+   */
   signal?: AbortSignal | null;
 }
 
 export interface GithubClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** The factory whose runs a wait belongs to. Defaults to the process's own. */
+  context?: FactoryContext;
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
+  const waitSignal: WaitSignal = deps.context?.runSignal ?? runSignal;
   function send<T>({
     auth,
     method = "GET",
@@ -110,7 +117,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
       },
       fetch: deps.fetch,
       sleep: deps.sleep,
-      signal,
+      signal: signal === undefined ? waitSignal : signal,
     });
   }
   return { send };

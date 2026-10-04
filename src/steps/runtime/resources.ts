@@ -1,7 +1,8 @@
 import { getWorkflowMetadata } from "workflow";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { RESERVED_KINDS, type RunResource } from "../../workflow/runtime/resources.ts";
-import { currentFactory, recordResource, registrySql } from "./registry.ts";
+import { recordResource, registrySql } from "./registry.ts";
 
 function assertResource(resource: RunResource): void {
   for (const field of ["kind", "identity", "url"] as const) {
@@ -33,7 +34,7 @@ function assertResource(resource: RunResource): void {
 export async function registerResource(resource: RunResource): Promise<RunResource> {
   assertResource(resource);
   await recordResource(registrySql(), {
-    factory: currentFactory(),
+    factory: currentFactoryContext().slug,
     runId: getWorkflowMetadata().workflowRunId,
     kind: resource.kind,
     identity: resource.identity,

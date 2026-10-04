@@ -7,23 +7,16 @@
 import { createSign } from "node:crypto";
 import { readFileSync, statSync } from "node:fs";
 import path from "node:path";
+import type { FactoryContext } from "../config/factory-context.ts";
+import { JigsError } from "../errors.ts";
 import {
   type AppIdentity,
   type GithubIdentity,
   installationFor,
   type ResolvedAppIdentity,
   type ResolvedGithubIdentity,
-  readFactoryConfig,
-} from "../config/factory-config.ts";
-import { JigsError } from "../errors.ts";
-import {
-  credentialRoot,
-  credentialValue,
-  type EnvLookup,
-  onProviderReset,
-  requireCredential,
-  setCredentialRoot,
-} from "./credentials.ts";
+} from "../workflow/factory-schema.ts";
+import { type EnvLookup, perContext, requireCredential } from "./credentials.ts";
 import { githubSend } from "./github-http.ts";
 import type { ProviderAuth } from "./http.ts";
 
@@ -159,15 +152,15 @@ export interface GithubAuth extends ProviderAuth {
 export interface GithubAuthDeps {
   now?: () => number;
   readPrivateKey?: (file: string) => PrivateKeyFile;
-  env?: EnvLookup;
+  env: EnvLookup;
 }
 
 export function createGithubAuth(
   identity: ResolvedGithubIdentity,
-  deps: GithubAuthDeps = {},
+  deps: GithubAuthDeps,
 ): GithubAuth {
   if (identity.mode === "pat") {
-    const env = deps.env ?? credentialValue;
+    const env = deps.env;
     return {
       identity,
       bearer: async () => requireCredential("GITHUB_TOKEN", "the GitHub identity", env),
@@ -202,49 +195,45 @@ export function createGithubAuth(
   };
 }
 
-/**
- * The identity this factory is configured with, with the private key path
- * resolved against the factory root. Outside a factory there is no config to
- * read and the personal token is the only credential there is.
- */
-export function resolveGithubIdentities(root?: string): GithubIdentity[] {
-  let dir: string;
-  try {
-    dir = root ?? credentialRoot();
-  } catch {
-    return [{ mode: "pat" }];
-  }
-  return readFactoryConfig(dir).github.identities.map((identity) =>
-    identity.mode === "pat"
-      ? identity
-      : {
-          ...identity,
-          privateKeyPath: path.resolve(dir, identity.privateKeyPath),
-        },
-  );
+interface FactoryGithub {
+  identities: GithubIdentity[];
+  auths: Map<string, GithubAuth>;
+  env: EnvLookup;
 }
 
-export function resolveGithubIdentity(account: string, root?: string): ResolvedGithubIdentity {
-  return installationFor(resolveGithubIdentities(root), account);
-}
+// The configured identities with each private key path resolved against the
+// factory root, and the credentials minted from them, kept per factory.
+const factoryGithub = perContext(
+  (ctx): FactoryGithub => ({
+    identities: ctx.config.github.identities.map((identity) =>
+      identity.mode === "pat"
+        ? identity
+        : { ...identity, privateKeyPath: path.resolve(ctx.root, identity.privateKeyPath) },
+    ),
+    auths: new Map(),
+    env: ctx.env,
+  }),
+);
 
-const processAuth = new Map<string, GithubAuth>();
-let processIdentities: GithubIdentity[] | null = null;
+/** The factory's GitHub identities, with each private key path resolved against its root. */
+export function githubIdentities(ctx?: FactoryContext): GithubIdentity[] {
+  return factoryGithub(ctx).identities;
+}
 
 /** Whether this factory acts through a personal access token, which is then its only identity. */
-export function githubUsesPat(): boolean {
-  processIdentities ??= resolveGithubIdentities();
-  return processIdentities.some((identity) => identity.mode === "pat");
+export function githubUsesPat(ctx?: FactoryContext): boolean {
+  return githubIdentities(ctx).some((identity) => identity.mode === "pat");
 }
 
-export function githubAuthFor(account: string): GithubAuth {
-  processIdentities ??= resolveGithubIdentities();
-  const identity = installationFor(processIdentities, account);
+/** The credential for one account, created once per factory. Its `identity` is who jigs acts as there. */
+export function githubAuthFor(account: string, ctx?: FactoryContext): GithubAuth {
+  const github = factoryGithub(ctx);
+  const identity = installationFor(github.identities, account);
   const key = identity.mode === "pat" ? "pat" : `${identity.appId}:${identity.installationId}`;
-  let auth = processAuth.get(key);
+  let auth = github.auths.get(key);
   if (!auth) {
-    auth = createGithubAuth(identity);
-    processAuth.set(key, auth);
+    auth = createGithubAuth(identity, { env: github.env });
+    github.auths.set(key, auth);
   }
   return auth;
 }
@@ -286,13 +275,3 @@ async function lookupAppBot(
   });
   return { login, id };
 }
-
-/** Drop cached credentials so the next call re-reads configuration. */
-export function resetGithubAuth(): void {
-  processAuth.clear();
-  appBots.clear();
-  processIdentities = null;
-  setCredentialRoot(null);
-}
-
-onProviderReset(resetGithubAuth);

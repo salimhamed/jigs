@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import type { LinearWebhook } from "./linear.ts";
 import { linearWebhookChecks } from "./linear-webhook-checks.ts";
 
@@ -33,7 +34,7 @@ function checks(webhooks: LinearWebhook[], config: unknown = enabled()) {
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-secret");
   const root = factoryWith(config);
   return linearWebhookChecks({
-    factoryRoot: () => root,
+    context: resolveFactoryContext(root),
     list: vi.fn(async () => webhooks),
   });
 }
@@ -89,7 +90,7 @@ test("an API refusal fails with an admin-key repair", async () => {
   const root = factoryWith(enabled());
   const refusal = webhookCheck(
     linearWebhookChecks({
-      factoryRoot: () => root,
+      context: resolveFactoryContext(root),
       list: async () => {
         throw new Error("forbidden");
       },
@@ -122,7 +123,9 @@ test("an app identity does not list webhooks, and says what to confirm by hand",
   vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-secret");
   const root = factoryWith(enabled(), { linear: { identity: { mode: "app" } } });
   const list = vi.fn(async (): Promise<LinearWebhook[]> => []);
-  const result = await webhookCheck(linearWebhookChecks({ factoryRoot: () => root, list }))?.run();
+  const result = await webhookCheck(
+    linearWebhookChecks({ context: resolveFactoryContext(root), list }),
+  )?.run();
   expect(result).toEqual({
     ok: true,
     detail:

@@ -1,4 +1,5 @@
 import { getWorkflowMetadata } from "workflow";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import {
   commitsAhead,
   DEFAULT_PUSH_TARGET,
@@ -15,7 +16,7 @@ import { githubAuthFor, githubUsesPat } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { currentFactory, recordResource, registrySql } from "../runtime/registry.ts";
+import { recordResource, registrySql } from "../runtime/registry.ts";
 import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
@@ -53,7 +54,7 @@ async function pushAndRecord(worktreePath: string, branch: string, push: () => P
   // sees an existing ref and records nothing: the branch is then never listed.
   if (!created || ref === null) return;
   await recordResource(registrySql(), {
-    factory: currentFactory(),
+    factory: currentFactoryContext().slug,
     runId: getWorkflowMetadata().workflowRunId,
     kind: "branch",
     identity: `${ref.owner}/${ref.repo}:${branch}`,

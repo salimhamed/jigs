@@ -967,7 +967,7 @@ test("an unconfirmed start's command round-trips every input through the CLI's o
   const doctor = await triggerChecks(
     factory({ pages: pagesTrigger }),
     { "fake.pages": fakeSource().source },
-    { store: h.memory.store },
+    { store: () => h.memory.store },
   )
     .find((c) => c.id === "trigger.pages.failed")
     ?.run();
@@ -1024,7 +1024,7 @@ test("a failed uncertain start is listed with its repair in status and in doctor
   const doctor = triggerChecks(
     factory({ pages: pagesTrigger }),
     { "fake.pages": fakeSource().source },
-    { store: h.memory.store },
+    { store: () => h.memory.store },
   ).find((c) => c.id === "trigger.pages.failed");
   const outcome = await doctor?.run();
   // A note: `jigs up` ends with doctor and must not refuse over it.
@@ -1042,7 +1042,7 @@ test("a trigger with no failed occurrences has a clean doctor note", async () =>
   const doctor = triggerChecks(
     factory({ pages: pagesTrigger }),
     { "fake.pages": fakeSource().source },
-    { store: memoryStore().store },
+    { store: () => memoryStore().store },
   ).find((c) => c.id === "trigger.pages.failed");
   expect(await doctor?.run()).toEqual({ ok: true });
 });

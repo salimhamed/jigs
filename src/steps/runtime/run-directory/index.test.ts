@@ -4,11 +4,10 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 const registry = vi.hoisted(() => ({ recordRunDirectory: vi.fn(), setResourceState: vi.fn() }));
-vi.mock("../registry.ts", () => ({
-  ...registry,
-  currentFactory: () => "factory-a",
-  registrySql: () => ({}),
-}));
+vi.mock("../registry.ts", () => ({ ...registry, registrySql: () => ({}) }));
+vi.mock("../../../config/factory-context.ts", async (original) =>
+  (await import("../test-fixtures.ts")).memoryFactoryContext(original as never),
+);
 
 const { createRunDirectory, removeRunDirectory } = await import("./index.ts");
 

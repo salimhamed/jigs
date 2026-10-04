@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { inTestFactory } from "../test-fixtures.ts";
 import {
   createPr,
   fetchPrCommitMessages,
@@ -26,6 +27,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
+inTestFactory();
 
 const pr = { owner: "acme", repo: "api", number: 41 };
 
@@ -216,7 +218,7 @@ test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => 
     "https://api.github.com/repos/acme/api/commits/head-sha-1/status?per_page=100",
   ]);
   const call = github.calls[0] as FetchCall;
-  expect(call.headers["authorization"]).toBe("Bearer gh_test_token");
+  expect(call.headers.authorization).toBe("Bearer gh_test_token");
 });
 
 test("review comments group into threads by in_reply_to_id", async () => {

@@ -6,7 +6,7 @@ import {
   buildAskAgentRequest,
   buildModelRequest,
 } from "../../../workflow/agents/plan.ts";
-import { RESERVED_AGENT_ENV } from "../../../workflow/factory.ts";
+import { RESERVED_AGENT_ENV } from "../../../workflow/factory-schema.ts";
 import { driverFor, drivers } from "./index.ts";
 import type { DriverRequest } from "./types.ts";
 

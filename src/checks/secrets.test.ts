@@ -1,23 +1,22 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, onTestFinished, test } from "vitest";
+import { type FactoryContext, resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { runChecks } from "./catalog.ts";
 import type { WorkflowRequires } from "./index.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 
-function factoryWithEnv(dotEnv: string): () => string {
+function factoryWithEnv(dotEnv: string): FactoryContext {
   const root = makeTmpDir();
   onTestFinished(() => removeTmpDir(root));
   writeFileSync(path.join(root, ".env"), dotEnv);
-  return () => root;
+  return resolveFactoryContext(root);
 }
 
 async function outcomes(requires: WorkflowRequires, env: Record<string, string>, dotEnv = "") {
-  const report = await runChecks(
-    secretChecks(requires, { factoryRoot: factoryWithEnv(dotEnv), env }),
-  );
+  const report = await runChecks(secretChecks(requires, { context: factoryWithEnv(dotEnv), env }));
   return report.checks;
 }
 
@@ -118,7 +117,7 @@ test("doctor checks each name once and names every workflow that needs it", asyn
         sync: { requires: { secrets: ["SNOWFLAKE_TOKEN"] } },
         report: { requires: { secrets: ["SNOWFLAKE_TOKEN", "bad name"] } },
       },
-      { factoryRoot: factoryWithEnv(""), env: {} },
+      { context: factoryWithEnv(""), env: {} },
     ),
   );
   expect(report.checks).toEqual([
@@ -135,14 +134,12 @@ test("doctor checks each name once and names every workflow that needs it", asyn
   ]);
 });
 
-test("without a factory root a set secret still passes", async () => {
+test("without a factory .env a set secret still passes", async () => {
   const [check] = await runChecks(
     secretChecks(
       { secrets: ["SNOWFLAKE_TOKEN"] },
       {
-        factoryRoot: () => {
-          throw new Error("no factory");
-        },
+        context: resolveFactoryContext(path.join(makeTmpDir(), "no-factory")),
         env: { SNOWFLAKE_TOKEN: "x" },
       },
     ),
@@ -163,7 +160,7 @@ test("doctor leaves MCP credentials to the MCP server checks", () => {
   });
   const checks = doctorSecretChecks(
     { analysis: { requires: { agents: { analyst } } } },
-    { factoryRoot: factoryWithEnv(""), env: {} },
+    { context: factoryWithEnv(""), env: {} },
   );
   expect(checks).toEqual([]);
 });

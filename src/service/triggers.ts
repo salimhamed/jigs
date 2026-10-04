@@ -7,8 +7,9 @@
 import { createHash } from "node:crypto";
 import type { z } from "zod";
 import { type Check, type CheckReport, failedCheck, failedChecks } from "../checks/index.ts";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import { plainHint } from "../errors.ts";
-import { currentFactory, registrySql } from "../steps/runtime/registry.ts";
+import { registrySql } from "../steps/runtime/registry.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import type { Provider } from "../workflow/providers.ts";
 import { nudgeDelay } from "./nudge.ts";
@@ -169,7 +170,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   // gates, whether or not the markers could be written. Until then no
   // uncertain row is settled.
   let bootedAt: Date | undefined;
-  const slug = deps.factorySlug ?? currentFactory;
+  const slug = deps.factorySlug ?? (() => currentFactoryContext().slug);
   let opened: TriggerStore | undefined = deps.store;
   const store = () => (opened ??= triggerStore(registrySql(), slug()));
 
@@ -635,11 +636,7 @@ export async function pushEvent(provider: Provider, event: unknown): Promise<str
 }
 
 async function configuredIntervals(): Promise<Record<Provider, number>> {
-  const [{ readFactoryConfig }, { factoryRoot }] = await Promise.all([
-    import("../config/factory-config.ts"),
-    import("../config/factory-root.ts"),
-  ]);
-  return readFactoryConfig(factoryRoot()).service.pollIntervalSeconds;
+  return currentFactoryContext().config.service.pollIntervalSeconds;
 }
 
 /** One failed occurrence, with the checks that refused its run. */
@@ -677,7 +674,7 @@ export async function listTriggers(
 ): Promise<TriggerView[]> {
   const declared = Object.entries(factory.triggers ?? {});
   if (declared.length === 0) return [];
-  const store = deps.store ?? triggerStore(registrySql(), currentFactory());
+  const store = deps.store ?? triggerStore(registrySql(), currentFactoryContext().slug);
   const liveRuns = deps.liveRunsByAttribute ?? liveRunsByAttribute;
   const now = (deps.now ?? (() => new Date()))();
   return Promise.all(
@@ -721,7 +718,7 @@ export async function listTriggers(
 export function triggerChecks(
   factory: Factory,
   sources: SourceRegistry = SOURCES,
-  deps: { store?: TriggerStore } = {},
+  deps: { store?: () => TriggerStore } = {},
 ): Check[] {
   return Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]): Check[] => {
     const id = `trigger.${name}`;
@@ -736,7 +733,7 @@ export function triggerChecks(
         // A note, not a failure: each failed occurrence waits on the operator,
         // and `jigs up`, which ends with doctor, must not refuse over one.
         run: async () => {
-          const store = deps.store ?? triggerStore(registrySql(), currentFactory());
+          const store = deps.store?.() ?? triggerStore(registrySql(), currentFactoryContext().slug);
           const summary = await store.summary(name, FAILURES_SHOWN);
           if (summary.failed === 0) return { ok: true };
           return {

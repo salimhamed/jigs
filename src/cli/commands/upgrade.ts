@@ -1,9 +1,9 @@
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { isMap, isScalar, isSeq, parseDocument, Scalar } from "yaml";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { type Step, StepFailed, stepRunner } from "./step-runner.ts";
 import type { UpOptions } from "./up.ts";
 
@@ -68,7 +68,7 @@ export async function upgradeFactory(
 
   try {
     const { factoryRoot, before } = await runner.run("packages", (note) => {
-      const factoryRoot = locateFactoryRoot(deps.cwd);
+      const factoryRoot = factoryContextAt(deps.cwd).root;
       const before = publishedVersion(factoryRoot);
       const normalized = normalizeReleaseAgeExclude(factoryRoot);
       note(normalized ? `jigs ${before}, normalized minimumReleaseAgeExclude` : `jigs ${before}`);

@@ -2,6 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveService } from "../../config/factory-config.ts";
+import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { downFactory } from "./down.ts";
@@ -41,7 +42,7 @@ function down(root: string, io: { exec: ReturnType<typeof fakeExec>; procs: Fake
 }
 
 function running(root: string, procs: FakeProcesses, pid: number): string {
-  const { slug } = resolveService(root);
+  const { slug } = resolveService(resolveFactoryContext(root));
   const pidfile = servicePidfilePath(slug);
   mkdirSync(path.dirname(pidfile), { recursive: true });
   writeFileSync(pidfile, `${pid}\n`);
@@ -93,7 +94,7 @@ test("a service that is not running is said so, and Postgres still stops", async
 
   await down(root, io);
 
-  const { slug } = resolveService(root);
+  const { slug } = resolveService(resolveFactoryContext(root));
   expect(lines[0]).toBe(`service ${slug} was not running`);
   expect(io.exec.calls.map((call) => call.args).at(-1)).toEqual(["compose", "down"]);
   expect(lines.slice(-3)).toEqual([

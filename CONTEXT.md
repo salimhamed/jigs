@@ -163,6 +163,12 @@ _Avoid_: sandbox home
 release and the dashboard.
 _Avoid_: server, daemon
 
+**Factory context**: Which factory a process answers for: its root, slug,
+configuration and environment. The service resolves it at boot, a CLI verb for
+the factory it was typed in, and step code reads the process's own through
+`currentFactoryContext()`; everything below takes it from them.
+_Avoid_: credential root, factory root (for the whole of it)
+
 **World**: The Workflow SDK's persistence and queue backend; one Postgres per
 factory.
 _Avoid_: database, store

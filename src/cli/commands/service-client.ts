@@ -3,9 +3,9 @@
 // renders them identically.
 
 import { resolveService } from "../../config/factory-config.ts";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
+import { factoryContextAt } from "../factory-context.ts";
 
 export interface ServiceDeps {
   serviceUrl: string;
@@ -24,7 +24,7 @@ export function usesFactoryService(explicit?: string): explicit is undefined | "
 // would then run on `jigs --help`, outside any factory repo.
 export function resolveServiceUrl(cwd: string, explicit?: string): string {
   if (!usesFactoryService(explicit)) return explicit;
-  return resolveService(locateFactoryRoot(cwd)).serviceUrl;
+  return resolveService(factoryContextAt(cwd)).serviceUrl;
 }
 
 export async function serviceFetch(

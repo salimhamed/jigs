@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 import { packageRoot } from "../../build/templates.ts";
-import { parseFactoryConfig } from "../../config/factory-config.ts";
+import { parseFactoryConfig } from "../../workflow/factory-schema.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { initFactory, resolveIdentityOptions } from "./init.ts";
 

@@ -1,5 +1,3 @@
-import { readFactoryConfig } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
 import type { Factory, FactoryDefinition } from "../../workflow/factory.ts";
 import {
   defaultReleasePolicy,
@@ -40,6 +38,6 @@ export async function resolveReleasePolicy(
   );
   return effectiveReleasePolicy(
     workflowReleasePolicy({ workflows }, metadata.workflowName),
-    readFactoryConfig(factoryRoot()).release,
+    definition.release,
   );
 }

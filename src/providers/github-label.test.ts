@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { inTestFactory } from "../test-fixtures.ts";
 import { ensureRepoLabel } from "./github-label.ts";
 import { type FakeGithub, fakeGithub } from "./test-fixtures.ts";
 
@@ -15,6 +16,7 @@ afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
+inTestFactory();
 
 test("an existing repository label is verified without a write", async () => {
   github.reply(new Response(JSON.stringify(label("ship it"))));

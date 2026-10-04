@@ -6,8 +6,8 @@ import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import {
-  currentFactory,
   ensureRegistry,
   listResources,
   type RegistrySql,
@@ -98,7 +98,7 @@ afterAll(async () => {
 });
 
 const states = async (runId: string) =>
-  (await listResources(registry, { factory: currentFactory(), runId })).map((row) => [
+  (await listResources(registry, { factory: currentFactoryContext().slug, runId })).map((row) => [
     row.kind,
     row.state,
     row.reason,

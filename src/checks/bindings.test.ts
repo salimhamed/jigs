@@ -1,6 +1,7 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 import {
@@ -36,7 +37,9 @@ function markClone(factoryRoot: string, name: string): void {
 }
 
 async function check(factoryRoot: string, name: string) {
-  const report = await runChecks(bindingChecks({ factoryRoot: () => factoryRoot, names: [name] }));
+  const report = await runChecks(
+    bindingChecks({ context: resolveFactoryContext(factoryRoot), names: [name] }),
+  );
   const outcome = report.checks[0];
   if (outcome === undefined) throw new Error("no outcome");
   return outcome;
@@ -136,7 +139,9 @@ test("a cloned binding whose copy entries all match passes", async () => {
 
 test("a missing jigs.config.ts collapses to one failed check naming the file, not a throw", async () => {
   const root = path.join(tmp, "no-factory-here");
-  const report = await runChecks(bindingChecks({ factoryRoot: () => root, names: ["api", "web"] }));
+  const report = await runChecks(
+    bindingChecks({ context: resolveFactoryContext(root), names: ["api", "web"] }),
+  );
   expect(report.checks).toHaveLength(1);
   expect(report.checks[0]).toMatchObject({
     id: "binding.factory-config",
@@ -147,7 +152,9 @@ test("a missing jigs.config.ts collapses to one failed check naming the file, no
 
 test("an unparseable jigs.config.ts collapses to one failed check", async () => {
   const factory = makeFactoryRepo(tmp, "export default { bindings: { api: { remote: [");
-  const report = await runChecks(bindingChecks({ factoryRoot: () => factory, names: ["api"] }));
+  const report = await runChecks(
+    bindingChecks({ context: resolveFactoryContext(factory), names: ["api"] }),
+  );
   expect(report.checks).toHaveLength(1);
   expect(report.checks[0]).toMatchObject({
     id: "binding.factory-config",
@@ -158,7 +165,7 @@ test("an unparseable jigs.config.ts collapses to one failed check", async () => 
 test("a workflow requiring no bindings needs no factory config at all", () => {
   expect(
     bindingChecks({
-      factoryRoot: () => path.join(tmp, "no-factory-here"),
+      context: resolveFactoryContext(path.join(tmp, "no-factory-here")),
       names: [],
     }),
   ).toEqual([]);

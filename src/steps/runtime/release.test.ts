@@ -15,6 +15,9 @@ vi.mock("./registry.ts", async (original) => ({
   ...(await original<typeof import("./registry.ts")>()),
   ...(await import("./test-fixtures.ts")).memoryRegistry(),
 }));
+vi.mock("../../config/factory-context.ts", async (original) =>
+  (await import("./test-fixtures.ts")).memoryFactoryContext(original as never),
+);
 
 const { MAX_RELEASE_ATTEMPTS, releaseDue, releaseRun, releaseRunResources } = await import(
   "./release.ts"

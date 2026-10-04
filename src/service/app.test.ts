@@ -8,11 +8,10 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import { resetProviderContext } from "../providers/credentials.ts";
-import { resetGithubAuth } from "../providers/github-auth.ts";
 import * as linear from "../providers/linear.ts";
 import { useGithubClient } from "../providers/test-fixtures.ts";
 import * as sql from "../steps/runtime/registry.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
@@ -29,16 +28,20 @@ import { clearWakes, lastWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
-  const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
   delete process.env.WORKFLOW_TARGET_WORLD;
-  delete process.env.WORKFLOW_POSTGRES_URL;
-  return { targetWorld, postgresUrl };
+  return { targetWorld };
 });
 
 vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
-vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
 
 const { createApp } = await import("./app.ts");
+
+// The factory every app here answers for: its secrets, and an empty registry
+// rather than the operator's database.
+const env: Record<string, string | undefined> = {};
+const context = testFactoryContext({ slug: "factory-test", env });
+const push = vi.fn(triggers.pushEvent);
+const deps = { context, registry: () => ({}) as never, triggers: { push } };
 
 // The routes are exercised against workflows this file declares: what is under
 // test is the framework.
@@ -77,7 +80,7 @@ const resumeHookMock = vi.mocked(resumeHook);
 // The ingress reads only whether the resume landed, never the hook it returns.
 const delivers = () => resumeHookMock.mockResolvedValueOnce({} as never);
 
-const app = createApp(fixture);
+const app = createApp(fixture, deps);
 
 // A second factory, because what the schedule routes answer is a property of
 // the config handed in. Nothing ticks here: the ticker is started by the
@@ -93,7 +96,7 @@ const scheduled = {
     "broken-cron": { workflow: "plain", cron: "always", inputs: {} },
   },
 } satisfies Factory;
-const scheduledApp = createApp(scheduled);
+const scheduledApp = createApp(scheduled, deps);
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -106,29 +109,23 @@ afterAll(() => {
   rmSync(dataDir, { recursive: true, force: true });
   if (ambientWorkflowEnv.targetWorld === undefined) delete process.env.WORKFLOW_TARGET_WORLD;
   else process.env.WORKFLOW_TARGET_WORLD = ambientWorkflowEnv.targetWorld;
-  if (ambientWorkflowEnv.postgresUrl === undefined) delete process.env.WORKFLOW_POSTGRES_URL;
-  else process.env.WORKFLOW_POSTGRES_URL = ambientWorkflowEnv.postgresUrl;
 });
 
 beforeEach(() => {
   vi.unstubAllEnvs();
-  // Every route that reads the registry gets an empty one rather than the
-  // operator's database.
-  vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
-  vi.spyOn(sql, "currentFactory").mockReturnValue("factory-test");
   vi.spyOn(sql, "listResources").mockResolvedValue([]);
   vi.spyOn(queue, "listRunDeadJobs").mockResolvedValue([]);
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
-  vi.stubEnv("WORKFLOW_POSTGRES_URL", undefined);
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
-  vi.stubEnv("GITHUB_TOKEN", "gh-service-token");
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "linear-hook-secret");
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "pd-hook-secret");
+  Object.assign(env, {
+    GITHUB_WEBHOOK_SECRET: "gh-hook-secret",
+    GITHUB_TOKEN: "gh-service-token",
+    LINEAR_WEBHOOK_SECRET: "linear-hook-secret",
+    PAGERDUTY_WEBHOOK_SECRET: "pd-hook-secret",
+  });
+  push.mockReset().mockImplementation(triggers.pushEvent);
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
-  resetGithubAuth();
-  resetProviderContext();
 });
 afterEach(() => {
   vi.restoreAllMocks();
@@ -136,8 +133,6 @@ afterEach(() => {
   // Clears the cached world too, so the next getWorld() opens the local one
   // again from the data dir above.
   setWorld(undefined);
-  resetGithubAuth();
-  resetProviderContext();
 });
 
 const sign = (body: string, secret: string) =>
@@ -175,7 +170,7 @@ test.each([
     },
   ],
 ])("with %s, neither ingress route exists", async (_name, webhooks) => {
-  const polling = createApp({ workflows: fixture.workflows, webhooks });
+  const polling = createApp({ workflows: fixture.workflows, webhooks }, deps);
   const body = commentPayload();
   const github = await polling.request("/ingress/github", {
     method: "POST",
@@ -192,10 +187,13 @@ test.each([
 });
 
 test("one provider switched on mounts only its own route", async () => {
-  const githubOnly = createApp({
-    workflows: fixture.workflows,
-    webhooks: { url: "https://f.test", github: { enabled: true } },
-  });
+  const githubOnly = createApp(
+    {
+      workflows: fixture.workflows,
+      webhooks: { url: "https://f.test", github: { enabled: true } },
+    },
+    deps,
+  );
   const body = commentPayload();
   expect(
     (
@@ -238,7 +236,7 @@ test("POST /ingress/github without a signature header is a 401", async () => {
 
 test("POST /ingress/github without a configured secret fails closed", async () => {
   vi.spyOn(console, "log").mockImplementation(() => undefined);
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+  env.GITHUB_WEBHOOK_SECRET = "";
   const res = await postGithub(reviewPayload, {
     "x-hub-signature-256": `sha256=${sign(reviewPayload, "")}`,
   });
@@ -595,8 +593,10 @@ test("every response names the jigs the service runs, misses included", async ()
 });
 
 test("health names the factory that answers here, and the injected workflows", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/factories/acme");
-  const res = await app.request("/health");
+  const res = await createApp(fixture, {
+    ...deps,
+    context: testFactoryContext({ root: "/factories/acme" }),
+  }).request("/health");
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     ok: true,
@@ -613,7 +613,7 @@ test("health outside a factory reports a null root rather than failing liveness"
   vi.stubEnv("JIGS_FACTORY_ROOT", "");
   const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
   try {
-    const res = await app.request("/health");
+    const res = await createApp(fixture).request("/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, factoryRoot: null });
   } finally {
@@ -629,10 +629,13 @@ test("GET /api/runs answers with empty runs when nothing has launched", async ()
 
 test("GET /api/runs still answers with runs when the triggers cannot be read", async () => {
   // The registry the triggers live in is unusable here.
-  const triggered = createApp({
-    ...fixture,
-    triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
-  });
+  const triggered = createApp(
+    {
+      ...fixture,
+      triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+    },
+    deps,
+  );
   const res = await triggered.request("/api/runs");
   expect(res.status).toBe(200);
   const body = (await res.json()) as {
@@ -989,7 +992,7 @@ const paged = {
     pagerduty: { enabled: true },
   },
 } satisfies Factory;
-const pagedApp = createApp(paged);
+const pagedApp = createApp(paged, deps);
 
 const incidentTriggered = () =>
   readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8");
@@ -1003,10 +1006,13 @@ test("PagerDuty's route exists only when its webhook is switched on", async () =
   expect((await app.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
     404,
   );
-  const off = createApp({
-    ...paged,
-    webhooks: { ...paged.webhooks, pagerduty: { enabled: false } },
-  });
+  const off = createApp(
+    {
+      ...paged,
+      webhooks: { ...paged.webhooks, pagerduty: { enabled: false } },
+    },
+    deps,
+  );
   expect((await off.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
     404,
   );
@@ -1017,7 +1023,6 @@ test.each([
   ["no signature", {}],
 ])("POST /ingress/pagerduty with %s is a 401 that logs no signature", async (_name, headers) => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const push = vi.spyOn(triggers, "pushEvent");
   const res = await postPagerDuty(incidentTriggered(), headers);
   expect(res.status).toBe(401);
   expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] pagerduty rejected reason=signature");
@@ -1026,7 +1031,7 @@ test.each([
 
 test("POST /ingress/pagerduty without a configured secret fails closed", async () => {
   vi.spyOn(console, "log").mockImplementation(() => undefined);
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
+  env.PAGERDUTY_WEBHOOK_SECRET = "";
   const body = incidentTriggered();
   const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body, "") });
   expect(res.status).toBe(401);
@@ -1045,7 +1050,7 @@ test("a signed PagerDuty event no trigger takes is acknowledged and logged as ig
 
 test("a push that fails is still acknowledged, so PagerDuty keeps the subscription on", async () => {
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  vi.spyOn(triggers, "pushEvent").mockRejectedValueOnce(new Error("registry unreachable"));
+  push.mockRejectedValueOnce(new Error("registry unreachable"));
   const body = incidentTriggered();
   const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
   expect(res.status).toBe(200);

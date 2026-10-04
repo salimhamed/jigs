@@ -1,7 +1,7 @@
 import { existsSync } from "node:fs";
 import path from "node:path";
 import { JigsError } from "../errors.ts";
-import { FACTORY_CONFIG_FILE } from "./factory-config.ts";
+import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
 
 export function locateFactoryRoot(cwd: string): string {
   let dir = path.resolve(cwd);
@@ -16,13 +16,4 @@ export function locateFactoryRoot(cwd: string): string {
     }
     dir = parent;
   }
-}
-
-// What the running service means by "the factory": the CLI passes an explicit
-// cwd, but the service is started by a supervisor from anywhere, so the
-// override is how it is told which factory it answers for.
-export function factoryRoot(): string {
-  const override = process.env.JIGS_FACTORY_ROOT;
-  if (override !== undefined && override !== "") return override;
-  return locateFactoryRoot(process.cwd());
 }

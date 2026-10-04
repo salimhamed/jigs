@@ -2,12 +2,12 @@ import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import path from "node:path";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../../build/templates.ts";
+import { JigsError } from "../../errors.ts";
 import {
   type GithubIdentity,
   githubIdentitySchema,
   type LinearIdentity,
-} from "../../config/factory-config.ts";
-import { JigsError } from "../../errors.ts";
+} from "../../workflow/factory-schema.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { columns, command, heading, note } from "../output.ts";

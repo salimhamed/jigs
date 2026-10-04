@@ -1,9 +1,8 @@
-import { readFactoryConfig } from "../../config/factory-config.ts";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { displayPath, formatTable } from "../output.ts";
 
 export interface BindingsDeps {
@@ -14,8 +13,7 @@ export interface BindingsDeps {
 // Offline by decree: what a binding is, where its clone would be, and what the
 // clone on disk says — never the network.
 export async function listBindings(deps: BindingsDeps): Promise<void> {
-  const factoryRoot = locateFactoryRoot(deps.cwd);
-  const config = readFactoryConfig(factoryRoot);
+  const { root: factoryRoot, config } = factoryContextAt(deps.cwd);
   const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
     const clone = cloneRepoDir({ factoryRoot, bindingName: name });

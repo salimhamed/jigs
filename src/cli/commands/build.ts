@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, type ExecOutput, execOutput, nodeExecFile } from "../exec.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { displayPath } from "../output.ts";
 import { SERVICE_ENTRY } from "./service-lifecycle.ts";
 
@@ -23,7 +23,7 @@ export interface BuildDeps {
 }
 
 export async function buildFactoryService(deps: BuildDeps): Promise<void> {
-  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const factoryRoot = factoryContextAt(deps.cwd).root;
 
   const prepare = deps.prepare ?? (await loadPrepare(factoryRoot));
   await prepare(factoryRoot);

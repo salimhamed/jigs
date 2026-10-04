@@ -38,7 +38,11 @@ test("a ticket field is ordinary input and never triggers Linear resolution", as
     { ticket: "abc", attempts: 3, triggerId: "trig_manual" },
   ]);
   expect(resolveIssueRef).not.toHaveBeenCalled();
-  expect(preflightChecks).toHaveBeenCalledExactlyOnceWith({}, { ticket: "abc", attempts: 3 });
+  expect(preflightChecks).toHaveBeenCalledExactlyOnceWith(
+    {},
+    { ticket: "abc", attempts: 3 },
+    undefined,
+  );
 });
 
 test("attributes are seeded on the run, where encrypted inputs cannot hide them", async () => {
