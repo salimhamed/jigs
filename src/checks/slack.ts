@@ -1,11 +1,6 @@
 import type { SlackConfig } from "../config/factory-config.ts";
-import {
-  SLACK_BOT_SCOPES,
-  SlackApiError,
-  type SlackAuth,
-  type SlackToken,
-  slackEnvValue,
-} from "../providers/slack.ts";
+import { credentialValue, type EnvLookup } from "../providers/credentials.ts";
+import { SLACK_BOT_SCOPES, SlackApiError, type SlackAuth } from "../providers/slack.ts";
 import type { Check } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
@@ -14,8 +9,6 @@ export interface SlackProbes {
   authTest(): Promise<SlackAuth>;
   openConnection(): Promise<string>;
 }
-
-type EnvLookup = (name: SlackToken) => string | undefined;
 
 const APP_SETTINGS = "the Slack app's settings (api.slack.com/apps)";
 const and = (items: readonly string[]) => items.join(" and ");
@@ -38,7 +31,7 @@ const SOCKET_MODE_FIX: Record<string, string> = {
 export function slackIdentityChecks(
   probes: SlackProbes,
   extraScopes: readonly string[] = [],
-  env: EnvLookup = slackEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   const scopes = [...new Set([...SLACK_BOT_SCOPES, ...extraScopes])];
   return [
@@ -94,7 +87,7 @@ export function slackIdentityChecks(
 export function slackSocketModeChecks(
   slack: Pick<SlackConfig, "socketMode">,
   probes: SlackProbes,
-  env: EnvLookup = slackEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   if (!slack.socketMode) return [];
   return [
@@ -138,7 +131,7 @@ export type SlackAppHoldersProbe = () => readonly string[];
 export function slackSharedAppChecks(
   slack: Pick<SlackConfig, "socketMode">,
   otherHolders: SlackAppHoldersProbe,
-  env: EnvLookup = slackEnvValue,
+  env: EnvLookup = credentialValue,
 ): Check[] {
   if (!slack.socketMode || env("SLACK_APP_TOKEN") === undefined) return [];
   return [

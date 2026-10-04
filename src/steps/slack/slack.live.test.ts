@@ -1,5 +1,6 @@
 import { afterAll, expect, test, vi } from "vitest";
-import { SlackApiError, slackEnvValue, slackHistory } from "../../providers/slack.ts";
+import { credentialValue } from "../../providers/credentials.ts";
+import { SlackApiError, slackHistory } from "../../providers/slack.ts";
 import { waitForSlackReply } from "../../workflow/slack/wait-for-reply.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
@@ -27,7 +28,7 @@ async function deleteMessage(ts: string) {
   const res = await fetch("https://slack.com/api/chat.delete", {
     method: "POST",
     headers: {
-      authorization: `Bearer ${slackEnvValue("SLACK_BOT_TOKEN")}`,
+      authorization: `Bearer ${credentialValue("SLACK_BOT_TOKEN")}`,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ channel, ts }),

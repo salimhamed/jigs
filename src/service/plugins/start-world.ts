@@ -388,13 +388,13 @@ export function announceSlackApp(deps: SlackAppHoldDeps): SlackAppHold | undefin
 }
 
 async function holdFactorySlackApp(): Promise<SlackAppHold | undefined> {
-  const [slackApps, { slackEnvValue }, { resolveService }, { factoryRoot }] = await Promise.all([
+  const [slackApps, { credentialValue }, { resolveService }, { factoryRoot }] = await Promise.all([
     import("../../config/slack-apps.ts"),
-    import("../../providers/slack.ts"),
+    import("../../providers/credentials.ts"),
     import("../../config/factory-config.ts"),
     import("../../config/factory-root.ts"),
   ]);
-  const token = slackEnvValue("SLACK_APP_TOKEN");
+  const token = credentialValue("SLACK_APP_TOKEN");
   if (token === undefined) return undefined;
   return announceSlackApp({
     hold: () => slackApps.holdSlackApp(token, resolveService(factoryRoot()).slug),
