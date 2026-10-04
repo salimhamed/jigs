@@ -218,6 +218,8 @@ Use `jigs up` after changing workflow code or configuration:
   A parked run resumes on the new bundle, and fails if the upgrade changed the
   steps it replays. `--force` skips the question but still prints the list;
   without a terminal, the command otherwise refuses.
+- A service running another jigs version cannot list its runs, so `up` warns
+  that its runs are unknown and restarts it.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
@@ -228,6 +230,12 @@ regenerates `jigs/`, runs `jigs up` and runs the factory's typecheck. Review
 and commit the changes it makes. Your workflows and copied recipes are yours to
 update: a new release can change an API they use, and the typecheck tells you
 where.
+
+The service keeps running the old jigs until `jigs up` restarts it. Until then,
+commands that talk to the service, such as `jigs status`, stop with an error
+naming both versions. `jigs up` and `jigs down` still work, but `jigs up`
+cannot list the old service's runs, so it warns and restarts. Check
+`jigs status` for parked or active runs before you upgrade.
 
 ## Cancelling
 

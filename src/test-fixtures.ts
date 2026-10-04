@@ -2,6 +2,8 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
+import { type Mock, vi } from "vitest";
+import { JIGS_VERSION, VERSION_HEADER } from "./version.ts";
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-test-"));
@@ -69,4 +71,14 @@ export function makeFactoryRepo(
       : `export default ${JSON.stringify({ service: { port: 8990, dashboardPort: 9090 }, workflows: {}, ...config })};\n`;
   writeFileSync(path.join(dir, "jigs.config.ts"), text);
   return dir;
+}
+
+// The fetch a service verb makes, answered by `fetchMock` as a service built
+// from this same jigs would answer it.
+export function stubService(fetchMock: Mock): void {
+  vi.stubGlobal("fetch", async (...args: unknown[]) => {
+    const res = (await fetchMock(...args)) as Response;
+    res.headers.set(VERSION_HEADER, JIGS_VERSION);
+    return res;
+  });
 }

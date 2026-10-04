@@ -16,6 +16,7 @@ import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { currentFactory, listResources, registrySql } from "../steps/runtime/registry.ts";
 import { readRunState } from "../steps/runtime/run-state.ts";
+import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
@@ -40,6 +41,11 @@ import { noteWake, recordWake } from "./wake-note.ts";
 /** Build the service HTTP application for one factory's workflows and webhooks. */
 export function createApp(factory: Factory): Hono {
   const app = new Hono();
+
+  app.use(async (c, next) => {
+    await next();
+    c.header(VERSION_HEADER, JIGS_VERSION);
+  });
 
   // Liveness, plus how far the boot has got; dependency verification is
   // preflight's job. Nitro serves this route before the plugins have run, so

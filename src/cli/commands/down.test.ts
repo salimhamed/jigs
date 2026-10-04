@@ -7,10 +7,12 @@ import { layoutProblems } from "../output-layout.ts";
 import { downFactory } from "./down.ts";
 import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
 import {
+  closeFakeServices,
   execError,
   type FakeProcesses,
   fakeExec,
   fakeProcesses,
+  fakeService,
   factory as scaffold,
   serviceRecord,
 } from "./test-fixtures.ts";
@@ -25,6 +27,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
+  closeFakeServices();
   removeTmpDir(tmp);
 });
 
@@ -70,6 +73,18 @@ test("stops the service process, then Postgres without removing its volume", asy
     "  start it again:",
     "    pnpm exec jigs up",
   ]);
+});
+
+// Stopping goes by pid, never through the service's API, so an upgraded CLI
+// stops a service built from an older jigs.
+test("a service on an older jigs is stopped all the same", async () => {
+  const root = scaffold(tmp, { port: await fakeService({ version: null }) });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  running(root, io.procs, 53812);
+
+  await down(root, io);
+
+  expect(io.procs.signals).toContainEqual({ pid: 53812, sig: "SIGTERM" });
 });
 
 test("a service that is not running is said so, and Postgres still stops", async () => {

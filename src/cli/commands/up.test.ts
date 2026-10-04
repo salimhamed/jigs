@@ -11,6 +11,7 @@ import {
   fakeExec,
   fakeProcesses,
   fakeService,
+  type ServiceRoutes,
   factory as scaffold,
 } from "./test-fixtures.ts";
 import { type UpDeps, type UpOptions, upFactory } from "./up.ts";
@@ -265,6 +266,28 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   expect(forced.service).toBe("restarted");
   expect(io.procs.spawns).toHaveLength(3);
   expect(lines.join("\n")).toMatch(/warning: 1 run\(s\) parked or active.*\n.*wrun_01/);
+});
+
+// After an upgrade the new CLI meets the service the old jigs built; its run
+// list may have another shape, so up cannot see its runs.
+test("a restart over a service on another jigs warns that its runs are unknown, and restarts", async () => {
+  const root = factory({
+    port: await fakeService({
+      runs: [{ runId: "wrun_01", workflow: "example", status: "running" }],
+      version: null,
+    }),
+  });
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  await up(root, io, {}, { doctor: false });
+  io.exec.bundle = "bundle v2";
+
+  lines = [];
+  const result = await up(root, io, {}, { doctor: false });
+  expect(result.ok).toBe(true);
+  expect(result.service).toBe("restarted");
+  expect(lines.join("\n")).toContain("another jigs version, so its runs cannot be listed");
+  expect(lines.join("\n")).not.toContain("wrun_01");
+  expect(io.procs.spawns).toHaveLength(2);
 });
 
 test("a restart whose service answers nothing is not asked about", async () => {

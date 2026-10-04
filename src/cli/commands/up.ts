@@ -21,7 +21,7 @@ import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
-import { resolveServiceUrl } from "./service-client.ts";
+import { resolveServiceUrl, ServiceVersionMismatch } from "./service-client.ts";
 import {
   awaitServiceReady,
   builtBundleHash,
@@ -347,24 +347,32 @@ async function confirmRestart(
   options: UpOptions,
 ): Promise<void> {
   const inFlight = await listRunsInFlight(factoryRoot);
-  if (inFlight.length === 0) return;
   // Warned even under --force: a parked run replays on the new bundle, and an
   // upgrade that changed the steps it replays fails it.
-  deps.out(
-    `  warning: ${inFlight.length} run(s) parked or active; a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay:`,
-  );
+  const consequence =
+    "a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay";
+  // Every upgrade meets an older service, so asking here would ask every time;
+  // `jigs status` before the upgrade, on matching versions, is the real check.
+  if (inFlight === undefined) {
+    deps.out(
+      `  warning: the running service is another jigs version, so its runs cannot be listed; ${consequence}`,
+    );
+    return;
+  }
+  if (inFlight.length === 0) return;
+  deps.out(`  warning: ${inFlight.length} run(s) parked or active; ${consequence}:`);
   for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
     deps.out(`    ${line}`);
   }
+  const runs = `${inFlight.length} in-flight run(s)`;
   if (options.force === true) return;
   if (deps.confirm === undefined) {
     throw new JigsError(
-      `refusing to restart ${service.slug} over ${inFlight.length} run(s) in flight without confirmation`,
+      `refusing to restart ${service.slug} over ${runs} without confirmation`,
       "restart anyway: `pnpm exec jigs up --force`\nor cancel each run first: `pnpm exec jigs cancel <run-id>`",
     );
   }
-  const question = `restart ${service.slug} over ${inFlight.length} in-flight run(s)?`;
-  if (!(await deps.confirm(question))) {
+  if (!(await deps.confirm(`restart ${service.slug} over ${runs}?`))) {
     throw new JigsError(
       "restart declined, so the service still runs the previous bundle",
       "when the runs finish, run: `pnpm exec jigs up`",
@@ -373,8 +381,9 @@ async function confirmRestart(
 }
 
 // Empty when the service is unreachable: a service nobody can reach is
-// holding no run this restart could cut off.
-async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[]> {
+// holding no run this restart could cut off. A service on another jigs
+// version answers in a shape this CLI may not read: undefined, its runs unknown.
+async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[] | undefined> {
   let runs: RunListRun[];
   try {
     // `jigs status` already knows how to find them; it prints, so it is handed a
@@ -383,7 +392,8 @@ async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[]> {
       serviceUrl: resolveServiceUrl(factoryRoot),
       out: () => {},
     }));
-  } catch {
+  } catch (err) {
+    if (err instanceof ServiceVersionMismatch) return undefined;
     return [];
   }
   return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));

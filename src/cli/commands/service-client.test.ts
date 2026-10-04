@@ -1,7 +1,13 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { resolveServiceUrl, serviceFetch, usesFactoryService } from "./service-client.ts";
+import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
+import {
+  resolveServiceUrl,
+  ServiceVersionMismatch,
+  serviceFetch,
+  usesFactoryService,
+} from "./service-client.ts";
 
 let tmp: string;
 
@@ -57,5 +63,39 @@ test("an unreachable service names the url and the lifecycle verbs", async () =>
   expect(failure?.message).toContain("http://svc.test:9100");
   expect(failure?.hint).toBe(
     "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs service start`",
+  );
+});
+
+const answering = (headers: Record<string, string>) =>
+  vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("{}", { headers })));
+
+const failureOf = (promise: Promise<unknown>) =>
+  promise.then(
+    () => null,
+    (err: unknown) => err as JigsError,
+  );
+
+test("a service on this CLI's jigs is answered as is", async () => {
+  answering({ [VERSION_HEADER]: JIGS_VERSION });
+  const res = await serviceFetch("http://svc.test:9100", "/api/runs");
+  expect(await res.json()).toEqual({});
+});
+
+test("a service on another jigs is refused before its answer is read", async () => {
+  answering({ [VERSION_HEADER]: "0.0.1" });
+  const failure = await failureOf(serviceFetch("http://svc.test:9100/", "/api/runs"));
+  expect(failure).toBeInstanceOf(ServiceVersionMismatch);
+  expect(failure?.message).toBe(
+    `the jigs service at http://svc.test:9100 runs jigs 0.0.1, and this CLI is jigs ${JIGS_VERSION}`,
+  );
+  expect(failure?.hint).toBe("restart it on this factory's jigs: `pnpm exec jigs up`");
+});
+
+test("a service that names no version predates the check and is refused as older", async () => {
+  answering({});
+  const failure = await failureOf(serviceFetch("http://svc.test:9100", "/api/runs"));
+  expect(failure).toBeInstanceOf(ServiceVersionMismatch);
+  expect(failure?.message).toBe(
+    `the jigs service at http://svc.test:9100 runs an older jigs, and this CLI is jigs ${JIGS_VERSION}`,
   );
 });
