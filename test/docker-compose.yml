@@ -1,4 +1,4 @@
-# The Postgres the *.live.test.ts files in this package run against. Named
+# The Postgres the *.db.test.ts files in this package run against. Named
 # apart from any factory's own World so the two never share a container or a
 # volume: docker compose -f test/docker-compose.yml up -d --wait
 name: jigs-service-tests

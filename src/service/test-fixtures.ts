@@ -1,5 +1,5 @@
 // An in-memory trigger store for engine tests: the Postgres store's contract,
-// checked against the real one by trigger-store.live.test.ts.
+// checked against the real one by trigger-store.db.test.ts.
 
 import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
 

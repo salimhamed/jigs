@@ -4,9 +4,10 @@ import { createServer } from "node:net";
 import path from "node:path";
 import { createWorld } from "@workflow/world-postgres";
 import { Pool } from "pg";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { currentFactoryContext } from "../config/factory-context.ts";
+import { databaseUrl, dbTest, postgresAdminUrl } from "../db-test-fixtures.ts";
 import {
   ensureRegistry,
   listResources,
@@ -20,13 +21,9 @@ import { makeClonedBinding, makeTmpDir, removeTmpDir } from "../steps/workspaces
 import type { Factory } from "../workflow/factory.ts";
 import { automaticReleaseDeps, startAutomaticRelease } from "./automatic-release.ts";
 
-const adminUrl = new URL(
-  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
-);
 const database = `jigs_cleanup_${crypto.randomUUID().replaceAll("-", "")}`;
-const testUrl = new URL(adminUrl);
-testUrl.pathname = `/${database}`;
-const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+const testUrl = databaseUrl(database);
+const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
 const service = createServer();
 const tmp = makeTmpDir();
 const factoryRoot = path.join(tmp, "factory");
@@ -104,50 +101,53 @@ const states = async (runId: string) =>
     row.reason,
   ]);
 
-test("startup reconciliation releases what a failed pass before a World restart left live", async () => {
-  const runId = await createCompletedRun();
-  const metadata = { workflowRunId: runId };
-  target = (await provisionWorktree({ binding: "api", branch }, metadata)).path;
-  const directory = await createRunDirectory(metadata);
+dbTest(
+  "startup reconciliation releases what a failed pass before a World restart left live",
+  async () => {
+    const runId = await createCompletedRun();
+    const metadata = { workflowRunId: runId };
+    target = (await provisionWorktree({ binding: "api", branch }, metadata)).path;
+    const directory = await createRunDirectory(metadata);
 
-  const warn = vi.fn();
-  const first = startAutomaticRelease(factory, {
-    ...automaticReleaseDeps(),
-    ready: () => true,
-    warn,
-    release: async () => {
-      throw new Error("transient cleanup failure before restart");
-    },
-  });
-  await until(() => warn.mock.calls.length > 0, "first coordinator did not attempt release");
-  await first.stop();
-  expect(existsSync(target)).toBe(true);
-  expect(await states(runId)).toEqual([
-    ["worktree", "live", null],
-    ["run-directory", "live", null],
-  ]);
+    const warn = vi.fn();
+    const first = startAutomaticRelease(factory, {
+      ...automaticReleaseDeps(),
+      ready: () => true,
+      warn,
+      release: async () => {
+        throw new Error("transient cleanup failure before restart");
+      },
+    });
+    await until(() => warn.mock.calls.length > 0, "first coordinator did not attempt release");
+    await first.stop();
+    expect(existsSync(target)).toBe(true);
+    expect(await states(runId)).toEqual([
+      ["worktree", "live", null],
+      ["run-directory", "live", null],
+    ]);
 
-  await world.close?.();
-  setWorld(undefined);
-  world = await startWorld();
+    await world.close?.();
+    setWorld(undefined);
+    world = await startWorld();
 
-  const restarted = startAutomaticRelease(factory, {
-    ...automaticReleaseDeps(),
-    ready: () => true,
-  });
-  await until(
-    async () => (await states(runId)).every(([, state]) => state === "released"),
-    "restarted coordinator did not release the run's resources",
-  );
-  await restarted.stop();
+    const restarted = startAutomaticRelease(factory, {
+      ...automaticReleaseDeps(),
+      ready: () => true,
+    });
+    await until(
+      async () => (await states(runId)).every(([, state]) => state === "released"),
+      "restarted coordinator did not release the run's resources",
+    );
+    await restarted.stop();
 
-  expect(await states(runId)).toEqual([
-    ["worktree", "released", "worktree and merged branch removed"],
-    ["run-directory", "released", "removed"],
-  ]);
-  expect(existsSync(target)).toBe(false);
-  expect(existsSync(directory)).toBe(false);
-});
+    expect(await states(runId)).toEqual([
+      ["worktree", "released", "worktree and merged branch removed"],
+      ["run-directory", "released", "removed"],
+    ]);
+    expect(existsSync(target)).toBe(false);
+    expect(existsSync(directory)).toBe(false);
+  },
+);
 
 async function startWorld(): Promise<ReturnType<typeof createWorld>> {
   const next = createWorld({

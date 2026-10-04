@@ -13,7 +13,8 @@ pnpm install
 pnpm dev           # run the CLI from source
 pnpm check         # lint, typecheck, tests (including documentation examples), build, doc comments
 pnpm e2e           # bare and linear-ticket-to-pr factories from packed installs; diffs durable IDs
-pnpm test:live     # live provider tests, each with its own auth setup
+pnpm test:db       # tests that need only Postgres
+pnpm test:live     # tests that need real agents or provider credentials
 pnpm docs:site     # build the website into docs-site/ (fails on dead links)
 pnpm docs:preview  # serve the built site; open the printed /jigs/ URL
 pnpm docs:examples # type-check displayed TypeScript examples in isolation
@@ -33,6 +34,25 @@ takes over five minutes and never runs on pull requests.
 
 Biome formats at 100 columns. Keep `templates/jigs/*.ts.tmpl` formatted the same
 way, or a formatted factory reports its `jigs/` files as stale.
+
+## Tests
+
+Vitest runs three projects from `vitest.config.ts`, each named for what its
+tests need:
+
+| Project | Files | Needs |
+| --- | --- | --- |
+| `unit` | `*.test.ts` | Nothing. `pnpm test` and `pnpm check` run it. |
+| `db` | `*.db.test.ts` | Postgres. CI runs every one. |
+| `live` | `*.live.test.ts` | A logged-in agent CLI or provider credentials. Never in CI. |
+
+A `db` test creates and drops its own databases on the server at
+`WORKFLOW_POSTGRES_URL`, or on the container from
+`docker compose -f test/docker-compose.yml up -d --wait` when that is unset.
+Take the URL and `dbTest` from `src/db-test-fixtures.ts`: with no URL set and
+no container listening, `dbTest` skips; with a URL set, an unreachable server
+fails. Each `live` file names the login or credentials it needs. Both
+projects read `.env.e2e.local` and run their files one at a time.
 
 ## Layout
 

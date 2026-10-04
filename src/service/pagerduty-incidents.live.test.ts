@@ -11,6 +11,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
+import { databaseUrl, postgresAdminUrl } from "../db-test-fixtures.ts";
 import { createPagerDutyClient, type PagerDutyIncident } from "../providers/pagerduty.ts";
 import { createPagerDutyAuth } from "../providers/pagerduty-auth.ts";
 import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
@@ -44,13 +45,9 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     auth: createPagerDutyAuth(identity, { env }),
   });
 
-  const adminUrl = new URL(
-    process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
-  );
   const database = `jigs_pd_trigger_${crypto.randomUUID().replaceAll("-", "")}`;
-  const testUrl = new URL(adminUrl);
-  testUrl.pathname = `/${database}`;
-  const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+  const testUrl = databaseUrl(database);
+  const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
   // Deliveries are acknowledged unread: the run only has to exist.
   const server = createServer(async (req, res) => {
     await req.toArray();
