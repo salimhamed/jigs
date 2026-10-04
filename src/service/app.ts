@@ -63,8 +63,6 @@ export interface AppDeps {
 /** Build the service HTTP application for one factory's workflows and webhooks. */
 export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   const app = new Hono();
-  // Resolved on first use rather than here: liveness answers even from a
-  // service started outside a factory.
   const context = () => deps.context ?? currentFactoryContext();
   const registry = deps.registry ?? registrySql;
   const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });

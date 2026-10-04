@@ -1,6 +1,5 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { githubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/shared/env.ts";
 import { NEEDS_APP_IDENTITY } from "../steps/agents/shared/github-access.ts";
@@ -68,7 +67,7 @@ export function agentGithubChecks(
         return {
           ok: false,
           reason: NEEDS_APP_IDENTITY.reason,
-          repair: `${NEEDS_APP_IDENTITY.repair}, then: \`${RESTART_SERVICE}\``,
+          repair: `${NEEDS_APP_IDENTITY.repair}, then: \`pnpm exec jigs up\``,
         };
       },
     },

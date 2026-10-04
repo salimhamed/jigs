@@ -70,8 +70,6 @@ afterAll(async () => {
   await dropDatabaseOnceIdle(admin, database);
   await admin.end();
 });
-inTestFactory();
-
 // Preflight reads the factory a launch runs in.
 inTestFactory();
 

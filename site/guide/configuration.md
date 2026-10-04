@@ -536,19 +536,19 @@ leave out (here `linear` and `pagerduty`) is off and keeps polling.
    `webhooks.url`.
 2. **GitHub**: create a secret with `openssl rand -hex 32`, put it in `.env` as
    `GITHUB_WEBHOOK_SECRET`, set `github: { enabled: true }`, run
-   `jigs service restart`, then run `jigs bind` again for each repository.
+   `jigs up`, then run `jigs bind` again for each repository.
    `bind` creates or repairs the repository's webhook. It needs hook permissions: `admin:repo_hook` for a PAT, or
    Repository webhooks read and write for an App.
 3. **Linear**: create the webhook yourself in Linear under Settings → API →
    Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
    only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET`, set
-   `linear: { enabled: true }` and run `jigs service restart`.
+   `linear: { enabled: true }` and run `jigs up`.
 4. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
    and add a subscription on the service or team your triggers watch, for the
    `incident.triggered` event only, delivering to
    `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
    in `.env` as `PAGERDUTY_WEBHOOK_SECRET`, set `pagerduty: { enabled: true }`
-   and run `jigs service restart`. A new incident then starts its run within
+   and run `jigs up`. A new incident then starts its run within
    seconds instead of at the next poll, and never starts a second one.
 
 A provider that is enabled without its secret stops the service from starting.

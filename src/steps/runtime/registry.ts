@@ -45,22 +45,21 @@ export function connectRegistry(url: string, options: PoolConfig = {}): Registry
   return drizzle(pool);
 }
 
-// One lazily-opened pool per registry URL: the plugin's startup ensure, steps
-// and automatic release share it, so nothing ends a pool another caller still
-// holds. The service owns process exit after World shutdown drains active
-// work. CLI commands use their own pool.
-const clients = new Map<string, RegistrySql>();
+// One registry per process, on one lazily-opened pool: the plugin's startup
+// ensure, steps and automatic release share it, so nothing ends a pool another
+// caller still holds. The service owns process exit after World shutdown
+// drains active work. CLI commands use their own pool.
+let shared: { url: string; client: RegistrySql } | undefined;
 
-/** The current factory's registry, on the process's pool for its URL. */
+/** The current factory's registry, on the process's one pool. */
 export function registrySql(): RegistrySql {
   const url = currentFactoryContext().env("WORKFLOW_POSTGRES_URL");
   if (url === undefined) throw new Error("WORKFLOW_POSTGRES_URL is not set");
-  let client = clients.get(url);
-  if (client === undefined) {
-    client = connectRegistry(url);
-    clients.set(url, client);
+  shared ??= { url, client: connectRegistry(url) };
+  if (shared.url !== url) {
+    throw new Error("WORKFLOW_POSTGRES_URL changed after the registry pool opened");
   }
-  return client;
+  return shared.client;
 }
 
 export async function ensureRegistry(db: RegistrySql): Promise<void> {

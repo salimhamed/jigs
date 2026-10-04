@@ -52,7 +52,7 @@ export function pagerDutyIdentityChecks(
           return {
             ok: false,
             reason: `${VARIABLES} are set but PagerDuty issued no token: ${err instanceof Error ? err.message : String(err)}`,
-            repair: `check ${VARIABLES} in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region in ${FACTORY_CONFIG_FILE} name its account (now ${account}), then: \`${RESTART_SERVICE}\``,
+            repair: `check ${VARIABLES} in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region in ${FACTORY_CONFIG_FILE} name its account (now ${account}), then: \`pnpm exec jigs up --restart-service\``,
           };
         }
         try {
@@ -62,7 +62,7 @@ export function pagerDutyIdentityChecks(
             ok: false,
             reason: `PagerDuty issued a token but refused to list incidents on ${account}: ${err instanceof Error ? err.message : String(err)}`,
             repair: forbidden(err)
-              ? `grant incidents.read to the PagerDuty scoped OAuth app, and check pagerduty.identity.subdomain and region in ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``
+              ? `grant incidents.read to the PagerDuty scoped OAuth app, and check pagerduty.identity.subdomain and region in ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up --restart-service\``
               : "retry, and check PagerDuty's status page if it repeats",
           };
         }
@@ -140,7 +140,7 @@ export function pagerDutyChecks(ctx: FactoryContext): Check[] {
         err instanceof Error ? err.message : String(err),
         err instanceof JigsError && err.hint !== undefined
           ? err.hint
-          : `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
+          : `repair ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
       ),
     ];
   }

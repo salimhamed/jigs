@@ -554,6 +554,21 @@ test("restart waits for the new process to be ready too", async () => {
   expect(lines[2]).toContain("started");
 });
 
+test("start and restart refuse a jigs.config.ts edited since the build", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  touch(root, "jigs.config.ts", 60_000);
+
+  for (const verb of [restartService, startService]) {
+    const err = await failure(verb(deps(root, io)));
+    expect(err?.message).toBe("jigs.config.ts changed since the service was built");
+    expect(err?.hint).toContain("pnpm exec jigs up");
+  }
+  expect(io.spawns).toHaveLength(1);
+  expect(io.signals.filter(({ sig }) => sig !== 0)).toEqual([]);
+});
+
 test("stop terminates the recorded pid and clears the record", async () => {
   const root = builtFactory();
   const io = fake();

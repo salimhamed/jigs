@@ -6,13 +6,7 @@
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../workflow/factory-schema.ts";
-import {
-  type EnvLookup,
-  perContext,
-  RESTART_SERVICE,
-  requireCredential,
-  SERVICE_ENV_FILE,
-} from "./credentials.ts";
+import { type EnvLookup, perContext, requireCredential, SERVICE_ENV_FILE } from "./credentials.ts";
 import { mintClientCredentials, type ProviderAuth } from "./http.ts";
 
 export const PAGERDUTY_TOKEN_URL = "https://identity.pagerduty.com/oauth/token";
@@ -74,7 +68,7 @@ async function mintPagerDutyToken(
     clientId,
     clientSecret,
     scope: pagerDutyScope(identity),
-    hint: `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`${RESTART_SERVICE}\``,
+    hint: `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`pnpm exec jigs up --restart-service\``,
     quote: refusal,
     fetch: doFetch,
   });

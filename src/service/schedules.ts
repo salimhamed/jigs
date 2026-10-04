@@ -117,8 +117,8 @@ export async function listSchedules(
   }));
 }
 
-/** Doctor's half: the same three validations the ticker refuses on, one
- *  check per schedule. */
+/** Doctor's half: the same cron and inputs validations the ticker refuses on,
+ *  one check per schedule. */
 export function scheduleChecks(factory: Factory): Check[] {
   return Object.entries(factory.schedules ?? {}).map(([name, schedule]) => {
     const id = `schedule.${name}`;
