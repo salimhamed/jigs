@@ -12,7 +12,7 @@ import type { Source } from "./sources.ts";
 
 // `since` filters on created_at, and an incident can surface in the list a
 // little after it was created, or by a clock a little ahead of this one. Each
-// poll reaches this far behind the last; the store drops what it already saw.
+// poll reaches this far behind its cursor; the store drops what it already saw.
 export const POLL_OVERLAP_MS = 5 * 60_000;
 // PagerDuty refuses a range over six months, and with no `until` it ends the
 // range a month after `since`, which would hide everything recent after a long
@@ -48,21 +48,25 @@ export interface PagerDutyIncidentsDeps {
 
 export function pagerDutyIncidents(
   deps: PagerDutyIncidentsDeps = {},
-): Source<PagerDutyIncidentsParams> {
+): Source<PagerDutyIncidentsParams, string> {
   const client = deps.client ?? pagerDutyClientFor;
   const now = deps.now ?? (() => new Date());
   return {
     provider: "pagerduty",
     params: pagerDutyIncidentsParamsSchema,
+    // When the last poll asked, as an ISO timestamp.
+    cursor: z.iso.datetime({ offset: true }),
     sampleInputs: { incident: "P000000" },
     occurrence(inputs) {
       if (typeof inputs.incident !== "string" || inputs.incident === "")
         throw new Error("no incident id in the occurrence");
       return inputs.incident;
     },
-    async poll(params, since) {
-      const until = now().getTime() + UNTIL_MARGIN_MS;
-      const from = Math.max(since.getTime() - POLL_OVERLAP_MS, until - MAX_RANGE_MS);
+    async poll(params, cursor, floor) {
+      const through = now();
+      const until = through.getTime() + UNTIL_MARGIN_MS;
+      const since = Math.max(cursor === undefined ? 0 : Date.parse(cursor), floor.getTime());
+      const from = Math.max(since - POLL_OVERLAP_MS, until - MAX_RANGE_MS);
       const filters = Object.fromEntries(
         Object.entries(params).filter(([, value]) => value !== undefined),
       ) as Record<string, string[]>;
@@ -74,10 +78,13 @@ export function pagerDutyIncidents(
         since: new Date(from).toISOString(),
         until: new Date(until).toISOString(),
       });
-      return incidents.map((incident) => ({
-        inputs: { incident: incident.id },
-        at: new Date(incident.created_at),
-      }));
+      return {
+        occurrences: incidents.map((incident) => ({
+          inputs: { incident: incident.id },
+          at: new Date(incident.created_at),
+        })),
+        cursor: through.toISOString(),
+      };
     },
     // The run gets the incident id either way, so the webhook's copy of the
     // incident is read only to key it and to apply the same filters the poll

@@ -90,11 +90,27 @@ test("pending rows come oldest first, and the summary counts and names failures"
   expect(await triggerStore(db, "factory-c").pending("pages")).toEqual([]);
 });
 
-test("the first enable is kept, and advancing moves only the poll window", async () => {
+test("the first enable is kept, and advancing moves only the cursor", async () => {
   const store = triggerStore(db, "factory-d");
-  expect(await store.enable("pages", at(0))).toEqual({ enabledAt: at(0), polledThrough: at(0) });
-  await store.advance("pages", at(5));
-  expect(await store.enable("pages", at(10))).toEqual({ enabledAt: at(0), polledThrough: at(5) });
+  expect(await store.enable("pages", at(0))).toEqual({ enabledAt: at(0), cursor: null });
+  await store.advance("pages", at(5).toISOString());
+  expect(await store.enable("pages", at(10))).toEqual({
+    enabledAt: at(0),
+    cursor: at(5).toISOString(),
+  });
+});
+
+test("a source's cursor round-trips through the store as it was written", async () => {
+  const store = triggerStore(db, "factory-d");
+  for (const cursor of [
+    { C0123ABCD: "1790723244.335019", G0123ABCD: "1790723300.000000" },
+    "1790723244.335019",
+    "2026-09-29T12:05:00.000Z",
+    [1, "two", { three: null }],
+  ]) {
+    await store.advance("pages", cursor);
+    expect((await store.enable("pages", at(10))).cursor).toEqual(cursor);
+  }
 });
 
 test("a row is claimed once: the loser of a race gets nothing, and a failed row adopts its late run", async () => {
