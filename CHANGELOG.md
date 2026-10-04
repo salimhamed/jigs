@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.1](https://github.com/salimhamed/jigs/compare/jigs-v0.102.0...jigs-v0.102.1) (2026-10-04)
+
+
+### Features
+
+* **cli:** add jigs --version ([#577](https://github.com/salimhamed/jigs/issues/577)) ([9dcd16b](https://github.com/salimhamed/jigs/commit/9dcd16b4bd4a1ac9a0daf3bf58fc083c63a799d7))
+
 ## [0.102.0](https://github.com/salimhamed/jigs/compare/jigs-v0.101.0...jigs-v0.102.0) (2026-10-04)
 
 
