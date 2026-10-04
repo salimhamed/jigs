@@ -2,9 +2,8 @@
  * Low-level GitHub operations for factory-owned steps. Call their durable
  * `#jigs/steps` wrappers from workflow code.
  *
- * Watch changes with `watchPullRequest` from `#jigs/routines`, and reply or post
- * updates with `postReviewAnswers` and `postPullRequestNote`. `callGitHub`
- * reaches any other REST endpoint from a factory's own `"use step"` function.
+ * Watch changes with `watchPullRequest` from `#jigs/routines`, and post updates
+ * with `postPullRequestNote`. `callGitHub` reaches any other REST endpoint from a factory's own `"use step"` function.
  * See [Waiting and external events](https://salimhamed.github.io/jigs/guide/waiting-and-events).
  *
  * @module steps/pull-requests

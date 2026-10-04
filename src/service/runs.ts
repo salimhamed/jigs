@@ -286,7 +286,9 @@ async function runSources(
     rows.flatMap((row) => {
       const kind = factory.triggers?.[row.trigger]?.source.kind;
       const source = kind === undefined ? undefined : SOURCES[kind];
-      return source === undefined ? [] : [[row.attribute, source.describe(row.inputs)] as const];
+      return source === undefined
+        ? []
+        : [[row.attribute, { kind: source.provider, label: source.describe(row.inputs) }] as const];
     }),
   );
   return new Map(

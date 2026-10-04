@@ -8,10 +8,9 @@ import {
   parseOutput,
   type RunAgentOptions,
 } from "../../../workflow/agents/plan.ts";
-import type { TicketClaim } from "../../../workflow/linear/claim.ts";
-import type { HaltForHumanFn, HumanReply } from "../../../workflow/linear/halt-for-human.ts";
-import { reviewTicket } from "../../../workflow/linear/review.ts";
-import type { TicketSnapshot } from "../../../workflow/linear/snapshot.ts";
+import { ticketReviewVerdictSchema } from "../../../workflow/linear/review.ts";
+import { renderTicketSnapshot, type TicketSnapshot } from "../../../workflow/linear/snapshot.ts";
+import { ticketReviewPrompt } from "../../../workflow/linear/ticket-review.prompt.ts";
 import { createCodexDriver } from "../drivers/codex.ts";
 import { type DriverResolver, driverFor } from "../drivers/index.ts";
 import { executeAgentWith } from "../execute-agent.ts";
@@ -93,40 +92,22 @@ test("ticket review asks every knowable decision in one needs-human round", asyn
     };
   };
 
-  const halts: string[] = [];
-  const haltForHuman: HaltForHumanFn = async (_claim, halt): Promise<HumanReply> => {
-    const rendered = JSON.stringify(halt.questions).toLowerCase();
-    halts.push(rendered);
-    if (halts.length > 1) throw new Error("ticket review emitted an avoidable second pause");
+  const review = (ticket: TicketSnapshot) =>
+    runAgent({
+      harness: harnesses.codex({ model: "gpt-5.5" }),
+      cwd: "/tmp",
+      prompt: ticketReviewPrompt({ ticket: renderTicketSnapshot(ticket) }),
+      output: ticketReviewVerdictSchema,
+    });
 
-    expect(rendered).toMatch(/warning|error/);
-    expect(rendered).toMatch(/doctor/);
-    expect(rendered).toMatch(/bind/);
-    return {
-      commentId: "answer-1",
-      body: answeredSnapshot.comments[0]?.body ?? "",
-      author: { id: "owner-1", name: "Product owner" },
-      createdAt: answeredSnapshot.comments[0]?.createdAt ?? "",
-    };
-  };
+  const first = await review(snapshot);
+  expect(first.output.verdict).toBe("needs-human");
+  const rendered = JSON.stringify(first.output.questions).toLowerCase();
+  expect(rendered).toMatch(/warning|error/);
+  expect(rendered).toMatch(/doctor/);
+  expect(rendered).toMatch(/bind/);
 
-  const handoff = await reviewTicket({
-    runAgent,
-    haltForHuman,
-    postTicketNote: async () => ({ commentId: "note" }),
-    fetchTicketSnapshot: async () => answeredSnapshot,
-    claim: {
-      issueId: snapshot.id,
-      identifier: snapshot.identifier,
-      token: `linear:ticket:${snapshot.id}`,
-      hook: {} as TicketClaim["hook"],
-      postedCommentIds: [],
-    },
-    snapshot,
-    harness: harnesses.codex({ model: "gpt-5.5" }),
-    cwd: "/tmp",
-  });
-
-  expect(halts).toHaveLength(1);
-  expect(handoff.snapshot).toBe(answeredSnapshot);
+  // Every decision was asked in the first round, so the answers are enough to proceed.
+  const second = await review(answeredSnapshot);
+  expect(second.output.verdict).toBe("proceed");
 });

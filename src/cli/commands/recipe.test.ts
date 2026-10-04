@@ -27,6 +27,8 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
     "workflows/linear-ticket-to-pr/linear-ticket-to-pr.test.ts",
     "workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts",
     "workflows/linear-ticket-to-pr/prompts.ts",
+    "workflows/linear-ticket-to-pr/review-ticket.test.ts",
+    "workflows/linear-ticket-to-pr/review-ticket.ts",
   ]);
   expect(deps.lines.slice(-4)).toEqual([
     'registered linear-ticket-to-pr in jigs.config.ts by adding "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts")',
@@ -53,7 +55,7 @@ test("keeps edited files when a recipe is added again", async () => {
   expect(result.created).toEqual([]);
   expect(deps.lines).toContain("linear-ticket-to-pr is already registered in jigs.config.ts");
   expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toBe(config);
-  expect(result.skipped).toHaveLength(4);
+  expect(result.skipped).toHaveLength(6);
   expect(deps.lines).toContain("kept    workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts");
   expect(
     readFileSync(

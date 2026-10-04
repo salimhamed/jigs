@@ -13,6 +13,7 @@ following the pull request, runs in four jigs routines the workflow calls.
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, the ticket status it sets between phases, and every note it posts. |
 | `prompts.ts` | Every prompt the agents are sent. |
+| `review-ticket.ts` | The ticket review before any code: the reviewer restates the ticket as a brief, or asks on the ticket until it can. |
 
 ## What it needs
 

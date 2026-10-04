@@ -4,7 +4,6 @@
 // only reached from a step, a check or the CLI — never from workflow code.
 
 import { type LinearIdentity, readFactoryConfig } from "../config/factory-config.ts";
-import { JigsError } from "../errors.ts";
 import {
   credentialRoot,
   credentialValue,
@@ -14,7 +13,7 @@ import {
   requireCredential,
   SERVICE_ENV_FILE,
 } from "./credentials.ts";
-import type { ProviderAuth } from "./http.ts";
+import { mintClientCredentials, type ProviderAuth } from "./http.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
 export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
@@ -42,35 +41,19 @@ export function missingLinearVariables(
 async function mintLinearAppToken(
   clientId: string,
   clientSecret: string,
-  doFetch: FetchLike,
+  doFetch: FetchLike | undefined,
 ): Promise<string> {
-  const res = await doFetch(LINEAR_TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      scope: APP_SCOPE,
-      client_id: clientId,
-      client_secret: clientSecret,
-    }).toString(),
+  const { accessToken } = await mintClientCredentials({
+    provider: "linear",
+    url: LINEAR_TOKEN_URL,
+    clientId,
+    clientSecret,
+    scope: APP_SCOPE,
+    hint: `check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the Linear OAuth application, and that client credentials are enabled on it, then: \`${RESTART_SERVICE}\``,
+    quote: (body) => body,
+    fetch: doFetch,
   });
-  const text = await res.text().catch(() => "");
-  if (!res.ok) {
-    throw new JigsError(
-      `Linear refused a client-credentials token (HTTP ${res.status}): ${text.replaceAll(clientSecret, "[redacted]")}`,
-      `check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the Linear OAuth application, and that client credentials are enabled on it, then: \`${RESTART_SERVICE}\``,
-    );
-  }
-  let body: { access_token?: unknown };
-  try {
-    body = JSON.parse(text) as typeof body;
-  } catch {
-    throw new JigsError(`Linear's token response (HTTP ${res.status}) was not JSON`);
-  }
-  if (typeof body.access_token !== "string" || body.access_token === "") {
-    throw new JigsError("Linear's token response carried no access_token");
-  }
-  return body.access_token;
+  return accessToken;
 }
 
 export interface LinearAuth extends ProviderAuth {
@@ -105,7 +88,7 @@ export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps 
         minting = mintLinearAppToken(
           required("LINEAR_CLIENT_ID"),
           required("LINEAR_CLIENT_SECRET"),
-          deps.fetch ?? fetch,
+          deps.fetch,
         ).finally(() => {
           minting = null;
         });

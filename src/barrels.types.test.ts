@@ -68,8 +68,6 @@ import type {
   PullRequestMarker,
   PullRequestReadOptions,
   PullRequestRef,
-  RebuildContextPrompt,
-  RebuildContextPromptInput,
   ReleasePolicy,
   ReleaseReport,
   ReviewFacts,
@@ -84,10 +82,8 @@ import type {
   SlackQuestion,
   SlackReplyResult,
   StatusReason,
-  ThreadAnswers,
   TicketClaim,
   TicketComment,
-  TicketHandoff,
   TicketLink,
   TicketNote,
   TicketRef,
@@ -172,8 +168,6 @@ type RootTypeSurface = {
   prMarker: PullRequestMarker;
   prReadOptions: PullRequestReadOptions;
   prRef: PullRequestRef;
-  rebuildContextPrompt: RebuildContextPrompt;
-  rebuildContextPromptInput: RebuildContextPromptInput;
   releasePolicy: ReleasePolicy;
   releaseReport: ReleaseReport;
   reviewFacts: ReviewFacts<unknown>;
@@ -188,10 +182,8 @@ type RootTypeSurface = {
   slackQuestion: SlackQuestion;
   slackReplyResult: SlackReplyResult;
   statusReason: StatusReason;
-  threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;
   ticketComment: TicketComment;
-  ticketHandoff: TicketHandoff;
   ticketLink: TicketLink;
   ticketNote: TicketNote;
   ticketRef: TicketRef;

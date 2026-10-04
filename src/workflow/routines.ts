@@ -8,7 +8,6 @@
  * @packageDocumentation
  */
 
-export type { RunAgentOrHaltOptions } from "./agents/agent-or-halt.ts";
 export {
   type AgentSession,
   type AgentSessionOptions,
@@ -26,14 +25,9 @@ export {
   type GitSteps,
   type ReadBranchState,
 } from "./git/committed-work.ts";
-export { type BoundReviewTicketOptions, bindLinearSteps, type LinearSteps } from "./linear/bind.ts";
+export { bindLinearSteps, type LinearSteps } from "./linear/bind.ts";
 export { claimTicket } from "./linear/claim.ts";
 export { type AcquireTicketSteps, acquireTicket } from "./linear/prelude.ts";
-export {
-  type PostPullRequestNoteOptions,
-  type PostReviewAnswersOptions,
-  postPullRequestNote,
-  postReviewAnswers,
-} from "./pull-requests/answers.ts";
+export { type PostPullRequestNoteOptions, postPullRequestNote } from "./pull-requests/answers.ts";
 export { bindPullRequestSteps, type PullRequestSteps } from "./pull-requests/bind.ts";
 export { type SlackReplySteps, waitForSlackReply } from "./slack/wait-for-reply.ts";

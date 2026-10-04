@@ -5,7 +5,6 @@ import {
   type NeedsHuman,
   type PullRequestSnapshot,
   type TicketClaim,
-  type TicketHandoff,
   type TicketSnapshot,
 } from "@jigs-ai/jigs";
 import { beforeEach, expect, test, vi } from "vitest";
@@ -13,6 +12,8 @@ import * as routines from "#jigs/routines";
 import * as steps from "#jigs/steps";
 import entry, { linearTicketToPr } from "./linear-ticket-to-pr.ts";
 import { prompts, type Ticket } from "./prompts.ts";
+import type { TicketHandoff } from "./review-ticket.ts";
+import * as review from "./review-ticket.ts";
 
 // The workflow body against mocked delivery routines: what it hands them, the
 // ticket status it sets around each one, and the notes it words.
@@ -27,10 +28,12 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   pushBranch: vi.fn(async () => ({ created: false })),
   setTicketStatus: vi.fn(async () => ({})),
 }));
+vi.mock("./review-ticket.ts", () => ({
+  reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
+}));
 vi.mock("#jigs/routines", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/routines")>()),
   acquireTicket: vi.fn(async () => ({ claim, snapshot })),
-  reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
   noteOnTicket: vi.fn(async () => {}),
   postPullRequestNote: vi.fn(async () => {}),
   buildAndReview: vi.fn(async () => ({
@@ -127,7 +130,7 @@ test("a run picks its builder and reviewer by name, each in its own session", as
 
 test("the chosen reviewer also reviews the requirements", async () => {
   await run({ reviewer: "builder" });
-  expect(routines.reviewTicket).toHaveBeenCalledWith(
+  expect(review.reviewTicket).toHaveBeenCalledWith(
     expect.objectContaining({ harness: entry.requires?.agents?.builder }),
   );
 });

@@ -1,6 +1,7 @@
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { describeSuspension, type RunSuspension } from "../../run-suspension.ts";
 import { parseHookToken } from "../../workflow/hook-tokens.ts";
+import type { Provider } from "../../workflow/providers.ts";
 import type { ResourceRecord } from "../../workflow/runtime/resources.ts";
 import { listResources, type RegistrySql, toRecord } from "./registry.ts";
 
@@ -38,7 +39,7 @@ export interface RunFacts {
 /** What an event trigger started a run for, as the trigger's source describes it. */
 export interface RunSource {
   /** The provider the occurrence came from. */
-  kind: string;
+  kind: Provider;
   /** The occurrence in an operator's words. */
   label: string;
 }

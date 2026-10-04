@@ -106,55 +106,13 @@ The workflow decides whether to change code, respond to feedback or merge.
 See the [watcher reference](/api/factory/routines#watchpullrequest) and
 [snapshot fields](/api/jigs#pullrequestsnapshot) for the exact data.
 
-## Reply to reviews and post updates
+## Post commit updates
 
-After reading a snapshot, your workflow can use `postReviewAnswers` to reply to
-review threads, or `postPullRequestNote` to explain the status of a commit. Both
-come from `#jigs/routines`; the generated routines supply the durable steps.
-
-### Reply to a review
-
-Add this helper at file scope in a workflow module. It takes the `pr` and
-`snapshot` from the watcher above, the root ID of a thread the workflow has
-chosen to answer, and the reply text. Call it inside the watch loop after your
-workflow has decided what to say. It finds the thread in the current snapshot
-and fails if that thread is absent.
-
-```ts
-import { JigsError, type PullRequestRef, type PullRequestSnapshot } from "@jigs-ai/jigs";
-import { postReviewAnswers } from "#jigs/routines";
-
-export async function answerReview(
-  pr: PullRequestRef,
-  snapshot: PullRequestSnapshot,
-  threadId: number,
-  body: string,
-) {
-  const selectedThread = snapshot.reviewThreads.find((thread) => thread.rootId === threadId);
-  if (!selectedThread) throw new JigsError("The selected review thread is absent from this snapshot.");
-
-  await postReviewAnswers({
-    pr,
-    scope: "delivery",
-    threads: [selectedThread],
-    answers: {
-      answers: [{ threadId: selectedThread.rootId, body }],
-      commitExplanation: null,
-    },
-  });
-}
-```
-
-The routine sends the answer to the right GitHub thread and marks which
-feedback it addresses. You can also include an explanation of a pushed commit.
-The [reference](/api/factory/routines#postreviewanswers) lists those options.
-
-### Post a commit update
-
-Use `postPullRequestNote` for a status message about the current commit. Add
-this helper at file scope in the watcher module, then call
-`await reportFailingCi(pr, snapshot)` inside the loop after the closed-state
-check. Both arguments come from that loop; the helper posts only when CI is red.
+After reading a snapshot, your workflow can use `postPullRequestNote` from
+`#jigs/routines` to explain the status of a commit; the generated routines
+supply the durable steps. Add this helper at file scope in the watcher module,
+then call `await reportFailingCi(pr, snapshot)` inside the loop after the
+closed-state check. Both arguments come from that loop; the helper posts only when CI is red.
 
 ```ts
 import type { PullRequestRef, PullRequestSnapshot } from "@jigs-ai/jigs";

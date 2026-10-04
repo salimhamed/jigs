@@ -102,6 +102,6 @@ export function pagerDutyIncidents(
         return null;
       return { inputs: { incident: data.id }, at: new Date(data.created_at) };
     },
-    describe: ({ incident }) => ({ kind: "pagerduty", label: `pagerduty ${String(incident)}` }),
+    describe: ({ incident }) => `pagerduty ${String(incident)}`,
   };
 }

@@ -1,7 +1,8 @@
+import { getWorkflowMetadata } from "workflow";
 import { getWorld } from "workflow/runtime";
-import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import { TERMINAL_RUN_STATUSES } from "./run-status.ts";
 
-/** How an agent invocation reads its run's persisted status. Tests replace it. */
+/** How a step reads its run's persisted status. Tests replace it. */
 export interface RunStatusReader {
   /** One authoritative read. Throws when the run cannot be read, including when it is missing. */
   read(runId: string): Promise<string>;
@@ -17,11 +18,15 @@ export interface RunStatusReader {
 // need the SDK's value at module load, which factory tests commonly mock away.
 export class RunCancelledError extends Error {
   readonly fatal = true;
-  constructor(runId: string, options?: { cause?: unknown; beforeStart?: boolean }) {
+  constructor(
+    runId: string,
+    options?: { cause?: unknown; beforeStart?: boolean; subject?: string },
+  ) {
+    const subject = options?.subject ?? "its agent";
     super(
       options?.beforeStart
-        ? `run ${runId} was cancelled, so jigs did not start its agent`
-        : `run ${runId} was cancelled, so jigs stopped its agent`,
+        ? `run ${runId} was cancelled, so jigs did not start ${subject}`
+        : `run ${runId} was cancelled, so jigs stopped ${subject}`,
     );
     this.name = "RunCancelledError";
     if (options?.cause !== undefined) this.cause = options.cause;
@@ -82,16 +87,17 @@ function delay(ms: number, signal: AbortSignal): Promise<void> {
 export async function watchRunCancellation(
   runId: string,
   reader: RunStatusReader = worldRunStatus,
+  subject = "its agent",
 ): Promise<RunCancellation> {
   let status: string;
   try {
     status = await reader.read(runId);
   } catch (error) {
-    throw new Error(`could not read run ${runId} before starting its agent: ${message(error)}`, {
+    throw new Error(`could not read run ${runId} before starting ${subject}: ${message(error)}`, {
       cause: error,
     });
   }
-  if (status === "cancelled") throw new RunCancelledError(runId, { beforeStart: true });
+  if (status === "cancelled") throw new RunCancelledError(runId, { beforeStart: true, subject });
 
   const cancelled = new AbortController();
   const disposal = new AbortController();
@@ -116,7 +122,7 @@ export async function watchRunCancellation(
       if (failures > 0) console.warn(`[jigs] run ${runId}: watching for cancellation again`);
       failures = 0;
       if (seen === "cancelled") {
-        cancelled.abort(new RunCancelledError(runId));
+        cancelled.abort(new RunCancelledError(runId, { subject }));
         return;
       }
       if (TERMINAL_RUN_STATUSES.has(seen)) return;
@@ -131,7 +137,7 @@ export async function watchRunCancellation(
     signal: cancelled.signal,
     classify: (error) =>
       cancelled.signal.aborted && !(error instanceof RunCancelledError)
-        ? new RunCancelledError(runId, { cause: error })
+        ? new RunCancelledError(runId, { cause: error, subject })
         : error,
     dispose: () => disposal.abort(),
   };
@@ -150,5 +156,27 @@ export async function withRunCancellation<T>(
     throw watch.classify(error);
   } finally {
     watch.dispose();
+  }
+}
+
+/**
+ * A watch on the calling step's run, or undefined outside a step or when its status cannot be
+ * read. Throws a {@link RunCancelledError} when the run is already cancelled.
+ */
+export async function watchCallingRun(
+  subject: string,
+  reader: RunStatusReader = worldRunStatus,
+): Promise<RunCancellation | undefined> {
+  let runId: string;
+  try {
+    runId = getWorkflowMetadata().workflowRunId;
+  } catch {
+    return undefined;
+  }
+  try {
+    return await watchRunCancellation(runId, reader, subject);
+  } catch (error) {
+    if (error instanceof RunCancelledError) throw error;
+    return undefined;
   }
 }

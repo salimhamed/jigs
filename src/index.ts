@@ -82,11 +82,6 @@ export type {
   RunAgentOptions,
 } from "./workflow/agents/plan.ts";
 export {
-  type RebuildContextPrompt,
-  type RebuildContextPromptInput,
-  rebuildContextPrompt,
-} from "./workflow/agents/rebuild-context.prompt.ts";
-export {
   type AgentResult,
   type AgentSessionRef,
   describeHarness,
@@ -163,11 +158,7 @@ export {
 export { interpolate } from "./workflow/interpolate.ts";
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
-export {
-  type TicketHandoff,
-  type TicketNote,
-  ticketReviewVerdictSchema,
-} from "./workflow/linear/review.ts";
+export { type TicketNote, ticketReviewVerdictSchema } from "./workflow/linear/review.ts";
 export {
   renderTicketSnapshot,
   type TicketComment,
@@ -183,7 +174,7 @@ export {
 export type { IncidentRef, IncidentSnapshot } from "./workflow/pagerduty/snapshot.ts";
 export { type PagerDutyIncidentsParams, pagerduty } from "./workflow/pagerduty/source.ts";
 
-export { renderChecks, type ThreadAnswers } from "./workflow/pull-requests/answers.ts";
+export { renderChecks } from "./workflow/pull-requests/answers.ts";
 export {
   type PullRequestMarker,
   parseMarkers,

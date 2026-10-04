@@ -35,7 +35,6 @@ import {
   readBranchState,
   readWorktreeDiff,
   registerResource,
-  replyToPullRequestReviewThread,
   resolveLinearIssue,
 } from "./steps.ts";
 
@@ -83,11 +82,9 @@ export const askModel = agents.askModel;
 export const askJev = agents.askJev;
 
 const linear = bindLinearSteps({
-  runAgent,
   postTicketHumanInputRequest,
   postTicketNote,
   checkForTicketHumanReply,
-  fetchTicketSnapshot,
 });
 
 /**
@@ -103,21 +100,6 @@ const linear = bindLinearSteps({
  * emails in the halt's `mention`.
  */
 export const haltForHuman = linear.haltForHuman;
-
-/**
- * Run an agent, asking a human to fix missing capabilities before retrying.
- * A third argument, `{ mention }`, lists more emails for the request to mention.
- *
- * @group Linear and human input
- */
-export const runAgentOrHalt = linear.runAgentOrHalt;
-
-/**
- * Clarify a Linear ticket and prepare an implementation brief.
- *
- * @group Linear and human input
- */
-export const reviewTicket = linear.reviewTicket;
 
 /**
  * Post a note on a claimed ticket that asks for nothing and waits for nothing.
@@ -148,11 +130,7 @@ export const {
   committedWork,
 } = bindGitSteps({ readBranchState });
 
-const pullRequests = bindPullRequestSteps({
-  fetchPullRequestState,
-  commentOnPullRequest,
-  replyToPullRequestReviewThread,
-});
+const pullRequests = bindPullRequestSteps({ fetchPullRequestState, commentOnPullRequest });
 
 /**
  * Read current pull request facts, then yield changed snapshots until it closes.
@@ -168,21 +146,6 @@ const pullRequests = bindPullRequestSteps({
  * a second owner receives `ClaimConflictError`.
  */
 export const watchPullRequest = pullRequests.watchPullRequest;
-
-/**
- * Post one revision round's answers, each marked with what it answers.
- *
- * @group Pull requests
- *
- * @remarks
- * Marks each answer with its source and scope to identify the feedback it addresses.
- * Inline review threads and conversation comments use their respective GitHub reply endpoints.
- * Each call posts the supplied answers; the workflow decides which feedback needs a reply.
- * Posting stops and logs the error on the first failure. Read fresh facts before deciding
- * whether to try again. Include `committedSha` and a non-null `commitExplanation` to
- * explain a pushed commit after posting the replies.
- */
-export const postReviewAnswers = pullRequests.postReviewAnswers;
 
 /**
  * Post a note about a commit, once per head and reason.

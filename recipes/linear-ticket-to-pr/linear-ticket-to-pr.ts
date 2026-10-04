@@ -8,7 +8,6 @@ import {
   JigsError,
   type NeedsHuman,
   renderTicketSnapshot,
-  type TicketHandoff,
   type TicketNote,
   type UnpublishedWork,
   type WorkflowInputs,
@@ -24,10 +23,10 @@ import {
   noteOnTicket,
   postPullRequestNote,
   publishPullRequest,
-  reviewTicket,
 } from "#jigs/routines";
 import { provisionWorktree, pushBranch, setTicketStatus } from "#jigs/steps";
 import { prompts, type Ticket } from "./prompts.ts";
+import { reviewTicket, type TicketHandoff } from "./review-ticket.ts";
 
 // The agents this workflow can run, by the part they play. A run picks one per
 // part by name; edit a line here to change a default model or harness. The

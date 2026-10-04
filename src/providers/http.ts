@@ -71,7 +71,8 @@ export type Fail = (
 
 export interface ProviderRequest<T> {
   provider: Provider;
-  auth: ProviderAuth;
+  /** Absent for a call that sends no credential, such as a token exchange. */
+  auth?: ProviderAuth;
   url: string;
   method?: string;
   /** Names the call in a failure; defaults to the method and the URL's path. */
@@ -96,8 +97,12 @@ export interface ProviderRequest<T> {
   decode?: (res: Response, text: string, fail: Fail) => T;
   fetch?: typeof fetch;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
-  /** Ends a rate-limit wait early, failing with the signal's reason. */
-  signal?: AbortSignal;
+  /**
+   * Ends a rate-limit wait early, failing with the signal's reason. Without one, a call made from
+   * a step ends its wait when that step's run is cancelled; `null` never ends it, for work shared
+   * between runs such as a token mint.
+   */
+  signal?: AbortSignal | null;
 }
 
 /** A JSON body on success, nothing on 204, and a failure for any error status. */
@@ -130,6 +135,37 @@ function retryAfterHeader(res: Response): number {
   return Number.isNaN(seconds) ? 1 : seconds;
 }
 
+// Imported on demand, so the CLI, which runs where the workflow SDK may not be
+// installed, never loads it.
+async function watchCallingRun(subject: string) {
+  let cancellation: typeof import("../run-cancellation.ts");
+  try {
+    cancellation = await import("../run-cancellation.ts");
+  } catch {
+    return undefined;
+  }
+  return cancellation.watchCallingRun(subject);
+}
+
+async function waitOut(
+  ms: number,
+  spec: Pick<ProviderRequest<unknown>, "provider" | "signal">,
+  sleep: NonNullable<ProviderRequest<unknown>["sleep"]>,
+): Promise<void> {
+  if (spec.signal === null) return sleep(ms);
+  const watch =
+    spec.signal === undefined
+      ? await watchCallingRun(`waiting out ${PROVIDER_NAMES[spec.provider]}'s rate limit`)
+      : undefined;
+  const signal = spec.signal ?? watch?.signal;
+  try {
+    if (signal?.aborted) throw abortReason(signal);
+    await abortable(sleep(ms, signal), signal);
+  } finally {
+    watch?.dispose();
+  }
+}
+
 export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
   const method = spec.method ?? "GET";
   const request = spec.request ?? `${method} ${new URL(spec.url).pathname}`;
@@ -139,11 +175,13 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
   let reauthorized = false;
   let rateLimited = 0;
   for (;;) {
-    const credential = await spec.auth.bearer();
+    const credential = await spec.auth?.bearer();
     const res = await doFetch(spec.url, {
       method,
       headers: {
-        authorization: spec.authorization?.(credential) ?? `Bearer ${credential}`,
+        ...(credential === undefined
+          ? {}
+          : { authorization: spec.authorization?.(credential) ?? `Bearer ${credential}` }),
         ...(spec.json === undefined ? {} : { "content-type": "application/json" }),
         ...spec.headers,
       },
@@ -154,7 +192,8 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
     // A long-lived token can be revoked early, by a re-mint with other scopes.
     if (
       !reauthorized &&
-      spec.auth.invalidate &&
+      credential !== undefined &&
+      spec.auth?.invalidate &&
       (spec.isAuthFailure?.(res, text) ?? res.status === 401)
     ) {
       reauthorized = true;
@@ -166,8 +205,7 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
       if (wait > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${wait}s`;
       else if (rateLimited < RATE_LIMIT_RETRIES) {
         rateLimited += 1;
-        if (spec.signal?.aborted) throw abortReason(spec.signal);
-        await abortable(sleep(wait * 1000, spec.signal), spec.signal);
+        await waitOut(wait * 1000, spec, sleep);
         continue;
       }
     }
@@ -182,4 +220,58 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
       });
     return decode(res, text, fail);
   }
+}
+
+export interface ClientCredentialsGrant {
+  provider: Provider;
+  url: string;
+  clientId: string;
+  clientSecret: string;
+  scope: string;
+  /** The hint on a refusal. */
+  hint: string;
+  /** What of a refusal's body to quote; the secret is then cut out of it. */
+  quote: (body: string) => string;
+  fetch?: typeof fetch;
+}
+
+/** Exchange an OAuth app's client credentials for a token, keeping the secret out of any failure. */
+export function mintClientCredentials(
+  grant: ClientCredentialsGrant,
+): Promise<{ accessToken: string; expiresIn?: unknown }> {
+  const name = PROVIDER_NAMES[grant.provider];
+  return providerRequest({
+    provider: grant.provider,
+    url: grant.url,
+    method: "POST",
+    headers: { "content-type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      grant_type: "client_credentials",
+      client_id: grant.clientId,
+      client_secret: grant.clientSecret,
+      scope: grant.scope,
+    }).toString(),
+    fetch: grant.fetch,
+    // One mint serves every run waiting on it.
+    signal: null,
+    decode: (res, text) => {
+      if (!res.ok) {
+        const detail = grant.quote(text).replaceAll(grant.clientSecret, "[redacted]");
+        throw new JigsError(
+          `${name} refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
+          grant.hint,
+        );
+      }
+      let body: { access_token?: unknown; expires_in?: unknown };
+      try {
+        body = JSON.parse(text) as typeof body;
+      } catch {
+        throw new JigsError(`${name}'s token response (HTTP ${res.status}) was not JSON`);
+      }
+      if (typeof body.access_token !== "string" || body.access_token === "") {
+        throw new JigsError(`${name}'s token response carried no access_token`);
+      }
+      return { accessToken: body.access_token, expiresIn: body.expires_in };
+    },
+  });
 }

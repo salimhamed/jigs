@@ -5,6 +5,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
 import { JigsError } from "../../errors.ts";
+import { RunCancelledError } from "../../run-cancellation.ts";
 import { JitCheckError } from "../../workflow/agents/agent.ts";
 import { harnesses, models } from "../../workflow/agents/harness-config.ts";
 import type { Driver, DriverResolver } from "./drivers/index.ts";
@@ -15,7 +16,6 @@ import {
   removeTmpDir,
   runningRunStatus,
 } from "./harnesses/test-fixtures.ts";
-import { RunCancelledError } from "./run-cancellation.ts";
 import { createAgentRunner, forFactoryStep, openAgentRunner } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";

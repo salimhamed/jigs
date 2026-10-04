@@ -14,6 +14,7 @@ import {
   jitChecks,
   runChecks,
 } from "../../checks/index.ts";
+import { type RunStatusReader, worldRunStatus } from "../../run-cancellation.ts";
 import {
   type DriverDependencies,
   type DriverResolver,
@@ -23,7 +24,6 @@ import {
 } from "./drivers/index.ts";
 import { agentAccessEnv } from "./harnesses/agent-access.ts";
 import { factoryAgentEnv } from "./harnesses/env.ts";
-import { type RunStatusReader, worldRunStatus } from "./run-cancellation.ts";
 import { openStepStream, type StepStream } from "./step-stream.ts";
 
 /** The parts of a `streamText` result an agent run reads. */

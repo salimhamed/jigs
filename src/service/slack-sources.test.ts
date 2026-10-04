@@ -236,10 +236,7 @@ test("a pushed message is the same occurrence its poll finds", async () => {
   const push = await messages.fromPush(params, pushed(TOP_LEVEL));
   expect(push).toEqual(polled);
   expect(messages.occurrence(push?.inputs ?? {})).toBe(`${CHANNEL}:${TOP_LEVEL.ts}`);
-  expect(messages.describe(push?.inputs ?? {})).toEqual({
-    kind: "slack",
-    label: `slack ${CHANNEL} ${TOP_LEVEL.ts}`,
-  });
+  expect(messages.describe(push?.inputs ?? {})).toBe(`slack ${CHANNEL} ${TOP_LEVEL.ts}`);
 });
 
 test.each([

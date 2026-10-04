@@ -3,7 +3,6 @@
 // registry, keyed by the descriptor's `kind`, is what the engine runs.
 
 import type { z } from "zod";
-import type { RunSource } from "../steps/runtime/run-state.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../workflow/pagerduty/source.ts";
 import type { Provider } from "../workflow/providers.ts";
 import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
@@ -39,8 +38,8 @@ export interface Source<P = unknown, C = unknown> {
   poll(params: P, cursor: C | undefined, floor: Date): Promise<SourcePoll<C>>;
   /** The same occurrence from a pushed provider event, or null when the event is not one. */
   fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
-  /** What a run this source started was started for, read off the inputs it handed the run. */
-  describe(inputs: Record<string, unknown>): RunSource;
+  /** What a run this source started was started for, in an operator's words, read off its inputs. */
+  describe(inputs: Record<string, unknown>): string;
 }
 
 // biome-ignore lint/suspicious/noExplicitAny: each kind has its own params and cursor

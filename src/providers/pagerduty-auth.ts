@@ -18,7 +18,7 @@ import {
   requireCredential,
   SERVICE_ENV_FILE,
 } from "./credentials.ts";
-import type { ProviderAuth } from "./http.ts";
+import { mintClientCredentials, type ProviderAuth } from "./http.ts";
 
 export const PAGERDUTY_TOKEN_URL = "https://identity.pagerduty.com/oauth/token";
 
@@ -54,54 +54,37 @@ interface MintedToken {
 }
 
 // The token endpoint's body is never quoted whole: only its error code and
-// description, with the secret cut out should either repeat it.
-async function refusal(res: Response, secret: string): Promise<string> {
-  const text = await res.text().catch(() => "");
-  let detail = "";
+// description.
+function refusal(text: string): string {
   try {
     const body = JSON.parse(text) as { error?: unknown; error_description?: unknown };
-    detail = [body.error, body.error_description]
+    return [body.error, body.error_description]
       .filter((part): part is string => typeof part === "string" && part !== "")
       .join(": ");
-  } catch {}
-  return detail.replaceAll(secret, "[redacted]");
+  } catch {
+    return "";
+  }
 }
 
 async function mintPagerDutyToken(
   identity: PagerDutyIdentity,
   clientId: string,
   clientSecret: string,
-  doFetch: FetchLike,
+  doFetch: FetchLike | undefined,
   now: () => number,
 ): Promise<MintedToken> {
-  const res = await doFetch(PAGERDUTY_TOKEN_URL, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams({
-      grant_type: "client_credentials",
-      client_id: clientId,
-      client_secret: clientSecret,
-      scope: pagerDutyScope(identity),
-    }).toString(),
+  const { accessToken, expiresIn } = await mintClientCredentials({
+    provider: "pagerduty",
+    url: PAGERDUTY_TOKEN_URL,
+    clientId,
+    clientSecret,
+    scope: pagerDutyScope(identity),
+    hint: `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`${RESTART_SERVICE}\``,
+    quote: refusal,
+    fetch: doFetch,
   });
-  if (!res.ok) {
-    const detail = await refusal(res, clientSecret);
-    throw new JigsError(
-      `PagerDuty refused a client-credentials token (HTTP ${res.status})${detail ? `: ${detail}` : ""}`,
-      `check PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the PagerDuty scoped OAuth app, and that pagerduty.identity.subdomain and region name its account (now ${identity.subdomain}, ${identity.region}), then: \`${RESTART_SERVICE}\``,
-    );
-  }
-  let body: { access_token?: unknown; expires_in?: unknown };
-  try {
-    body = (await res.json()) as typeof body;
-  } catch {
-    throw new JigsError(`PagerDuty's token response (HTTP ${res.status}) was not JSON`);
-  }
-  if (typeof body.access_token !== "string" || body.access_token === "") {
-    throw new JigsError("PagerDuty's token response carried no access_token");
-  }
-  const lifetimeSeconds = typeof body.expires_in === "number" ? body.expires_in : 86400;
-  return { token: body.access_token, expiresAt: now() + lifetimeSeconds * 1000 };
+  const lifetimeSeconds = typeof expiresIn === "number" ? expiresIn : 86400;
+  return { token: accessToken, expiresAt: now() + lifetimeSeconds * 1000 };
 }
 
 export interface PagerDutyAuth extends ProviderAuth {
@@ -138,7 +121,7 @@ export function createPagerDutyAuth(
           identity,
           required("PAGERDUTY_CLIENT_ID"),
           required("PAGERDUTY_CLIENT_SECRET"),
-          deps.fetch ?? fetch,
+          deps.fetch,
           now,
         ).finally(() => {
           minting = null;

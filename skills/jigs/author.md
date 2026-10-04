@@ -26,7 +26,7 @@ become editable factory source; upgrades only regenerate `jigs/`.
   workflow's own steps in a `steps.ts` in its directory; their implementations
   may use Node and external services.
 - A routine is a function you call from a workflow. It runs steps and may
-  wait, such as `runAgent`, `reviewTicket` or `watchPullRequest`. It has no
+  wait, such as `runAgent`, `haltForHuman` or `watchPullRequest`. It has no
   directive.
 - Step arguments and results cross the database as JSON. Pass data only: a
   function or a provider object fails with `SerializationError: Failed to
@@ -115,8 +115,7 @@ and `haltForHuman` skips them all when it looks for a human's reply.
 Every jigs comment on a ticket mentions the operator (or, without one, the
 ticket's creator) and the assignee. The operator is the factory's
 `linear.operator` in `jigs.config.ts`, and a change takes effect after `jigs up`
-rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note,
-or pass `mention` to `reviewTicket` or as `runAgentOrHalt`'s third argument.
+rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note.
 Unknown emails are skipped with a warning; the comment still posts.
 
 ## Validation ownership
@@ -209,10 +208,9 @@ own name plus that key — so renaming the function changes the scope and a pull
 request parked mid-conversation stops recognising its own answers, the same
 rule that governs durable step ids. Pass an explicit `scope` when you want one
 that outlives a rename. Loop over `watchPullRequest` with `for await`; leaving the loop stops
-watching. Post through `postReviewAnswers` and `postPullRequestNote` so answers are
-marked. `postPullRequestNote` posts once per head and reason and is a no-op on
-repeat. A post that fails ends the wake rather than the run, so the next wake
-reposts what is still unanswered. A workflow that only reads a pull request must
+watching. Post status notes through `postPullRequestNote` so they are marked: it posts
+once per head and reason and is a no-op on repeat. A note that fails to post
+ends the wake rather than the run, so the next wake posts it again. A workflow that only reads a pull request must
 not call `watchPullRequest`: the `github:pr:` hook is an exclusive writer claim
 and a second holder fails. Read on a schedule with the snapshot step instead,
 under a scope of your own, and the linear-ticket-to-pr recipe's comments will read as neither your

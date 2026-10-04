@@ -1,13 +1,5 @@
-import type {
-  commentOnPullRequest,
-  replyToPullRequestReviewThread,
-} from "../../steps/pull-requests/pr.ts";
-import {
-  type PostPullRequestNoteOptions,
-  type PostReviewAnswersOptions,
-  postPullRequestNote,
-  postReviewAnswers,
-} from "./answers.ts";
+import type { commentOnPullRequest } from "../../steps/pull-requests/pr.ts";
+import { type PostPullRequestNoteOptions, postPullRequestNote } from "./answers.ts";
 import type { FetchPrState, PullRequestReadOptions, PullRequestRef } from "./pull-request.ts";
 import { watchPullRequest } from "./watch.ts";
 
@@ -19,7 +11,6 @@ import { watchPullRequest } from "./watch.ts";
 export interface PullRequestSteps {
   fetchPullRequestState: FetchPrState;
   commentOnPullRequest: typeof commentOnPullRequest;
-  replyToPullRequestReviewThread: typeof replyToPullRequestReviewThread;
 }
 
 type StepFields = keyof PullRequestSteps;
@@ -33,8 +24,6 @@ export function bindPullRequestSteps(steps: PullRequestSteps) {
   return {
     watchPullRequest: (pr: PullRequestRef, options?: PullRequestReadOptions) =>
       watchPullRequest(pr, steps.fetchPullRequestState, options),
-    postReviewAnswers: (options: Omit<PostReviewAnswersOptions, StepFields>) =>
-      postReviewAnswers({ ...options, ...steps }),
     postPullRequestNote: (options: Omit<PostPullRequestNoteOptions, StepFields>) =>
       postPullRequestNote({ ...options, ...steps }),
   };
