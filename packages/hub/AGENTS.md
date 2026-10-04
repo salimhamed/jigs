@@ -5,7 +5,7 @@ tracker. The hub stays private until it ships.
 
 ## Layout
 
-- `src/` is the server, which `node` runs from source. `main.ts` reads the
+- `src/` is the server. `main.ts` reads the
   environment once (`config.ts`), applies migrations, then listens.
   `server.ts` is the Express app: add `/api/*` and `/webhooks/*` routes there,
   ahead of the web app.
@@ -24,10 +24,14 @@ edit the schema, then run
 ## Running
 
 Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL` and `HUB_ENCRYPTION_KEY`
-(`openssl rand -base64 32`); `HOST` and `PORT` are optional. `dev` serves the
-web app through Vite and reads `packages/hub/.env`; `build` then `start` runs
-the production app. Tests ending in `.db.test.ts` need Postgres and run under
-`pnpm test:db`, which builds the app first.
+(`openssl rand -base64 32`); `HOST` and `PORT` are optional. `dev` runs the
+server from source, serves the web app through Vite and reads
+`packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
+(Node will not strip types under `node_modules`) and the web app into `build/`;
+`start` runs `dist/main.js` in production mode. Paths to `migrations/` and
+`build/` resolve from `src/package-root.ts`, so they hold from `src/` and
+`dist/` alike. Tests ending in `.db.test.ts` need Postgres and run under
+`pnpm test:db`, which builds first.
 
 Keep `main.db.test.ts` passing: the built hub must exit 0 on SIGTERM once open
 connections close, so its process manager can stop it.

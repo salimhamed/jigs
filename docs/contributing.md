@@ -57,7 +57,7 @@ fails. Each `live` file names the login or credentials it needs. Both
 projects read `.env.e2e.local` and run their files one at a time.
 
 `packages/hub` has the same `unit` and `db` projects, with its own `dbTest` in
-`packages/hub/src/db/test-database.ts`. Its `test:db` builds the web app first,
+`packages/hub/src/db/test-database.ts`. Its `test:db` builds the hub first,
 because its server test starts the built hub.
 
 ## Layout

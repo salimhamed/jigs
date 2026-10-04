@@ -2,11 +2,12 @@ import { fileURLToPath } from "node:url";
 import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { Pool } from "pg";
+import { packageRoot } from "../package-root.ts";
 import * as schema from "./schema.ts";
 
 export type HubDatabase = NodePgDatabase<typeof schema> & { $client: Pool };
 
-const migrationsFolder = fileURLToPath(new URL("../../migrations/", import.meta.url));
+const migrationsFolder = fileURLToPath(new URL("migrations/", packageRoot));
 
 /** Open the hub's pool. The caller ends it with `db.$client.end()`. */
 export function connectDatabase(url: string): HubDatabase {

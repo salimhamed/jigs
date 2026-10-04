@@ -27,5 +27,4 @@ process.once("SIGTERM", () => {
     await db.$client.end();
     process.exit(error ? 1 : 0);
   });
-  server.closeIdleConnections();
 });

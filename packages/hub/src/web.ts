@@ -3,6 +3,7 @@ import { createRequestHandler } from "@react-router/express";
 import express, { type RequestHandler } from "express";
 import type { ServerBuild } from "react-router";
 import type { HubConfig } from "./config.ts";
+import { packageRoot as root } from "./package-root.ts";
 
 declare module "react-router" {
   interface AppLoadContext {
@@ -15,8 +16,6 @@ export interface WebApp {
   handlers: RequestHandler[];
   close(): Promise<void>;
 }
-
-const root = new URL("../", import.meta.url);
 
 /** The built app from `build/`, or with `dev` the app served from source through Vite. */
 export async function createWebApp(config: HubConfig, dev: boolean): Promise<WebApp> {

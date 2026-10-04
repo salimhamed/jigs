@@ -10,10 +10,10 @@
   },
   "scripts": {
     "dev": "NODE_ENV=development node --env-file-if-exists=.env src/main.ts",
-    "build": "react-router build",
-    "start": "node src/main.ts",
+    "build": "tsdown && react-router build",
+    "start": "NODE_ENV=production node dist/main.js",
     "test": "vitest run --project unit",
-    "test:db": "react-router build && vitest run --project db",
+    "test:db": "pnpm build && vitest run --project db",
     "typecheck": "react-router typegen && tsc --noEmit",
     "db:generate": "drizzle-kit generate"
   },
@@ -27,6 +27,7 @@
     "@types/react-dom": "^19.3.0",
     "drizzle-kit": "^0.31.11",
     "tailwindcss": "^4.3.3",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vite": "^8.2.1",
     "vitest": "^4.1.10"

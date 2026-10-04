@@ -6,7 +6,7 @@ import { Client } from "pg";
 import { afterEach, expect } from "vitest";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 
-const main = fileURLToPath(new URL("./main.ts", import.meta.url));
+const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const cleanups: (() => Promise<void> | void)[] = [];
 afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
@@ -18,6 +18,7 @@ dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async 
   const child = spawn(process.execPath, [main], {
     env: {
       ...process.env,
+      NODE_ENV: "production",
       HOST: "127.0.0.1",
       PORT: "0",
       HUB_PUBLIC_URL: "https://hub.example.com",
