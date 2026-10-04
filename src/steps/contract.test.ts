@@ -3,6 +3,7 @@ import { MockLanguageModelV4 } from "ai/test";
 import { expectTypeOf, test } from "vitest";
 import type {
   AgentSessionRef,
+  ClaudeHarness,
   Harness,
   HarnessKind,
   ModelKind,
@@ -46,7 +47,6 @@ test("Driver keeps its published members", () => {
     | "decide"
     | "installationChecks"
     | "descriptorChecks"
-    | "requestChecks"
     | "jitChecks"
     | "envAllowlist"
     | "setsEnv"
@@ -59,7 +59,7 @@ test("Driver keeps its published members", () => {
     | "kind"
     | "family"
     | "installationChecks"
-    | "requestChecks"
+    | "descriptorChecks"
     | "envAllowlist"
     | "setsEnv"
     | "displayName"
@@ -98,13 +98,14 @@ test("Driver keeps its published method signatures", () => {
   expectTypeOf<Parameters<Method<D, "installationChecks">>>().toEqualTypeOf<[]>();
   expectTypeOf<ReturnType<Method<D, "installationChecks">>>().toEqualTypeOf<Check[]>();
   expectTypeOf<Parameters<Method<Driver<"openrouter">, "descriptorChecks">>>().toEqualTypeOf<
-    [source: OpenrouterSource]
+    [descriptor: OpenrouterSource]
+  >();
+  expectTypeOf<Parameters<Method<D, "descriptorChecks">>>().toEqualTypeOf<
+    [descriptor: ClaudeHarness]
   >();
   expectTypeOf<ReturnType<Method<Driver<"openrouter">, "descriptorChecks">>>().toEqualTypeOf<
     Check[]
   >();
-  expectTypeOf<Parameters<Method<D, "requestChecks">>>().toEqualTypeOf<[request: DriverRequest]>();
-  expectTypeOf<ReturnType<Method<D, "requestChecks">>>().toEqualTypeOf<Check[]>();
   expectTypeOf<Parameters<Method<D, "jitChecks">>>().toEqualTypeOf<[target: HarnessTarget]>();
   expectTypeOf<ReturnType<Method<D, "jitChecks">>>().toEqualTypeOf<Check[]>();
   expectTypeOf<Parameters<Method<D, "envAllowlist">>>().toEqualTypeOf<[request: DriverRequest]>();
@@ -119,7 +120,7 @@ test("Driver keeps its published method signatures", () => {
     family: "harness",
     open: async () => ({ model: new MockLanguageModelV4(), close: async () => {} }),
     installationChecks: () => [],
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     envAllowlist: () => [],
     setsEnv: [],
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },

@@ -23,14 +23,11 @@ function descriptor(request: DriverRequest): OpenrouterSource | undefined {
   return request.model;
 }
 
-// Plain asks always reach OpenRouter; a decision reaches it only on a jev-class model.
-function acceptsRequest(request: DriverRequest): boolean {
-  if (!("questions" in request)) return true;
-  const source = descriptor(request);
-  return (
-    source !== undefined &&
-    (source.model === "~typesafe/jev-latest" || source.model.startsWith("typesafe/jev-"))
-  );
+function assertJevModel(source: OpenrouterSource): void {
+  if (source.model !== "~typesafe/jev-latest" && !source.model.startsWith("typesafe/jev-"))
+    throw new JigsError(
+      `${source.model} is not a jev-class model; askJev accepts only jev-class models`,
+    );
 }
 
 function descriptorChecks(source: OpenrouterSource) {
@@ -206,10 +203,7 @@ async function decide<const QUESTIONS extends JevQuestions>(
   const source = descriptor(request);
   if (source === undefined)
     throw new JigsError("the OpenRouter driver requires an OpenRouter decision request");
-  if (!acceptsRequest(request))
-    throw new JigsError(
-      `${source.model} is not a jev-class model; askJev accepts only jev-class models`,
-    );
+  assertJevModel(source);
   const openrouter = createOpenRouter({
     apiKey: context.env[source.apiKeyEnv],
     headers: { "HTTP-Referer": "https://github.com/salimhamed/jigs", "X-Title": "jigs" },
@@ -244,10 +238,6 @@ export const openrouterDriver = {
   decide,
   installationChecks: () => [],
   descriptorChecks,
-  requestChecks: (request) => {
-    const source = descriptor(request);
-    return acceptsRequest(request) && source !== undefined ? descriptorChecks(source) : [];
-  },
   envAllowlist: (request: DriverRequest) => {
     const source = descriptor(request);
     return source === undefined ? [] : [source.apiKeyEnv];

@@ -27,7 +27,7 @@ export async function executeModelWith(
     throw new JigsError(`no driver is registered for ${wire.model.kind}`);
   if (driver.family !== "model")
     throw new JigsError(`${wire.model.kind} is an agent harness, not a model source`);
-  const requestReport = await runChecks(driver.requestChecks(wire));
+  const requestReport = await runChecks(driver.descriptorChecks(wire.model));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.ask(wire, {
     metadata,
@@ -83,7 +83,7 @@ export async function executeJevWith<const QUESTIONS extends JevQuestions>(
         `question "${key}" is malformed: scores need at least two described levels`,
       );
   }
-  const requestReport = await runChecks(driver.requestChecks(wire));
+  const requestReport = await runChecks(driver.descriptorChecks(wire.model));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.decide(wire, {
     metadata,

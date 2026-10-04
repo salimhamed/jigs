@@ -30,13 +30,7 @@ import {
   runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
-import {
-  harnessChecks,
-  harnessUsers,
-  missingDriverCheck,
-  requiredHarnessKinds,
-  usedHarnessChecks,
-} from "./harnesses.ts";
+import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
@@ -88,14 +82,9 @@ export function preflightChecks(
     ...(integrations.includes("pagerduty") ? pagerDutyChecks() : []),
     ...(integrations.includes("slack") ? slackChecks() : []),
     ...bindingChecks({ factoryRoot, names: bindings }),
-    ...harnessChecks(requiredHarnessKinds(requires)),
+    ...descriptorChecks(requiredDescriptors(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
     ...declaredSkillChecks({ workflow: { requires } }).flatMap(({ checks }) => checks),
-    ...(requires.models ?? []).flatMap((source) => {
-      const driver = driverFor(source.kind);
-      if (driver === undefined) return [missingDriverCheck(source.kind)];
-      return [...driver.installationChecks(), ...(driver.descriptorChecks?.(source) ?? [])];
-    }),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
     ...secretChecks(requires, { factoryRoot }),
   ];
@@ -290,7 +279,7 @@ export function doctorChecks(
     ...pagerDutyWebhookChecks({ factoryRoot, probes: pagerDutyWebhookProbes }),
     ...bindingChecks({ factoryRoot }),
     ...webhookChecks({ factoryRoot }),
-    ...usedHarnessChecks(harnessUsers(workflows)),
+    ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),
     ...requiredMcpServerChecks(workflows),
     ...declaredSkillChecks(workflows).flatMap(({ checks, workflows }) =>

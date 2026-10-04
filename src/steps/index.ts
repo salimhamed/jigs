@@ -17,6 +17,7 @@ export type {
   Driver,
   DriverContext,
   DriverDependencies,
+  DriverDescriptor,
   DriverRequest,
   EvaluationGeneration,
   ExecutorGeneration,

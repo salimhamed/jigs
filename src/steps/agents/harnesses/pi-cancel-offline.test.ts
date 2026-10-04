@@ -56,7 +56,7 @@ test.skipIf(skipPi)(
     vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
     vi.stubEnv("NO_PROXY", "127.0.0.1,localhost");
     let chatRequests = 0;
-    // Lists its model for the request check, then never answers a turn.
+    // Lists its model for the descriptor check, then never answers a turn.
     const server = createServer((request, response) => {
       if (request.method === "GET" && request.url === "/v1/models") {
         response.writeHead(200, { "content-type": "application/json" });
