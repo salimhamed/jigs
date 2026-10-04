@@ -191,6 +191,18 @@ factory's service, delete the record the message names and run the command
 again. If it is, stop it yourself (`kill <pid>`), check that nothing it started
 is left, then delete the record.
 
+## Starting the service says the URL is already served by another process
+
+Another program already listens on the factory's `service.port`, so the new
+service could not take the port. jigs stops the service it just started and
+leaves the other process alone. The message names that process ID, or says the
+answer carried none when the program is not a jigs service.
+
+Find the program with `ps -p <pid> -o pid,command`, or with `lsof -i :<port>`
+when no ID is named. Stop it if it should not be running, often a service
+another factory or checkout started, then run `jigs up` again. To keep both,
+give this factory another `service.port` in `jigs.config.ts`.
+
 ## A service command says the service record is unreadable
 
 The service record under `~/.local/share/jigs/services/` is damaged. Check with
