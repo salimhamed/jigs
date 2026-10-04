@@ -15,7 +15,7 @@ import type {
   McpToolProbe,
   PiMcpServerConfig,
 } from "../workflow/agents/harness-config.ts";
-import { CHECK_TIMEOUT_MS, type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
+import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 // A step runs these when its agent starts, and doctor runs them for the agents
@@ -111,7 +111,7 @@ type ServerChecks = {
   inherit: boolean;
 };
 
-export function mcpCredentialFailure(
+function credentialFailure(
   name: string,
   server: McpServerConfig,
   env: Record<string, string>,
@@ -136,7 +136,7 @@ async function checkMcpServer(
   env: Record<string, string>,
   options: ServerChecks,
 ): Promise<CheckResult> {
-  const credentials = mcpCredentialFailure(name, server, env);
+  const credentials = credentialFailure(name, server, env);
   if (credentials !== undefined) return credentials;
   // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
   // client cannot reproduce that flow without adding a second integration,
@@ -221,38 +221,6 @@ export function mcpServerChecks(
     label: `MCP server ${name}`,
     run: () => checkMcpServer(name, server, cwd, env, options),
   }));
-}
-
-/**
- * Whether a hosted server answers at all. Any HTTP status counts: without the agent's token a
- * server is expected to refuse.
- */
-export function mcpReachableCheck(
-  id: string,
-  label: string,
-  url: string,
-  doFetch: typeof fetch = fetch,
-): Check {
-  return {
-    id,
-    label,
-    run: async (): Promise<CheckResult> => {
-      try {
-        const response = await doFetch(url, {
-          method: "POST",
-          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
-        });
-        await response.body?.cancel();
-        return { ok: true };
-      } catch (err) {
-        return {
-          ok: false,
-          reason: `${url} did not answer: ${err instanceof Error ? err.message : String(err)}`,
-          repair: `check the service's network access to ${new URL(url).host}, or the server's url`,
-        };
-      }
-    },
-  };
 }
 
 export function codexWorktreeConfigCheck(worktreeDir: string): Check {
