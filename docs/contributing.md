@@ -101,9 +101,8 @@ code and the generated `jigs/steps.ts`, and a jigs upgrade never renames a step.
 Factory code imports the library from the root `@jigs-ai/jigs`. The generated
 `jigs/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and the generated
 `jigs/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where the
-routines that take steps as arguments live. The other subpaths (`/app`,
-`/nitro`, `/schedules`, `/automatic-release`, `/build`, `/plugins/*`) belong
-to the service a factory builds. The Workflow SDK, its Postgres World, the
+routines that take steps as arguments live. The other subpaths (`/nitro`,
+`/build`, `/service`) belong to the service a factory builds. The Workflow SDK, its Postgres World, the
 dashboard and zod are peer dependencies the factory installs. All but zod are
 optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none of them or the
 native builds they bring; the CLI must never import them.

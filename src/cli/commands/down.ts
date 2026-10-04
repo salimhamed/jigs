@@ -2,7 +2,8 @@ import { type ExecFile, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { detail, hint, section } from "../output.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
-import { type ServiceProcesses, stopService } from "./service-lifecycle.ts";
+import { stopService } from "./service.ts";
+import type { ServiceProcesses } from "./service-process.ts";
 
 export interface DownDeps {
   cwd: string;

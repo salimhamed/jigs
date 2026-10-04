@@ -4,7 +4,8 @@ import type { AddressInfo } from "node:net";
 import path from "node:path";
 import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 import type { ExecFile, ExecOptions } from "../exec.ts";
-import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-lifecycle.ts";
+import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-process.ts";
+import { writeServiceRecord } from "./service-record.ts";
 
 // The machine as `up` and `upgrade` see it: a scaffolded factory on disk, the
 // child processes they exec, the service process they supervise, and the HTTP
@@ -119,15 +120,18 @@ export const SERVICE_COMMAND = `${process.execPath} ${SERVICE_ENTRY}`;
 export const FAKE_BOOT = "boot-1";
 export const FAKE_START = "Thu Jan 1 00:00:00 2026";
 
-export function serviceRecord(pid: number, overrides: Record<string, unknown> = {}): string {
-  const record = {
-    processGroup: pid,
-    bootId: FAKE_BOOT,
-    startTime: FAKE_START,
-    command: SERVICE_COMMAND,
-    ...overrides,
-  };
-  return `${JSON.stringify(record)}\n`;
+/** Record `pid` as the factory's service; `exited` as one that exited during boot. */
+export function recordService(slug: string, pid: number, options: { exited?: true } = {}): void {
+  writeServiceRecord(slug, {
+    process: {
+      processGroup: pid,
+      bootId: FAKE_BOOT,
+      startTime: FAKE_START,
+      command: SERVICE_COMMAND,
+      ...options,
+    },
+    run: { logOffset: 0 },
+  });
 }
 
 export interface FakeProcesses {

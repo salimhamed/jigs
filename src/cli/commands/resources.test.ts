@@ -9,12 +9,14 @@ import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
+import type { ServiceProcesses } from "./service-process.ts";
+import { readServiceRecord } from "./service-record.ts";
 import {
-  type ServiceProcesses,
-  servicePidfilePath,
-  serviceSupervisionPath,
-} from "./service-lifecycle.ts";
-import { FAKE_BOOT, FAKE_START, SERVICE_COMMAND, serviceRecord } from "./test-fixtures.ts";
+  FAKE_BOOT,
+  FAKE_START,
+  recordService as recordFactoryService,
+  SERVICE_COMMAND,
+} from "./test-fixtures.ts";
 
 vi.mock("../../steps/runtime/registry.ts", async (original) => ({
   ...(await original<typeof import("../../steps/runtime/registry.ts")>()),
@@ -491,13 +493,9 @@ function machine(rows: string[] = [], boot = FAKE_BOOT): ServiceProcesses {
   };
 }
 
-function recordService(pid: number, options: { pidfile?: boolean } = {}): void {
-  const slug = factorySlug(root);
-  const pidfile = servicePidfilePath(slug);
-  mkdirSync(path.dirname(pidfile), { recursive: true });
-  if (options.pidfile !== false) writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(serviceSupervisionPath(slug), serviceRecord(pid));
-}
+const recordService = (pid: number, options: { exited?: true } = {}) =>
+  recordFactoryService(factorySlug(root), pid, options);
+const recordedProcess = () => readServiceRecord(factorySlug(root)).process;
 
 const prune = (processes: ServiceProcesses, connect: () => RegistrySql) =>
   runResourcesPrune(
@@ -540,7 +538,7 @@ test("apply proceeds in a factory whose service never ran", async () => {
 });
 
 test("apply proceeds once the service and its group are gone", async () => {
-  recordService(700, { pidfile: false });
+  recordService(700, { exited: true });
   const connect = vi.fn(() => database());
 
   const report = await prune(machine(["1 0 1 Ss init", "900 1 900 Ss bash"]), connect);
@@ -555,22 +553,10 @@ test("apply proceeds after a restart of the machine, every time, whatever now ha
   const rebooted = machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"], "boot-2");
 
   await prune(rebooted, connect);
-  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
+  expect(recordedProcess()).toBeUndefined();
   await prune(rebooted, connect);
 
   expect(connect).toHaveBeenCalledTimes(2);
-});
-
-test("apply fails loudly when a live pidfile pid has no service record", async () => {
-  const slug = factorySlug(root);
-  mkdirSync(path.dirname(servicePidfilePath(slug)), { recursive: true });
-  writeFileSync(servicePidfilePath(slug), "700\n");
-  const connect = vi.fn(() => database());
-
-  await expect(prune(machine(["700 1 700 Ss tmux"]), connect)).rejects.toMatchObject({
-    message: expect.stringContaining("pid 700"),
-  });
-  expect(connect).not.toHaveBeenCalled();
 });
 
 test("apply ignores a reused group once a clean stop removed the record", async () => {
@@ -588,12 +574,11 @@ test("apply removes a crashed service's record once its group is empty", async (
   await prune(machine(["1 0 1 Ss init"]), connect);
 
   expect(connect).toHaveBeenCalled();
-  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(recordedProcess()).toBeUndefined();
 });
 
-test("apply proceeds when another program took the group after a clean stop", async () => {
-  recordService(700, { pidfile: false });
+test("apply proceeds when another program took the pid of a service that exited during boot", async () => {
+  recordService(700, { exited: true });
   const connect = vi.fn(() => database());
 
   await prune(machine(["700 1 700 Ss tmux", "701 700 700 S -zsh"]), connect);

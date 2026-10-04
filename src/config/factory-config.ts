@@ -50,7 +50,7 @@ export interface ResolvedService {
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug
-// that keys its pidfile and its bindings' directories.
+// that keys its service record and its bindings' directories.
 export function resolveService(ctx: FactoryContext): ResolvedService {
   const { service } = ctx.config;
   return {

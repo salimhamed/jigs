@@ -57,16 +57,7 @@ test("package exports determine the API reference layout", () => {
 
 test("public package docs exclude service plumbing and the empty human module", () => {
   const published = [".", "./steps/agents", "./steps/linear"];
-  const service = [
-    "./steps/human",
-    "./app",
-    "./nitro",
-    "./build",
-    "./schedules",
-    "./triggers",
-    "./plugins/start-world",
-    "./routines",
-  ];
+  const service = ["./steps/human", "./nitro", "./build", "./service", "./routines"];
   expect(published.every((subpath) => isPublicEntry({ subpath }))).toBe(true);
   expect(service.some((subpath) => isPublicEntry({ subpath }))).toBe(false);
 });

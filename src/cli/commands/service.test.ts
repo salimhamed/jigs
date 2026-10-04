@@ -12,25 +12,34 @@ import { factorySlug } from "../../config/paths.ts";
 import type { JigsError } from "../../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
-import type { ServiceHealth, ServiceProcesses, SpawnSpec } from "./service-lifecycle.ts";
 import {
-  acquireServiceExclusion,
   awaitServiceReady,
-  builtBundleHash,
+  ensureServiceCurrent,
   restartService,
-  runningBundleHash,
-  SERVICE_ENTRY,
-  serviceBehindSources,
-  serviceLogPath,
   serviceLogs,
-  servicePidfilePath,
   serviceStatus,
-  serviceSupervisionPath,
-  staleWorkflowSources,
   startService,
   stopService,
-} from "./service-lifecycle.ts";
-import { FAKE_BOOT, FAKE_START, SERVICE_COMMAND, serviceRecord } from "./test-fixtures.ts";
+} from "./service.ts";
+import {
+  builtBundleHash,
+  runningBundleHash,
+  SERVICE_ENTRY,
+  type ServiceHealth,
+  type ServiceProcesses,
+  type SpawnSpec,
+  serviceBehindSources,
+  staleWorkflowSources,
+} from "./service-process.ts";
+import {
+  acquireServiceExclusion,
+  readServiceRecord,
+  serviceLogPath,
+  serviceRecordPath,
+} from "./service-record.ts";
+import { FAKE_BOOT, FAKE_START, recordService, SERVICE_COMMAND } from "./test-fixtures.ts";
+
+const recorded = (root: string) => readServiceRecord(factorySlug(root)).process;
 
 let tmp: string;
 let lines: string[];
@@ -230,18 +239,18 @@ test("the factory's own .env owns the world the service writes", async () => {
   );
 });
 
-test("start runs node directly and records the pid and its process group", async () => {
+test("start runs node directly and records the pid, its process group and its bundle", async () => {
   const root = builtFactory();
   const io = fake();
   await startService(deps(root, io));
   expect(io.spawns[0]?.command).toBe(process.execPath);
-  const pidfile = servicePidfilePath(factorySlug(root));
-  expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
-  expect(JSON.parse(readFileSync(serviceSupervisionPath(factorySlug(root)), "utf8"))).toEqual({
+  expect(JSON.parse(readFileSync(serviceRecordPath(factorySlug(root)), "utf8"))).toEqual({
     processGroup: 4242,
     bootId: FAKE_BOOT,
     startTime: FAKE_START,
     command: SERVICE_COMMAND,
+    bundle: builtBundleHash(root),
+    logOffset: 0,
   });
 });
 
@@ -355,8 +364,8 @@ test("two factories supervise independently", async () => {
   const io = fake();
   await startService(deps(one, io));
   await startService(deps(two, io));
-  expect(existsSync(servicePidfilePath(factorySlug(one)))).toBe(true);
-  expect(existsSync(servicePidfilePath(factorySlug(two)))).toBe(true);
+  expect(existsSync(serviceRecordPath(factorySlug(one)))).toBe(true);
+  expect(existsSync(serviceRecordPath(factorySlug(two)))).toBe(true);
 });
 
 test("start refuses when the factory has not built its service", async () => {
@@ -368,7 +377,7 @@ test("start refuses when the factory has not built its service", async () => {
   expect(io.spawns).toHaveLength(0);
 });
 
-test("start on a live pidfile does not spawn a second process", async () => {
+test("start on a live service does not spawn a second process", async () => {
   const root = builtFactory();
   const io = fake();
   await startService(deps(root, io));
@@ -377,15 +386,13 @@ test("start on a live pidfile does not spawn a second process", async () => {
   expect(lines.at(-1)).toContain("already running");
 });
 
-test("start replaces a pidfile whose process is gone", async () => {
+test("start replaces a record whose process is gone", async () => {
   const root = builtFactory();
-  const pidfile = servicePidfilePath(factorySlug(root));
-  mkdirSync(path.dirname(pidfile), { recursive: true });
-  writeFileSync(pidfile, "9\n");
+  recordService(factorySlug(root), 9);
   const io = fake();
   await startService(deps(root, io));
   expect(io.spawns).toHaveLength(1);
-  expect(readFileSync(pidfile, "utf8").trim()).toBe("4242");
+  expect(recorded(root)?.processGroup).toBe(4242);
 });
 
 // A 200 from /health is not enough: nitro answers it before the plugins that
@@ -433,7 +440,7 @@ test("a process that dies while booting fails the start at once, printing its lo
   expect(lines).toEqual(["booting: cloning forge", "cloning binding forge", "fatal: repo gone"]);
   expect(io.probes).toHaveLength(1);
   // Nothing is left to supervise.
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(recorded(root)?.exited).toBe(true);
 });
 
 test("a start that outlives its timeout fails, names the log and the phase, and keeps the live pid supervised", async () => {
@@ -446,15 +453,18 @@ test("a start that outlives its timeout fails, names the log and the phase, and 
   expect(err?.message).toContain("cloning forge");
   expect(err?.hint).toContain("jigs service logs");
   expect(err?.hint).toContain("jigs service stop");
-  expect(readFileSync(servicePidfilePath(factorySlug(root)), "utf8").trim()).toBe("4242");
+  expect(recorded(root)).toMatchObject({ processGroup: 4242 });
+  expect(recorded(root)?.exited).toBeUndefined();
 });
 
 // `jigs up` names the spawn and the wait as two steps.
-test("a start told not to wait spawns without probing, and awaitServiceReady waits afterwards", async () => {
+test("bringing the service current spawns without probing, and awaitServiceReady waits afterwards", async () => {
   const root = builtFactory();
   const io = fake([booting("world"), READY]);
 
-  await startService(deps(root, io), { awaitReady: false });
+  expect(await ensureServiceCurrent(deps(root, io), { beforeRestart: async () => {} })).toBe(
+    "started",
+  );
   expect(io.probes).toHaveLength(0);
   expect(lines[0]).toContain("started");
 
@@ -463,19 +473,34 @@ test("a start told not to wait spawns without probing, and awaitServiceReady wai
   expect(lines).toContain("booting: world");
 });
 
+test("a service already on the built bundle is left running unless a restart is asked for", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+  exitsOnTerm(io);
+  const beforeRestart = vi.fn(async () => {});
+
+  expect(await ensureServiceCurrent(deps(root, io), { beforeRestart })).toBe("unchanged");
+  expect(beforeRestart).not.toHaveBeenCalled();
+  writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
+  expect(await ensureServiceCurrent(deps(root, io), { beforeRestart })).toBe("restarted");
+  expect(beforeRestart).toHaveBeenCalledOnce();
+  expect(io.spawns).toHaveLength(2);
+});
+
 test("awaitServiceReady on a pid that died reports the failed boot", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io), { awaitReady: false });
+  await ensureServiceCurrent(deps(root, io), { beforeRestart: async () => {} });
   io.alive.clear();
 
   const err = await failure(awaitServiceReady(deps(root, io)));
 
   expect(err?.message).toContain("exited during boot");
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(recorded(root)?.exited).toBe(true);
 });
 
-test("awaitServiceReady without a pidfile says the service is not running", async () => {
+test("awaitServiceReady without a record says the service is not running", async () => {
   const root = builtFactory();
   const err = await failure(awaitServiceReady(deps(root, fake())));
   expect(err?.message).toContain("not running");
@@ -498,7 +523,7 @@ test("restart waits for the new process to be ready too", async () => {
   expect(lines[2]).toContain("started");
 });
 
-test("stop terminates the recorded pid and clears the pidfile", async () => {
+test("stop terminates the recorded pid and clears the record", async () => {
   const root = builtFactory();
   const io = fake();
   await startService(deps(root, io));
@@ -508,7 +533,7 @@ test("stop terminates the recorded pid and clears the pidfile", async () => {
 
   expect(io.signals.map((s) => s.sig)).toContain("SIGTERM");
   expect(io.signals.map((s) => s.sig)).not.toContain("SIGKILL");
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(existsSync(serviceRecordPath(factorySlug(root)))).toBe(false);
 });
 
 test("stop escalates to SIGKILL when the process outlives the timeout", async () => {
@@ -519,7 +544,7 @@ test("stop escalates to SIGKILL when the process outlives the timeout", async ()
   await stopService(deps(root, io, { stopTimeoutMs: 0 }));
 
   expect(io.signals.map((s) => s.sig)).toContain("SIGKILL");
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(existsSync(serviceRecordPath(factorySlug(root)))).toBe(false);
 });
 
 test("stop ends what the service started, in its group or below it", async () => {
@@ -540,10 +565,10 @@ test("stop ends what the service started, in its group or below it", async () =>
     `stopped service ${factorySlug(root)} (pid 4242 and 3 process(es) it started)`,
   ]);
   // The group is empty, so the record would only ever find someone else's.
-  expect(existsSync(serviceSupervisionPath(factorySlug(root)))).toBe(false);
+  expect(existsSync(serviceRecordPath(factorySlug(root)))).toBe(false);
 });
 
-test("a stop that leaves a survivor fails and keeps the pidfile for another try", async () => {
+test("a stop that leaves a survivor fails and keeps the record for another try", async () => {
   const root = builtFactory();
   const io = fake();
   await startService(deps(root, io));
@@ -555,7 +580,7 @@ test("a stop that leaves a survivor fails and keeps the pidfile for another try"
   const err = await failure(stopService(deps(root, io, { stopTimeoutMs: 0 })));
 
   expect(err?.message).toContain(`pid 4242: ${SERVICE_COMMAND}`);
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(true);
+  expect(recorded(root)?.processGroup).toBe(4242);
 });
 
 test("start first ends what a service that died without a stop left running", async () => {
@@ -577,11 +602,9 @@ test("start first ends what a service that died without a stop left running", as
 
 // After a restart of the machine, or a pid handed to another program, the
 // records name someone else's processes: a tmux server and the shells in it.
-function reusedByTmux(root: string, io: Fake, pidfile = true): string {
+function reusedByTmux(root: string, io: Fake, options: { exited?: true } = {}): string {
   const slug = factorySlug(root);
-  mkdirSync(path.dirname(servicePidfilePath(slug)), { recursive: true });
-  if (pidfile) writeFileSync(servicePidfilePath(slug), "612\n");
-  writeFileSync(serviceSupervisionPath(slug), serviceRecord(612));
+  recordService(slug, 612, options);
   io.alive.add(612).add(613).add(614);
   io.table.set(612, { ppid: 1, pgid: 612, command: "tmux new -s work" });
   io.table.set(613, { ppid: 612, pgid: 613, command: "-zsh" });
@@ -600,8 +623,7 @@ test("records from before the machine restarted are discarded and nothing is sig
 
   expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
   expect(lines).toEqual([`service ${slug} was not running`]);
-  expect(existsSync(servicePidfilePath(slug))).toBe(false);
-  expect(existsSync(serviceSupervisionPath(slug))).toBe(false);
+  expect(recorded(root)).toBeUndefined();
 });
 
 test("a recorded pid now run by another program fails the stop and signals nothing", async () => {
@@ -613,9 +635,9 @@ test("a recorded pid now run by another program fails the stop and signals nothi
 
   expect(err?.message).toContain("pid 612");
   expect(err?.message).toContain("tmux new -s work");
-  expect(err?.hint).toContain(servicePidfilePath(slug));
+  expect(err?.hint).toContain(serviceRecordPath(slug));
   expect(io.signals.filter((s) => s.sig !== 0)).toEqual([]);
-  expect(existsSync(servicePidfilePath(slug))).toBe(true);
+  expect(recorded(root)?.processGroup).toBe(612);
 });
 
 test("start refuses rather than run a second service beside an unverified pid", async () => {
@@ -629,10 +651,10 @@ test("start refuses rather than run a second service beside an unverified pid", 
   expect(io.spawns).toHaveLength(0);
 });
 
-test("a group taken over after a clean stop is someone else's, so stop selects nothing", async () => {
+test("a pid taken over after a failed boot is someone else's, so stop selects nothing", async () => {
   const root = builtFactory();
   const io = fake();
-  const slug = reusedByTmux(root, io, false);
+  const slug = reusedByTmux(root, io, { exited: true });
 
   await stopService(deps(root, io));
 
@@ -655,8 +677,8 @@ test("a live pid whose command differs from the record is not the service", asyn
 test("an unreadable service record is an error, not a missing one", async () => {
   const root = builtFactory();
   const slug = factorySlug(root);
-  mkdirSync(path.dirname(serviceSupervisionPath(slug)), { recursive: true });
-  writeFileSync(serviceSupervisionPath(slug), "systemd-scope\n");
+  mkdirSync(path.dirname(serviceRecordPath(slug)), { recursive: true });
+  writeFileSync(serviceRecordPath(slug), "systemd-scope\n");
 
   const err = await failure(stopService(deps(root, fake())));
 
@@ -692,7 +714,7 @@ test("an earlier boot's record whose pid still matches is not silently discarded
 
   expect(err?.message).toContain("cannot be verified");
   expect(err?.hint).toContain("earlier boot");
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(true);
+  expect(recorded(root)?.processGroup).toBe(4242);
 });
 
 test("status reads the records without deleting them; stop cleans them up", async () => {
@@ -702,11 +724,10 @@ test("status reads the records without deleting them; stop cleans them up", asyn
   io.boot = "boot-2";
 
   serviceStatus(deps(root, io));
-  expect(existsSync(servicePidfilePath(slug))).toBe(true);
-  expect(existsSync(serviceSupervisionPath(slug))).toBe(true);
+  expect(recorded(root)?.processGroup).toBe(612);
 
   await stopService(deps(root, io));
-  expect(existsSync(serviceSupervisionPath(slug))).toBe(false);
+  expect(existsSync(serviceRecordPath(slug))).toBe(false);
 });
 
 test("a new service whose start time cannot be read is killed and the start fails", async () => {
@@ -718,10 +739,10 @@ test("a new service whose start time cannot be read is killed and the start fail
 
   expect(err?.message).toContain("could not read the start time");
   expect(io.signals).toContainEqual({ pid: 4242, sig: "SIGKILL" });
-  expect(existsSync(servicePidfilePath(factorySlug(root)))).toBe(false);
+  expect(existsSync(serviceRecordPath(factorySlug(root)))).toBe(false);
 });
 
-test("stop without a pidfile says so instead of failing", async () => {
+test("stop without a record says so instead of failing", async () => {
   const root = builtFactory();
   await stopService(deps(root, fake()));
   expect(lines).toContain(`service ${factorySlug(root)} was not running`);
@@ -740,7 +761,7 @@ test("status reports the pid, the url and the factory root", async () => {
   expect(lines).toContain(`  factory    ${root}`);
 });
 
-test("status reports a dead pidfile as not running", async () => {
+test("status reports a dead service as not running", async () => {
   const root = builtFactory();
   const io = fake();
   await startService(deps(root, io));

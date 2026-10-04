@@ -19,18 +19,15 @@ import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
 import { type RunListRun, showRuns } from "./run-list.ts";
-import { resolveServiceUrl, ServiceVersionMismatch } from "./service-client.ts";
 import {
   awaitServiceReady,
-  builtBundleHash,
+  ensureServiceCurrent,
   liveServicePid,
-  restartService,
-  runningBundleHash,
-  type ServiceLifecycleDeps,
-  type ServiceProcesses,
-  serviceLogPath,
-  startService,
-} from "./service-lifecycle.ts";
+  type ServiceOutcome,
+} from "./service.ts";
+import { resolveServiceUrl, ServiceVersionMismatch } from "./service-client.ts";
+import type { ServiceLifecycleDeps, ServiceProcesses } from "./service-process.ts";
+import { serviceLogPath } from "./service-record.ts";
 import { nested, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
 // Takes a factory from any state to a running service: the commands a human
@@ -51,8 +48,6 @@ export type UpStepName =
   | "doctor";
 
 export type UpStep = Step<UpStepName>;
-
-export type ServiceOutcome = "started" | "restarted" | "unchanged";
 
 export interface UpResult {
   ok: boolean;
@@ -152,24 +147,16 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       }),
     );
 
-    // Compared against the bundle the running process started from, not the
-    // one on disk before this build: a restart refused last time must still
-    // be owed this time. The spawn and the wait are two steps here, so each
-    // gets its own line and its own failure; the wait itself is the
-    // lifecycle module's, the one `jigs service start` does.
+    // The spawn and the wait are two steps here, so each gets its own line
+    // and its own failure; the wait itself is the one `jigs service start`
+    // does.
     result.service = await runner.run("service", async (note) => {
-      if (liveServicePid(lifecycle) === undefined) {
-        await startService(lifecycle, { awaitReady: false });
-        return "started";
-      }
-      const unchanged = builtBundleHash(factoryRoot) === runningBundleHash(lifecycle);
-      if (unchanged && options.restart !== true) {
-        note("unchanged, not restarted");
-        return "unchanged";
-      }
-      await confirmRestart(factoryRoot, service, deps, options);
-      await restartService(lifecycle, { awaitReady: false });
-      return "restarted";
+      const outcome = await ensureServiceCurrent(lifecycle, {
+        restart: options.restart,
+        beforeRestart: () => confirmRestart(factoryRoot, service, deps, options),
+      });
+      if (outcome === "unchanged") note("unchanged, not restarted");
+      return outcome;
     });
 
     await runner.run("ready", () => awaitServiceReady(lifecycle));

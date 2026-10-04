@@ -1,9 +1,11 @@
-import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
 import { generateFactoryIntegration } from "../build/integration.ts";
-import { GENERATED_DIR, prepare } from "./build.ts";
+import { prepare } from "./build.ts";
+
+const GENERATED = ".jigs";
 
 const factory = () => {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-factory-"));
@@ -15,34 +17,33 @@ test("the entry is a real file that composes the app from the factory's config",
   const root = factory();
   const entry = prepare(root);
 
-  expect(entry).toBe(path.join(root, GENERATED_DIR, "server.ts"));
+  expect(entry).toBe(path.join(root, GENERATED, "server.ts"));
   const source = readFileSync(entry, "utf8");
   // An alias would satisfy Nitro and leave the workflow builder's own
   // discovery pass with nothing to find.
-  expect(source).toContain('from "@jigs-ai/jigs/app"');
-  expect(source).toContain('from "./factory.ts"');
+  expect(source).toContain('from "@jigs-ai/jigs/service"');
+  expect(source).toContain("createApp(factory)");
 });
 
-test("the schedules plugin is generated beside the entry, holding the ticker", () => {
+test("the service plugin is generated beside the entry and starts the factory's service", () => {
   const root = factory();
   prepare(root);
 
-  const source = readFileSync(path.join(root, GENERATED_DIR, "schedules.ts"), "utf8");
-  expect(source).toContain('from "@jigs-ai/jigs/schedules"');
-  expect(source).toContain('from "./factory.ts"');
-  expect(source).toContain("startSchedules(factory)");
+  const source = readFileSync(path.join(root, GENERATED, "service.ts"), "utf8");
+  expect(source).toContain('from "@jigs-ai/jigs/service"');
+  expect(source).toContain('from "./server.ts"');
+  expect(source).toContain("startService(factory)");
 });
 
-test("the triggers plugin is generated beside the entry, and the factory carries its triggers", () => {
+test("preparing writes only the entry and the plugin, dropping what an earlier release wrote", () => {
   const root = factory();
+  mkdirSync(path.join(root, GENERATED));
+  writeFileSync(path.join(root, GENERATED, "schedules.ts"), "// stale\n");
   prepare(root);
 
-  const source = readFileSync(path.join(root, GENERATED_DIR, "triggers.ts"), "utf8");
-  expect(source).toContain('from "@jigs-ai/jigs/triggers"');
-  expect(source).toContain("startTriggers(factory)");
-  expect(readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8")).toContain(
-    "triggers: definition.triggers",
-  );
+  expect(existsSync(path.join(root, GENERATED, "schedules.ts"))).toBe(false);
+  expect(existsSync(path.join(root, GENERATED, "server.ts"))).toBe(true);
+  expect(existsSync(path.join(root, GENERATED, "service.ts"))).toBe(true);
 });
 
 test("preparing twice restores a hand-edited entry", () => {
@@ -56,17 +57,14 @@ test("preparing twice restores a hand-edited entry", () => {
   expect(readFileSync(entry, "utf8")).toBe(original);
 });
 
-test("generated factory resolves deferred modules only inside the service", () => {
-  const root = factory();
-  prepare(root);
-  const source = readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8");
+test("the entry resolves deferred modules only inside the service", () => {
+  const source = readFileSync(prepare(factory()), "utf8");
   expect(source).toContain('from "../jigs.config.ts"');
   expect(source).toContain("(await load()).default");
 });
 
-test("generated factory hands the app the webhook settings that decide its ingress routes", () => {
-  const root = factory();
-  prepare(root);
-  const source = readFileSync(path.join(root, GENERATED_DIR, "factory.ts"), "utf8");
+test("the factory carries the triggers and webhook settings the service reads", () => {
+  const source = readFileSync(prepare(factory()), "utf8");
+  expect(source).toContain("triggers: definition.triggers");
   expect(source).toContain("webhooks: definition.webhooks");
 });

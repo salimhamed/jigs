@@ -1,42 +1,38 @@
-/**
- * Start the Workflow runtime and the jigs services that depend on it.
- *
- * @packageDocumentation
- */
+// Start the Workflow runtime and the jigs services that depend on it.
 
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { FactoryContext } from "../../config/factory-context.ts";
-import type { SlackAppHold } from "../../config/slack-apps.ts";
-import { plainHint } from "../../errors.ts";
-import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
-import type { HarnessRuntime } from "../../steps/agents/shared/harness-runtime.ts";
-import { stopProcessGroups } from "../../steps/agents/shared/process-group.ts";
-import type { RegistrySql } from "../../steps/runtime/registry.ts";
-import type { BindingClone } from "../../steps/workspaces/clone.ts";
-import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
-import type { WorkflowDefinition } from "../../workflow/factory.ts";
-import type { SlackConfig, WebhooksConfig } from "../../workflow/factory-schema.ts";
-import { PROVIDERS, WEBHOOK_PROVIDERS } from "../../workflow/providers.ts";
-import { READY_PHASE, setBootPhase } from "../readiness.ts";
-import { installShutdown, onShutdown } from "../shutdown.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
+import type { SlackAppHold } from "../config/slack-apps.ts";
+import { plainHint } from "../errors.ts";
+import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
+import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
+import { stopProcessGroups } from "../steps/agents/shared/process-group.ts";
+import type { RegistrySql } from "../steps/runtime/registry.ts";
+import type { BindingClone } from "../steps/workspaces/clone.ts";
+import type { HarnessKind } from "../workflow/agents/harness-config.ts";
+import type { WorkflowDefinition } from "../workflow/factory.ts";
+import type { SlackConfig, WebhooksConfig } from "../workflow/factory-schema.ts";
+import { PROVIDERS, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
+import { READY_PHASE, setBootPhase } from "./readiness.ts";
+import { installShutdown, onShutdown } from "./shutdown.ts";
 
 // Why every import below is dynamic: this module's top level has to stay free
 // of postgres, the factory config and the workflow runtime — the gate tests
 // import these functions directly, and a static import would stand all three
-// up to do it. Inside the plugin the deferral also orders the boot: nothing
+// up to do it. Inside startWorld the deferral also orders the boot: nothing
 // fallible resolves until installShutdown() can turn its failure into an exit.
 
 // The service's one factory context: every gate and the boot after them read
 // the same one.
 async function serviceContext(): Promise<FactoryContext> {
-  return (await import("../../config/factory-context.ts")).currentFactoryContext();
+  return (await import("../config/factory-context.ts")).currentFactoryContext();
 }
 
 async function configuredHarnesses(): Promise<Map<HarnessKind, string[]>> {
   const [ctx, { harnessUsers }] = await Promise.all([
     serviceContext(),
-    import("../../checks/harnesses.ts"),
+    import("../checks/harnesses.ts"),
   ]);
   const entries = await Promise.all(
     Object.entries(ctx.config.workflows ?? {}).map(
@@ -66,11 +62,11 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   let neededBy: (workflows: readonly string[]) => string;
   try {
     users = await (deps.harnesses ?? configuredHarnesses)();
-    ({ neededBy } = await import("../../checks/catalog.ts"));
+    ({ neededBy } = await import("../checks/catalog.ts"));
     const kinds = [...users.keys()];
     runtimes =
       deps.runtimes === undefined
-        ? await (await import("../../checks/harnesses.ts")).harnessRuntimes(kinds)
+        ? await (await import("../checks/harnesses.ts")).harnessRuntimes(kinds)
         : await deps.runtimes(kinds);
   } catch (err) {
     (deps.error ?? ((line: string) => console.error(line)))(
@@ -129,7 +125,7 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
     exit(1);
     return false;
   }
-  const { webhookSecret, webhookSecretVariable } = await import("../../config/webhook-secret.ts");
+  const { webhookSecret, webhookSecretVariable } = await import("../config/webhook-secret.ts");
   const missing = WEBHOOK_PROVIDERS.filter(
     (provider) => webhooks?.[provider].enabled && webhookSecret(provider, { env }) === undefined,
   ).map(webhookSecretVariable);
@@ -201,9 +197,9 @@ export async function gateOnRegistry(deps: RegistryGateDeps = {}): Promise<boole
     // Opening the connection belongs inside the try: a missing or malformed
     // WORKFLOW_POSTGRES_URL throws synchronously, and that escape is the very
     // thing this gate exists to stop.
-    const resolveSql = deps.sql ?? (await import("../../steps/runtime/registry.ts")).registrySql;
+    const resolveSql = deps.sql ?? (await import("../steps/runtime/registry.ts")).registrySql;
     const sql = resolveSql();
-    const ensure = deps.ensure ?? (await import("../../steps/runtime/registry.ts")).ensureRegistry;
+    const ensure = deps.ensure ?? (await import("../steps/runtime/registry.ts")).ensureRegistry;
     await ensure(sql);
   } catch (err) {
     const error = deps.error ?? ((line: string) => console.error(line));
@@ -246,7 +242,7 @@ export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Prom
   try {
     // Inside the try: reading the factory config is itself fallible, and a
     // service that cannot tell what is bound must not start.
-    const jigs = await import("../../steps/workspaces/clone.ts");
+    const jigs = await import("../steps/workspaces/clone.ts");
     ensure = deps.ensure ?? jigs.ensureBindingClone;
     declared = deps.bindings?.() ?? jigs.bindingClones(await serviceContext());
   } catch (err) {
@@ -391,7 +387,7 @@ export function announceSlackApp(deps: SlackAppHoldDeps): SlackAppHold | undefin
 }
 
 async function holdFactorySlackApp(ctx: FactoryContext): Promise<SlackAppHold | undefined> {
-  const slackApps = await import("../../config/slack-apps.ts");
+  const slackApps = await import("../config/slack-apps.ts");
   const token = ctx.env("SLACK_APP_TOKEN");
   if (token === undefined) return undefined;
   return announceSlackApp({ hold: () => slackApps.holdSlackApp(token, ctx.slug) });
@@ -401,9 +397,9 @@ async function holdFactorySlackApp(ctx: FactoryContext): Promise<SlackAppHold | 
 // message stream.
 async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
   const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
-    import("../slack-socket.ts"),
-    import("../triggers.ts"),
-    import("../slack-thread-wake.ts"),
+    import("./slack-socket.ts"),
+    import("./event-triggers/runner.ts"),
+    import("./slack-thread-wake.ts"),
   ]);
   const hold = await holdFactorySlackApp(ctx);
   const socket = startSlackSocket({
@@ -431,10 +427,8 @@ async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
   );
 }
 
-// The documented defineNitroPlugin subpath doesn't exist at nitro 3.0.260610-beta;
-// a plain default export works.
 /** Run the ordered service startup gates, then enable readiness and reconciliation. */
-export default async function startWorld() {
+export async function startWorld() {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
   // stop` during a first clone or against a hanging Postgres has to end in an
   // exit, not the CLI's SIGKILL. A clone child mid-gate is orphaned to
@@ -489,7 +483,7 @@ export default async function startWorld() {
   // provider's interval. After readiness, not before: a slow nudge pass must
   // not hold `jigs service start` on a service that is already answering.
   const [{ nudgeProvider, startNudges }, ctx] = await Promise.all([
-    import("../nudge.ts"),
+    import("./nudge.ts"),
     serviceContext(),
   ]);
   const { config } = ctx;
@@ -499,8 +493,4 @@ export default async function startWorld() {
   });
   if (config.slack?.socketMode) await startSlackSocketMode(ctx);
   await Promise.all(PROVIDERS.map((provider) => nudgeProvider(provider)));
-
-  // The generated factory plugin starts automatic release after this plugin
-  // reaches readiness. It imports the compiled factory so per-workflow policy
-  // stays available to the coordinator.
 }

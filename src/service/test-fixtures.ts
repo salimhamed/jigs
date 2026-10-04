@@ -1,7 +1,7 @@
 // An in-memory trigger store for engine tests: the Postgres store's contract,
-// checked against the real one by trigger-store.db.test.ts.
+// checked against the real one by event-triggers/store.db.test.ts.
 
-import type { Occurrence, TriggerMarker, TriggerStore } from "./trigger-store.ts";
+import type { Occurrence, TriggerMarker, TriggerStore } from "./event-triggers/store.ts";
 
 export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
   const rows = new Map<string, Occurrence>();

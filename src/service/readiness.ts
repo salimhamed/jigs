@@ -1,5 +1,5 @@
 // How far the boot has got, beside the liveness /health already reports. The
-// start-world plugin advances it; the route reads it; `jigs service start`
+// service boot advances it; the route reads it; `jigs service start`
 // waits on it. Module-level because the plugin and the route meet nowhere
 // else — nitro hands neither a reference to the other.
 

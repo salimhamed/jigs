@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { slackHistory, slackPostMessage } from "../providers/slack.ts";
+import { SOURCES } from "./event-triggers/sources.ts";
 import { type SlackMessageEvent, startSlackSocket } from "./slack-socket.ts";
-import { SOURCES } from "./sources.ts";
 
 // Posts one short message to the test channel and sees it arrive over Socket
 // Mode and in history. It is the bot's own post, so both sources skip it.

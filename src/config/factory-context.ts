@@ -15,7 +15,7 @@ export type RunWatch = Pick<RunCancellation, "signal" | "dispose">;
 
 export interface FactoryContext {
   readonly root: string;
-  /** Keys this factory's rows, pidfile and clones apart from other factories'. */
+  /** Keys this factory's rows, service record and clones apart from other factories'. */
   readonly slug: string;
   /** Read on first use, so a verb that never needs it is not stopped by a config that fails. */
   readonly config: FactoryConfig;

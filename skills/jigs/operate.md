@@ -219,10 +219,9 @@ the service and every process it started, killing what is still running after
 lists each surviving pid and command; show them to the human rather than
 killing them yourself. A service command that says a pid cannot be verified as
 the service has signalled nothing: another program probably has that pid now.
-Show the human the pid and command; deleting the named pidfile and service
-record is their call. A process an agent fully detached (`setsid`, double
-fork) can survive a stop, and Docker containers an agent started are never
-stopped.
+Show the human the pid and command; deleting the named service record is their
+call. A process an agent fully detached (`setsid`, double fork) can survive a
+stop, and Docker containers an agent started are never stopped.
 
 Parked runs are also why the names in `jigs/steps.ts` and `workflows/` matter —
 see the never list.

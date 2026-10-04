@@ -5,8 +5,8 @@
 import { z } from "zod";
 import { plainHint } from "../errors.ts";
 import { type SlackAuth, type SlackMessage, slackBot, slackHistory } from "../providers/slack.ts";
+import type { Source, SourceOccurrence } from "./event-triggers/sources.ts";
 import type { SlackMessageEvent } from "./slack-socket.ts";
-import type { Source, SourceOccurrence } from "./sources.ts";
 
 // A direct message's ID starts with D, so the ID alone keeps DMs out of polling.
 const paramsSchema = z.strictObject({

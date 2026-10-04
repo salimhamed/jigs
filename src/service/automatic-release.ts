@@ -1,8 +1,4 @@
-/**
- * Release the resources of finished factory runs automatically, by release policy.
- *
- * @packageDocumentation
- */
+// Release the resources of finished factory runs automatically, by release policy.
 
 import { getWorld } from "workflow/runtime";
 import { currentFactoryContext } from "../config/factory-context.ts";

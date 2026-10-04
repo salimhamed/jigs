@@ -119,24 +119,9 @@ test("the root, the routines entry, the steps entry and the nine step topics are
     "git",
     "runtime",
   ];
-  const service = [
-    "./app",
-    "./nitro",
-    "./schedules",
-    "./triggers",
-    "./automatic-release",
-    "./build",
-  ];
-  const plugins = ["./plugins/start-world", "./plugins/start-dashboard"];
+  const service = ["./nitro", "./build", "./service"];
   expect(Object.keys(pkg.exports).sort()).toEqual(
-    [
-      ".",
-      "./routines",
-      "./steps",
-      ...service,
-      ...plugins,
-      ...topics.map((topic) => `./steps/${topic}`),
-    ].sort(),
+    [".", "./routines", "./steps", ...service, ...topics.map((topic) => `./steps/${topic}`)].sort(),
   );
   expect(pkg.exports["./steps"]).toEqual({
     types: "./dist/steps/index.d.ts",
@@ -263,6 +248,14 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "claimTicket",
     "postPullRequestNote",
     "waitForSlackReply",
+  ],
+  "service/nitro.ts": ["defineJigsService"],
+  "service/build.ts": ["generateFactoryIntegration", "prepare"],
+  "service/service.ts": [
+    "automaticReleaseAction",
+    "createApp",
+    "reconcileAutomaticRelease",
+    "startService",
   ],
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],

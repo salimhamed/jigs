@@ -18,10 +18,10 @@ import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runt
 import type { Factory } from "../workflow/factory.ts";
 import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
+import { createTriggerEngine } from "./event-triggers/engine.ts";
+import { triggerStore } from "./event-triggers/store.ts";
 import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { findRunsByAttribute } from "./runs.ts";
-import { triggerStore } from "./trigger-store.ts";
-import { createTriggerEngine } from "./triggers.ts";
 
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
 const from = env("PAGERDUTY_FROM");

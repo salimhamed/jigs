@@ -4,26 +4,8 @@
  * @packageDocumentation
  */
 
-import path from "node:path";
-import { fileURLToPath } from "node:url";
 import type { NitroConfig } from "nitro/types";
-import {
-  GENERATED_CLEANUP_FILE,
-  GENERATED_DIR,
-  GENERATED_ENTRY_FILE,
-  GENERATED_SCHEDULES_FILE,
-  GENERATED_TRIGGERS_FILE,
-} from "./build.ts";
-
-// Nitro resolves a bare `plugins` entry against the build root, which is the
-// factory rather than this package, so the path has to be absolute and
-// resolved from this module. The plugins are emitted beside it with the same
-// extension, so one path works for the source under vitest and for dist/.
-const extension = path.extname(fileURLToPath(import.meta.url));
-const shippedPlugin = (name: string): string =>
-  fileURLToPath(new URL(`./plugins/${name}${extension}`, import.meta.url));
-const startWorldPlugin = shippedPlugin("start-world");
-const startDashboardPlugin = shippedPlugin("start-dashboard");
+import { GENERATED_DIR, GENERATED_ENTRY_FILE, GENERATED_PLUGIN_FILE } from "./generated-files.ts";
 
 // Both Worlds the SDK can load reach for `@opentelemetry/api` behind a
 // `.catch(() => null)` — telemetry is optional and no factory installs it —
@@ -40,16 +22,7 @@ export function defineJigsService(): NitroConfig {
   // `claude` — bundling severs the SDK's vendored CLI.
   return {
     modules: ["workflow/nitro"],
-    // Nitro invokes plugins in order without awaiting them, so the generated
-    // ticker starts after the World start is *called*, not after it finishes
-    // — harmless, because the first fire is a whole cron tick away.
-    plugins: [
-      startWorldPlugin,
-      startDashboardPlugin,
-      `./${GENERATED_DIR}/${GENERATED_SCHEDULES_FILE}`,
-      `./${GENERATED_DIR}/${GENERATED_TRIGGERS_FILE}`,
-      `./${GENERATED_DIR}/${GENERATED_CLEANUP_FILE}`,
-    ],
+    plugins: [`./${GENERATED_DIR}/${GENERATED_PLUGIN_FILE}`],
     // The workflow builder's scan directory stays at its default (the whole
     // root): bounding it to workflows/ would make a misfiled workflow
     // silently invisible, which is worse than scanning a little extra.

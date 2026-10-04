@@ -3,10 +3,10 @@
 // registry, keyed by the descriptor's `kind`, is what the engine runs.
 
 import type { z } from "zod";
-import { PAGERDUTY_INCIDENTS_SOURCE } from "../workflow/pagerduty/source.ts";
-import type { Provider } from "../workflow/providers.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
-import { SLACK_SOURCES } from "./slack-sources.ts";
+import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
+import type { Provider } from "../../workflow/providers.ts";
+import { pagerDutyIncidents } from "../pagerduty-incidents.ts";
+import { SLACK_SOURCES } from "../slack-sources.ts";
 
 /** One occurrence as a source reports it: the reference the run reads, and when it happened. */
 export interface SourceOccurrence {

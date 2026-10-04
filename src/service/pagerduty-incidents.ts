@@ -8,7 +8,7 @@ import {
   type PagerDutyIncidentsParams,
   pagerDutyIncidentsParamsSchema,
 } from "../workflow/pagerduty/source.ts";
-import type { Source } from "./sources.ts";
+import type { Source } from "./event-triggers/sources.ts";
 
 // `since` filters on created_at, and an incident can surface in the list a
 // little after it was created, or by a clock a little ahead of this one. Each

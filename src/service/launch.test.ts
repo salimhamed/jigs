@@ -18,7 +18,7 @@ vi.mock("../checks/index.ts", () => ({
 }));
 vi.mock("../providers/linear.ts", () => ({ resolveIssueRef }));
 
-const { prepareRun, startRun } = await import("./trigger.ts");
+const { prepareRun, startRun } = await import("./launch.ts");
 const inputs = z.object({ ticket: z.string(), attempts: z.number().default(3) });
 const factory = {
   workflows: {

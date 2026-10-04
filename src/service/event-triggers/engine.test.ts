@@ -2,24 +2,20 @@ import { execFileSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import { afterAll, afterEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import type { CheckReport } from "../checks/index.ts";
-import { coerceInputs, splitInputs } from "../cli/commands/run.ts";
-import { hintLines } from "../cli/output.ts";
-import * as slackApi from "../providers/slack.ts";
-import type { EventTrigger, Factory } from "../workflow/factory.ts";
-import { eventTriggerId, runIdTime } from "./runs.ts";
-import { slackSources } from "./slack-sources.ts";
+import type { CheckReport } from "../../checks/index.ts";
+import { coerceInputs, splitInputs } from "../../cli/commands/run.ts";
+import { hintLines } from "../../cli/output.ts";
+import * as slackApi from "../../providers/slack.ts";
+import type { EventTrigger, Factory } from "../../workflow/factory.ts";
+import type { PreparedRun } from "../launch.ts";
+import { eventTriggerId, runIdTime } from "../runs.ts";
+import { slackSources } from "../slack-sources.ts";
+import { memoryTriggerStore } from "../test-fixtures.ts";
+import { createTriggerEngine, type TriggerDeps } from "./engine.ts";
+import { startTriggers } from "./runner.ts";
 import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
-import { memoryTriggerStore } from "./test-fixtures.ts";
-import type { PreparedRun } from "./trigger.ts";
-import type { TriggerStore } from "./trigger-store.ts";
-import {
-  createTriggerEngine,
-  listTriggers,
-  startTriggers,
-  type TriggerDeps,
-  triggerChecks,
-} from "./triggers.ts";
+import type { TriggerStore } from "./store.ts";
+import { listTriggers, triggerChecks } from "./view.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
