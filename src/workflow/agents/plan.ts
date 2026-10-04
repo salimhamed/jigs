@@ -92,10 +92,11 @@ export function assertAskableHarness(harness: Harness): asserts harness is Askab
     throw new JigsError(
       "askAgent() has no MCP universe — mcpServers on the harness descriptor is only honored by runAgent()",
     );
-  if (harness.github !== undefined)
-    throw new JigsError(
-      "askAgent() runs without tools — github on the harness descriptor is only honored by runAgent()",
-    );
+  for (const access of ["github", "linear", "pagerduty"] as const)
+    if (harness[access] !== undefined)
+      throw new JigsError(
+        `askAgent() runs without tools — ${access} on the harness descriptor is only honored by runAgent()`,
+      );
   if (harness.kind === "pi" && harness.tools !== undefined)
     throw new JigsError(
       "askAgent() runs without tools — tools on the Pi harness descriptor is only honored by runAgent()",

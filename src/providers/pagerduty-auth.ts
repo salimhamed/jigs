@@ -109,8 +109,8 @@ async function mintPagerDutyToken(
 
 export interface PagerDutyAuth {
   identity: PagerDutyIdentity;
-  /** The bearer token for a REST call, minted as needed. */
-  bearer(): Promise<string>;
+  /** The bearer token for a REST call, minted as needed so it lives `minLifetimeMs` longer. */
+  bearer(minLifetimeMs?: number): Promise<string>;
   /** Forget `stale` if it is still the cached token, so the next call mints a fresh one. */
   invalidate(stale: string): void;
 }
@@ -143,8 +143,8 @@ export function createPagerDutyAuth(
   let minting: Promise<MintedToken> | null = null;
   return {
     identity,
-    async bearer(): Promise<string> {
-      if (cached !== null && cached.expiresAt > now()) return cached.token;
+    async bearer(minLifetimeMs = 0): Promise<string> {
+      if (cached !== null && cached.expiresAt > now() + minLifetimeMs) return cached.token;
       if (minting === null) {
         minting = mintPagerDutyToken(
           identity,

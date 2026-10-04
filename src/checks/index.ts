@@ -19,7 +19,7 @@ import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerdu
 import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
-import { readsAgentGithubToken } from "../workflow/agents/github-mcp.ts";
+import { agentTokensReadBy, assertAgentAccess } from "../workflow/agents/agent-access.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
@@ -53,7 +53,7 @@ import {
   linearOperatorChecks,
 } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
-import { mcpServerChecks } from "./mcp.ts";
+import { mcpReachableCheck, mcpServerChecks } from "./mcp.ts";
 import {
   type PagerDutyIdentityProbes,
   pagerDutyFromChecks,
@@ -262,11 +262,21 @@ function pagerDutyFromDoctorChecks(): Check[] {
   });
 }
 
+// An agent that acts as the factory on a provider needs that provider's
+// identity, as a step that calls it does.
+function integrationsOf(requires: WorkflowRequires): Integration[] {
+  const agents = Object.values(requires.agents ?? {});
+  const opted = (["linear", "pagerduty"] as const).filter((provider) =>
+    agents.some((agent) => agent[provider] !== undefined),
+  );
+  return [...new Set([...(requires.integrations ?? []), ...opted])];
+}
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
 ): Check[] {
-  const integrations = requires.integrations ?? [];
+  const integrations = integrationsOf(requires);
   // A binding selected by this run is more specific than the workflow's
   // static requirements. Workflows without a binding input retain the fixed
   // binding list declared in their manifest.
@@ -375,19 +385,24 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
       const driver = driverFor(harness.kind);
       if (driver === undefined) continue;
       for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
-        const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
+        const tokens = agentTokensReadBy(server);
+        const optedIn = tokens.filter((provider) => harness[provider] !== undefined);
+        const key = JSON.stringify([harness.kind, name, server, optedIn]);
         const entry = servers.get(key) ?? {
           checks: serverChecks(name, () => {
-            // The agent's GitHub token exists only inside its step, so doctor
-            // checks the server is installed; the step's own check probes it.
-            if (readsAgentGithubToken(server) && "command" in server)
+            assertAgentAccess({ ...harness, mcpServers: { [name]: server } });
+            // An agent token exists only inside its step, so doctor checks the
+            // server is installed or reachable; the step's own check probes it.
+            if (tokens.length > 0)
               return [
-                agentCommandCheck(
-                  `mcp.${name}`,
-                  `MCP server ${name}`,
-                  server.command,
-                  `install ${server.command} on the PATH the service starts agents with`,
-                ),
+                "command" in server
+                  ? agentCommandCheck(
+                      `mcp.${name}`,
+                      `MCP server ${name}`,
+                      server.command,
+                      `install ${server.command} on the PATH the service starts agents with`,
+                    )
+                  : mcpReachableCheck(`mcp.${name}`, `MCP server ${name}`, server.url),
               ];
             return agentMcpServerChecks(
               harness.kind,
@@ -457,7 +472,7 @@ export function doctorChecks(
   triggers: Record<string, Integration> = {},
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
-    ...(requires.integrations ?? []),
+    ...integrationsOf(requires),
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();

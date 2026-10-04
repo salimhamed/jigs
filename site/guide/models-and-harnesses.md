@@ -396,3 +396,47 @@ It runs the local
 install yourself; `jigs doctor` checks for it. Tools that need a user, such as
 `get_me`, are left out, since an App cannot answer them. For Pi, pass the tools
 the model may call: `githubMcp({ tools: ["pull_request_read", "add_issue_comment"] })`.
+
+## Linear and PagerDuty access for agents {#provider-access}
+
+An agent can also act as the factory on Linear and PagerDuty: set `linear: true`
+or `pagerduty: true` on its harness. When it starts, jigs puts the factory's own
+token in its environment:
+
+- **`JIGS_LINEAR_TOKEN`** holds the [Linear identity](/guide/configuration#linear-identity)'s
+  credential: the app's token in `app` mode, so the agent acts as the factory's
+  Linear app, or the API key in `key` mode.
+- **`JIGS_PAGERDUTY_TOKEN`** holds a token for the factory's
+  [PagerDuty](/guide/configuration#pagerduty) OAuth app, with the scopes jigs
+  itself uses: the agent can read and update incidents and read users.
+
+A run whose workflow declares such an agent checks that identity in preflight,
+as it would for a workflow that requires the provider.
+
+`linearMcp()` and `pagerdutyMcp()` add each service's own hosted MCP server
+with that token. Only a harness that opts in can use them:
+
+```ts
+import { harnesses, linearMcp, pagerdutyMcp } from "@jigs-ai/jigs";
+
+harnesses.claude({
+  model: "opus",
+  linear: true,
+  pagerduty: true,
+  mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp({ region: "eu" }) },
+});
+```
+
+Pass `pagerdutyMcp` the `region` of your PagerDuty identity; it defaults to
+`us`. For Pi, pass the tools the model may call, as with `githubMcp`. Each
+result is plain data, so spread it to change a field: Linear's
+`https://mcp.linear.app/mcp/readonly` offers read tools only.
+
+The hosted servers cannot hide tools, so tools the factory's token cannot use
+still appear and fail when called. On PagerDuty those are tools about the
+current user, such as `get_user_data`, and tools outside jigs' scopes, such as
+schedules and services. `jigs doctor` checks that each server answers; the
+agent's step probes it with the token before the agent starts.
+
+Slack has no helper: its official MCP server accepts only user tokens, and jigs
+holds a bot token.

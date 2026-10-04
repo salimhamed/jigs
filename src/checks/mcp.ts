@@ -15,7 +15,7 @@ import type {
   McpToolProbe,
   PiMcpServerConfig,
 } from "../workflow/agents/harness-config.ts";
-import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
+import { CHECK_TIMEOUT_MS, type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./core.ts";
 
 // A step runs these when its agent starts, and doctor runs them for the agents
@@ -221,6 +221,34 @@ export function mcpServerChecks(
     label: `MCP server ${name}`,
     run: () => checkMcpServer(name, server, cwd, env, options),
   }));
+}
+
+/**
+ * Whether a hosted server answers at all. Any HTTP status counts: without the agent's token a
+ * server is expected to refuse.
+ */
+export function mcpReachableCheck(
+  id: string,
+  label: string,
+  url: string,
+  doFetch: typeof fetch = fetch,
+): Check {
+  return {
+    id,
+    label,
+    run: async (): Promise<CheckResult> => {
+      try {
+        await doFetch(url, { method: "POST", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        return { ok: true };
+      } catch (err) {
+        return {
+          ok: false,
+          reason: `${url} did not answer: ${err instanceof Error ? err.message : String(err)}`,
+          repair: `check the service's network access to ${new URL(url).host}, or the server's url`,
+        };
+      }
+    },
+  };
 }
 
 export function codexWorktreeConfigCheck(worktreeDir: string): Check {

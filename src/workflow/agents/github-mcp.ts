@@ -1,14 +1,5 @@
-import { JigsError } from "../errors.ts";
-import type {
-  AgentGithub,
-  McpServerConfig,
-  McpStdioServerConfig,
-  PiMcpServerConfig,
-  PiMcpStdioServerConfig,
-} from "./harness-config.ts";
-
-/** The variable that holds the token of an agent whose harness sets `github`. */
-export const AGENT_GITHUB_TOKEN_ENV = "GH_TOKEN";
+import { AGENT_TOKEN_ENV } from "./agent-access.ts";
+import type { McpStdioServerConfig, PiMcpStdioServerConfig } from "./harness-config.ts";
 
 // GitHub's default toolsets without `context`, whose tools need a user and
 // fail for an installation token.
@@ -59,35 +50,10 @@ export function githubMcp(
   const server = {
     command: "github-mcp-server",
     args: ["stdio", `--toolsets=${TOOLSETS}`],
-    env: { GITHUB_PERSONAL_ACCESS_TOKEN: AGENT_GITHUB_TOKEN_ENV },
+    env: { GITHUB_PERSONAL_ACCESS_TOKEN: AGENT_TOKEN_ENV.github },
     probe: PROBE,
   };
   return options === undefined
     ? server
     : { ...server, tools: [...new Set([PROBE.tool, ...options.tools])] };
-}
-
-/** Whether a server is handed the token of an agent whose harness sets `github`. */
-export function readsAgentGithubToken(server: McpServerConfig | PiMcpServerConfig): boolean {
-  const sources =
-    "command" in server
-      ? Object.values(server.env ?? {})
-      : [...Object.values(server.headers ?? {}), server.bearerTokenEnv];
-  return sources.includes(AGENT_GITHUB_TOKEN_ENV);
-}
-
-/** Reject an MCP server that reads the agent's GitHub token on a harness that does not set `github`. */
-export function assertGithubMcp(harness: {
-  mcpServers?: Record<string, McpServerConfig | PiMcpServerConfig> | undefined;
-  github?: AgentGithub | undefined;
-}): void {
-  if (harness.github !== undefined) return;
-  const name = Object.entries(harness.mcpServers ?? {}).find(([, server]) =>
-    readsAgentGithubToken(server),
-  )?.[0];
-  if (name !== undefined)
-    throw new JigsError(
-      `MCP server '${name}' reads ${AGENT_GITHUB_TOKEN_ENV}, the token jigs gives only to an agent whose harness sets github`,
-      "set `github: true` on the harness, or `github: { owner }` for an agent with no worktree",
-    );
 }

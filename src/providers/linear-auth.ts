@@ -77,6 +77,8 @@ export interface LinearAuth {
   identity: LinearIdentity;
   /** The `authorization` header value for a GraphQL call, minted as needed. */
   authorization(): Promise<string>;
+  /** The bare credential: the API key, or the app's token, minted as needed. */
+  token(): Promise<string>;
   /** Forget a minted token, so the next call mints a fresh one. */
   invalidate(): void;
 }
@@ -103,23 +105,28 @@ export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps 
   let cached: string | null = null;
   // The mint in flight, so concurrent calls share one token.
   let minting: Promise<string> | null = null;
+  const token = async (): Promise<string> => {
+    if (identity.mode === "key") return required("LINEAR_API_KEY");
+    if (cached !== null) return cached;
+    if (minting === null) {
+      minting = mintLinearAppToken(
+        required("LINEAR_CLIENT_ID"),
+        required("LINEAR_CLIENT_SECRET"),
+        deps.fetch,
+      ).finally(() => {
+        minting = null;
+      });
+    }
+    const pending = minting;
+    cached = await pending;
+    return cached;
+  };
   return {
     identity,
+    token,
     async authorization(): Promise<string> {
-      if (identity.mode === "key") return required("LINEAR_API_KEY");
-      if (cached !== null) return `Bearer ${cached}`;
-      if (minting === null) {
-        minting = mintLinearAppToken(
-          required("LINEAR_CLIENT_ID"),
-          required("LINEAR_CLIENT_SECRET"),
-          deps.fetch,
-        ).finally(() => {
-          minting = null;
-        });
-      }
-      const pending = minting;
-      cached = await pending;
-      return `Bearer ${cached}`;
+      const credential = await token();
+      return identity.mode === "key" ? credential : `Bearer ${credential}`;
     },
     invalidate(): void {
       cached = null;

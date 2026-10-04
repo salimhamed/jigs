@@ -49,6 +49,15 @@ function writeFactory(identity: unknown, env: string): void {
 test("a key identity sends the raw key, with no Bearer prefix", async () => {
   const auth = createLinearAuth({ mode: "key" }, { env: lookup({ LINEAR_API_KEY: "lin_key" }) });
   expect(await auth.authorization()).toBe("lin_key");
+  expect(await auth.token()).toBe("lin_key");
+});
+
+test("an app identity's bare token is the minted one, shared with authorization", async () => {
+  const doFetch = vi.fn(async () => tokenResponse("app-token"));
+  const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });
+  expect(await auth.token()).toBe("app-token");
+  expect(await auth.authorization()).toBe("Bearer app-token");
+  expect(doFetch).toHaveBeenCalledTimes(1);
 });
 
 test("an app identity mints a client-credentials token once and sends it as a bearer", async () => {

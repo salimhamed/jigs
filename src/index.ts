@@ -18,6 +18,7 @@ export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export { type GithubMcpOptions, githubMcp } from "./workflow/agents/github-mcp.ts";
 export {
   type AgentGithub,
+  type AgentProviderAccess,
   type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,
@@ -68,6 +69,12 @@ export {
   type YesNoQuestion,
   yesNo,
 } from "./workflow/agents/jev.ts";
+export { type LinearMcpOptions, linearMcp } from "./workflow/agents/linear-mcp.ts";
+export {
+  type PagerdutyMcpOptions,
+  type PiPagerdutyMcpOptions,
+  pagerdutyMcp,
+} from "./workflow/agents/pagerduty-mcp.ts";
 export type {
   AgentRequest,
   AskAgentOptions,

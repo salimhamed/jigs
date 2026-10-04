@@ -131,6 +131,17 @@ test("a token is reused until it expires, then replaced", async () => {
   expect(await auth.bearer()).toBe("token-2");
 });
 
+test("a caller that needs a longer lifetime gets a fresh token", async () => {
+  let minted = 0;
+  let now = 0;
+  const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`, 3600));
+  const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch, now: () => now });
+  expect(await auth.bearer()).toBe("token-1");
+  now = 1_000;
+  expect(await auth.bearer(3_598_999)).toBe("token-1");
+  expect(await auth.bearer(3_599_000)).toBe("token-2");
+});
+
 test("a refused mint names the .env keys and never echoes the secret", async () => {
   const doFetch = vi.fn(
     async () =>
