@@ -4,7 +4,8 @@
 
 import { JigsError } from "../errors.ts";
 
-export type Provider = "github" | "linear" | "pagerduty" | "slack";
+import type { Provider } from "../workflow/providers.ts";
+export type { Provider };
 
 const PROVIDER_NAMES: Record<Provider, string> = {
   github: "GitHub",

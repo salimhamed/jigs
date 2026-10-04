@@ -21,6 +21,7 @@ import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts"
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
 import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -34,7 +35,7 @@ import {
   runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
-import { type Integration, RESTART_SERVICE } from "./core.ts";
+import { RESTART_SERVICE } from "./core.ts";
 import {
   type GithubIdentityProbes,
   githubIdentityChecks,
@@ -128,7 +129,7 @@ export { type WebhookChecksOptions, webhookChecks } from "./webhooks.ts";
 // list. Hand-maintaining the list is the drift trap this exists to avoid.
 export interface WorkflowRequires {
   agents?: Record<string, Harness>;
-  integrations?: Integration[];
+  integrations?: Provider[];
   bindings?: string[];
   models?: AskableModelSource[];
   aws?: true;
@@ -264,7 +265,7 @@ function pagerDutyFromDoctorChecks(): Check[] {
 
 // An agent that acts as the factory on a provider needs that provider's
 // identity, as a step that calls it does.
-function integrationsOf(requires: WorkflowRequires): Integration[] {
+function integrationsOf(requires: WorkflowRequires): Provider[] {
   const agents = Object.values(requires.agents ?? {});
   const opted = AGENT_ACCESS_PROVIDERS.filter((provider) =>
     agents.some((agent) => agent[provider] !== undefined),
@@ -309,7 +310,7 @@ export function preflightChecks(
 // section or a slack section is set up on purpose. The key and PAT identities
 // are what every scaffold states, so they ask for nothing. An unreadable config
 // asks for nothing either: the binding checks report it.
-function configuredProviders(): Record<Integration, boolean> {
+function configuredProviders(): Record<Provider, boolean> {
   try {
     const { bindings, webhooks, github, linear, pagerduty, slack } = readFactoryConfig(
       factoryRoot(),
@@ -466,14 +467,14 @@ export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
 // provider its source reads.
 export function doctorChecks(
   workflows: WorkflowManifests,
-  triggers: Record<string, Integration> = {},
+  triggers: Record<string, Provider> = {},
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
     ...integrationsOf(requires),
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();
-  const provider = (name: Integration, checks: () => Check[]): Check[] => {
+  const provider = (name: Provider, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
     return needing.length > 0 || polling.length > 0 || configured[name]

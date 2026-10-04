@@ -9,10 +9,10 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../workflow/linear/halt-for-human.ts";
 import { TICKET_TOKEN_PREFIX } from "../workflow/linear/ticket-token.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../workflow/pull-requests/pull-request.ts";
 import { SLACK_THREAD_TOKEN_PREFIX } from "../workflow/slack/thread-token.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
-import type { SourceProvider } from "./sources.ts";
 import { recordWake } from "./wake-note.ts";
 
 // Subtracted, never added: the interval is a promise, so the jitter only ever
@@ -27,7 +27,7 @@ interface Subject {
   select: (hooks: HeldHook[]) => HeldHook[];
 }
 
-const SUBJECTS: Record<SourceProvider, Subject> = {
+const SUBJECTS: Record<Provider, Subject> = {
   github: {
     label: "pull requests",
     select: (hooks) => hooks.filter((hook) => hook.token.startsWith(PULL_REQUEST_TOKEN_PREFIX)),
@@ -98,7 +98,7 @@ export function nudgeDelay(intervalSeconds: number, random: () => number = Math.
  * call, so nudging a busy run buys nothing and grows its event log.
  */
 export async function nudgeProvider(
-  provider: SourceProvider,
+  provider: Provider,
   deps: NudgeDeps = {},
 ): Promise<NudgeReport> {
   const { label, select } = SUBJECTS[provider];
@@ -153,7 +153,7 @@ export async function nudgeProvider(
 
 /** Sweep each provider on its own repeating timer until stopped, one sweep per provider at a time. */
 export function startNudges(
-  intervalSeconds: Record<SourceProvider, number>,
+  intervalSeconds: Record<Provider, number>,
   deps: NudgeDeps = {},
 ): { stop: () => void } {
   const setTimer =
@@ -164,16 +164,16 @@ export function startNudges(
       timer.unref?.();
       return () => clearTimeout(timer);
     });
-  const cancels = new Map<SourceProvider, () => void>();
+  const cancels = new Map<Provider, () => void>();
   let stopped = false;
-  const schedule = (provider: SourceProvider) => {
+  const schedule = (provider: Provider) => {
     if (stopped) return;
     const fire = () => {
       void nudgeProvider(provider, deps).then(() => schedule(provider));
     };
     cancels.set(provider, setTimer(fire, nudgeDelay(intervalSeconds[provider], deps.random)));
   };
-  for (const provider of Object.keys(SUBJECTS) as SourceProvider[]) schedule(provider);
+  for (const provider of Object.keys(SUBJECTS) as Provider[]) schedule(provider);
   return {
     stop: () => {
       stopped = true;

@@ -15,6 +15,7 @@ import { stopProcessGroups } from "../../steps/agents/harnesses/process-group.ts
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
 import type { FactoryDefinition, WorkflowDefinition } from "../../workflow/factory.ts";
+import { PROVIDERS, WEBHOOK_PROVIDERS } from "../../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
 import { installShutdown, onShutdown } from "../shutdown.ts";
 
@@ -120,9 +121,9 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
     return false;
   }
   const { webhookSecret, webhookSecretVariable } = await import("../../config/webhook-secret.ts");
-  const missing = (["github", "linear", "pagerduty"] as const)
-    .filter((provider) => webhooks?.[provider].enabled && webhookSecret(provider) === undefined)
-    .map(webhookSecretVariable);
+  const missing = WEBHOOK_PROVIDERS.filter(
+    (provider) => webhooks?.[provider].enabled && webhookSecret(provider) === undefined,
+  ).map(webhookSecretVariable);
   if (missing.length > 0) {
     error(
       `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
@@ -503,7 +504,7 @@ export default async function startWorld() {
     nudge.stop();
   });
   if (config.slack?.socketMode) await startSlackSocketMode();
-  await Promise.all([nudgeProvider("github"), nudgeProvider("linear"), nudgeProvider("slack")]);
+  await Promise.all(PROVIDERS.map((provider) => nudgeProvider(provider)));
 
   // The generated factory plugin starts automatic release after this plugin
   // reaches readiness. It imports the compiled factory so per-workflow policy

@@ -3,13 +3,10 @@
 // registry, keyed by the descriptor's `kind`, is what the engine runs.
 
 import type { z } from "zod";
-import type { FactoryConfig } from "../config/factory-config.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../workflow/pagerduty/source.ts";
+import type { Provider } from "../workflow/providers.ts";
 import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "./slack-sources.ts";
-
-/** A provider with its own `service.pollIntervalSeconds` entry. */
-export type SourceProvider = keyof FactoryConfig["service"]["pollIntervalSeconds"];
 
 /** One occurrence as a source reports it: the reference the run reads, and when it happened. */
 export interface SourceOccurrence {
@@ -18,7 +15,7 @@ export interface SourceOccurrence {
 }
 
 export interface Source<P = unknown> {
-  provider: SourceProvider;
+  provider: Provider;
   /** Validates the descriptor's `params`. */
   params: z.ZodType<P>;
   /** A representative of the inputs this source hands every run, which doctor checks the
