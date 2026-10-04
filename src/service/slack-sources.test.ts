@@ -1,8 +1,8 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import * as slackApi from "../providers/slack.ts";
 import { slack } from "../workflow/slack/sources.ts";
+import { SOURCES } from "./event-triggers/sources.ts";
 import { slackSources } from "./slack-sources.ts";
-import { SOURCES } from "./sources.ts";
 
 const BOT = {
   userId: "U0C59SU5V29",

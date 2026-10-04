@@ -6,11 +6,12 @@ import type { PagerDutyAuth } from "../providers/pagerduty-auth.ts";
 import type { Factory } from "../workflow/factory.ts";
 import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
+import { createTriggerEngine } from "./event-triggers/engine.ts";
+import { triggerChecks, triggerProviders } from "./event-triggers/view.ts";
+import type { PreparedRun } from "./launch.ts";
 import { POLL_OVERLAP_MS, pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
-import type { PreparedRun } from "./trigger.ts";
-import { createTriggerEngine, triggerChecks, triggerProviders } from "./triggers.ts";
 
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);

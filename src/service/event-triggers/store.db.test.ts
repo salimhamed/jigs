@@ -1,9 +1,9 @@
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect } from "vitest";
-import type { CheckReport } from "../checks/index.ts";
-import { databaseUrl, dbTest, postgresAdminUrl } from "../db-test-fixtures.ts";
-import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
-import { occurrencesByAttribute, triggerStore } from "./trigger-store.ts";
+import type { CheckReport } from "../../checks/index.ts";
+import { databaseUrl, dbTest, postgresAdminUrl } from "../../db-test-fixtures.ts";
+import { connectRegistry, ensureRegistry, type RegistrySql } from "../../steps/runtime/registry.ts";
+import { occurrencesByAttribute, triggerStore } from "./store.ts";
 
 // A database of its own, like the registry suite: never a factory's World.
 const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });

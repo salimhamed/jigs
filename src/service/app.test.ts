@@ -18,12 +18,12 @@ import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
+import * as triggers from "./event-triggers/runner.ts";
+import type { PreparedRun } from "./launch.ts";
 import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import * as queue from "./queue.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
-import type { PreparedRun } from "./trigger.ts";
-import * as triggers from "./triggers.ts";
 import { clearWakes, lastWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {

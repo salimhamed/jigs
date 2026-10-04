@@ -1,9 +1,9 @@
 import { afterAll, expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory, Schedule } from "../workflow/factory.ts";
+import type { StartRunResult } from "./launch.ts";
 import type { RunRow } from "./runs.ts";
 import { fireSchedule, listSchedules, scheduleChecks, startSchedules } from "./schedules.ts";
-import type { StartRunResult } from "./trigger.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;

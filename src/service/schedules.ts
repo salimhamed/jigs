@@ -1,14 +1,19 @@
 // Start and inspect the recurring schedules declared by a factory.
 
 import { Cron } from "croner";
-import type { z } from "zod";
 import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
 import { plainHint } from "../errors.ts";
 import { finished } from "../steps/runtime/run-state.ts";
 import type { Factory, Schedule } from "../workflow/factory.ts";
+import {
+  type ConfigProblem,
+  issues,
+  nameProblem,
+  workflowProblem,
+} from "./event-triggers/validate.ts";
+import { type StartRunResult, startRun } from "./launch.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
-import { type StartRunResult, startRun } from "./trigger.ts";
 
 // Five fields, minute to day-of-week: croner's default mode would also
 // accept a seconds field, and a schedule that fires sixty times an hour
@@ -130,32 +135,15 @@ export function scheduleChecks(factory: Factory): Check[] {
   });
 }
 
-interface ScheduleProblem {
-  reason: string;
-  repair: string;
-}
-
-function scheduleProblem(
-  factory: Factory,
-  name: string,
-  schedule: Schedule,
-): ScheduleProblem | null {
+function scheduleProblem(factory: Factory, name: string, schedule: Schedule): ConfigProblem | null {
   // The tick is appended to the name with a ":", and both the trigger column
   // and the overlap skip read the name back by splitting on the first one — so
   // a name carrying its own would answer for another schedule's runs.
-  if (name.includes(":")) {
-    return {
-      reason: `schedule name "${name}" contains ":"`,
-      repair: `rename the "${name}" schedule in jigs.config.ts to a name without ":"\na run's trigger id is read back out of the name`,
-    };
-  }
-  const entry = factory.workflows[schedule.workflow];
-  if (!entry) {
-    return {
-      reason: `workflow "${schedule.workflow}" is not one of this factory's workflows`,
-      repair: `set schedules.${name}.workflow in jigs.config.ts to one of: ${Object.keys(factory.workflows).join(", ")}`,
-    };
-  }
+  const problem =
+    nameProblem("schedule", name) ??
+    workflowProblem(factory, `schedules.${name}`, schedule.workflow);
+  if (problem !== null) return problem;
+  const entry = factory.workflows[schedule.workflow] as Factory["workflows"][string];
   try {
     new Cron(schedule.cron, { mode: CRON_MODE });
   } catch (err) {
@@ -167,9 +155,7 @@ function scheduleProblem(
   const parsed = entry.inputs.safeParse(schedule.inputs);
   if (!parsed.success) {
     return {
-      reason: `inputs do not satisfy the ${schedule.workflow} workflow's schema: ${parsed.error.issues
-        .map((issue: z.core.$ZodIssue) => `${issue.path.join(".") || "(root)"} ${issue.message}`)
-        .join("; ")}`,
+      reason: `inputs do not satisfy the ${schedule.workflow} workflow's schema: ${issues(parsed.error.issues)}`,
       repair: `fix schedules.${name}.inputs in jigs.config.ts to satisfy the ${schedule.workflow} workflow's inputs`,
     };
   }

@@ -13,6 +13,7 @@ import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
+import * as triggerStore from "./event-triggers/store.ts";
 import {
   enrichSuspensions,
   eventTriggerId,
@@ -28,7 +29,6 @@ import {
   type WorldRun,
   worldRunFacts,
 } from "./runs.ts";
-import * as triggerStore from "./trigger-store.ts";
 import { clearWakes, recordWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {

@@ -398,7 +398,7 @@ async function holdFactorySlackApp(ctx: FactoryContext): Promise<SlackAppHold | 
 async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
   const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
     import("./slack-socket.ts"),
-    import("./triggers.ts"),
+    import("./event-triggers/runner.ts"),
     import("./slack-thread-wake.ts"),
   ]);
   const hold = await holdFactorySlackApp(ctx);

@@ -16,6 +16,7 @@ import {
   postgresAdminUrl,
 } from "../db-test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
+import { prepareRun } from "./launch.ts";
 import {
   cancelRun,
   findRunsByAttribute,
@@ -23,7 +24,6 @@ import {
   runIdTime,
   runStatuses,
 } from "./runs.ts";
-import { prepareRun } from "./trigger.ts";
 
 const database = `jigs_runs_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = databaseUrl(database);

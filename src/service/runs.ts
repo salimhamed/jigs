@@ -26,8 +26,8 @@ import {
 import type { Factory } from "../workflow/factory.ts";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
-import { SOURCES } from "./sources.ts";
-import { occurrencesByAttribute } from "./trigger-store.ts";
+import { SOURCES } from "./event-triggers/sources.ts";
+import { occurrencesByAttribute } from "./event-triggers/store.ts";
 import { lastWake } from "./wake-note.ts";
 
 // The SDK mints run IDs as `wrun_` + a ULID. Anything else names no run, and

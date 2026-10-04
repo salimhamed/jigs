@@ -12,8 +12,8 @@ import {
   text,
   timestamp,
 } from "drizzle-orm/pg-core";
-import type { CheckReport } from "../checks/index.ts";
-import type { RegistrySql } from "../steps/runtime/registry.ts";
+import type { CheckReport } from "../../checks/index.ts";
+import type { RegistrySql } from "../../steps/runtime/registry.ts";
 
 // pg already parses jsonb; drizzle's own jsonb parses a string value a second
 // time, which turns a cursor like "1790723244.335019" into a number.

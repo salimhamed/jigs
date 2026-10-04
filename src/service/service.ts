@@ -8,8 +8,8 @@ import type { Factory } from "../workflow/factory.ts";
 import { startAutomaticRelease } from "./automatic-release.ts";
 import { startWorld } from "./boot.ts";
 import { startDashboard } from "./dashboard.ts";
+import { startTriggers } from "./event-triggers/runner.ts";
 import { startSchedules } from "./schedules.ts";
-import { startTriggers } from "./triggers.ts";
 
 export { type AppDeps, createApp } from "./app.ts";
 /** @internal */
