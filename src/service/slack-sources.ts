@@ -50,14 +50,16 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
       const bot = await slackBot();
       const oldest = (since.getTime() / 1000).toFixed(6);
       const found: SourceOccurrence[] = [];
+      const failed: string[] = [];
+      let firstWhy = "";
       for (const channel of channels) {
         let messages: SlackMessage[];
         try {
           messages = await slackHistory(channel, { oldest });
         } catch (error) {
-          // Skipped, not retried: the window still advances, so this channel's
-          // messages from this poll are only seen if Socket Mode delivers them.
           const why = error instanceof Error ? error.message : String(error);
+          failed.push(channel);
+          firstWhy ||= why;
           console.log(`[slack] could not poll channel ${channel}: ${why}`);
           console.log(
             plainHint(
@@ -69,6 +71,11 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
         for (const message of messages)
           if (startsRun(message, bot, mentionsOnly)) found.push(occurred(channel, message.ts));
       }
+      // Every channel is still read so each failure is logged with its repair,
+      // but the poll fails: the engine then keeps the window where it was and
+      // the next poll reads the failed channel's messages again.
+      if (failed.length > 0)
+        throw new Error(`could not poll Slack channel ${failed.join(", ")}: ${firstWhy}`);
       return found;
     },
     async fromPush({ channels }, event) {

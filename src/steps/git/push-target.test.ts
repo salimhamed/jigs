@@ -1,8 +1,10 @@
 // How the reviewed commit reaches GitHub under each identity. The git
 // provider is a stand-in here: what is under test is the target jigs hands it,
-// not what git does with it.
+// not what git does with it. Credentials come from a real factory config, so a
+// lookup that runs too early fails here as it would in a factory.
 
-import { beforeEach, expect, test, vi } from "vitest";
+import { writeFileSync } from "node:fs";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   git,
   pushBranch as gitPushBranch,
@@ -10,9 +12,10 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
-import { pushApprovedChange, pushBranch } from "../git/branch.ts";
+import { githubAuthFor, resetGithubAuth, useFactoryRoot } from "../../providers/github-auth.ts";
+import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
+import { pushApprovedChange, pushBranch } from "./branch.ts";
 
 vi.mock("../../providers/git.ts", () => ({
   commitsAhead: vi.fn(),
@@ -24,7 +27,10 @@ vi.mock("../../providers/git.ts", () => ({
   pushCommit: vi.fn(),
   resolveRemoteUrl: vi.fn(),
 }));
-vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
+vi.mock("../../providers/github-auth.ts", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../../providers/github-auth.ts")>();
+  return { ...actual, githubAuthFor: vi.fn(actual.githubAuthFor) };
+});
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_push" }) }));
 vi.mock("../runtime/registry.ts", async () =>
   (await import("../runtime/test-fixtures.ts")).memoryRegistry(),
@@ -38,34 +44,41 @@ const worktree = {
   baseSha: "base",
 };
 
-const APP = {
-  mode: "app",
-  appId: 1,
-  installationId: 2,
-  privateKeyPath: "/key.pem",
-  operator: "salimhamed",
-} as const;
+const PAT = `{ mode: "pat" }`;
+const APP = `{ mode: "app", appId: 1, privateKeyPath: "key.pem", operator: "salimhamed", installations: { acme: 2 } }`;
 
-const authAs = (identity: { mode: "pat" } | typeof APP, token = "ghs_installation") =>
-  vi.mocked(githubAuthFor).mockReturnValue({ identity, bearer: async () => token });
+let factory: string;
+function configure(identity: string) {
+  writeFileSync(
+    `${factory}/jigs.config.ts`,
+    `export default { service: { dashboardPort: 9090 }, github: { identities: [${identity}] } }`,
+  );
+  useFactoryRoot(factory);
+}
+
+const remote = (url: string) =>
+  vi.mocked(resolveRemoteUrl).mockResolvedValue({ remote: "origin", url });
 
 const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]);
 
 beforeEach(() => {
+  factory = makeTmpDir();
   memoryRows.length = 0;
   vi.mocked(git).mockResolvedValue("");
   // The first push creates the branch; every later one updates it.
-  vi.mocked(pushCommit).mockResolvedValue({ created: false });
-  vi.mocked(gitPushBranch).mockResolvedValue({ created: false });
+  vi.mocked(pushCommit).mockReset().mockResolvedValue({ created: false });
+  vi.mocked(gitPushBranch).mockReset().mockResolvedValue({ created: false });
   vi.mocked(headSha).mockResolvedValue("approved");
-  vi.mocked(resolveRemoteUrl).mockResolvedValue({
-    remote: "origin",
-    url: "git@github.com:acme/api.git",
-  });
+  remote("git@github.com:acme/api.git");
+});
+
+afterEach(() => {
+  resetGithubAuth();
+  removeTmpDir(factory);
 });
 
 test("pat mode pushes to the binding's own remote, over SSH as the operator", async () => {
-  authAs({ mode: "pat" });
+  configure(PAT);
   vi.mocked(pushCommit).mockResolvedValueOnce({ created: true });
   await pushApprovedChange(worktree, "approved");
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
@@ -76,8 +89,15 @@ test("pat mode pushes to the binding's own remote, over SSH as the operator", as
   ]);
 });
 
+test("pat mode pushes to a remote outside GitHub as it is", async () => {
+  configure(PAT);
+  remote("git@gitlab.com:acme/api.git");
+  await pushApprovedChange(worktree, "approved");
+  expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
+});
+
 test("a push that creates the branch records it, with the clone to ask about it", async () => {
-  authAs({ mode: "pat" });
+  configure(PAT);
   vi.mocked(git).mockImplementation(async (args) =>
     args[0] === "rev-parse" ? "/data/clones/api/repo.git" : "",
   );
@@ -90,15 +110,21 @@ test("a push that creates the branch records it, with the clone to ask about it"
 });
 
 test("a push to a branch that already existed records nothing", async () => {
-  authAs({ mode: "pat" });
+  configure(PAT);
   await pushBranch(worktree);
   await pushApprovedChange(worktree, "approved");
   expect(branches()).toEqual([]);
 });
 
 test("app mode pushes over HTTPS, with the token beside the URL rather than in it", async () => {
-  authAs(APP);
+  configure(APP);
+  const { identity } = githubAuthFor("acme");
+  vi.mocked(githubAuthFor).mockReturnValueOnce({
+    identity,
+    bearer: async () => "ghs_installation",
+  });
   await pushApprovedChange(worktree, "approved");
+  expect(githubAuthFor).toHaveBeenLastCalledWith("acme");
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", {
     remote: "https://github.com/acme/api.git",
     token: "ghs_installation",
@@ -106,16 +132,14 @@ test("app mode pushes over HTTPS, with the token beside the URL rather than in i
 });
 
 test("an installation token can only push to GitHub, and says so", async () => {
-  authAs(APP);
-  vi.mocked(resolveRemoteUrl).mockResolvedValue({
-    remote: "origin",
-    url: "git@gitlab.com:acme/api.git",
-  });
+  configure(APP);
+  remote("git@gitlab.com:acme/api.git");
   await expect(pushApprovedChange(worktree, "approved")).rejects.toThrow("not a github.com remote");
+  expect(pushCommit).not.toHaveBeenCalled();
 });
 
 test("a push that fails records nothing, and its retry records the branch it creates", async () => {
-  authAs({ mode: "pat" });
+  configure(PAT);
   vi.mocked(gitPushBranch).mockRejectedValueOnce(new Error("connection reset"));
   await expect(pushBranch(worktree)).rejects.toThrow("connection reset");
   expect(branches()).toEqual([]);

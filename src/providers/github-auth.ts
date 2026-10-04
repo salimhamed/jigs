@@ -270,6 +270,12 @@ export function resolveGithubIdentity(account: string, root?: string): ResolvedG
 const processAuth = new Map<string, GithubAuth>();
 let processIdentities: GithubIdentity[] | null = null;
 
+/** Whether this factory acts through a personal access token, which is then its only identity. */
+export function githubUsesPat(): boolean {
+  processIdentities ??= resolveGithubIdentities();
+  return processIdentities.some((identity) => identity.mode === "pat");
+}
+
 export function githubAuthFor(account: string): GithubAuth {
   processIdentities ??= resolveGithubIdentities();
   const identity = installationFor(processIdentities, account);

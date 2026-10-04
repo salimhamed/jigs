@@ -5,8 +5,10 @@ import { z } from "zod";
 import type { CheckReport } from "../checks/index.ts";
 import { coerceInputs, splitInputs } from "../cli/commands/run.ts";
 import { hintLines } from "../cli/output.ts";
+import * as slackApi from "../providers/slack.ts";
 import type { EventTrigger, Factory } from "../workflow/factory.ts";
 import { eventTriggerId, runIdTime } from "./runs.ts";
+import { SLACK_SOURCES } from "./slack-sources.ts";
 import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 import type { PreparedRun } from "./trigger.ts";
@@ -130,6 +132,8 @@ function harness(
     modes?: StartMode[];
     store?: TriggerStore;
     memory?: ReturnType<typeof memoryStore>;
+    /** Sources beside the fake one. */
+    sources?: SourceRegistry;
   } = {},
 ) {
   const { source, queued, polls } = fakeSource();
@@ -141,7 +145,7 @@ function harness(
   const modes = options.modes ?? [];
   const cancelled: string[] = [];
   const cancelFailures = { before: 0, after: 0 };
-  const sources: SourceRegistry = { "fake.pages": source };
+  const sources: SourceRegistry = { "fake.pages": source, ...options.sources };
   const held = () => runs.filter((run) => run.inWorld);
   const deps = {
     store: options.store ?? memory.store,
@@ -1102,6 +1106,52 @@ test("a window held for an unrecorded occurrence never reaches back past the loo
   await h.engine.poll("pages");
   await h.engine.poll("pages");
   expect(h.polls).toEqual([minutes(-600), minutes(-60)]);
+});
+
+test("a Slack channel that fails one poll has its message picked up by the next", async () => {
+  const posted = {
+    type: "message",
+    user: "U0HUMAN01",
+    ts: (minutes(5).getTime() / 1000).toFixed(6),
+  };
+  const channels: Record<string, (typeof posted)[]> = { C0FIRST01: [], C0SECOND1: [posted] };
+  let failing = true;
+  vi.spyOn(console, "log").mockImplementation(() => {});
+  vi.spyOn(slackApi, "slackBot").mockResolvedValue({
+    userId: "U0BOT0001",
+    botId: "B0BOT0001",
+    user: "jigs",
+    team: "T",
+    scopes: [],
+  });
+  vi.spyOn(slackApi, "slackHistory").mockImplementation(async (channel, { oldest }) => {
+    if (channel === "C0SECOND1" && failing) {
+      failing = false;
+      throw new slackApi.SlackApiError("conversations.history", "ratelimited");
+    }
+    return (channels[channel] ?? []).filter((message) => Number(message.ts) > Number(oldest));
+  });
+  try {
+    const h = harness({
+      sources: SLACK_SOURCES,
+      trigger: {
+        workflow: "respond",
+        source: { kind: "slack.messages", params: { channels: ["C0FIRST01", "C0SECOND1"] } },
+        inputs: { page: "slack", team: "infra" },
+      },
+    });
+    await h.engine.arm();
+    h.at(minutes(10));
+    await h.engine.poll("pages");
+    h.at(minutes(20));
+    await h.engine.poll("pages");
+
+    expect(h.starts.map((start) => start.inputs)).toEqual([
+      { channel: "C0SECOND1", ts: posted.ts, page: "slack", team: "infra" },
+    ]);
+  } finally {
+    vi.restoreAllMocks();
+  }
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {
