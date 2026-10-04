@@ -11,7 +11,7 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
+import { githubAuthFor, githubUsesPat } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -27,8 +27,7 @@ import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 async function pushTarget(worktreePath: string): Promise<PushTarget> {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  const auth = githubAuthFor(ref?.owner ?? "");
-  if (auth.identity.mode === "pat") return DEFAULT_PUSH_TARGET;
+  if (githubUsesPat()) return DEFAULT_PUSH_TARGET;
   if (ref === null) {
     throw new Error(
       `${worktreePath} pushes to ${url}, which is not a github.com remote — a GitHub App installation token can only push to GitHub`,
@@ -36,7 +35,7 @@ async function pushTarget(worktreePath: string): Promise<PushTarget> {
   }
   return {
     remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
-    token: await auth.bearer(),
+    token: await githubAuthFor(ref.owner).bearer(),
   };
 }
 
