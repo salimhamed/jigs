@@ -79,6 +79,10 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
         ? occurred(message.channel, message.ts)
         : null;
     },
+    describe: ({ channel, ts }) => ({
+      kind: "slack",
+      label: `slack ${String(channel)} ${String(ts)}`,
+    }),
   };
 }
 

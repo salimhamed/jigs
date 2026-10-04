@@ -101,7 +101,7 @@ test("a trigger's run names the Slack message it was started for", async () => {
   respond(
     result({
       trigger: "trigger:answers",
-      source: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
+      source: { kind: "slack", label: "slack C0123ABCD 1790723244.335019" },
     }),
   );
   respond({ steps: [], deadJobs: [] });

@@ -35,10 +35,13 @@ export interface RunFacts {
   source?: RunSource;
 }
 
-/** The Slack message or PagerDuty incident an event trigger started a run for. */
-export type RunSource =
-  | { kind: "slack"; channel: string; ts: string }
-  | { kind: "pagerduty"; incident: string };
+/** What an event trigger started a run for, as the trigger's source describes it. */
+export interface RunSource {
+  /** The provider the occurrence came from. */
+  kind: string;
+  /** The occurrence in an operator's words. */
+  label: string;
+}
 
 export interface RunStep {
   name: string;

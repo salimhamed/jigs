@@ -93,7 +93,7 @@ export async function showRuns(
         run.ticket ?? "-",
         tone(run.status),
         run.trigger,
-        run.source === null ? "-" : sourceLine(run.source),
+        run.source === null ? "-" : run.source.label,
         age(run.createdAt, now),
         age(run.lastActivityAt, now),
         waitingCell(run),
@@ -175,9 +175,6 @@ function triggerFailureLines(triggers: readonly RunListTrigger[]): string[] {
 export function waitingCell(run: RunListRun): string {
   return run.suspensions.map(suspensionLine).join("; ") || "-";
 }
-
-export const sourceLine = (source: RunSource): string =>
-  source.kind === "slack" ? `slack ${source.channel} ${source.ts}` : `pagerduty ${source.incident}`;
 
 export const suspensionLine = (suspension: RunListSuspension): string =>
   suspension.url === undefined ? suspension.reason : `${suspension.reason} → ${suspension.url}`;

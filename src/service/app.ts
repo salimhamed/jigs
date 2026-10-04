@@ -265,7 +265,7 @@ export function createApp(factory: Factory): Hono {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const state = await readRunState(registrySql(), currentFactory(), runId, (id) =>
-      worldRunFacts(id, true),
+      worldRunFacts(id, factory),
     );
     const body: Record<string, unknown> = {
       ...state,
