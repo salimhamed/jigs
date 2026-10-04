@@ -81,12 +81,23 @@ export function createCodexDriver(
     let provider: CodexAppServerProvider | undefined;
     const onAbort = () => void provider?.close().catch(() => {});
     context.signal.addEventListener("abort", onAbort, { once: true });
+    // Codex can still write into its home while it exits after the provider's
+    // close returns, so removal may race it. The run's release removes the rest.
+    const removeHome = () => {
+      try {
+        prepared.cleanup();
+      } catch (err) {
+        console.warn(
+          `[jigs] run ${runId}: could not remove Codex home ${prepared.home}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    };
     const close = async () => {
       context.signal.removeEventListener("abort", onAbort);
       try {
         await provider?.close();
       } finally {
-        prepared.cleanup();
+        removeHome();
       }
     };
     try {
