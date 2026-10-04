@@ -1,13 +1,40 @@
 # @jigs-ai/hub — agent guide
 
 The repo root's `AGENTS.md` covers commands, releases, docs and the issue
-tracker.
+tracker. The hub stays private until it ships.
 
-The hub is private until it ships. Today it is a plain `node:http` server:
-`src/server.ts` builds it and `src/main.ts` starts it on `HOST` and `PORT` and
-exits 0 on SIGTERM once open connections close. `pnpm --filter @jigs-ai/hub
-start` runs it from source. Keep the SIGTERM test passing: the hub must stop
-on its own when its process manager asks.
+## Layout
+
+- `src/` is the server. `main.ts` reads the
+  environment once (`config.ts`), applies migrations, then listens.
+  `server.ts` is the Express app: add `/api/*` and `/webhooks/*` routes there,
+  ahead of the web app.
+- `app/` is the React Router web app (Vite, Tailwind, Radix). Loaders reach
+  server state through the load context that `src/web.ts` builds.
+- `src/secrets.ts` encrypts every secret the hub stores with
+  `HUB_ENCRYPTION_KEY`. Store secrets only in that encrypted form.
+
+## Database
+
+Drizzle on `pg`. `src/db/schema.ts` holds every table. To add or change one,
+edit the schema, then run
+`pnpm --filter @jigs-ai/hub db:generate --name <change>` and commit the SQL and
+`migrations/meta/` it writes. The hub applies pending migrations on start.
+
+## Running
+
+Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL` and `HUB_ENCRYPTION_KEY`
+(`openssl rand -base64 32`); `HOST` and `PORT` are optional. `dev` runs the
+server from source, serves the web app through Vite and reads
+`packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
+(Node will not strip types under `node_modules`) and the web app into `build/`;
+`start` runs `dist/main.js` in production mode. Paths to `migrations/` and
+`build/` resolve from `src/package-root.ts`, so they hold from `src/` and
+`dist/` alike. Tests ending in `.db.test.ts` need Postgres and run under
+`pnpm test:db`, which builds first.
+
+Keep `main.db.test.ts` passing: the built hub must exit 0 on SIGTERM once open
+connections close, so its process manager can stop it.
 
 Messages the hub exchanges with a factory belong in `@jigs-ai/hub-protocol`,
 not here, so jigs can share them.

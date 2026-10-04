@@ -9,13 +9,42 @@
     "node": ">=24"
   },
   "scripts": {
-    "start": "node src/main.ts",
-    "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "dev": "NODE_ENV=development node --env-file-if-exists=.env src/main.ts",
+    "build": "tsdown && react-router build",
+    "start": "NODE_ENV=production node dist/main.js",
+    "test": "vitest run --project unit",
+    "test:db": "pnpm build && vitest run --project db",
+    "typecheck": "react-router typegen && tsc --noEmit",
+    "db:generate": "drizzle-kit generate"
   },
   "devDependencies": {
+    "@react-router/dev": "^7.18.4",
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
+    "@types/pg": "8.23.1",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "drizzle-kit": "^0.31.11",
+    "tailwindcss": "^4.3.3",
+    "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
+    "vite": "^8.2.1",
     "vitest": "^4.1.10"
+  },
+  "dependencies": {
+    "@radix-ui/react-dropdown-menu": "^2.1.24",
+    "@react-router/express": "^7.18.4",
+    "@react-router/node": "^7.18.4",
+    "drizzle-orm": "0.45.2",
+    "express": "^5.2.1",
+    "isbot": "^5.2.2",
+    "lucide-react": "^1.51.0",
+    "next-themes": "^0.4.6",
+    "pg": "8.20.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-router": "^7.18.4",
+    "sonner": "^2.0.8"
   }
 }
