@@ -4,7 +4,7 @@
 
 import type { z } from "zod";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
-import type { Provider } from "../../workflow/providers.ts";
+import type { PolledProvider } from "../../workflow/providers.ts";
 import { pagerDutyIncidents } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
@@ -21,7 +21,7 @@ export interface SourcePoll<C> {
 }
 
 export interface Source<P = unknown, C = unknown> {
-  provider: Provider;
+  provider: PolledProvider;
   /** Validates the descriptor's `params`. */
   params: z.ZodType<P>;
   /** Validates the cursor an earlier poll returned, as the store hands it back. */

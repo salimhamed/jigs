@@ -36,7 +36,7 @@ export function factory(tmp: string, shape: FactoryShape): string {
   if (shape.example !== false) {
     writeFileSync(
       path.join(root, ".env.example"),
-      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\nLINEAR_CLIENT_ID=\nLINEAR_CLIENT_SECRET=\nGITHUB_TOKEN=\n",
+      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\nLINEAR_CLIENT_ID=\nLINEAR_CLIENT_SECRET=\nGITHUB_TOKEN=\nJIGS_HUB_TOKEN=test-hub-token\n",
     );
   }
   if (shape.env !== undefined) writeFileSync(path.join(root, ".env"), shape.env);
@@ -56,7 +56,7 @@ export function factory(tmp: string, shape: FactoryShape): string {
       : "";
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}${pagerduty}workflows: {}};\n`,
+      `export default {hub: {url: "https://hub.example.test"}, service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}${pagerduty}workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");

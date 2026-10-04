@@ -33,10 +33,9 @@ const outcome = async (
   id: string,
   overrides: Partial<GithubIdentityProbes> = {},
   env: Record<string, string> = { GITHUB_TOKEN: "ghp_live" },
-  webhooks = false,
 ) => {
   const report = await runChecks(
-    githubIdentityChecks([identity], probes(overrides), (name) => env[name], { webhooks }),
+    githubIdentityChecks([identity], probes(overrides), (name) => env[name]),
   );
   const found = report.checks.find((check) => check.id === id);
   if (found === undefined) throw new Error(`no check ${id}`);
@@ -105,22 +104,6 @@ test("an installation that does not answer names the three facts that address it
     reason: expect.stringContaining("162033982"),
     repair: expect.stringContaining("installations"),
   });
-});
-
-test("without GitHub webhooks an App needs no webhook administration", async () => {
-  expect(await outcome(APP, "github.identity")).toMatchObject({ ok: true });
-});
-
-test("with GitHub webhooks on, webhook administration is a permission to grant and accept", async () => {
-  const check = await outcome(APP, "github.identity", {}, { GITHUB_TOKEN: "ghp_live" }, true);
-  expect(check).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("repository_hooks: write"),
-  });
-  if (check.ok) throw new Error("expected a failure");
-  expect(check.reason).toContain("the webhook that wakes parked runs");
-  expect(check.repair).toContain("Repository webhooks");
-  expect(check.repair).toContain("accept the updated permissions on the installation");
 });
 
 test("reading CI requires the checks and statuses permissions", async () => {

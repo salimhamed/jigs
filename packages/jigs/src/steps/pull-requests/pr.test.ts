@@ -93,7 +93,7 @@ beforeEach(() => {
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
     bindings: {
       app: { remote: "git@github.com:owner/repo.git" },
     },
@@ -393,7 +393,7 @@ test("opening a PR derives its repository, head and default branch from the supp
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
     bindings: { docs: { remote: "git@github.com:acme/docs.git" } },
   };`,
   );
@@ -424,7 +424,7 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
     github: {
       identities: [{ mode: "app", appId: 1, installations: { owner: 2 }, privateKeyPath: "key.pem", operator: "salimhamed" }],
       mergeApproval: "review",

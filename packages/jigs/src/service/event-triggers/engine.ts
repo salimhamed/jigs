@@ -6,7 +6,7 @@ import { currentFactoryContext } from "../../config/factory-context.ts";
 import { plainHint } from "../../errors.ts";
 import { registrySql } from "../../steps/runtime/registry.ts";
 import type { Factory } from "../../workflow/factory.ts";
-import type { Provider } from "../../workflow/providers.ts";
+import type { PolledProvider, Provider } from "../../workflow/providers.ts";
 import { type PreparedRun, prepareRun } from "../launch.ts";
 import {
   cancelRun,
@@ -42,7 +42,7 @@ export interface TriggerDeps {
 
 /** One factory's valid event triggers, ready to poll, take pushes and start runs. */
 export interface TriggerEngine {
-  readonly triggers: ReadonlyArray<{ name: string; provider: Provider }>;
+  readonly triggers: ReadonlyArray<{ name: string; provider: PolledProvider }>;
   /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
   poll(name: string): Promise<void>;

@@ -2,7 +2,7 @@
 
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import type { Factory } from "../../workflow/factory.ts";
-import type { Provider } from "../../workflow/providers.ts";
+import type { PolledProvider, Provider } from "../../workflow/providers.ts";
 import { nudgeDelay } from "../nudge.ts";
 import { whenReady } from "../readiness.ts";
 import { onShutdown } from "../shutdown.ts";
@@ -14,7 +14,7 @@ const DRAIN_INTERVAL_MS = 30_000;
 
 /** Injectable timers, readiness and intervals, on top of the engine's own dependencies. */
 export interface StartTriggersDeps extends TriggerDeps {
-  intervalSeconds?: () => Promise<Record<Provider, number>>;
+  intervalSeconds?: () => Promise<Record<PolledProvider, number>>;
   ready?: () => Promise<void>;
   random?: () => number;
   /** Schedules one call and returns its canceller. */
@@ -101,6 +101,6 @@ export async function pushEvent(provider: Provider, event: unknown): Promise<str
   return running === undefined ? [] : running.push(provider, event);
 }
 
-async function configuredIntervals(): Promise<Record<Provider, number>> {
+async function configuredIntervals(): Promise<Record<PolledProvider, number>> {
   return currentFactoryContext().config.service.pollIntervalSeconds;
 }

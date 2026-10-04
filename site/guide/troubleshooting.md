@@ -141,12 +141,6 @@ expires. Tool output can include file contents, command output and secrets the
 agent read, so treat the database as sensitive. Use only the service's
 dashboard: `workflow web` run against the factory takes its queue jobs.
 
-## Doctor reports webhook deliveries rejected with 401
-
-GitHub's copy of the webhook secret does not match `GITHUB_WEBHOOK_SECRET` in
-`.env`. Run `pnpm exec jigs bind <remote>` for that repository to send GitHub
-the current secret.
-
 ## An old worktree or directory is still there
 
 That is often on purpose: failed runs, waiting runs and unfinished Git work

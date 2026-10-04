@@ -13,7 +13,7 @@ import {
   resolveRemoteUrl,
 } from "../../providers/git.ts";
 import { githubAuthFor, githubUsesPat } from "../../providers/github-auth.ts";
-import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { recordResource, registrySql } from "../runtime/registry.ts";

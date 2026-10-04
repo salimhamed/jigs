@@ -354,7 +354,7 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
 
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      'export default { service: { dashboardPort: 9000 }, linear: { operator: "kim@example.com" } };',
+      'export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9000 }, linear: { operator: "kim@example.com" } };',
     );
     createComment.mockClear();
     await postTicketNote(

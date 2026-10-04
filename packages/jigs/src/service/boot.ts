@@ -13,7 +13,7 @@ import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { WorkflowDefinition } from "../workflow/factory.ts";
 import type { SlackConfig, WebhooksConfig } from "../workflow/factory-schema.ts";
-import { PROVIDERS, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
+import { POLLED_PROVIDERS, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
 import { installShutdown, onShutdown } from "./shutdown.ts";
 
@@ -132,6 +132,37 @@ export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Pr
   if (missing.length > 0) {
     error(
       `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
+    );
+    exit(1);
+    return false;
+  }
+  return true;
+}
+
+/** Injectable configuration and output used by the hub startup gate. */
+export interface HubTokenGateDeps {
+  env?: () => Promise<FactoryContext["env"]>;
+  exit?: (code: number) => void;
+  error?: (line: string) => void;
+}
+
+// Without its token the factory hears nothing from GitHub, and every run that
+// waits on a pull request waits forever.
+/** Refuse service startup when `JIGS_HUB_TOKEN` is not set. */
+export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boolean> {
+  const error = deps.error ?? ((line: string) => console.error(line));
+  const exit = deps.exit ?? process.exit;
+  let env: FactoryContext["env"];
+  try {
+    env = await (deps.env ?? serviceEnv)();
+  } catch (err) {
+    error(`[service] could not read the hub token: ${describe(err)}`);
+    exit(1);
+    return false;
+  }
+  if (env("JIGS_HUB_TOKEN") === undefined) {
+    error(
+      "[service] JIGS_HUB_TOKEN is not set. Connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`, then restart the service",
     );
     exit(1);
     return false;
@@ -441,6 +472,7 @@ export async function startWorld() {
   if (!(await gateOnHarnessRuntimes())) return;
 
   setBootPhase("webhooks");
+  if (!(await gateOnHubToken())) return;
   if (!(await gateOnWebhookSecrets())) return;
   if (!(await gateOnSlackAppToken())) return;
 
@@ -488,6 +520,25 @@ export async function startWorld() {
   onShutdown(() => {
     nudge.stop();
   });
+  await startHub(ctx);
   if (config.slack?.socketMode) await startSlackSocketMode(ctx);
-  await Promise.all(PROVIDERS.map((provider) => nudgeProvider(provider)));
+  await Promise.all(POLLED_PROVIDERS.map((provider) => nudgeProvider(provider)));
+}
+
+// The hub keeps what it holds until it is confirmed, so whatever arrived while
+// the service was down comes first. startService started the triggers before
+// this boot reached readiness, and a push waits for them to be enabled.
+async function startHub(ctx: FactoryContext): Promise<void> {
+  const [{ startHubClient }, { pushEvent }, { JIGS_VERSION }] = await Promise.all([
+    import("./hub-client.ts"),
+    import("./event-triggers/runner.ts"),
+    import("../version.ts"),
+  ]);
+  const client = startHubClient({
+    url: ctx.config.hub.url,
+    token: ctx.env("JIGS_HUB_TOKEN") ?? "",
+    version: JIGS_VERSION,
+    route: { context: ctx, push: pushEvent },
+  });
+  onShutdown(() => client.stop(), { phase: "quiesce" });
 }

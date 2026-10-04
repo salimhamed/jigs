@@ -22,7 +22,7 @@ function factory(source: string) {
 }
 const source = `// Factory config.
 export default {
-  service: { port: 8990, dashboardPort: 9090 },
+  hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 },
   bindings: {
     // Main API.
     "acme-api": {
@@ -53,6 +53,7 @@ test("an unknown top-level section is rejected by name", () => {
 test("defineFactory rejects an unknown top-level section at compile time and when loaded", () => {
   expect(() =>
     defineFactory({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       workflows: {},
       // @ts-expect-error lienar is not a factory section
@@ -63,11 +64,22 @@ test("defineFactory rejects an unknown top-level section at compile time and whe
 
 test.each([
   [{ service: {} }, "dashboardPort"],
-  [{ service: { dashboardPort: 0 } }, "dashboardPort"],
-  [{ service: { dashboardPort: 9090, port: 70000 } }, "port"],
-  [{ service: { dashboardPort: 9090 }, bindings: { api: {} } }, "remote"],
+  [{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 0 } }, "dashboardPort"],
+  [
+    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090, port: 70000 } },
+    "port",
+  ],
   [
     {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      bindings: { api: {} },
+    },
+    "remote",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url", hookTimeoutMinutes: 0 } },
     },
@@ -75,25 +87,69 @@ test.each([
   ],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url", typo: true } },
     },
     "typo",
   ],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { github: 29 } } }, "github"],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { linear: 1.5 } } }, "linear"],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { slack: 10 } } }, "slack"],
-  [{ service: { dashboardPort: 9090 }, slack: {} }, "socketMode"],
-  [{ service: { dashboardPort: 9090 }, slack: { socketMode: true, mode: "app" } }, '"mode"'],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { pagerduty: 10 } } }, "pagerduty"],
-  [{ service: { dashboardPort: 9090 }, webhooks: { github: { enabled: true } } }, "url"],
   [
     {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090, pollIntervalSeconds: { github: 300 } },
+    },
+    "github",
+  ],
+  [{ service: { dashboardPort: 9090 } }, "hub"],
+  [{ hub: { url: "hub.example.test" }, service: { dashboardPort: 9090 } }, "url"],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090, pollIntervalSeconds: { linear: 1.5 } },
+    },
+    "linear",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090, pollIntervalSeconds: { slack: 10 } },
+    },
+    "slack",
+  ],
+  [
+    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, slack: {} },
+    "socketMode",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      slack: { socketMode: true, mode: "app" },
+    },
+    '"mode"',
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090, pollIntervalSeconds: { pagerduty: 10 } },
+    },
+    "pagerduty",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      webhooks: { linear: { enabled: true } },
+    },
+    "url",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       webhooks: {
         url: "https://f.test",
-        github: {},
-        linear: { enabled: false },
+        linear: {},
         pagerduty: { enabled: false },
       },
     },
@@ -101,11 +157,11 @@ test.each([
   ],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       webhooks: {
         url: "not a url",
-        github: { enabled: true },
-        linear: { enabled: false },
+        linear: { enabled: true },
         pagerduty: { enabled: false },
       },
     },
@@ -116,56 +172,94 @@ test.each([
 });
 
 test("service port defaults while dashboard port is explicit", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).service).toEqual({
+  expect(
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+    }).service,
+  ).toEqual({
     port: 8990,
     dashboardPort: 3456,
-    pollIntervalSeconds: { github: 300, linear: 300, slack: 300, pagerduty: 300 },
+    pollIntervalSeconds: { linear: 300, slack: 300, pagerduty: 300 },
   });
 });
 
 test("each provider's poll interval defaults on its own and may sit at the floor", () => {
   expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } } })
-      .service.pollIntervalSeconds,
-  ).toEqual({ github: 300, linear: 30, slack: 300, pagerduty: 300 });
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } },
+    }).service.pollIntervalSeconds,
+  ).toEqual({ linear: 30, slack: 300, pagerduty: 300 });
 });
 
 test("without a slack section the factory has no Slack app", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).slack).toBeUndefined();
   expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, slack: { socketMode: true } }).slack,
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+    }).slack,
+  ).toBeUndefined();
+  expect(
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      slack: { socketMode: true },
+    }).slack,
   ).toEqual({ socketMode: true, scopes: [] });
 });
 
 test("without a webhooks section no provider sends webhooks", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).webhooks).toBeUndefined();
+  expect(
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+    }).webhooks,
+  ).toBeUndefined();
 });
 
 test("a webhook provider left out of the webhooks section is disabled", () => {
   expect(
     parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 3456 },
-      webhooks: { url: "https://f.test", github: { enabled: true } },
+      webhooks: { url: "https://f.test", linear: { enabled: true } },
     }).webhooks,
   ).toEqual({
     url: "https://f.test",
-    github: { enabled: true },
-    linear: { enabled: false },
+    linear: { enabled: true },
     pagerduty: { enabled: false },
   });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).agents).toEqual({ env: [] });
   expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["MISE_DATA_DIR"] } })
-      .agents.env,
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+    }).agents,
+  ).toEqual({ env: [] });
+  expect(
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["MISE_DATA_DIR"] },
+    }).agents.env,
   ).toEqual(["MISE_DATA_DIR"]);
   expect(() =>
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] } }),
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["A=b"] },
+    }),
   ).toThrow("agents.env.0");
   expect(() =>
-    defineFactory({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] }, workflows: {} }),
+    defineFactory({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["A=b"] },
+      workflows: {},
+    }),
   ).toThrow("agents.env.0");
 });
 
@@ -178,7 +272,12 @@ test.each([
   "PI_CODING_AGENT_DIR",
   "CLAUDE_CONFIG_DIR",
 ])("agents.env rejects %s, which jigs sets or which selects a model credential", (name) => {
-  const definition = { service: { dashboardPort: 3456 }, agents: { env: [name] }, workflows: {} };
+  const definition = {
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 3456 },
+    agents: { env: [name] },
+    workflows: {},
+  };
   expect(() => parseFactoryConfig(definition)).toThrow("model source");
   expect(() => defineFactory(definition)).toThrow("model source");
 });
@@ -326,7 +425,7 @@ test("adding a binding to a one-line object ignores commas in comments", () => {
 
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
-    "export default { service: { dashboardPort: 9090 } };",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } };",
     "api",
     "url",
   );
@@ -370,7 +469,7 @@ test("an already registered workflow leaves the config alone", () => {
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
   const root = factory(
-    `const service = { dashboardPort: 9090 }; export default { service, bindings: { api: { remote: "url" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
+    `const service = { dashboardPort: 9090 }; export default { hub: { url: "https://hub.example.test" }, service, bindings: { api: { remote: "url" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
   const ctx = resolveFactoryContext(root);
   expect(resolveService(ctx).dashboardPort).toBe(9090);
@@ -378,7 +477,9 @@ test("config loading supports computed settings without invoking workflow loader
 });
 
 test("native TypeScript config is one snapshot per process and a new process sees edits", () => {
-  const root = factory(`import service from "./settings.ts"; export default { service };`);
+  const root = factory(
+    `import service from "./settings.ts"; export default { hub: { url: "https://hub.example.test" }, service };`,
+  );
   const settings = path.join(root, "settings.ts");
   writeFileSync(
     settings,
@@ -405,7 +506,11 @@ test("native TypeScript config is one snapshot per process and a new process see
 });
 
 const withSettings = (extra: Record<string, unknown>) =>
-  parseFactoryConfig({ service: { dashboardPort: 9090 }, ...extra });
+  parseFactoryConfig({
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 9090 },
+    ...extra,
+  });
 
 test("a factory that states no identity gets a PAT, approved by label", () => {
   const config = withSettings({});
@@ -649,6 +754,7 @@ test("workflows, schedules and triggers are checked for shape when the config lo
 test("defineFactory refuses a schedule naming a workflow it does not declare", () => {
   expect(() =>
     defineFactory({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       workflows: sweep,
       schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } },

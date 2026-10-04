@@ -222,7 +222,15 @@ function ensureEnv(factoryRoot: string): Record<string, string> {
       "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
     );
   }
-  return readFactoryEnv(factoryRoot);
+  const env = readFactoryEnv(factoryRoot);
+  // The service refuses to start without it, so nothing after this step could work.
+  if ((env.JIGS_HUB_TOKEN ?? "") === "") {
+    throw new JigsError(
+      "JIGS_HUB_TOKEN is not set in .env",
+      "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`",
+    );
+  }
+  return env;
 }
 
 function reportEmptyCredentials(

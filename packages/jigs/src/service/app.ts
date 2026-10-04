@@ -22,11 +22,7 @@ import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { pushEvent } from "./event-triggers/runner.ts";
 import { triggerStore } from "./event-triggers/store.ts";
 import { listTriggers, triggerChecks, triggerProviders } from "./event-triggers/view.ts";
-import {
-  verifyGithubSignature,
-  verifyLinearSignature,
-  verifyPagerDutySignature,
-} from "./ingress.ts";
+import { verifyLinearSignature, verifyPagerDutySignature } from "./ingress.ts";
 import { startRun } from "./launch.ts";
 import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { type ProviderEvent, type RouteResult, routeProviderEvent } from "./provider-events.ts";
@@ -174,7 +170,6 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
   // provider. A provider whose webhooks are off has no route at all, so a
   // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.github?.enabled) mountGithubIngress(app, routes);
   if (factory.webhooks?.linear?.enabled) mountLinearIngress(app, routes);
   if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app, routes);
 
@@ -325,23 +320,6 @@ interface IngressDeps {
   push: typeof pushEvent;
 }
 
-function mountGithubIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/github", async (c) => {
-    const name = c.req.header("x-github-event") ?? "unknown";
-    // The boot gate refuses a service without the secret; a missing one here
-    // still fails closed.
-    const secret = webhookSecret("github", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("x-hub-signature-256");
-    if (secret === undefined || !verifyGithubSignature(rawBody, signature, secret)) {
-      console.log(`[ingress] github rejected reason=signature event=${sanitizeForLog(name)}`);
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    return answer(c, await route(deps, { provider: "github", name, payload }));
-  });
-}
-
 function mountLinearIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/linear", async (c) => {
     const secret = webhookSecret("linear", deps.context());
@@ -425,10 +403,6 @@ function parseJson(rawBody: string): unknown {
   } catch {
     return null;
   }
-}
-
-function sanitizeForLog(value: string): string {
-  return value.replace(/[\r\n\t]/g, " ");
 }
 
 // The hooks that name an external resource: what another run can be blocked

@@ -75,7 +75,7 @@ test("doctor checks github-mcp-server is installed instead of probing it without
   });
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    "export default { service: { dashboardPort: 9090 } }",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   const withMcp = harnesses.claude({

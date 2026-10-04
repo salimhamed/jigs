@@ -60,7 +60,7 @@ afterEach(() => {
 function writeBinding(provisioning: Record<string, unknown> = {}): void {
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, ...provisioning } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, ...provisioning } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
   );
 }
 

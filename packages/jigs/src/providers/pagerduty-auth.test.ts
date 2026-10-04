@@ -185,7 +185,7 @@ test("a missing variable is named before anything is fetched", async () => {
 function writeFactory(pagerduty: unknown): void {
   writeFileSync(
     path.join(tmp, "jigs.config.ts"),
-    `export default ${JSON.stringify({ service: { dashboardPort: 9090 }, pagerduty })}`,
+    `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, pagerduty })}`,
   );
 }
 

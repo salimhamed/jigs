@@ -279,7 +279,7 @@ test("the release step applies an explicit policy's success action without resol
 
   const report = await releaseRunResources(
     { workflowRunId: RUN, workflowName: "compiled" },
-    { service: { dashboardPort: 9000 }, workflows: {} },
+    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9000 }, workflows: {} },
     keep,
   );
 
@@ -295,7 +295,11 @@ test("without a policy, the release step resolves the configured one", async () 
   const discard = { onSuccess: "release", onFailure: "release" } as const;
   policy.resolveReleasePolicy.mockResolvedValue(discard);
   const metadata = { workflowRunId: RUN, workflowName: "compiled" };
-  const definition = { service: { dashboardPort: 9000 }, workflows: {} };
+  const definition = {
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 9000 },
+    workflows: {},
+  };
 
   const report = await releaseRunResources(metadata, definition);
 

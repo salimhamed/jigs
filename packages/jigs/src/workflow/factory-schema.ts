@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
-import { PROVIDERS, perProvider, WEBHOOK_PROVIDERS } from "./providers.ts";
+import { POLLED_PROVIDERS, perProvider, WEBHOOK_PROVIDERS } from "./providers.ts";
 import { type MergeApproval, mergeApprovalSchema } from "./pull-requests/policy.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
@@ -72,14 +72,16 @@ const serviceSchema = z.strictObject({
   // port, and the two numbers have to be the operator's to move.
   dashboardPort: portSchema,
   /**
-   * Seconds between the service's reads of each provider: re-reading
-   * parked runs, and polling the event triggers whose source is on that
-   * provider. Each defaults to 300 and may not go below 30. Up to a tenth
+   * Seconds between the service's reads of each provider but GitHub, whose
+   * events arrive through the hub: re-reading parked runs, and polling the
+   * event triggers whose source is on that provider. Each defaults to 300 and may not go below 30. Up to a tenth
    * of the interval is taken off at random so services do not all poll at
    * once.
    */
   // With that provider's webhook on, this is only the floor under a lost delivery.
-  pollIntervalSeconds: z.strictObject(perProvider(PROVIDERS, pollIntervalSchema)).prefault({}),
+  pollIntervalSeconds: z
+    .strictObject(perProvider(POLLED_PROVIDERS, pollIntervalSchema))
+    .prefault({}),
 });
 
 // A provider that is on is stated outright rather than implied by a secret in
@@ -276,6 +278,9 @@ const eventTriggerSchema: z.ZodType<EventTrigger, EventTrigger> = z.strictObject
 export const factoryConfigSchema = z
   .strictObject({
     bindings: z.record(z.string(), bindingSchema).default({}),
+    // The hub this factory hears its providers through. Its token stays in
+    // .env as JIGS_HUB_TOKEN.
+    hub: z.strictObject({ url: z.url() }),
     // Where provider webhooks reach this factory's service (the tunnel URL), and
     // which providers send them. Absent, the service only polls.
     webhooks: webhooksSchema.optional(),

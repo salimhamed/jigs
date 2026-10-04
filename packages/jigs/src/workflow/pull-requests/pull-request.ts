@@ -3,7 +3,7 @@ import { PULL_REQUEST_TOKEN_PREFIX } from "../hook-tokens.ts";
 import type { ApprovalCoverage } from "./policy.ts";
 
 /**
- * Build the durable hook token shared by a pull request watcher, the service poll and the webhook ingress.
+ * Build the durable hook token shared by a pull request watcher and the GitHub events that wake it.
  *
  * @remarks
  * Owner and repository are lowercased because GitHub treats them
@@ -35,7 +35,7 @@ function prNumber(payload: GithubPayload): number | null {
   return number ?? null;
 }
 
-/** Return the pull request hook token named by a supported GitHub webhook payload. */
+/** Return the pull request hook token named by a supported GitHub event payload. */
 export function tokenFromGitHubPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { repository } = payload as GithubPayload;

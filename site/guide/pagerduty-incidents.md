@@ -138,6 +138,7 @@ source, which starts one run for each new incident on the services you name:
 import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
   pagerduty: {
     identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },

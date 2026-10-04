@@ -20,6 +20,7 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 pnpm install
 cp .env.example .env
+pnpm exec jigs hub connect <hub-url> <token>
 pnpm exec jigs up
 ```
 

@@ -15,7 +15,7 @@ import { type PullRequestSnapshot, pullRequestSnapshotKey } from "./snapshot.ts"
  * The factory supplies a durable step to read GitHub. Duplicate wakes and collection ordering
  * changes do not yield again. Comments are included regardless of author or hidden metadata;
  * the consumer decides what needs attention, owns its action limits and decides who merges.
- * The service poll and GitHub webhooks wake an exclusive hook, so only one run can watch a given
+ * GitHub events from the hub and `jigs poke` wake an exclusive hook, so only one run can watch a given
  * pull request at a time. Closing the iterator releases that hook. A closed snapshot is yielded before the iterator ends.
  * `options` say how each read counts approvals.
  */

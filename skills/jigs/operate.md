@@ -106,10 +106,8 @@ Each suspension carries a kind:
   webhooks on, the reply wakes it at once.
 - **pull-request** — the run holds a pull request and wants the factory's
   approval (a review of the current head, or the `jigs:approved` label), green
-  CI and a mergeable branch. The service re-reads
-  the pull request every `service.pollIntervalSeconds.github` seconds (default
-  300); with GitHub webhooks on, a review, a new commit, a CI result or a
-  top-level comment wakes it at once.
+  CI and a mergeable branch. A review, a new commit, a CI result or a
+  top-level comment wakes it as soon as the hub passes the GitHub event on.
 
 Anything else is **external** and prints its own token.
 

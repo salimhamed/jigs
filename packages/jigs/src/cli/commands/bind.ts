@@ -3,12 +3,6 @@ import path from "node:path";
 import { upsertBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
 import type { FactoryContext } from "../../config/factory-context.ts";
-import { readFactoryEnv } from "../../config/factory-env.ts";
-import {
-  missingWebhookSecret,
-  webhookSecret,
-  webhookSecretRepair,
-} from "../../config/webhook-secret.ts";
 import { JigsError } from "../../errors.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
@@ -17,12 +11,12 @@ import {
   ensureRepoLabel,
   JIGS_LABELS,
 } from "../../providers/github-label.ts";
-import { ensureRepoWebhook, parseGithubRemote } from "../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { installationFor, type WebhooksConfig } from "../../workflow/factory-schema.ts";
+import { installationFor } from "../../workflow/factory-schema.ts";
 import { factoryContextAt } from "../factory-context.ts";
-import { detail, displayPath, hint, note } from "../output.ts";
+import { detail, hint, note } from "../output.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
@@ -39,11 +33,9 @@ export interface BindOptions {
 export interface BindResult {
   name: string;
   remote: string;
-  webhook: "created" | "verified" | "updated" | "skipped";
 }
 
-// A config edit plus jigs-owned repository furniture: the webhook and the jigs
-// labels. The clone is the service's to make at its next start.
+// A config edit plus jigs-owned repository furniture: the jigs labels. The clone is the service's to make at its next start.
 export async function bindRepo(
   remoteUrl: string,
   deps: BindDeps,
@@ -112,27 +104,19 @@ export async function bindRepo(
   }
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
   // — the old repo's objects sitting where its clone goes. An entry a failed
-  // webhook leg already wrote owes the clone as much on the re-run.
+  // label leg already wrote owes the clone as much on the re-run.
   const owesClone =
     existing === undefined || !hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }));
 
   // Last, so furniture that cannot be ensured leaves the binding recorded and
-  // the whole verb re-runnable: the config edit above and both operations below
-  // are idempotent. Ensure the webhook first because it wakes every run.
+  // the whole verb re-runnable: the config edit above and the labels below are
+  // idempotent.
   const reBindCommand =
     options.name !== undefined || name !== derivedName
       ? `pnpm exec jigs bind ${remoteUrl} --binding-name ${name}`
       : `pnpm exec jigs bind ${remoteUrl}`;
-  const webhook = await ensureWebhook({
-    remoteUrl,
-    ctx,
-    webhooks: config.webhooks,
-    pollSeconds: config.service.pollIntervalSeconds.github,
-    // The repair it prints has to land on this binding, not on the one the
-    // remote alone would derive.
-    reBindCommand,
-    deps,
-  });
+  // The repair it prints has to land on this binding, not on the one the
+  // remote alone would derive.
   await ensureJigsLabels(remoteUrl, ctx, reBindCommand, deps);
   if (owesClone) {
     for (const line of [
@@ -142,7 +126,7 @@ export async function bindRepo(
       deps.out(line);
     }
   }
-  return { name, remote: remoteUrl, webhook };
+  return { name, remote: remoteUrl };
 }
 
 // Every label, whatever this factory's approval: a switch to label approval
@@ -226,107 +210,6 @@ function defaultBindingName(remoteUrl: string): string {
   const repo = repoRef?.repo ?? last.replace(/\.git$/, "");
   // Lowercased: the name is typed on a command line and written into yaml.
   return repo.toLowerCase();
-}
-
-async function ensureWebhook({
-  remoteUrl,
-  ctx,
-  webhooks,
-  pollSeconds,
-  reBindCommand,
-  deps,
-}: {
-  remoteUrl: string;
-  ctx: FactoryContext;
-  webhooks: WebhooksConfig | undefined;
-  pollSeconds: number;
-  reBindCommand: string;
-  deps: BindDeps;
-}): Promise<BindResult["webhook"]> {
-  const factoryRoot = ctx.root;
-  if (webhooks === undefined || !webhooks.github.enabled) {
-    deps.out(
-      note(
-        `note: skipping webhook (GitHub webhooks are off), so pull request waits poll every ${pollSeconds} seconds`,
-      ),
-    );
-    return "skipped";
-  }
-  const repoRef = parseGithubRemote(remoteUrl);
-  if (repoRef === null) {
-    deps.out(note(`note: skipping webhook (${remoteUrl} is not a github.com remote)`));
-    return "skipped";
-  }
-  const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const secret = webhookSecret("github", ctx);
-  if (secret === undefined) {
-    throw new JigsError(
-      `${missingWebhookSecret("github", factoryRoot)}, so ${slug}'s webhook cannot be signed`,
-      `${webhookSecretRepair("github", factoryRoot)}\nthen re-run: \`${reBindCommand}\``,
-    );
-  }
-  const { identity } = githubAuthFor(repoRef.owner, ctx);
-  // Creating a webhook is hook administration, which each identity holds
-  // differently — and in App mode not at all until the permission is granted.
-  const credentialRepair =
-    identity.mode === "app"
-      ? `grant the App "Repository webhooks: read & write" (Settings → Developer settings → GitHub Apps → Permissions), accept it on the installation for ${slug}, then re-run: \`${reBindCommand}\``
-      : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with admin:repo_hook on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: \`${reBindCommand}\``;
-  if (identity.mode === "pat" && ctx.env("GITHUB_TOKEN") === undefined) {
-    // A route with no webhook behind it is a factory waiting on deliveries
-    // that never come.
-    throw new JigsError(
-      `jigs.config.ts enables GitHub webhooks but GITHUB_TOKEN is not set, so ${slug}'s webhook cannot be created`,
-      credentialRepair,
-    );
-  }
-  const repairFor = (err: unknown): string => {
-    if (tokenWasRejected(err)) return credentialRepair;
-    // A 404 is as often a typo in the remote as a token that cannot see a
-    // private repo, and neither clears on its own.
-    if (err instanceof GitHubApiError && err.status === 404 && identity.mode === "app")
-      return `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: \`${reBindCommand}\``;
-    if (err instanceof GitHubApiError && err.status === 404)
-      return `check the remote, and that this token can see ${slug}, then re-run: \`${reBindCommand}\``;
-    return `once that clears, re-run: \`${reBindCommand}\``;
-  };
-  const ensured = await ensureRepoWebhook({
-    ...repoRef,
-    webhooksUrl: webhooks.url,
-    secret,
-    context: ctx,
-  }).catch((err: unknown) => {
-    throw new JigsError(
-      `${slug}'s webhook could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-      repairFor(err),
-    );
-  });
-  deps.out(
-    ensured.outcome === "created"
-      ? `webhook created: ${slug}`
-      : `webhook ${ensured.outcome}: ${slug} ${detail("signing secret re-sent")}`,
-  );
-  if (ensured.outcome === "updated") {
-    deps.out(
-      note(
-        "note: the existing webhook's events, content type or active flag had drifted and were reset",
-      ),
-    );
-  }
-  if (ensured.otherHosts.length > 0) {
-    deps.out(`other jigs hooks on this repo: ${ensured.otherHosts.join(", ")}`);
-    deps.out(note("delete one by hand if it was this factory's before a hostname change"));
-  }
-  if (identity.mode === "pat" && (readFactoryEnv(factoryRoot).GITHUB_TOKEN ?? "") === "") {
-    // The webhook now posts to a service that reads the file alone, so a token
-    // living in this shell only leaves the gate it wakes without one.
-    deps.out(
-      note(
-        `note: that GITHUB_TOKEN is this shell's, but the service reads ${displayPath(path.join(factoryRoot, ".env"))}, so set it there too`,
-      ),
-    );
-  }
-  return ensured.outcome;
 }
 
 // GitHub lays a token it will not take on 401, and one whose scopes fall short
