@@ -890,6 +890,26 @@ test("a poke that landed is the wake the run's status reports", async () => {
   expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
 });
 
+test("a poke the World cannot deliver says so instead of calling the wait gone", async () => {
+  runHolding(CLAIM);
+  resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(await res.json()).toEqual({
+    runId: RUN,
+    poked: [{ token: CLAIM, outcome: "failed", error: "Error: database unavailable" }],
+  });
+});
+
+test("a poke whose hook is gone reports it gone", async () => {
+  runHolding(CLAIM);
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: CLAIM, outcome: "gone" }] });
+});
+
 test("cancel reports observed hook release, retained worktrees, and no queue-deletion count", async () => {
   runHolding(CLAIM, MARKER);
 
