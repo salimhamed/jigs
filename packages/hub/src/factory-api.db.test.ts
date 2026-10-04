@@ -1,8 +1,11 @@
+import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import {
   cursorPath,
+  type FactoryStatus,
+  factoryStatusPath,
   type Message,
   type MessagesResponse,
   maxMessagesPerResponse,
@@ -17,6 +20,7 @@ import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
+import { GitHubTokens } from "./github.ts";
 import { fanOutProviderEvent, MessageWaiters } from "./messages.ts";
 import { deleteExpiredMessages } from "./retention.ts";
 
@@ -35,7 +39,8 @@ beforeAll(async () => {
     { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
     { id: "other", name: "Other", slug: "other", createdAt: new Date() },
   ]);
-  server = express().use(createFactoryApi(db, waiters)).listen(0, "127.0.0.1");
+  const githubTokens = new GitHubTokens({ db, encryptionKey: randomBytes(32) });
+  server = express().use(createFactoryApi({ db, waiters, githubTokens })).listen(0, "127.0.0.1");
   await once(server, "listening");
   url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -134,6 +139,42 @@ dbTest("refuses unknown tokens and records who called", async () => {
 
   await removeFactory(db, waiters, organizationId, factory.id);
   expect((await poll(reissued)).status).toBe(401);
+});
+
+dbTest("reports the factory, its Organization and only its assigned apps", async () => {
+  const { factory, token } = await newFactory();
+  const other = await newFactory();
+  const assigned = await appFor([factory.id, other.factory.id]);
+  await appFor([other.factory.id]);
+  await db.insert(schema.installations).values([
+    { appId: assigned, externalId: "1", account: "widgets" },
+    { appId: assigned, externalId: "2", account: "acme" },
+  ]);
+  const bare = await appFor([factory.id]);
+
+  const status = async (bearer: string) => {
+    const response = await fetch(`${url}${factoryStatusPath}`, { headers: headers(bearer) });
+    return { status: response.status, body: await response.json() };
+  };
+  expect((await status("nope")).status).toBe(401);
+  const names = new Map(
+    (await db.select().from(schema.apps)).map((app) => [app.id, app.name] as const),
+  );
+  const { status: code, body } = await status(token);
+  expect(code).toBe(200);
+  expect(body).toEqual({
+    factory: { name: factory.name },
+    organization: { name: "Acme" },
+    apps: expect.arrayContaining([
+      {
+        provider: "github",
+        name: names.get(assigned),
+        installations: [{ account: "acme" }, { account: "widgets" }],
+      },
+      { provider: "github", name: names.get(bare), installations: [] },
+    ]),
+  } satisfies FactoryStatus);
+  expect(body.apps).toHaveLength(2);
 });
 
 dbTest("returns messages in batches after a cursor that only moves forward", async () => {

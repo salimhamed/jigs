@@ -2,6 +2,7 @@ import { createHmac, createVerify, generateKeyPairSync, randomBytes } from "node
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { type GitHubTokenResponse, githubTokenPath } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
 import { afterAll, beforeAll, expect } from "vitest";
@@ -10,9 +11,12 @@ import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/databas
 import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
+import { createFactoryApi } from "./factory-api.ts";
 import {
   addGitHubApp,
   createGitHubRoutes,
+  type GitHubAppSettings,
+  GitHubTokens,
   githubInstallUrl,
   githubSetupPath,
   githubWebhookPath,
@@ -32,6 +36,12 @@ let hub: string;
 let github: string;
 // The fake GitHub's installations, by installation id: the App ID and account.
 const githubInstallations = new Map<string, { appId: string; login: string }>();
+// The fake GitHub's bot users' ids, by login, and the installation tokens it minted.
+const githubBots = new Map<string, number>();
+const minted: { installationId: string; token: string }[] = [];
+let botLookups = 0;
+const tokenLifetimeMs = 60 * 60 * 1000;
+let githubTokens: GitHubTokens;
 
 async function listen(app: express.Express) {
   const server = app.listen(0, "127.0.0.1");
@@ -82,6 +92,33 @@ function fakeGitHub() {
         return;
       }
       response.json(body(request.params.id, installation));
+    })
+    .post("/app/installations/:id/access_tokens", (request, response) => {
+      const appId = appIdOf(request.get("authorization"));
+      if (!appId || githubInstallations.get(request.params.id)?.appId !== appId) {
+        response.status(404).json({ message: "Not Found" });
+        return;
+      }
+      const token = `ghs_${minted.length + 1}`;
+      minted.push({ installationId: request.params.id, token });
+      response.status(201).json({
+        token,
+        expires_at: new Date(Date.now() + tokenLifetimeMs).toISOString(),
+        permissions: { contents: "write" },
+        repository_selection: "all",
+      });
+    })
+    .get("/users/:login", (request, response) => {
+      const authorized = minted.some(
+        ({ token }) => request.get("authorization") === `Bearer ${token}`,
+      );
+      const id = githubBots.get(request.params.login);
+      if (!authorized || id === undefined) {
+        response.status(404).json({ message: "Not Found" });
+        return;
+      }
+      botLookups += 1;
+      response.json({ login: request.params.login, id, type: "Bot" });
     });
 }
 
@@ -94,8 +131,11 @@ beforeAll(async () => {
     { id: "other", name: "Other", slug: "other", createdAt: new Date() },
   ]);
   github = await listen(fakeGitHub());
+  githubTokens = new GitHubTokens({ db, encryptionKey, apiUrl: github });
   hub = await listen(
-    express().use(createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github })),
+    express()
+      .use(createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github }))
+      .use(createFactoryApi({ db, waiters, githubTokens })),
   );
 });
 
@@ -128,21 +168,24 @@ async function newApp(organization = organizationId) {
     github,
   );
   if ("error" in added) throw new Error(added.error);
+  githubBots.set(`${added.app.name}[bot]`, 40000 + appCount);
   return { app: added.app, webhookSecret };
 }
 
 let factoryCount = 0;
-async function newFactory(organization = organizationId) {
+async function newFactoryWithToken(organization = organizationId) {
   factoryCount += 1;
-  return (await addFactory(db, organization, `factory ${factoryCount}`)).factory;
+  return addFactory(db, organization, `factory ${factoryCount}`);
 }
+const newFactory = async (organization = organizationId) =>
+  (await newFactoryWithToken(organization)).factory;
 
 let installationCount = 0;
-async function installed(app: App) {
+async function installed(app: App, login = "acme") {
   installationCount += 1;
   const id = String(5000 + installationCount);
-  githubInstallations.set(id, { appId: app.externalId, login: "acme" });
-  await db.insert(schema.installations).values({ appId: app.id, externalId: id, account: "acme" });
+  githubInstallations.set(id, { appId: app.externalId, login });
+  await db.insert(schema.installations).values({ appId: app.id, externalId: id, account: login });
   return Number(id);
 }
 
@@ -427,3 +470,81 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
     error: "GitHub App 424242 is already on this hub.",
   });
 });
+
+async function requestToken(token: string, owner: unknown) {
+  const response = await fetch(`${hub}${githubTokenPath}`, {
+    method: "POST",
+    headers: {
+      authorization: `Bearer ${token}`,
+      "user-agent": "jigs/1.2.3",
+      "content-type": "application/json",
+    },
+    body: JSON.stringify({ owner }),
+  });
+  return { status: response.status, body: await response.json() };
+}
+
+dbTest("issues the assigned App's installation token for an owner and reuses it", async () => {
+  const github = await newApp();
+  const { factory, token } = await newFactoryWithToken();
+  await setAssignments(db, organizationId, github.app.id, [factory.id]);
+  const installationId = String(await installed(github.app, "Acme-Corp"));
+  const before = { minted: minted.length, lookups: botLookups };
+
+  const first = await requestToken(token, "acme-corp");
+  expect(first.status).toBe(200);
+  const issued = first.body as GitHubTokenResponse;
+  expect(issued).toEqual({
+    token: minted.at(-1)?.token,
+    expiresAt: expect.any(String),
+    app: { slug: github.app.name, botUserId: githubBots.get(`${github.app.name}[bot]`) },
+  });
+  expect(minted.at(-1)?.installationId).toBe(installationId);
+  expect(await requestToken(token, "ACME-CORP")).toEqual({ status: 200, body: issued });
+  expect(minted.length - before.minted).toBe(1);
+
+  const stored = await db.query.apps.findFirst({ where: eq(schema.apps.id, github.app.id) });
+  expect(stored?.settings).toEqual({
+    clientId: expect.any(String),
+    botUserId: issued.app.botUserId,
+  } satisfies GitHubAppSettings);
+
+  // Within five minutes of expiring, a token is replaced; the bot's id is not looked up again.
+  const nearExpiry = Date.parse(issued.expiresAt) - 4 * 60 * 1000;
+  const refreshed = await githubTokens.issue(factory.id, "acme-corp", nearExpiry);
+  expect(refreshed).toEqual({
+    token: { ...issued, token: minted.at(-1)?.token, expiresAt: expect.any(String) },
+  });
+  expect(minted.length - before.minted).toBe(2);
+  expect(botLookups - before.lookups).toBe(1);
+});
+
+dbTest(
+  "refuses a token for an owner no assigned App, or more than one, is installed on",
+  async () => {
+    const [first, second, unassigned] = [await newApp(), await newApp(), await newApp()];
+    const { factory, token } = await newFactoryWithToken();
+    await setAssignments(db, organizationId, first.app.id, [factory.id]);
+    await setAssignments(db, organizationId, second.app.id, [factory.id]);
+    await installed(first.app, "shared");
+    await installed(second.app, "shared");
+    await installed(unassigned.app, "elsewhere");
+    const before = minted.length;
+
+    expect(await requestToken(token, "nobody")).toEqual({
+      status: 404,
+      body: { error: "No GitHub App assigned to this factory is installed on nobody." },
+    });
+    expect((await requestToken(token, "elsewhere")).status).toBe(404);
+    expect(await requestToken(token, "shared")).toEqual({
+      status: 409,
+      body: {
+        error: `More than one GitHub App assigned to this factory is installed on shared: ${[first.app.name, second.app.name].sort().join(", ")}.`,
+      },
+    });
+    expect((await requestToken(token, "")).status).toBe(400);
+    expect((await requestToken(token, 7)).status).toBe(400);
+    expect((await requestToken("nope", "shared")).status).toBe(401);
+    expect(minted.length).toBe(before);
+  },
+);

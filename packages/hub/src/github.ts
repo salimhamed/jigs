@@ -5,7 +5,8 @@ import {
   type KeyObject,
   timingSafeEqual,
 } from "node:crypto";
-import { and, eq } from "drizzle-orm";
+import type { GitHubTokenResponse } from "@jigs-ai/hub-protocol";
+import { and, eq, sql } from "drizzle-orm";
 import express, { type Router } from "express";
 import {
   type App,
@@ -15,7 +16,7 @@ import {
   removeInstallation,
 } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, installations } from "./db/schema.ts";
+import { apps, assignments, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptSecret, encryptSecret } from "./secrets.ts";
 
@@ -25,9 +26,11 @@ export const githubWebhookPath = "/webhooks/github";
 /** Where GitHub returns after someone installs or changes an installation of an App, its "Setup URL". */
 export const githubSetupPath = (appId: string) => `/setup/github/${appId}`;
 
-/** What a GitHub App's settings page shows, kept in `apps.settings`. Its slug is the app's name. */
+/** What the hub knows of a GitHub App besides its secrets, kept in `apps.settings`. Its slug is the app's name. */
 export interface GitHubAppSettings {
   clientId: string;
+  /** The user id of `<slug>[bot]`, learned the first time the hub issues the App a token. */
+  botUserId?: number;
 }
 
 interface GitHubAppSecrets {
@@ -37,9 +40,10 @@ interface GitHubAppSecrets {
 }
 
 /** What an admin copies from a GitHub App they made by hand. */
-export interface GitHubAppInput extends GitHubAppSettings, GitHubAppSecrets {
+export interface GitHubAppInput extends GitHubAppSecrets {
   appId: string;
   slug: string;
+  clientId: string;
 }
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -118,12 +122,15 @@ export function githubAppJwt(appId: string, privateKey: string | KeyObject, now 
   return `${unsigned}.${signature}`;
 }
 
-const githubHeaders = (appId: string, privateKey: string) => ({
+const bearerHeaders = (token: string) => ({
   accept: "application/vnd.github+json",
-  authorization: `Bearer ${githubAppJwt(appId, privateKey)}`,
+  authorization: `Bearer ${token}`,
   "user-agent": "jigs-hub",
   "x-github-api-version": "2022-11-28",
 });
+
+const githubHeaders = (appId: string, privateKey: string) =>
+  bearerHeaders(githubAppJwt(appId, privateKey));
 
 /** Every installation GitHub has of the App, or the status GitHub refused with. */
 async function listInstallations(
@@ -303,4 +310,105 @@ export function createGitHubRoutes(options: {
   });
 
   return router;
+}
+
+/** What {@link GitHubTokens.issue} answers: a token, or the status and message to refuse with. */
+export type GitHubTokenResult =
+  | { token: GitHubTokenResponse }
+  | { status: 404 | 409; error: string };
+
+// A cached token is handed out only while it has longer than this to live.
+const MIN_TOKEN_LIFE_MS = 5 * 60 * 1000;
+
+/**
+ * Issues factories installation tokens of their GitHub Apps. Tokens stay in
+ * this process's memory, never the database, and are reused until five
+ * minutes before they expire.
+ */
+export class GitHubTokens {
+  readonly #cache = new Map<string, GitHubTokenResponse>();
+  readonly #db: HubDatabase;
+  readonly #encryptionKey: Buffer;
+  readonly #apiUrl: string;
+
+  constructor(options: { db: HubDatabase; encryptionKey: Buffer; apiUrl?: string }) {
+    this.#db = options.db;
+    this.#encryptionKey = options.encryptionKey;
+    this.#apiUrl = options.apiUrl ?? defaultApiUrl;
+  }
+
+  /** A token of the one GitHub App assigned to the factory that is installed on `owner`. */
+  async issue(factoryId: string, owner: string, now = Date.now()): Promise<GitHubTokenResult> {
+    const found = await this.#db
+      .select({ app: apps, installationId: installations.externalId })
+      .from(installations)
+      .innerJoin(apps, eq(apps.id, installations.appId))
+      .innerJoin(assignments, eq(assignments.appId, apps.id))
+      .where(
+        and(
+          eq(assignments.factoryId, factoryId),
+          eq(apps.provider, "github"),
+          sql`lower(${installations.account}) = lower(${owner})`,
+        ),
+      );
+    const [first] = found;
+    if (!first) {
+      return {
+        status: 404,
+        error: `No GitHub App assigned to this factory is installed on ${owner}.`,
+      };
+    }
+    if (found.length > 1) {
+      const names = found
+        .map((row) => row.app.name)
+        .sort()
+        .join(", ");
+      return {
+        status: 409,
+        error: `More than one GitHub App assigned to this factory is installed on ${owner}: ${names}.`,
+      };
+    }
+    const key = `${first.app.id}:${first.installationId}`;
+    const cached = this.#cache.get(key);
+    if (cached && Date.parse(cached.expiresAt) - now > MIN_TOKEN_LIFE_MS) return { token: cached };
+    const token = await this.#mint(first.app, first.installationId);
+    this.#cache.set(key, token);
+    return { token };
+  }
+
+  async #mint(app: App, installationId: string): Promise<GitHubTokenResponse> {
+    const { privateKey } = readSecrets(this.#encryptionKey, app);
+    const response = await fetch(
+      `${this.#apiUrl}/app/installations/${installationId}/access_tokens`,
+      { method: "POST", headers: githubHeaders(app.externalId, privateKey) },
+    );
+    if (!response.ok) {
+      throw new Error(
+        `GitHub answered ${response.status} minting a token for ${app.name}'s installation ${installationId}`,
+      );
+    }
+    const { token, expires_at } = (await response.json()) as { token: string; expires_at: string };
+    const botUserId = await this.#botUserId(app, token);
+    return { token, expiresAt: expires_at, app: { slug: app.name, botUserId } };
+  }
+
+  async #botUserId(app: App, token: string): Promise<number> {
+    const settings = app.settings as GitHubAppSettings;
+    if (settings.botUserId !== undefined) return settings.botUserId;
+    const response = await fetch(
+      `${this.#apiUrl}/users/${encodeURIComponent(`${app.name}[bot]`)}`,
+      {
+        headers: bearerHeaders(token),
+      },
+    );
+    if (!response.ok) {
+      throw new Error(`GitHub answered ${response.status} reading the user ${app.name}[bot]`);
+    }
+    const { id } = (await response.json()) as { id: number };
+    await this.#db
+      .update(apps)
+      .set({ settings: { ...settings, botUserId: id } satisfies GitHubAppSettings })
+      .where(eq(apps.id, app.id));
+    return id;
+  }
 }
