@@ -12,16 +12,12 @@ import {
   processEnv,
 } from "../config/factory-context.ts";
 import { webhookSecret } from "../config/webhook-secret.ts";
-import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { listResources, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import { readRunState } from "../steps/runtime/run-state.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
-import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
-import type { Provider } from "../workflow/providers.ts";
-import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { pushEvent } from "./event-triggers/runner.ts";
 import { triggerStore } from "./event-triggers/store.ts";
@@ -33,6 +29,7 @@ import {
 } from "./ingress.ts";
 import { startRun } from "./launch.ts";
 import { pagerDutyEventType } from "./pagerduty-incidents.ts";
+import { type ProviderEvent, type RouteResult, routeProviderEvent } from "./provider-events.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
@@ -330,58 +327,18 @@ interface IngressDeps {
 
 function mountGithubIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/github", async (c) => {
-    const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
+    const name = c.req.header("x-github-event") ?? "unknown";
     // The boot gate refuses a service without the secret; a missing one here
     // still fails closed.
     const secret = webhookSecret("github", deps.context());
     const rawBody = await c.req.text();
     const signature = c.req.header("x-hub-signature-256");
     if (secret === undefined || !verifyGithubSignature(rawBody, signature, secret)) {
-      console.log(`[ingress] github rejected reason=signature event=${event}`);
+      console.log(`[ingress] github rejected reason=signature event=${sanitizeForLog(name)}`);
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    if (event === "status") {
-      const status = githubStatus(payload);
-      if (status === null) {
-        console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-        return c.json({ ignored: true });
-      }
-      if (status.state === "pending") {
-        console.log(`[ingress] github ignored reason=pending-status event=${event}`);
-        return c.json({ ignored: true });
-      }
-      let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
-      try {
-        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context());
-      } catch (error) {
-        const reason =
-          error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
-            ? "missing-github-credential"
-            : "status-lookup-failed";
-        console.log(`[ingress] github dropped reason=${reason} event=${event}`);
-        return c.json({ delivered: false }, 404);
-      }
-      if (prs.length === 0) {
-        console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
-        return c.json({ delivered: false });
-      }
-      const tokens = prs
-        .map((pr) =>
-          tokenFromGitHubPayload({
-            pull_request: { number: pr.number },
-            repository: { name: pr.repo, owner: { login: pr.owner } },
-          }),
-        )
-        .filter((token): token is string => token !== null);
-      return wakeAndLog(c, "github", tokens, event);
-    }
-    const token = tokenFromGitHubPayload(payload);
-    if (token === null) {
-      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-      return c.json({ ignored: true });
-    }
-    return wakeAndLog(c, "github", [token], event);
+    return answer(c, await route(deps, { provider: "github", name, payload }));
   });
 }
 
@@ -395,25 +352,13 @@ function mountLinearIngress(app: Hono, deps: IngressDeps): void {
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    if (payload === null) {
-      console.log("[ingress] linear ignored reason=unrecognized-shape");
-      return c.json({ ignored: true });
-    }
-    const event = linearEvent(payload);
-    const token = tokenFromLinearPayload(payload);
-    if (token === null) {
-      console.log(
-        `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
-      );
-      return c.json({ ignored: true });
-    }
-    return wakeAndLog(c, "linear", [token], event);
+    const type = (payload as { type?: unknown } | null)?.type;
+    const name = typeof type === "string" ? type : "";
+    return answer(c, await route(deps, { provider: "linear", name, payload }));
   });
 }
 
-// PagerDuty events start runs rather than wake them. The answer waits only
-// for the occurrence's row, never the start, so it lands well inside
-// PagerDuty's timeout; an event no trigger takes, of any type, is acknowledged.
+// An event no trigger takes, of any type, is acknowledged.
 function mountPagerDutyIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/pagerduty", async (c) => {
     const secret = webhookSecret("pagerduty", deps.context());
@@ -424,23 +369,32 @@ function mountPagerDutyIngress(app: Hono, deps: IngressDeps): void {
       return c.json({ error: "invalid signature" }, 401);
     }
     const payload = parseJson(rawBody);
-    const event = `event=${sanitizeForLog(pagerDutyEventType(payload) ?? "unknown")}`;
-    let triggers: string[];
-    try {
-      triggers = await deps.push("pagerduty", payload);
-    } catch (error) {
-      // Still a 2xx: PagerDuty switches a subscription off after repeated
-      // failures, and the poll finds the incident anyway.
-      console.log(`[ingress] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
-      return c.json({ delivered: false });
-    }
-    if (triggers.length === 0) {
-      console.log(`[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
-      return c.json({ ignored: true });
-    }
-    console.log(`[ingress] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
-    return c.json({ triggers });
+    const name = pagerDutyEventType(payload) ?? "unknown";
+    const result = await route(deps, { provider: "pagerduty", name, payload });
+    // Still a 2xx: PagerDuty switches a subscription off after repeated
+    // failures, and the poll finds the incident anyway.
+    if (result.outcome === "failed") return c.json({ delivered: false });
+    return answer(c, result);
   });
+}
+
+function route(deps: IngressDeps, event: ProviderEvent): Promise<RouteResult> {
+  return routeProviderEvent(event, { context: deps.context(), push: deps.push });
+}
+
+function answer(c: Context, result: RouteResult) {
+  switch (result.outcome) {
+    case "ignored":
+      return c.json({ ignored: true });
+    case "woken":
+      return c.json({ delivered: true });
+    case "dropped":
+      return c.json({ delivered: false });
+    case "failed":
+      return c.json({ delivered: false }, 404);
+    case "triggered":
+      return c.json({ triggers: result.triggers });
+  }
 }
 
 // Liveness must answer from anywhere, including a service started outside a
@@ -475,52 +429,6 @@ function parseJson(rawBody: string): unknown {
 
 function sanitizeForLog(value: string): string {
   return value.replace(/[\r\n\t]/g, " ");
-}
-
-function linearEvent(payload: unknown): string | null {
-  const type = (payload as { type?: unknown }).type;
-  return typeof type === "string" ? sanitizeForLog(type) : null;
-}
-
-function githubStatus(payload: unknown): {
-  sha: string;
-  state: string;
-  repository: { owner: string; repo: string };
-} | null {
-  if (typeof payload !== "object" || payload === null) return null;
-  const candidate = payload as {
-    sha?: unknown;
-    state?: unknown;
-    repository?: { name?: unknown; owner?: { login?: unknown } };
-  };
-  const { sha, state } = candidate;
-  const owner = candidate.repository?.owner?.login;
-  const repo = candidate.repository?.name;
-  return typeof sha === "string" &&
-    typeof state === "string" &&
-    typeof owner === "string" &&
-    typeof repo === "string"
-    ? { sha, state, repository: { owner, repo } }
-    : null;
-}
-
-// A wake carries no payload: the suspension primitives re-check provider
-// state on every wake, so nothing downstream reads one.
-async function wakeAndLog(c: Context, provider: Provider, tokens: string[], event: string | null) {
-  const outcomes = await Promise.all(
-    tokens.map(async (token) => {
-      const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
-      const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
-      if (outcome === "woken") console.log(`[ingress] ${provider} accepted ${correlation}`);
-      else {
-        const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
-        console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
-      }
-      return outcome;
-    }),
-  );
-  if (outcomes.includes("woken")) return c.json({ delivered: true });
-  return c.json({ delivered: false }, outcomes.includes("failed") ? 404 : 200);
 }
 
 // The hooks that name an external resource: what another run can be blocked
