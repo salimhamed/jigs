@@ -1,11 +1,13 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { linearMcp } from "../workflow/agents/linear-mcp.ts";
 import { pagerdutyMcp } from "../workflow/agents/pagerduty-mcp.ts";
 import { doctorChecks, preflightChecks } from "./index.ts";
+
+inTestFactory();
 
 test("preflight checks the identity of each provider a workflow's agents opt in to", () => {
   const ids = (harness: ReturnType<typeof harnesses.codex>) =>

@@ -32,11 +32,11 @@ const outcome = async (
   identity: AppIdentity | { mode: "pat" },
   id: string,
   overrides: Partial<GithubIdentityProbes> = {},
-  env: NodeJS.ProcessEnv = { GITHUB_TOKEN: "ghp_live" },
+  env: Record<string, string> = { GITHUB_TOKEN: "ghp_live" },
   webhooks = false,
 ) => {
   const report = await runChecks(
-    githubIdentityChecks([identity], probes(overrides), env, { webhooks }),
+    githubIdentityChecks([identity], probes(overrides), (name) => env[name], { webhooks }),
   );
   const found = report.checks.find((check) => check.id === id);
   if (found === undefined) throw new Error(`no check ${id}`);
@@ -153,6 +153,7 @@ test("doctor probes every installation and registration once per App", async () 
         { ...app, appId: 5, installations: { Other: 4 } },
       ],
       probes({ installation, registration }),
+      () => undefined,
     ),
   );
   expect(report.ok).toBe(true);

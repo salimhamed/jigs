@@ -12,7 +12,7 @@ import {
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
 import { perContext, requireCredential } from "./credentials.ts";
-import { ProviderApiError, providerRequest } from "./http.ts";
+import { ProviderApiError, rateLimitWait, retryAfterSeconds } from "./http.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
 
@@ -112,7 +112,8 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
   const ctx = () => deps.context ?? currentFactoryContext();
   // Form-encoded, because every Web API method accepts it and not every read
   // method accepts JSON.
-  function slackCall<T extends SlackReply>(
+  // A token is read from .env, not minted, so a rejected one is not retried.
+  async function slackCall<T extends SlackReply>(
     method: string,
     params: SlackParams = {},
     token: SlackToken = "SLACK_BOT_TOKEN",
@@ -122,33 +123,44 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
       if (value !== undefined)
         form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-    return providerRequest({
-      provider: "slack",
-      auth: { bearer: async () => requireCredential(token, undefined, ctx().env) },
-      url: `${SLACK_API_URL}/${method}`,
-      method: "POST",
-      request: method,
-      headers: { "content-type": "application/x-www-form-urlencoded" },
-      body: form.toString(),
-      fetch: deps.fetch,
-      sleep: deps.sleep,
-      signal: deps.context?.runSignal ?? runSignal,
-      decode: (res, text, fail) => {
-        let body: T;
-        try {
-          body = JSON.parse(text) as T;
-        } catch {
-          throw fail({ detail: `answered HTTP ${res.status}` });
-        }
-        if (!body.ok) {
-          throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
-            status: res.status,
-            body: text,
-          });
-        }
-        return { body, headers: res.headers };
-      },
-    });
+    let waits = 0;
+    for (;;) {
+      const credential = requireCredential(token, undefined, ctx().env);
+      const res = await (deps.fetch ?? fetch)(`${SLACK_API_URL}/${method}`, {
+        method: "POST",
+        headers: {
+          authorization: `Bearer ${credential}`,
+          "content-type": "application/x-www-form-urlencoded",
+        },
+        body: form.toString(),
+      });
+      const text = await res.text();
+      if (
+        res.status === 429 &&
+        (await rateLimitWait("slack", retryAfterSeconds(res), waits++, runSignal, deps.sleep))
+      ) {
+        continue;
+      }
+      let body: T;
+      try {
+        body = JSON.parse(text) as T;
+      } catch {
+        throw new ProviderApiError({
+          provider: "slack",
+          status: res.status,
+          request: method,
+          body: text,
+          detail: `answered HTTP ${res.status}`,
+        });
+      }
+      if (!body.ok) {
+        throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
+          status: res.status,
+          body: text,
+        });
+      }
+      return { body, headers: res.headers };
+    }
   }
 
   async function slackPages<T>(method: string, params: SlackParams, key: string): Promise<T[]> {

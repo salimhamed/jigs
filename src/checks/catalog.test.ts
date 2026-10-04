@@ -2,7 +2,7 @@ import { copyFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
@@ -124,6 +124,8 @@ const preflightIds = (requires: WorkflowRequires): string[] =>
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+
+inTestFactory();
 
 test("a workflow requiring aws gets the credentials check", () => {
   expect(preflightIds({ aws: true })).toContain("aws.credentials");

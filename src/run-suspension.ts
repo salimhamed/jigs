@@ -1,4 +1,4 @@
-import type { WakeNote } from "./service/wake-note.ts";
+import type { WakeNote } from "./service/wake.ts";
 import { describeHookToken, type HookKind } from "./workflow/hook-tokens.ts";
 import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-requests/snapshot.ts";
 
@@ -26,7 +26,7 @@ export interface RunSuspension {
   mergeState?: string;
   /** Why the readiness check refuses a merge, or that nothing is stopping it. */
   blocker?: string;
-  /** What last resumed this run's pull request wait, if the service has woken it since it started. */
+  /** What last resumed this wait, if the service has woken it since it started. */
   lastWake?: WakeNote;
 }
 

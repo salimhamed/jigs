@@ -85,7 +85,7 @@ export function preflightChecks(
     ...descriptorChecks(requiredDescriptors(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
     ...declaredSkillChecks({ workflow: { requires } }).flatMap(({ checks }) => checks),
-    ...(requires.aws ? [awsCredentialsCheck()] : []),
+    ...(requires.aws ? [awsCredentialsCheck({ factoryEnv: ctx.env })] : []),
     ...secretChecks(requires, { context: ctx }),
   ];
 }
@@ -272,7 +272,7 @@ export function doctorChecks(
     ...declaredSkillChecks(workflows).flatMap(({ checks, workflows }) =>
       neededByUsers(checks, workflows),
     ),
-    ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
+    ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck({ factoryEnv: ctx.env })], aws) : []),
     ...doctorSecretChecks(workflows, { context: ctx }),
   ];
 }

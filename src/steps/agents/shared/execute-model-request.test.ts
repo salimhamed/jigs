@@ -1,4 +1,4 @@
-import { afterEach, expect, test, vi } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { askModel } from "../../../workflow/agents/ask-model.ts";
 import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
@@ -49,6 +49,12 @@ afterEach(() => {
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
+});
+
+// Credentials come from the shell stubs; a factory without a .env adds none, and
+// building a real one would spend the mocked mkdtempSync.
+beforeEach(() => {
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/nonexistent/jigs-test-factory");
 });
 
 const verdict = z.object({ ok: z.boolean() });

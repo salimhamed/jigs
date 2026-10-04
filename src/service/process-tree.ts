@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
+import { processEnv } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 
 /** One row of a process snapshot. */
@@ -34,7 +35,7 @@ export interface ProcessControl {
 
 // A fixed locale and time zone, so a start time read at stop matches the one
 // recorded at start whatever the calling shell's environment.
-const PS_ENV = { ...process.env, LC_ALL: "C", TZ: "UTC" };
+const PS_ENV = { ...processEnv(), LC_ALL: "C", TZ: "UTC" };
 
 /** {@link ProcessControl} for this machine, through `ps` and `process.kill`. */
 export const systemProcesses: ProcessControl = {

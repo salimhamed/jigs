@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { describeHookToken, parseHookToken } from "./hook-tokens.ts";
+import { describeHookToken, parseHookToken, wakeToken } from "./hook-tokens.ts";
 import { needsHumanToken } from "./linear/halt-for-human.ts";
 import { ticketToken } from "./linear/ticket-token.ts";
 import { pullRequestToken } from "./pull-requests/pull-request.ts";
@@ -48,6 +48,12 @@ test("a minted prefix keeps its kind when the rest is unreadable", () => {
   expect(parseHookToken("github:pr:garbage")).toMatchObject({ kind: "pull-request", pr: null });
   expect(parseHookToken("jigs:needs-human:onlyone")).toMatchObject({ halt: null });
   expect(parseHookToken("slack:thread:C0123ABCD")).toMatchObject({ thread: null });
+});
+
+test("a halt is woken through its ticket claim, every other wait through its own token", () => {
+  expect(wakeToken(halt)).toBe(claim);
+  expect(wakeToken(claim)).toBe(claim);
+  expect(wakeToken("jigs:needs-human:onlyone")).toBe("jigs:needs-human:onlyone");
 });
 
 test("every kind describes what it names and what a run holding it waits for", () => {

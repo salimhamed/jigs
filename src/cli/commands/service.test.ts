@@ -244,14 +244,18 @@ test("start runs node directly and records the pid, its process group and its bu
   const io = fake();
   await startService(deps(root, io));
   expect(io.spawns[0]?.command).toBe(process.execPath);
-  expect(JSON.parse(readFileSync(serviceRecordPath(factorySlug(root)), "utf8"))).toEqual({
-    processGroup: 4242,
-    bootId: FAKE_BOOT,
-    startTime: FAKE_START,
-    command: SERVICE_COMMAND,
-    bundle: builtBundleHash(root),
-    logOffset: 0,
-  });
+  const written = {
+    process: {
+      processGroup: 4242,
+      bootId: FAKE_BOOT,
+      startTime: FAKE_START,
+      command: SERVICE_COMMAND,
+      bundle: builtBundleHash(root),
+    },
+    run: { logOffset: 0 },
+  };
+  expect(JSON.parse(readFileSync(serviceRecordPath(factorySlug(root)), "utf8"))).toEqual(written);
+  expect(readServiceRecord(factorySlug(root))).toEqual(written);
 });
 
 test("start records which bundle the process runs, and a dead pid runs none", async () => {
@@ -468,6 +472,19 @@ test("a ready answer from another process on the port fails the start and stops 
   expect(err?.hint).toContain("service.port");
   expect(io.alive.has(4242)).toBe(false);
   expect(io.signals).not.toContainEqual(expect.objectContaining({ pid: 777 }));
+  expect(recorded(root)).toBeUndefined();
+});
+
+test("an answer on the port without a pid fails the start and stops the new one", async () => {
+  const root = builtFactory();
+  const io = fake([{ ...READY, pid: undefined }]);
+  exitsOnTerm(io);
+
+  const err = await failure(startService(deps(root, io)));
+
+  expect(err?.message).toContain("already served by another process (one that reports no pid)");
+  expect(err?.hint).toContain("service.port");
+  expect(io.alive.has(4242)).toBe(false);
   expect(recorded(root)).toBeUndefined();
 });
 

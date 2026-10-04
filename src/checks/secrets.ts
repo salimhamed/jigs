@@ -8,7 +8,6 @@ import type { WorkflowRequires } from "./index.ts";
 
 export interface SecretChecksOptions {
   context: FactoryContext;
-  env?: Record<string, string | undefined>;
 }
 
 // An invalid MCP credential name is the MCP server check's diagnosis, in
@@ -51,7 +50,7 @@ function secretCheck(name: string, options: SecretChecksOptions): Check {
     id: `secret.${name}`,
     label: `secret ${name}`,
     run: async () => {
-      const value = (options.env ?? process.env)[name];
+      const value = options.context.env(name);
       if (value === undefined || value.trim() === "")
         return {
           ok: false,

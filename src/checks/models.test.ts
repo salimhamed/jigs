@@ -1,23 +1,26 @@
 import { expect, test } from "vitest";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { inTestFactory } from "../test-fixtures.ts";
 import { models } from "../workflow/agents/harness-config.ts";
 import { preflightChecks } from "./index.ts";
 import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "./models.ts";
 
+inTestFactory();
+
 test("an API model credential check requires the named environment variable without probing", async () => {
-  const missing = await modelApiKeyCheck("OPENROUTER_API_KEY", {}).run();
+  const missing = await modelApiKeyCheck("OPENROUTER_API_KEY", () => undefined).run();
   expect(missing).toEqual({
     ok: false,
     reason: "OPENROUTER_API_KEY is not set in the service's environment",
     repair: `set OPENROUTER_API_KEY in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
   });
 
-  await expect(
-    modelApiKeyCheck("TEAM_OPENROUTER_KEY", { TEAM_OPENROUTER_KEY: "configured" }).run(),
-  ).resolves.toEqual({ ok: true });
-  await expect(
-    modelApiKeyCheck("TEAM_OPENROUTER_KEY", { TEAM_OPENROUTER_KEY: "  " }).run(),
-  ).resolves.toMatchObject({ ok: false });
+  await expect(modelApiKeyCheck("TEAM_OPENROUTER_KEY", () => "configured").run()).resolves.toEqual({
+    ok: true,
+  });
+  await expect(modelApiKeyCheck("TEAM_OPENROUTER_KEY", () => "  ").run()).resolves.toMatchObject({
+    ok: false,
+  });
 });
 
 const source = {

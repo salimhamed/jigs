@@ -8,6 +8,7 @@ import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
 import { z } from "zod";
 import { RunCancelledError } from "../../../run-cancellation.ts";
+import { inTestFactory } from "../../../test-fixtures.ts";
 import { unwrapAgentStep } from "../../../workflow/agents/agent.ts";
 import { bindAgentSession, type RunAgentFn } from "../../../workflow/agents/agent-session.ts";
 import { type CodexHarness, harnesses, models } from "../../../workflow/agents/harness-config.ts";
@@ -80,6 +81,8 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
+
+inTestFactory();
 
 type Captured = {
   options?: Parameters<ExecutionSeams["generateText"]>[0];

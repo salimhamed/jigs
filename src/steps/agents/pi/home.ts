@@ -10,7 +10,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { jigsDataDir } from "../../../config/paths.ts";
+import { jigsDataDir } from "../../../config/factory-context.ts";
 import { copySkills } from "../shared/skills.ts";
 import type { PiModelPlan } from "./model.ts";
 

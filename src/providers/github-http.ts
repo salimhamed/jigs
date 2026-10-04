@@ -1,9 +1,9 @@
-// GitHub on the shared request loop: its headers, its failure and its
-// rate-limit signals. Credential minting sends through here too, so it cannot
+// GitHub's request loop: its headers, its failure and its rate-limit
+// signals. Credential minting sends through here too, so it cannot
 // live beside the per-account credential choice in github-api.ts.
 
-import { type FactoryContext, runSignal } from "../config/factory-context.ts";
-import { ProviderApiError, type ProviderAuth, providerRequest, type WaitSignal } from "./http.ts";
+import { runSignal } from "../config/factory-context.ts";
+import { ProviderApiError, type ProviderAuth, rateLimitWait, reauthorize } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -58,7 +58,7 @@ function isRateLimited(res: Response): boolean {
   );
 }
 
-function rateLimitWait(res: Response): number {
+function rateLimitSeconds(res: Response): number {
   const after = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
   if (!Number.isNaN(after)) return after;
   const reset = Number(res.headers.get("x-ratelimit-reset"));
@@ -77,48 +77,56 @@ export interface GithubSend {
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
   /**
-   * Ends a rate-limit wait early. Defaults to the calling run's cancellation; `null` keeps the wait
-   * going, for work shared between runs such as a token mint.
+   * Keeps a rate-limit wait going when the calling run is cancelled, for work shared between runs
+   * such as a token mint.
    */
-  signal?: AbortSignal | null;
+  outlivesRun?: true;
 }
 
 export interface GithubClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
-  /** The factory whose runs a wait belongs to. Defaults to the process's own. */
-  context?: FactoryContext;
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
-  const waitSignal: WaitSignal = deps.context?.runSignal ?? runSignal;
-  function send<T>({
+  async function send<T>({
     auth,
     method = "GET",
     apiPath,
     json,
     refuse,
-    signal,
+    outlivesRun,
   }: GithubSend): Promise<T> {
-    return providerRequest<T>({
-      provider: "github",
-      auth,
-      url: `${GITHUB_API_URL}${apiPath}`,
-      method,
-      request: apiPath,
-      headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
-      json,
-      isRateLimited,
-      retryAfter: rateLimitWait,
-      decode: (res, text) => {
-        if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
-        // 204 on a POST that adds nothing to say — assignees and labels do this.
-        return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
-      },
-      fetch: deps.fetch,
-      sleep: deps.sleep,
-      signal: signal === undefined ? waitSignal : signal,
-    });
+    let reauthorized = false;
+    let waits = 0;
+    for (;;) {
+      const credential = await auth.bearer();
+      const res = await (deps.fetch ?? fetch)(`${GITHUB_API_URL}${apiPath}`, {
+        method,
+        headers: {
+          authorization: `Bearer ${credential}`,
+          ...(json === undefined ? {} : { "content-type": "application/json" }),
+          accept: "application/vnd.github+json",
+          "x-github-api-version": "2022-11-28",
+        },
+        body: json === undefined ? undefined : JSON.stringify(json),
+      });
+      const text = await res.text();
+      if (res.status === 401 && !reauthorized && reauthorize(auth, credential)) {
+        reauthorized = true;
+        continue;
+      }
+      const watch = outlivesRun ? null : runSignal;
+      if (
+        isRateLimited(res) &&
+        (await rateLimitWait("github", rateLimitSeconds(res), waits++, watch, deps.sleep))
+      ) {
+        continue;
+      }
+      if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+      // 204 on a POST that adds nothing to say — assignees and labels do this.
+      return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
+    }
   }
   return { send };
 }

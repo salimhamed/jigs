@@ -1,5 +1,6 @@
 import path from "node:path";
-import { factorySlug, jigsDataDir } from "../../config/paths.ts";
+import { jigsDataDir } from "../../config/factory-context.ts";
+import { factorySlug } from "../../config/paths.ts";
 
 export function branchDirname(branch: string): string {
   return branch.replaceAll("/", "-");

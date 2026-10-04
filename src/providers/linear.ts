@@ -9,7 +9,14 @@ import {
   runSignal,
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { type Fail, providerRequest } from "./http.ts";
+import {
+  MAX_RATE_LIMIT_WAIT_SECONDS,
+  ProviderApiError,
+  type ProviderApiErrorInit,
+  rateLimitWait,
+  reauthorize,
+  retryAfterSeconds,
+} from "./http.ts";
 import { LINEAR_API_URL, type LinearAuth, linearAuthFor } from "./linear-auth.ts";
 
 export interface LinearUser {
@@ -45,6 +52,8 @@ function rejectedCredential(res: Response, text: string): boolean {
       false)
   );
 }
+
+type Fail = (extra?: Pick<ProviderApiErrorInit, "code" | "detail">) => ProviderApiError;
 
 function decodeGraphql<T>(res: Response, text: string, fail: Fail): T {
   if (!res.ok) throw fail();
@@ -157,23 +166,43 @@ export interface LinearIssueMatch {
 
 export function createLinearClient(deps: LinearClientDeps = {}) {
   const ctx = () => deps.context ?? currentFactoryContext();
-  function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
+  async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
     const auth = deps.auth ?? linearAuthFor(ctx());
-    return providerRequest<T>({
-      provider: "linear",
-      auth,
-      url: LINEAR_API_URL,
-      method: "POST",
-      request: operationName(query),
-      json: { query, variables },
-      // A personal key goes bare; only an app token is a bearer.
-      authorization: auth.identity.mode === "key" ? (key) => key : undefined,
-      isAuthFailure: rejectedCredential,
-      decode: decodeGraphql<T>,
-      fetch: deps.fetch,
-      sleep: deps.sleep,
-      signal: deps.context?.runSignal ?? runSignal,
-    });
+    let reauthorized = false;
+    let waits = 0;
+    for (;;) {
+      const credential = await auth.bearer();
+      const res = await (deps.fetch ?? fetch)(LINEAR_API_URL, {
+        method: "POST",
+        headers: {
+          // A personal key goes bare; only an app token is a bearer.
+          authorization: auth.identity.mode === "key" ? credential : `Bearer ${credential}`,
+          "content-type": "application/json",
+        },
+        body: JSON.stringify({ query, variables }),
+      });
+      const text = await res.text();
+      if (rejectedCredential(res, text) && !reauthorized && reauthorize(auth, credential)) {
+        reauthorized = true;
+        continue;
+      }
+      let detail: string | undefined;
+      if (res.status === 429) {
+        const seconds = retryAfterSeconds(res);
+        if (await rateLimitWait("linear", seconds, waits++, runSignal, deps.sleep)) continue;
+        if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${seconds}s`;
+      }
+      const fail: Fail = (extra = {}) =>
+        new ProviderApiError({
+          provider: "linear",
+          status: res.status,
+          request: operationName(query),
+          body: text,
+          detail,
+          ...extra,
+        });
+      return decodeGraphql<T>(res, text, fail);
+    }
   }
 
   // The preflight probe for the Linear identity: the cheapest call that proves

@@ -93,7 +93,7 @@ export interface TestContextInit {
   env?: Record<string, string | undefined>;
 }
 
-// A context built in memory: no jigs.config.ts or .env on disk, and no run to watch.
+// A context built in memory: no jigs.config.ts or .env on disk.
 export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
   const root = init.root ?? "/factory";
   const env = init.env ?? {};
@@ -110,7 +110,6 @@ export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
       return config;
     },
     env: (name) => (env[name] === "" ? undefined : env[name]),
-    runSignal: async () => undefined,
   };
 }
 

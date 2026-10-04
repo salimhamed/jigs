@@ -197,6 +197,38 @@ test("status prints live pull-request gate state under its suspension", async ()
   ]);
 });
 
+test("status prints the last wake of a human and a Slack-thread wait", async () => {
+  respond(
+    result({
+      status: "running",
+      suspensions: [
+        {
+          token: "jigs:needs-human:issue-1:comment-1",
+          kind: "needs-human",
+          reason: "waiting for a human to answer on AGE-1",
+          lastWake: { kind: "linear Comment", at: "2026-09-04T10:08:00.000Z" },
+        },
+        {
+          token: "slack:thread:C0C5EUZ7P9Q:1790723478.961719",
+          kind: "slack-thread",
+          reason: "waiting for a reply in a Slack thread",
+          lastWake: { kind: "slack reply", at: "2026-09-04T10:08:00.000Z" },
+        },
+      ],
+    }),
+  );
+  respond({ steps: [], deadJobs: [] });
+  await showRunStatus(RUN, deps(), { now: NOW });
+  expect(lines.slice(4)).toEqual([
+    "",
+    "Waiting",
+    "  waiting for a human to answer on AGE-1",
+    "    last wake  linear Comment, 2m ago (2026-09-04T10:08:00.000Z)",
+    "  waiting for a reply in a Slack thread",
+    "    last wake  slack reply, 2m ago (2026-09-04T10:08:00.000Z)",
+  ]);
+});
+
 test("a pull request GitHub could not be asked about prints as it always did", async () => {
   respond(
     result({

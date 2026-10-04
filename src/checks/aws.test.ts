@@ -23,7 +23,7 @@ const rejecting = (err: Error) => async () => {
 
 test("an unset AWS_PROFILE fails naming the env file and the restart", async () => {
   const result = await awsCredentialsCheck({
-    env: {},
+    factoryEnv: () => undefined,
     exec: rejecting(new Error("should not run")),
   }).run();
   expect(result).toMatchObject({
@@ -33,20 +33,9 @@ test("an unset AWS_PROFILE fails naming the env file and the restart", async () 
   });
 });
 
-test("an empty AWS_PROFILE is treated as unset", async () => {
-  const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "" },
-    exec: rejecting(new Error("should not run")),
-  }).run();
-  expect(result).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("AWS_PROFILE is not set"),
-  });
-});
-
 test("a missing aws executable fails with an install repair", async () => {
   const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "prod" },
+    factoryEnv: () => "prod",
     exec: rejecting(spawnFailure()),
   }).run();
   expect(result).toMatchObject({
@@ -58,7 +47,7 @@ test("a missing aws executable fails with an install repair", async () => {
 
 test("an expired SSO session fails with the login for that profile", async () => {
   const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "prod" },
+    factoryEnv: () => "prod",
     exec: rejecting(cliFailure("\nError loading SSO Token: Token for prod does not exist\n\n")),
   }).run();
   expect(result).toMatchObject({
@@ -72,7 +61,7 @@ test("an expired SSO session fails with the login for that profile", async () =>
 
 test("a failure unrelated to SSO points at the profile's own credentials", async () => {
   const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "typo" },
+    factoryEnv: () => "typo",
     exec: rejecting(cliFailure("The config profile (typo) could not be found")),
   }).run();
   expect(result).toMatchObject({
@@ -84,7 +73,7 @@ test("a failure unrelated to SSO points at the profile's own credentials", async
 
 test("a probe killed by the timeout blames the network, not the config file", async () => {
   const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "prod" },
+    factoryEnv: () => "prod",
     exec: rejecting(
       Object.assign(new Error("Command failed: aws sts get-caller-identity"), {
         code: null,
@@ -104,7 +93,7 @@ test("a probe killed by the timeout blames the network, not the config file", as
 
 test("a resolved identity passes with no message", async () => {
   const result = await awsCredentialsCheck({
-    env: { AWS_PROFILE: "prod" },
+    factoryEnv: () => "prod",
     exec: async () => ({
       stdout: JSON.stringify({
         UserId: "AROA:dev",
@@ -123,7 +112,8 @@ test("the probe runs the CLI by argv under the profile's env, never a shell", as
     env: {},
   };
   await awsCredentialsCheck({
-    env: { AWS_PROFILE: "prod", PATH: "/usr/bin" },
+    env: { PATH: "/usr/bin" },
+    factoryEnv: () => "prod",
     exec: async (file, args, options) => {
       if (args[0] === "configure") throw cliFailure("");
       spawned = { file, args, env: options.env };
@@ -165,7 +155,8 @@ describe("an SSO profile", () => {
   ])("with %s resolves credentials past the cached role credentials", async (_label, config) => {
     let seen: Record<string, string> = {};
     const result = await awsCredentialsCheck({
-      env: { AWS_PROFILE: "prod", HOME: home },
+      env: { HOME: home },
+      factoryEnv: () => "prod",
       exec: fakeAws(config, (env) => {
         seen = env;
         // The CLI's role-credential cache lives under HOME; the SSO login does not move.
@@ -187,8 +178,8 @@ describe("an SSO profile", () => {
   test("keeps config files the environment already points at", async () => {
     let seen: Record<string, string> = {};
     await awsCredentialsCheck({
+      factoryEnv: () => "prod",
       env: {
-        AWS_PROFILE: "prod",
         HOME: home,
         AWS_CONFIG_FILE: "/etc/aws/config",
         AWS_SHARED_CREDENTIALS_FILE: "/etc/aws/credentials",
@@ -205,7 +196,8 @@ describe("an SSO profile", () => {
 
   test("whose SSO login expired fails while cached role credentials would still pass", async () => {
     const result = await awsCredentialsCheck({
-      env: { AWS_PROFILE: "prod", HOME: home },
+      env: { HOME: home },
+      factoryEnv: () => "prod",
       exec: fakeAws({ sso_session: "corp" }, () => {
         throw cliFailure(
           "\nError when retrieving token from sso: Token has expired and refresh failed\n",

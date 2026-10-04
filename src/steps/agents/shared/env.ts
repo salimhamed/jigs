@@ -1,4 +1,8 @@
-import { currentFactoryContext, type FactoryContext } from "../../../config/factory-context.ts";
+import {
+  currentFactoryContext,
+  type FactoryContext,
+  processEnv,
+} from "../../../config/factory-context.ts";
 import type { DriverRequest } from "./types.ts";
 
 // Every harness process gets these when the service has them, and nothing else
@@ -35,7 +39,7 @@ export const BASE_ENV = [
 
 const isLocale = (name: string) => /^LC_[A-Z0-9_]+$/.test(name);
 
-export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, string> {
+export function stringEnv(env: NodeJS.ProcessEnv = processEnv()): Record<string, string> {
   const clean: Record<string, string> = {};
   for (const [key, value] of Object.entries(env)) {
     if (value !== undefined) clean[key] = value;
@@ -46,7 +50,7 @@ export function stringEnv(env: NodeJS.ProcessEnv = process.env): Record<string, 
 // Built from empty: the base set, then exactly the names given.
 export function harnessEnv(
   names: readonly string[],
-  source: NodeJS.ProcessEnv = process.env,
+  source: NodeJS.ProcessEnv = processEnv(),
 ): Record<string, string> {
   const env: Record<string, string> = {};
   const keep = (name: string) => {

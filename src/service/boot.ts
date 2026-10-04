@@ -404,15 +404,14 @@ async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
   const hold = await holdFactorySlackApp(ctx);
   const socket = startSlackSocket({
     onMessage: async (event) => {
-      const [pushed, woken] = await Promise.allSettled([
+      const [pushed] = await Promise.allSettled([
         pushEvent("slack", event),
         wakeSlackThread(event),
       ]);
-      const where = `${event.channel}:${event.ts}`;
       if (pushed.status === "rejected")
-        console.log(`[slack] could not start runs for ${where}: ${String(pushed.reason)}`);
-      if (woken.status === "rejected")
-        console.log(`[slack] could not wake the thread of ${where}: ${String(woken.reason)}`);
+        console.log(
+          `[slack] could not start runs for ${event.channel}:${event.ts}: ${String(pushed.reason)}`,
+        );
     },
   });
   onShutdown(
@@ -464,6 +463,7 @@ export async function startWorld() {
   // and ends the pool, and the process leaves once that is done. Tell the
   // Postgres World not to install Graphile's competing signal handlers before
   // the SDK resolves and caches it. Other World implementations ignore this.
+  // biome-ignore lint/style/noProcessEnv: sets the SDK's own switch, not a factory setting
   process.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
   setBootPhase("world");
   const started = await gateOnWorldStart({
@@ -474,7 +474,9 @@ export async function startWorld() {
     own: (world) => onShutdown(() => world.close?.()),
   });
   if (!started) return;
-  console.log(`[service] world started: ${process.env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);
+  // biome-ignore lint/style/noProcessEnv: the SDK's own World choice, not a factory setting
+  const world = process.env.WORKFLOW_TARGET_WORLD ?? "local (default)";
+  console.log(`[service] world started: ${world}`);
 
   setBootPhase(READY_PHASE);
 

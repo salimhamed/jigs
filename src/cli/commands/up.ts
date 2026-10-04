@@ -264,7 +264,7 @@ async function bootstrapWorld(
     [],
     {
       cwd: factoryRoot,
-      env: { ...stringEnv(process.env), ...env, WORKFLOW_POSTGRES_URL: url },
+      env: { ...stringEnv(), ...env, WORKFLOW_POSTGRES_URL: url },
     },
     out,
     {

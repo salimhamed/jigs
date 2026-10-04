@@ -10,7 +10,7 @@ import type {
   GithubIdentity,
   ResolvedAppIdentity,
 } from "../workflow/factory-schema.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
+import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 import { getAuthenticatedUser } from "./github.ts";
 import {
   fetchAppInstallation,
@@ -76,7 +76,7 @@ export interface GithubIdentityCheckOptions {
 export function githubIdentityChecks(
   identities: GithubIdentity[],
   probes: GithubIdentityProbes,
-  env: NodeJS.ProcessEnv = process.env,
+  env: EnvLookup,
   { webhooks = false }: GithubIdentityCheckOptions = {},
 ): Check[] {
   const registrations = new Map<number, Promise<{ slug: string }>>();
@@ -100,12 +100,12 @@ export function githubIdentityChecks(
   });
 }
 
-function patCheck(probes: GithubIdentityProbes, env: NodeJS.ProcessEnv): Check {
+function patCheck(probes: GithubIdentityProbes, env: EnvLookup): Check {
   return {
     id: "github.identity",
     label: "GitHub identity",
     run: async (): Promise<CheckResult> => {
-      const token = env.GITHUB_TOKEN;
+      const token = env("GITHUB_TOKEN");
       if (token === undefined || token === "") {
         return {
           ok: false,
@@ -220,13 +220,13 @@ export function githubChecks(ctx: FactoryContext): Check[] {
   const probes = realGithubIdentityProbes(getAuthenticatedUser);
   try {
     const { webhooks } = ctx.config;
-    return githubIdentityChecks(githubIdentities(ctx), probes, process.env, {
+    return githubIdentityChecks(githubIdentities(ctx), probes, ctx.env, {
       webhooks: webhooks?.github.enabled ?? false,
     });
   } catch {
     // A configuration that cannot be read is the binding checks' diagnosis;
     // the credential is still worth checking, against what a factory that
     // states nothing would get.
-    return githubIdentityChecks([{ mode: "pat" }], probes);
+    return githubIdentityChecks([{ mode: "pat" }], probes, ctx.env);
   }
 }

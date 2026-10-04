@@ -3,7 +3,8 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { processEnv } from "../config/factory-context.ts";
+import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { stringEnv } from "../steps/agents/shared/env.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
@@ -16,7 +17,9 @@ export interface AwsCredentialsDeps {
     args: string[],
     options: { env: Record<string, string>; timeout: number },
   ) => Promise<{ stdout: string }>;
+  /** What the CLI inherits. */
   env?: NodeJS.ProcessEnv;
+  factoryEnv: EnvLookup;
 }
 
 function isEnoent(err: unknown): boolean {
@@ -93,17 +96,17 @@ async function withoutCachedRoleCredentials<T>(
 // The whole credential chain is the CLI's business, so the probe asks it
 // rather than reading ~/.aws itself: an SSO cache miss and a bad key look
 // identical from the config file and different from get-caller-identity.
-export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
+export function awsCredentialsCheck(deps: AwsCredentialsDeps): Check {
   const exec = deps.exec ?? execFileAsync;
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? processEnv();
   const callerIdentity = (probeEnv: Record<string, string>) =>
     exec("aws", ["sts", "get-caller-identity"], { env: probeEnv, timeout: PROBE_TIMEOUT_MS });
   return {
     id: "aws.credentials",
     label: "AWS credentials",
     run: async (): Promise<CheckResult> => {
-      const profile = env.AWS_PROFILE;
-      if (profile === undefined || profile === "") {
+      const profile = deps.factoryEnv("AWS_PROFILE");
+      if (profile === undefined) {
         return {
           ok: false,
           reason: "AWS_PROFILE is not set in the service's environment",
@@ -111,7 +114,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
         };
       }
 
-      const probeEnv = stringEnv(env);
+      const probeEnv = { ...stringEnv(env), AWS_PROFILE: profile };
       const sso = await usesSso(exec, probeEnv, profile);
       try {
         await (sso

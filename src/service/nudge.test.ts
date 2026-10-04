@@ -1,7 +1,8 @@
 import { afterAll, expect, test, vi } from "vitest";
+import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { type NudgeDeps, nudgeDelay, nudgeProvider, startNudges } from "./nudge.ts";
-import { clearWakes, lastWake } from "./wake-note.ts";
+import { clearWakes, lastWake } from "./wake.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -19,6 +20,7 @@ afterAll(() => {
 });
 
 vi.mock("workflow/api", () => ({ resumeHook: vi.fn() }));
+const resumeHookMock = vi.mocked(resumeHook);
 
 const held = [
   { runId: "wrun_A", token: "github:pr:acme/api#1" },
@@ -35,6 +37,10 @@ function sweepDeps(overrides: NudgeDeps = {}) {
   const resumed: string[] = [];
   const lines: string[] = [];
   const warnings: string[] = [];
+  resumeHookMock.mockReset().mockImplementation(async (token) => {
+    resumed.push(token as string);
+    return { runId: held.find((hook) => hook.token === token)?.runId } as never;
+  });
   return {
     resumed,
     lines,
@@ -42,9 +48,6 @@ function sweepDeps(overrides: NudgeDeps = {}) {
     deps: {
       hooks: async () => held,
       busyRuns: async () => [],
-      resume: async (token: string) => {
-        resumed.push(token);
-      },
       log: (line: string) => lines.push(line),
       warn: (line: string) => warnings.push(line),
       ...overrides,
@@ -89,12 +92,12 @@ test("a run in the middle of a turn is skipped rather than queued behind itself"
 });
 
 test("a hook that disappeared is reported; any other failure is warned about", async () => {
-  const { deps, warnings } = sweepDeps({
-    resume: async (token: string) => {
-      if (token.endsWith("#1")) throw new HookNotFoundError(token);
-      throw new Error("postgres went away");
-    },
+  const { deps } = sweepDeps();
+  resumeHookMock.mockImplementation(async (token) => {
+    if ((token as string).endsWith("#1")) throw new HookNotFoundError(token as string);
+    throw new Error("postgres went away");
   });
+  const errors = vi.spyOn(console, "error").mockImplementation(() => {});
   expect(await nudgeProvider("github", deps)).toEqual({
     held: 2,
     nudged: 0,
@@ -104,8 +107,9 @@ test("a hook that disappeared is reported; any other failure is warned about", a
   });
   // A run whose hook is gone has moved on; a run whose resume failed has lost
   // its floor, and only the warning says so.
-  expect(warnings).toHaveLength(1);
-  expect(warnings[0]).toContain("postgres went away");
+  expect(errors).toHaveBeenCalledOnce();
+  expect(String(errors.mock.calls[0]?.[0])).toContain("postgres went away");
+  errors.mockRestore();
 });
 
 test("a sweep that cannot list hooks warns loudly and returns", async () => {
