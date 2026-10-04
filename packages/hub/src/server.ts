@@ -1,12 +1,13 @@
-import { createServer, type Server } from "node:http";
+import express, { type Express } from "express";
+import type { WebApp } from "./web.ts";
 
-export function createHubServer(): Server {
-  return createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-    response.writeHead(404).end();
+/** The hub's HTTP app. `/api/*` and `/webhooks/*` routes go here, ahead of the web app. */
+export function createHubApp(web: WebApp): Express {
+  const app = express();
+  app.disable("x-powered-by");
+  app.get("/health", (_request, response) => {
+    response.json({ status: "ok" });
   });
+  app.use(web.handlers);
+  return app;
 }
