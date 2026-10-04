@@ -35,12 +35,9 @@ export interface RunFacts {
   source?: RunSource;
 }
 
-/**
- * The Slack message or PagerDuty incident an event trigger started a run for. A Slack
- * message's `url` is read from Slack, so only the single-run route has it.
- */
+/** The Slack message or PagerDuty incident an event trigger started a run for. */
 export type RunSource =
-  | { kind: "slack"; channel: string; ts: string; url?: string }
+  | { kind: "slack"; channel: string; ts: string }
   | { kind: "pagerduty"; incident: string };
 
 export interface RunStep {

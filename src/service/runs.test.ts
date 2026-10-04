@@ -7,7 +7,6 @@ import * as config from "../config/factory-config.ts";
 import * as root from "../config/factory-root.ts";
 import * as github from "../providers/github.ts";
 import * as githubAuth from "../providers/github-auth.ts";
-import * as slack from "../providers/slack.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
@@ -15,7 +14,6 @@ import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import {
-  enrichSource,
   enrichSuspensions,
   eventTriggerId,
   findRunsByAttribute,
@@ -434,36 +432,21 @@ test("a trigger's run names the message or incident it was started for before it
     [RUN_A]: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
     [RUN_B]: { kind: "pagerduty", incident: "Q1ABCDEF" },
   });
-  expect((await worldRunFacts(RUN_A)).source).toEqual({
+  expect((await worldRunFacts(RUN_A, true)).source).toEqual({
     kind: "slack",
     channel: "C0123ABCD",
     ts: "1790723244.335019",
   });
+  // Automatic release reads a run without its detail, and never pays for the lookup.
+  lookup.mockClear();
+  expect((await worldRunFacts(RUN_A)).source).toBeUndefined();
+  expect(lookup).not.toHaveBeenCalled();
 });
 
 test("a run started by hand has no source", async () => {
   world({ runs: [worldRun({ input: storedArgs("manual") })] });
   expect((await listRuns(factory))[0]?.source).toBeNull();
-  expect((await worldRunFacts(RUN_A)).source).toBeUndefined();
-});
-
-test("a Slack source gains its message's link, and keeps its place when Slack fails", async () => {
-  const message = { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" } as const;
-  const permalink = vi
-    .spyOn(slack, "slackPermalink")
-    .mockResolvedValueOnce("https://acme.slack.com/archives/C0123ABCD/p1790723244335019")
-    .mockRejectedValueOnce(new Error("not_in_channel"));
-  expect(await enrichSource(message)).toEqual({
-    ...message,
-    url: "https://acme.slack.com/archives/C0123ABCD/p1790723244335019",
-  });
-  expect(await enrichSource(message)).toEqual(message);
-  expect(await enrichSource({ kind: "pagerduty", incident: "Q1ABCDEF" })).toEqual({
-    kind: "pagerduty",
-    incident: "Q1ABCDEF",
-  });
-  expect(await enrichSource(null)).toBeNull();
-  expect(permalink).toHaveBeenCalledTimes(2);
+  expect((await worldRunFacts(RUN_A, true)).source).toBeUndefined();
 });
 
 test("run statuses are read by ID, and a run the World lacks is absent", async () => {

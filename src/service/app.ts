@@ -29,14 +29,7 @@ import {
 import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import {
-  enrichSource,
-  enrichSuspensions,
-  listRunSteps,
-  listRuns,
-  runExists,
-  worldRunFacts,
-} from "./runs.ts";
+import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { startRun } from "./trigger.ts";
 import { listTriggers, pushEvent, triggerChecks, triggerProviders } from "./triggers.ts";
@@ -260,8 +253,7 @@ export function createApp(factory: Factory): Hono {
 
   // The run's state from the one reader release and prune also use. One run is
   // worth what the listing will not spend on every run: its steps, terminal or
-  // not, a round trip per halt to read the comment back from Linear, and one to
-  // Slack for the link to the message a trigger started the run for.
+  // not, and a round trip per halt to read the comment back from Linear.
   app.get("/api/runs/:runId", async (c) => {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
@@ -270,7 +262,6 @@ export function createApp(factory: Factory): Hono {
     );
     const body: Record<string, unknown> = {
       ...state,
-      source: await enrichSource(state.source),
       suspensions: await enrichSuspensions(state.suspensions, runId),
       dashboard: dashboardPointer(runId),
     };

@@ -176,12 +176,8 @@ export function waitingCell(run: RunListRun): string {
   return run.suspensions.map(suspensionLine).join("; ") || "-";
 }
 
-/** `slack <channel> <ts>` or `pagerduty <incident>`, with the message's link where it was read. */
-export function sourceLine(source: RunSource): string {
-  if (source.kind === "pagerduty") return `pagerduty ${source.incident}`;
-  const message = `slack ${source.channel} ${source.ts}`;
-  return source.url === undefined ? message : `${message} → ${source.url}`;
-}
+export const sourceLine = (source: RunSource): string =>
+  source.kind === "slack" ? `slack ${source.channel} ${source.ts}` : `pagerduty ${source.incident}`;
 
 export const suspensionLine = (suspension: RunListSuspension): string =>
   suspension.url === undefined ? suspension.reason : `${suspension.reason} → ${suspension.url}`;

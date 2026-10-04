@@ -7,7 +7,6 @@ import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import type { PullRequestRef } from "../providers/github.ts";
 import { getComment } from "../providers/linear.ts";
-import { slackPermalink } from "../providers/slack.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { needsHumanParts, prFromToken, type RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
@@ -245,7 +244,8 @@ const runFacts = (run: WorldRun): NonNullable<RunFacts["run"]> => ({
 
 /**
  * What the World says about one run, for `readRunState`. A live run's hooks and steps are
- * read; `detail` also reads a finished run's steps, which only the single-run route pays for.
+ * read; `detail` also reads a finished run's steps and the run's source, which only the
+ * single-run route pays for.
  */
 export async function worldRunFacts(runId: string, detail = false): Promise<RunFacts> {
   let run: WorldRun;
@@ -255,7 +255,7 @@ export async function worldRunFacts(runId: string, detail = false): Promise<RunF
     if (WorkflowRunNotFoundError.is(error)) return { run: null };
     throw error;
   }
-  const source = (await runSources([run])).get(runId);
+  const source = detail ? (await runSources([run])).get(runId) : undefined;
   const facts = { run: runFacts(run), ...(source === undefined ? {} : { source }) };
   if (TERMINAL_RUN_STATUSES.has(run.status)) {
     return detail ? { ...facts, steps: await listRunSteps(runId) } : facts;
@@ -286,16 +286,6 @@ function sourceOf(inputs: Record<string, unknown>): RunSource | undefined {
   if (typeof channel === "string" && typeof ts === "string") return { kind: "slack", channel, ts };
   if (typeof incident === "string") return { kind: "pagerduty", incident };
   return undefined;
-}
-
-/**
- * A Slack source with its message's link. Failures leave the source as it was, so this is for
- * the single-run read only, never the listing.
- */
-export async function enrichSource(source: RunSource | null): Promise<RunSource | null> {
-  if (source?.kind !== "slack") return source;
-  const url = await slackPermalink(source.channel, source.ts).catch(() => undefined);
-  return url === undefined ? source : { ...source, url };
 }
 
 /** Every run this factory's World holds, described the way `readRunState` describes one. */

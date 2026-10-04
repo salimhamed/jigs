@@ -3,7 +3,7 @@
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
-import { jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../checks/index.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
 
@@ -34,7 +34,10 @@ export const occurrences = pgTable(
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
-  (table) => [primaryKey({ columns: [table.factory, table.trigger, table.occurrence] })],
+  (table) => [
+    primaryKey({ columns: [table.factory, table.trigger, table.occurrence] }),
+    index("jigs_triggers_attribute").on(table.factory, table.attribute),
+  ],
 );
 
 export const markers = pgTable(
