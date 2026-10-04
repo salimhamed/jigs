@@ -197,7 +197,7 @@ nothing else. Holding it:
 runs `jigs doctor` and typechecks the factory; see **Confirm first** when runs are in flight.
 Check `jigs status` before upgrading: once the new jigs is installed, commands
 that talk to the old service fail with a version error until `jigs up` restarts
-it, and `up` asks before that restart because it cannot list the old service's runs.
+it, and `up` restarts it without being able to list its runs.
 
 ## Parked runs and worktrees
 

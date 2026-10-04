@@ -347,26 +347,24 @@ async function confirmRestart(
   options: UpOptions,
 ): Promise<void> {
   const inFlight = await listRunsInFlight(factoryRoot);
-  if (inFlight?.length === 0) return;
   // Warned even under --force: a parked run replays on the new bundle, and an
   // upgrade that changed the steps it replays fails it.
   const consequence =
     "a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay";
-  let runs: string;
+  // Every upgrade meets an older service, so asking here would ask every time;
+  // `jigs status` before the upgrade, on matching versions, is the real check.
   if (inFlight === undefined) {
     deps.out(
       `  warning: the running service is another jigs version, so its runs cannot be listed; ${consequence}`,
     );
-    runs = "runs it cannot list";
-  } else {
-    deps.out(`  warning: ${inFlight.length} run(s) parked or active; ${consequence}:`);
-    for (const line of columns(
-      inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]),
-    )) {
-      deps.out(`    ${line}`);
-    }
-    runs = `${inFlight.length} in-flight run(s)`;
+    return;
   }
+  if (inFlight.length === 0) return;
+  deps.out(`  warning: ${inFlight.length} run(s) parked or active; ${consequence}:`);
+  for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
+    deps.out(`    ${line}`);
+  }
+  const runs = `${inFlight.length} in-flight run(s)`;
   if (options.force === true) return;
   if (deps.confirm === undefined) {
     throw new JigsError(

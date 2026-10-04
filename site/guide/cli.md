@@ -219,7 +219,7 @@ Use `jigs up` after changing workflow code or configuration:
   steps it replays. `--force` skips the question but still prints the list;
   without a terminal, the command otherwise refuses.
 - A service running another jigs version cannot list its runs, so `up` warns
-  that its runs are unknown and asks the same question.
+  that its runs are unknown and restarts it.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
@@ -233,9 +233,9 @@ where.
 
 The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
-naming both versions. `jigs up` and `jigs down` still work. `jigs up` cannot
-list the old service's runs, so it asks before restarting, as it does over
-in-flight runs. Pass `--force` to `jigs upgrade` to skip the question.
+naming both versions. `jigs up` and `jigs down` still work, but `jigs up`
+cannot list the old service's runs, so it warns and restarts. Check
+`jigs status` for parked or active runs before you upgrade.
 
 ## Cancelling
 
