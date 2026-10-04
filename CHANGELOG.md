@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.92.2](https://github.com/salimhamed/jigs/compare/jigs-v0.92.1...jigs-v0.92.2) (2026-10-04)
+
+
+### Bug Fixes
+
+* refuse a jigs service on another version instead of misreading its answers ([#547](https://github.com/salimhamed/jigs/issues/547)) ([a91e669](https://github.com/salimhamed/jigs/commit/a91e6697cb00d9c794c06ceb3c51764ba71ee471))
+
 ## [0.92.1](https://github.com/salimhamed/jigs/compare/jigs-v0.92.0...jigs-v0.92.1) (2026-10-04)
 
 
