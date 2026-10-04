@@ -75,8 +75,9 @@ export interface ReceivedProviderEvent {
 }
 
 /**
- * Store a provider event once and append an `event` message for each factory,
- * then wake their long polls. Returns the stored event's id.
+ * Store a provider event once and append an `event` message for each of the
+ * Organization's factories named, skipping any that no longer exist, then wake
+ * their long polls. Returns the stored event's id.
  */
 export async function fanOutProviderEvent(
   db: HubDatabase,
@@ -84,25 +85,24 @@ export async function fanOutProviderEvent(
   event: ReceivedProviderEvent,
   factoryIds: readonly string[],
 ): Promise<string> {
-  const id = await db.transaction(async (tx) => {
+  const { id, appendedTo } = await db.transaction(async (tx) => {
     await lockAppends(tx);
     const [stored] = await tx
       .insert(providerEvents)
       .values(event)
       .returning({ id: providerEvents.id });
     if (!stored) throw new Error("storing a provider event returned no row");
-    if (factoryIds.length > 0) {
-      await tx.insert(factoryMessages).values(
-        factoryIds.map((factoryId) => ({
-          factoryId,
-          kind: "event" as const,
-          providerEventId: stored.id,
-        })),
-      );
-    }
-    return stored.id;
+    if (factoryIds.length === 0) return { id: stored.id, appendedTo: [] };
+    // Only this Organization's factories that still exist, so one removed meanwhile drops out.
+    const appended = await tx.execute<{ factory_id: string }>(sql`
+      insert into ${factoryMessages} (factory_id, kind, provider_event_id)
+      select id, 'event', ${stored.id} from ${factories}
+      where id in ${factoryIds} and organization_id = ${event.organizationId}
+      returning factory_id
+    `);
+    return { id: stored.id, appendedTo: appended.rows.map((row) => row.factory_id) };
   });
-  waiters.wake(factoryIds);
+  waiters.wake(appendedTo);
   return id;
 }
 
@@ -126,7 +126,8 @@ export async function readMessages(db: HubDatabase, factoryId: string): Promise<
     .orderBy(asc(factoryMessages.position))
     .limit(maxMessagesPerResponse);
   return rows.map(({ position, kind, event }): Message => {
-    if (kind === "fellBehind" || !event) return { position: String(position), kind: "fellBehind" };
+    if (kind === "fellBehind") return { position: String(position), kind };
+    if (!event) throw new Error(`event message ${position} has no provider event`);
     return {
       position: String(position),
       kind,

@@ -30,9 +30,10 @@ beforeAll(async () => {
   database = await createTestDatabase();
   db = connectDatabase(database.url);
   await migrateDatabase(db);
-  await db
-    .insert(schema.organization)
-    .values({ id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() });
+  await db.insert(schema.organization).values([
+    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
+    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
+  ]);
   server = express().use(createFactoryApi(db, waiters)).listen(0, "127.0.0.1");
   await once(server, "listening");
   url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
@@ -100,13 +101,13 @@ dbTest("refuses unknown tokens and records who called", async () => {
   const seen = await db.query.factories.findFirst({ where: eq(schema.factories.id, factory.id) });
   expect(seen).toMatchObject({ lastSeenVersion: "1.2.3", lastSeenAt: expect.any(Date) });
 
-  const reissued = await reissueToken(db, organizationId, factory.id);
+  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
   if (!reissued) throw new Error("expected a token");
   expect((await poll(token)).status).toBe(401);
   expect((await poll(reissued)).status).toBe(200);
-  expect(await reissueToken(db, "other", factory.id)).toBeNull();
+  expect(await reissueToken(db, waiters, "other", factory.id)).toBeNull();
 
-  await removeFactory(db, organizationId, factory.id);
+  await removeFactory(db, waiters, organizationId, factory.id);
   expect((await poll(reissued)).status).toBe(401);
 });
 
@@ -222,10 +223,33 @@ dbTest("tells a factory once when expired messages it never confirmed are delete
 dbTest("removing a factory removes its messages", async () => {
   const { factory } = await newFactory();
   await send([factory.id]);
-  await removeFactory(db, organizationId, factory.id);
+  await removeFactory(db, waiters, organizationId, factory.id);
   const left = await db
     .select()
     .from(schema.factoryMessages)
     .where(eq(schema.factoryMessages.factoryId, factory.id));
   expect(left).toEqual([]);
+});
+
+dbTest("refuses a held poll once its token is re-issued or its factory removed", async () => {
+  const { factory, token } = await newFactory();
+  const held = poll(token, 30);
+  await until(() => waiters.waiting(factory.id) === 1);
+  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
+  expect((await held).status).toBe(401);
+
+  const again = poll(reissued ?? "", 30);
+  await until(() => waiters.waiting(factory.id) === 1);
+  await removeFactory(db, waiters, organizationId, factory.id);
+  expect((await again).status).toBe(401);
+});
+
+dbTest("fans an event out only to the Organization's factories that still exist", async () => {
+  const { factory, token } = await newFactory();
+  const removed = await newFactory();
+  await removeFactory(db, waiters, organizationId, removed.factory.id);
+  const foreign = await addFactory(db, "other", "theirs");
+  await send([factory.id, removed.factory.id, foreign.factory.id], "shared");
+  expect((await poll(token)).body.messages).toMatchObject([{ event: { name: "shared" } }]);
+  expect((await poll(foreign.token)).body.messages).toEqual([]);
 });

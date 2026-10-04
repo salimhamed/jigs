@@ -19,10 +19,13 @@ try {
 const db = connectDatabase(config.databaseUrl);
 await migrateDatabase(db);
 const auth = createAuth(config, db);
-const web = await createWebApp({ config, db, auth }, process.env.NODE_ENV === "development");
 
 const waiters = new MessageWaiters();
 const retention = startRetention(db, waiters, config.retentionDays);
+const web = await createWebApp(
+  { config, db, auth, waiters },
+  process.env.NODE_ENV === "development",
+);
 
 const server = createHubApp(auth, createFactoryApi(db, waiters), web).listen(
   config.port,

@@ -25,10 +25,10 @@ export async function action({ context, request }: Route.ActionArgs) {
   const name = String(form.get("name") ?? "").trim();
   switch (form.get("intent")) {
     case "remove":
-      await removeFactory(context.db, organizationId, factoryId);
+      await removeFactory(context.db, context.waiters, organizationId, factoryId);
       return { message: `Removed ${name}.` };
     case "reissue": {
-      const token = await reissueToken(context.db, organizationId, factoryId);
+      const token = await reissueToken(context.db, context.waiters, organizationId, factoryId);
       if (!token) return { error: "That factory is gone." };
       return { connect: { name, command: connectCommand(context, token) } };
     }

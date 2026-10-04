@@ -2,6 +2,7 @@ import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import type { HubDatabase } from "./db/database.ts";
 import { factories } from "./db/schema.ts";
+import type { MessageWaiters } from "./messages.ts";
 
 export type Factory = typeof factories.$inferSelect;
 
@@ -28,9 +29,14 @@ export async function addFactory(
   return { factory, token };
 }
 
-/** Give a factory a new token; the old one stops working at once. `null` if no such factory. */
+/**
+ * Give a factory a new token, or `null` if there is no such factory. The hub
+ * refuses the old token from then on, and wakes its open polls so they are
+ * refused too.
+ */
 export async function reissueToken(
   db: HubDatabase,
+  waiters: MessageWaiters,
   organizationId: string,
   factoryId: string,
 ): Promise<string | null> {
@@ -40,18 +46,22 @@ export async function reissueToken(
     .set({ tokenHash })
     .where(and(eq(factories.id, factoryId), eq(factories.organizationId, organizationId)))
     .returning({ id: factories.id });
-  return updated.length > 0 ? token : null;
+  if (updated.length === 0) return null;
+  waiters.wake([factoryId]);
+  return token;
 }
 
-/** Remove a factory and every message waiting for it. */
+/** Remove a factory and every message waiting for it, and refuse its open polls. */
 export async function removeFactory(
   db: HubDatabase,
+  waiters: MessageWaiters,
   organizationId: string,
   factoryId: string,
 ): Promise<void> {
   await db
     .delete(factories)
     .where(and(eq(factories.id, factoryId), eq(factories.organizationId, organizationId)));
+  waiters.wake([factoryId]);
 }
 
 /**
