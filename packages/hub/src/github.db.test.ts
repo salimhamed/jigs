@@ -40,32 +40,49 @@ async function listen(app: express.Express) {
   return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 }
 
-// GitHub's `GET /app/installations/{id}`, answering only an App JWT signed with its key.
+// GitHub's installation endpoints for an App, answering only an App JWT signed with its key.
 function fakeGitHub() {
-  return express().get("/app/installations/:id", (request, response) => {
-    const [header = "", payload = "", signature = ""] = (request.get("authorization") ?? "")
+  const appIdOf = (authorization: string | undefined) => {
+    const [header = "", payload = "", signature = ""] = (authorization ?? "")
       .replace(/^Bearer /, "")
       .split(".");
     const verified = createVerify("RSA-SHA256")
       .update(`${header}.${payload}`)
       .verify(publicKey, signature, "base64url");
-    if (!verified) {
-      response.status(401).json({ message: "A JSON web token could not be decoded" });
-      return;
-    }
-    const { iss } = JSON.parse(Buffer.from(payload, "base64url").toString());
-    const installation = githubInstallations.get(request.params.id);
-    if (installation?.appId !== String(iss)) {
-      response.status(404).json({ message: "Not Found" });
-      return;
-    }
-    response.json({
-      id: Number(request.params.id),
-      account: { login: installation.login, id: 1, type: "Organization" },
-      app_id: Number(iss),
-      target_type: "Organization",
-    });
+    return verified ? String(JSON.parse(Buffer.from(payload, "base64url").toString()).iss) : null;
+  };
+  const body = (id: string, installation: { appId: string; login: string }) => ({
+    id: Number(id),
+    account: { login: installation.login, id: 1, type: "Organization" },
+    app_id: Number(installation.appId),
+    target_type: "Organization",
   });
+  return express()
+    .get("/app/installations", (request, response) => {
+      const appId = appIdOf(request.get("authorization"));
+      if (!appId) {
+        response.status(401).json({ message: "A JSON web token could not be decoded" });
+        return;
+      }
+      response.json(
+        [...githubInstallations]
+          .filter(([, installation]) => installation.appId === appId)
+          .map(([id, installation]) => body(id, installation)),
+      );
+    })
+    .get("/app/installations/:id", (request, response) => {
+      const appId = appIdOf(request.get("authorization"));
+      if (!appId) {
+        response.status(401).json({ message: "A JSON web token could not be decoded" });
+        return;
+      }
+      const installation = githubInstallations.get(request.params.id);
+      if (installation?.appId !== appId) {
+        response.status(404).json({ message: "Not Found" });
+        return;
+      }
+      response.json(body(request.params.id, installation));
+    });
 }
 
 beforeAll(async () => {
@@ -96,14 +113,20 @@ let appCount = 0;
 async function newApp(organization = organizationId) {
   appCount += 1;
   const webhookSecret = `secret ${appCount}`;
-  const added = await addGitHubApp(db, encryptionKey, organization, {
-    appId: String(1000 + appCount),
-    slug: `jigs-${appCount}`,
-    clientId: `Iv1.${appCount}`,
-    clientSecret: "client secret",
-    webhookSecret,
-    privateKey: pem,
-  });
+  const added = await addGitHubApp(
+    db,
+    encryptionKey,
+    organization,
+    {
+      appId: String(1000 + appCount),
+      slug: `jigs-${appCount}`,
+      clientId: `Iv1.${appCount}`,
+      clientSecret: "client secret",
+      webhookSecret,
+      privateKey: pem,
+    },
+    github,
+  );
   if ("error" in added) throw new Error(added.error);
   return { app: added.app, webhookSecret };
 }
@@ -118,6 +141,7 @@ let installationCount = 0;
 async function installed(app: App) {
   installationCount += 1;
   const id = String(5000 + installationCount);
+  githubInstallations.set(id, { appId: app.externalId, login: "acme" });
   await db.insert(schema.installations).values({ appId: app.id, externalId: id, account: "acme" });
   return Number(id);
 }
@@ -297,30 +321,34 @@ dbTest("keeps installations current from installation events", async () => {
   expect(await eventNames(factory.id)).toEqual(["installation", "issues", "installation"]);
 });
 
-async function setup(query: Record<string, string>) {
-  const response = await fetch(`${hub}${githubSetupPath}?${new URLSearchParams(query)}`, {
+async function setup(app: App | string, query: Record<string, string>) {
+  const id = typeof app === "string" ? app : app.id;
+  const response = await fetch(`${hub}${githubSetupPath(id)}?${new URLSearchParams(query)}`, {
     redirect: "manual",
   });
   return { status: response.status, location: response.headers.get("location") };
 }
 
-const stateOf = (url: string) => new URL(url).searchParams.get("state") ?? "";
-
-dbTest("records an installation GitHub confirms for the app the install link names", async () => {
+dbTest("records an installation GitHub confirms is the App's", async () => {
   const github = await newApp();
   const other = await newApp();
+  expect(githubInstallUrl(github.app)).toBe(
+    `https://github.com/apps/${github.app.name}/installations/new`,
+  );
   githubInstallations.set("31", { appId: github.app.externalId, login: "acme-corp" });
   githubInstallations.set("32", { appId: other.app.externalId, login: "elsewhere" });
-  const installUrl = githubInstallUrl(encryptionKey, github.app);
-  expect(installUrl).toMatch(
-    new RegExp(`^https://github.com/apps/${github.app.name}/installations/new\\?state=`),
-  );
-  const state = stateOf(installUrl);
 
-  expect(await setup({ installation_id: "32", setup_action: "install", state })).toMatchObject({
-    status: 400,
+  expect(await setup(github.app, { installation_id: "32", setup_action: "install" })).toMatchObject(
+    {
+      status: 400,
+    },
+  );
+  expect(await setup(github.app, { installation_id: "31", setup_action: "install" })).toEqual({
+    status: 303,
+    location: `/apps/${github.app.id}`,
   });
-  expect(await setup({ installation_id: "31", setup_action: "install", state })).toEqual({
+  githubInstallations.set("31", { appId: github.app.externalId, login: "acme-renamed" });
+  expect(await setup(github.app, { installation_id: "31", setup_action: "update" })).toEqual({
     status: 303,
     location: `/apps/${github.app.id}`,
   });
@@ -328,40 +356,45 @@ dbTest("records an installation GitHub confirms for the app the install link nam
     .select({ externalId: schema.installations.externalId, account: schema.installations.account })
     .from(schema.installations)
     .where(eq(schema.installations.appId, github.app.id));
-  expect(recorded).toEqual([{ externalId: "31", account: "acme-corp" }]);
+  expect(recorded).toEqual([{ externalId: "31", account: "acme-renamed" }]);
 
-  // An update returns without state, to the page of the app that has the installation.
-  expect(await setup({ installation_id: "31", setup_action: "update" })).toEqual({
-    status: 303,
-    location: `/apps/${github.app.id}`,
-  });
-  expect(await setup({ installation_id: "32", setup_action: "update" })).toMatchObject({
-    status: 400,
-  });
+  for (const bad of [crypto.randomUUID(), "nonsense"]) {
+    expect(await setup(bad, { installation_id: "31" })).toMatchObject({ status: 400 });
+  }
+  expect(await setup(github.app, {})).toMatchObject({ status: 400 });
 });
 
-dbTest("refuses install links that are forged, altered or expired", async () => {
-  const github = await newApp();
-  githubInstallations.set("41", { appId: github.app.externalId, login: "acme" });
-  const state = stateOf(githubInstallUrl(encryptionKey, github.app));
-  const [body = "", signature = ""] = state.split(".");
-  const forged = stateOf(githubInstallUrl(randomBytes(32), github.app));
-  const altered = `${Buffer.from(
-    Buffer.from(body, "base64url").toString().replace(github.app.id, crypto.randomUUID()),
-  ).toString("base64url")}.${signature}`;
-  const expired = stateOf(githubInstallUrl(encryptionKey, github.app, Date.now() - 11 * 60_000));
+dbTest("learns installations the hub missed, when added and when an event names one", async () => {
+  const appId = "777001";
+  githubInstallations.set("61", { appId, login: "early" });
+  const added = await addGitHubApp(
+    db,
+    encryptionKey,
+    organizationId,
+    {
+      appId,
+      slug: "jigs-early",
+      clientId: "Iv1.early",
+      clientSecret: "s",
+      webhookSecret: "early secret",
+      privateKey: pem,
+    },
+    github,
+  );
+  if (!("app" in added)) throw new Error(added.error);
+  const app = { app: added.app, webhookSecret: "early secret" };
+  const factory = await newFactory();
+  await setAssignments(db, organizationId, app.app.id, [factory.id]);
+  expect(await deliver(app, "issues", issueOpened(61))).toBe(200);
 
-  for (const bad of [forged, altered, expired, "nonsense"]) {
-    expect(
-      await setup({ installation_id: "41", setup_action: "install", state: bad }),
-    ).toMatchObject({ status: 400 });
-  }
-  expect(
-    await db
-      .select()
-      .from(schema.installations)
-      .where(eq(schema.installations.appId, github.app.id)),
-  ).toEqual([]);
+  githubInstallations.set("62", { appId, login: "missed" });
+  expect(await deliver(app, "issues", issueOpened(62))).toBe(200);
+  const known = await db
+    .select({ externalId: schema.installations.externalId })
+    .from(schema.installations)
+    .where(eq(schema.installations.appId, app.app.id));
+  expect(known.map((row) => row.externalId).sort()).toEqual(["61", "62"]);
+  expect(await eventNames(factory.id)).toEqual(["issues", "issues"]);
 });
 
 dbTest("validates a GitHub App before adding it, once per hub", async () => {
@@ -373,16 +406,24 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
     webhookSecret: "w",
     privateKey: pem,
   };
-  expect(await addGitHubApp(db, encryptionKey, organizationId, { ...input, appId: "x" })).toEqual({
+  const add = (organization: string, changes: Partial<typeof input> = {}) =>
+    addGitHubApp(db, encryptionKey, organization, { ...input, ...changes }, github);
+  expect(await add(organizationId, { appId: "x" })).toEqual({
     error: "The App ID is a number.",
   });
-  expect(
-    await addGitHubApp(db, encryptionKey, organizationId, { ...input, privateKey: "nope" }),
-  ).toEqual({ error: "The private key is not a PEM private key." });
-  const added = await addGitHubApp(db, encryptionKey, organizationId, input);
+  expect(await add(organizationId, { privateKey: "nope" })).toEqual({
+    error: "The private key is not a PEM private key.",
+  });
+  const otherKey = generateKeyPairSync("rsa", { modulusLength: 2048 })
+    .privateKey.export({ type: "pkcs8", format: "pem" })
+    .toString();
+  expect(await add(organizationId, { privateKey: otherKey })).toEqual({
+    error: "GitHub refused App 424242 with this private key (401).",
+  });
+  const added = await add(organizationId);
   if (!("app" in added)) throw new Error(added.error);
   expect(added.app.secrets).not.toContain("BEGIN");
-  expect(await addGitHubApp(db, encryptionKey, "other", input)).toEqual({
+  expect(await add("other")).toEqual({
     error: "GitHub App 424242 is already on this hub.",
   });
 });

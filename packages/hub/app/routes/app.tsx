@@ -1,9 +1,6 @@
-import { and, eq } from "drizzle-orm";
 import { Download, Trash2 } from "lucide-react";
 import { data, Form, redirect } from "react-router";
 import { removeApp, setAssignments } from "../../src/apps.ts";
-import { apps } from "../../src/db/schema.ts";
-import { githubInstallUrl } from "../../src/github.ts";
 import { readApp } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -28,13 +25,6 @@ export async function action({ context, request, params }: Route.ActionArgs) {
   if (!UUID.test(params.id)) throw notFound();
   const form = await request.formData();
   switch (form.get("intent")) {
-    case "install": {
-      const app = await context.db.query.apps.findFirst({
-        where: and(eq(apps.id, params.id), eq(apps.organizationId, organizationId)),
-      });
-      if (!app) throw notFound();
-      return redirect(githubInstallUrl(context.config.encryptionKey, app));
-    }
     case "remove":
       await removeApp(context.db, organizationId, params.id);
       return redirect("/apps");
@@ -71,6 +61,11 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
           Keep the webhook <strong>Active</strong>, turn on <strong>Redirect on update</strong> and
           leave <strong>Request user authorization (OAuth) during installation</strong> off.
         </p>
+        <p className="text-sm">
+          Under <strong>Where can this GitHub App be installed?</strong> choose{" "}
+          <strong>Only on this account</strong>. Otherwise anyone can install it, and their events
+          reach your factories.
+        </p>
       </section>
 
       <section className="space-y-2">
@@ -99,13 +94,10 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
           </table>
         )}
         {isAdmin && (
-          <Form method="post">
-            <input type="hidden" name="intent" value="install" />
-            <button type="submit" className={button}>
-              <Download className="size-4" />
-              Install on GitHub
-            </button>
-          </Form>
+          <a href={app.installUrl} className={button}>
+            <Download className="size-4" />
+            Install on GitHub
+          </a>
         )}
       </section>
 

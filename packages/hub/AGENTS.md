@@ -64,7 +64,8 @@ appended for; `src/retention.ts` deletes expired messages hourly.
 `src/apps.ts` holds what every provider's apps share: installations and
 assignments. A provider event goes only to the factories its app is assigned
 to, so `fanOutProviderEvent` takes the app. `src/github.ts` adds GitHub Apps:
-an admin enters an App made by hand, the install link's signed `state` binds
-GitHub's return to the setup URL to that app, and `/webhooks/github` finds the
-app by `X-GitHub-Hook-Installation-Target-ID` and checks its signature. Tests
-pass `apiUrl` to stand in for GitHub's API.
+an admin enters an App made by hand; each App's setup URL confirms an
+installation with the App's JWT before recording it; `/webhooks/github` finds
+the app by `X-GitHub-Hook-Installation-Target-ID`, checks its signature, and
+re-lists the App's installations from GitHub before dropping an event from one
+it does not know. Tests pass `apiUrl` to stand in for GitHub's API.

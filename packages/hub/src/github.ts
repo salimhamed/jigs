@@ -2,13 +2,18 @@ import {
   createHmac,
   createPrivateKey,
   createSign,
-  hkdfSync,
   type KeyObject,
   timingSafeEqual,
 } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
-import { type App, recordInstallation, removeInstallation } from "./apps.ts";
+import {
+  type App,
+  type Installed,
+  recordInstallation,
+  removeInstallation,
+  syncInstallations,
+} from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
@@ -17,12 +22,11 @@ import { decryptSecret, encryptSecret } from "./secrets.ts";
 /** Where GitHub sends every GitHub App's webhooks. */
 export const githubWebhookPath = "/webhooks/github";
 
-/** Where GitHub returns after someone installs a GitHub App, its "Setup URL". */
-export const githubSetupPath = "/setup/github";
+/** Where GitHub returns after someone installs or changes an installation of an App, its "Setup URL". */
+export const githubSetupPath = (appId: string) => `/setup/github/${appId}`;
 
-/** What a GitHub App's settings page shows, kept in `apps.settings`. */
+/** What a GitHub App's settings page shows, kept in `apps.settings`. Its slug is the app's name. */
 export interface GitHubAppSettings {
-  slug: string;
   clientId: string;
 }
 
@@ -35,17 +39,24 @@ interface GitHubAppSecrets {
 /** What an admin copies from a GitHub App they made by hand. */
 export interface GitHubAppInput extends GitHubAppSettings, GitHubAppSecrets {
   appId: string;
+  slug: string;
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+const defaultApiUrl = "https://api.github.com";
+
 /**
- * Add a GitHub App to an Organization, or say what is wrong with the input.
- * An App can belong to only one Organization on a hub.
+ * Add a GitHub App to an Organization with every installation it already has,
+ * or say what is wrong with the input. An App can belong to only one
+ * Organization on a hub.
  */
 export async function addGitHubApp(
   db: HubDatabase,
   encryptionKey: Buffer,
   organizationId: string,
   input: GitHubAppInput,
+  apiUrl = defaultApiUrl,
 ): Promise<{ app: App } | { error: string }> {
   if (!/^\d+$/.test(input.appId)) return { error: "The App ID is a number." };
   if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the App's URL name." };
@@ -57,71 +68,44 @@ export async function addGitHubApp(
   } catch {
     return { error: "The private key is not a PEM private key." };
   }
-  const [app] = await db
-    .insert(apps)
-    .values({
-      organizationId,
-      provider: "github",
-      name: input.slug,
-      externalId: input.appId,
-      settings: { slug: input.slug, clientId: input.clientId } satisfies GitHubAppSettings,
-      secrets: encryptSecret(
-        encryptionKey,
-        JSON.stringify({
-          privateKey: input.privateKey,
-          webhookSecret: input.webhookSecret,
-          clientSecret: input.clientSecret,
-        } satisfies GitHubAppSecrets),
-      ),
-    })
-    .onConflictDoNothing()
-    .returning();
-  if (!app) return { error: `GitHub App ${input.appId} is already on this hub.` };
-  return { app };
+  const installed = await listInstallations(apiUrl, input.appId, input.privateKey);
+  if ("status" in installed) {
+    return {
+      error: `GitHub refused App ${input.appId} with this private key (${installed.status}).`,
+    };
+  }
+  return db.transaction(async (tx) => {
+    const [app] = await tx
+      .insert(apps)
+      .values({
+        organizationId,
+        provider: "github",
+        name: input.slug,
+        externalId: input.appId,
+        settings: { clientId: input.clientId } satisfies GitHubAppSettings,
+        secrets: encryptSecret(
+          encryptionKey,
+          JSON.stringify({
+            privateKey: input.privateKey,
+            webhookSecret: input.webhookSecret,
+            clientSecret: input.clientSecret,
+          } satisfies GitHubAppSecrets),
+        ),
+      })
+      .onConflictDoNothing()
+      .returning();
+    if (!app) return { error: `GitHub App ${input.appId} is already on this hub.` };
+    await syncInstallations(tx, app.id, installed.installations);
+    return { app };
+  });
 }
+
+/** The page on GitHub that installs an App. */
+export const githubInstallUrl = (app: App) =>
+  `https://github.com/apps/${app.name}/installations/new`;
 
 const readSecrets = (encryptionKey: Buffer, app: App): GitHubAppSecrets =>
   JSON.parse(decryptSecret(encryptionKey, app.secrets));
-
-const INSTALL_STATE_MS = 10 * 60 * 1000;
-
-const stateKey = (encryptionKey: Buffer) =>
-  Buffer.from(hkdfSync("sha256", encryptionKey, "", "jigs hub github install state", 32));
-
-const signState = (encryptionKey: Buffer, body: string) =>
-  createHmac("sha256", stateKey(encryptionKey)).update(body).digest("base64url");
-
-/**
- * The GitHub page that installs an app. Its `state` binds the install to this
- * Organization and app for ten minutes, so the setup URL can trust it.
- */
-export function githubInstallUrl(encryptionKey: Buffer, app: App, now = Date.now()): string {
-  const body = Buffer.from(
-    JSON.stringify({
-      organizationId: app.organizationId,
-      appId: app.id,
-      expires: now + INSTALL_STATE_MS,
-    }),
-  ).toString("base64url");
-  const state = `${body}.${signState(encryptionKey, body)}`;
-  const { slug } = app.settings as GitHubAppSettings;
-  return `https://github.com/apps/${slug}/installations/new?state=${state}`;
-}
-
-function readInstallState(
-  encryptionKey: Buffer,
-  state: string,
-  now = Date.now(),
-): { organizationId: string; appId: string } | null {
-  const [body = "", signature = ""] = state.split(".");
-  const expected = Buffer.from(signState(encryptionKey, body));
-  const given = Buffer.from(signature);
-  if (given.length !== expected.length || !timingSafeEqual(given, expected)) return null;
-  const parsed = JSON.parse(Buffer.from(body, "base64url").toString("utf8"));
-  return parsed.expires > now
-    ? { organizationId: parsed.organizationId, appId: parsed.appId }
-    : null;
-}
 
 /** A JSON Web Token that authenticates as the GitHub App itself, for ten minutes at most. */
 export function githubAppJwt(appId: string, privateKey: string | KeyObject, now = Date.now()) {
@@ -134,6 +118,33 @@ export function githubAppJwt(appId: string, privateKey: string | KeyObject, now 
   return `${unsigned}.${signature}`;
 }
 
+const githubHeaders = (appId: string, privateKey: string) => ({
+  accept: "application/vnd.github+json",
+  authorization: `Bearer ${githubAppJwt(appId, privateKey)}`,
+  "user-agent": "jigs-hub",
+  "x-github-api-version": "2022-11-28",
+});
+
+/** Every installation GitHub has of the App, or the status GitHub refused with. */
+async function listInstallations(
+  apiUrl: string,
+  appId: string,
+  privateKey: string,
+): Promise<{ installations: Installed[] } | { status: number }> {
+  const installed: Installed[] = [];
+  for (let page = 1; ; page += 1) {
+    const response = await fetch(`${apiUrl}/app/installations?per_page=100&page=${page}`, {
+      headers: githubHeaders(appId, privateKey),
+    });
+    if (!response.ok) return { status: response.status };
+    const batch = (await response.json()) as InstallationBody[];
+    for (const installation of batch) {
+      installed.push({ externalId: String(installation.id), account: accountName(installation) });
+    }
+    if (batch.length < 100) return { installations: installed };
+  }
+}
+
 /** The account an App's installation is on, or `null` if GitHub says the App has no such installation. */
 async function fetchInstallationAccount(
   apiUrl: string,
@@ -142,12 +153,7 @@ async function fetchInstallationAccount(
   installationId: string,
 ): Promise<string | null> {
   const response = await fetch(`${apiUrl}/app/installations/${installationId}`, {
-    headers: {
-      accept: "application/vnd.github+json",
-      authorization: `Bearer ${githubAppJwt(app.externalId, secrets.privateKey)}`,
-      "user-agent": "jigs-hub",
-      "x-github-api-version": "2022-11-28",
-    },
+    headers: githubHeaders(app.externalId, secrets.privateKey),
   });
   if (response.status === 404) return null;
   if (!response.ok) {
@@ -179,7 +185,7 @@ export function createGitHubRoutes(options: {
   /** GitHub's REST API, replaced in tests. */
   apiUrl?: string;
 }): Router {
-  const { db, waiters, encryptionKey, apiUrl = "https://api.github.com" } = options;
+  const { db, waiters, encryptionKey, apiUrl = defaultApiUrl } = options;
   const router = express.Router();
 
   const findApp = async (appId: string) =>
@@ -195,6 +201,19 @@ export function createGitHubRoutes(options: {
         eq(installations.externalId, String(installationId)),
       ),
     })) !== undefined;
+
+  // An installation the hub missed, such as one made while the hub was down, is
+  // learned from GitHub before its event is dropped.
+  const knowsInstallation = async (app: App, installationId: number) => {
+    if (await hasInstallation(app.id, installationId)) return true;
+    const { privateKey } = readSecrets(encryptionKey, app);
+    const installed = await listInstallations(apiUrl, app.externalId, privateKey);
+    if ("status" in installed) {
+      throw new Error(`GitHub answered ${installed.status} listing ${app.name}'s installations`);
+    }
+    await syncInstallations(db, app.id, installed.installations);
+    return installed.installations.some((row) => row.externalId === String(installationId));
+  };
 
   router.post(
     githubWebhookPath,
@@ -235,7 +254,7 @@ export function createGitHubRoutes(options: {
             accountName(payload.installation ?? {}),
           );
         }
-      } else if (installationId === undefined || !(await hasInstallation(app.id, installationId))) {
+      } else if (installationId === undefined || !(await knowsInstallation(app, installationId))) {
         console.warn(
           `[github] dropped ${name} for ${app.name}: installation ${installationId ?? "(none)"} is not one of its installations`,
         );
@@ -253,41 +272,17 @@ export function createGitHubRoutes(options: {
     },
   );
 
-  router.get(githubSetupPath, async (request, response) => {
+  // GitHub's call proves the installation is this App's, and an App is one Organization's.
+  router.get(githubSetupPath(":appId"), async (request, response) => {
     const installationId = String(request.query.installation_id ?? "");
-    if (!/^\d+$/.test(installationId)) {
-      response.status(400).type("text").send("GitHub sent no installation.");
-      return;
-    }
-    const state = request.query.state;
-    if (typeof state !== "string") {
-      // "Redirect on update" returns here without state after someone changes an installation.
-      const known = await db.query.installations.findFirst({
-        columns: { appId: true },
-        where: eq(installations.externalId, installationId),
-      });
-      if (!known) {
-        response.status(400).type("text").send("Install the app from its page on the hub.");
-        return;
-      }
-      response.redirect(303, `/apps/${known.appId}`);
-      return;
-    }
-    const bound = readInstallState(encryptionKey, state);
-    const app =
-      bound &&
-      (await db.query.apps.findFirst({
-        where: and(
-          eq(apps.id, bound.appId),
-          eq(apps.organizationId, bound.organizationId),
-          eq(apps.provider, "github"),
-        ),
-      }));
-    if (!app) {
-      response
-        .status(400)
-        .type("text")
-        .send("This install link has expired or is not from this hub. Install again from the hub.");
+    const appId = String(request.params.appId);
+    const app = UUID.test(appId)
+      ? await db.query.apps.findFirst({
+          where: and(eq(apps.id, appId), eq(apps.provider, "github")),
+        })
+      : undefined;
+    if (!app || !/^\d+$/.test(installationId)) {
+      response.status(400).type("text").send("GitHub sent no installation of an App on this hub.");
       return;
     }
     const account = await fetchInstallationAccount(

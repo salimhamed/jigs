@@ -7,6 +7,9 @@ import * as schema from "./schema.ts";
 
 export type HubDatabase = NodePgDatabase<typeof schema> & { $client: Pool };
 
+/** A transaction on the hub's database. */
+export type Transaction = Parameters<Parameters<HubDatabase["transaction"]>[0]>[0];
+
 const migrationsFolder = fileURLToPath(new URL("migrations/", packageRoot));
 
 /** Open the hub's pool. The caller ends it with `db.$client.end()`. */

@@ -1,9 +1,7 @@
 import { type Message, maxMessagesPerResponse, type Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
-import type { HubDatabase } from "./db/database.ts";
+import type { HubDatabase, Transaction } from "./db/database.ts";
 import { assignments, factories, factoryMessages, providerEvents } from "./db/schema.ts";
-
-type Transaction = Parameters<Parameters<HubDatabase["transaction"]>[0]>[0];
 
 /**
  * Factories holding a long poll open, woken when a message is appended for

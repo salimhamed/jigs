@@ -1,5 +1,5 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
-import type { HubDatabase } from "./db/database.ts";
+import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import type { HubDatabase, Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 
 export type App = typeof apps.$inferSelect;
@@ -68,4 +68,35 @@ export async function removeInstallation(
   await db
     .delete(installations)
     .where(and(eq(installations.appId, appId), eq(installations.externalId, externalId)));
+}
+
+/** An installation as the provider lists it. */
+export interface Installed {
+  externalId: string;
+  account: string;
+}
+
+/** Make an app's installations exactly what the provider lists. */
+export async function syncInstallations(
+  db: HubDatabase | Transaction,
+  appId: string,
+  installed: readonly Installed[],
+): Promise<void> {
+  const current = installed.map((row) => row.externalId);
+  await db
+    .delete(installations)
+    .where(
+      and(
+        eq(installations.appId, appId),
+        current.length > 0 ? notInArray(installations.externalId, current) : undefined,
+      ),
+    );
+  if (installed.length === 0) return;
+  await db
+    .insert(installations)
+    .values(installed.map((row) => ({ appId, ...row })))
+    .onConflictDoUpdate({
+      target: [installations.appId, installations.externalId],
+      set: { account: sql`excluded.account` },
+    });
 }

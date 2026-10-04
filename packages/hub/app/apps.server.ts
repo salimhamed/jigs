@@ -1,7 +1,12 @@
 import { and, asc, eq } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
 import { apps, assignments, factories, installations } from "../src/db/schema.ts";
-import { type GitHubAppSettings, githubSetupPath, githubWebhookPath } from "../src/github.ts";
+import {
+  type GitHubAppSettings,
+  githubInstallUrl,
+  githubSetupPath,
+  githubWebhookPath,
+} from "../src/github.ts";
 
 /** An Organization's apps, each with its installations and assigned factories. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
@@ -58,10 +63,10 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
     provider: app.provider,
     name: app.name,
     appId: app.externalId,
-    slug: settings.slug,
     clientId: settings.clientId,
+    installUrl: githubInstallUrl(app),
     webhookUrl: `${origin}${githubWebhookPath}`,
-    setupUrl: `${origin}${githubSetupPath}`,
+    setupUrl: `${origin}${githubSetupPath(app.id)}`,
     installations: installed,
     factories: organizationFactories.map((factory) => ({
       id: factory.id,
