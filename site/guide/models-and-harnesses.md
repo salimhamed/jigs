@@ -236,7 +236,8 @@ prefix, such as `jigs-skills:snowflake`. They add to the repository's own
 `Skill` for the agent to use them. The plugin is removed when the agent call
 ends; one left behind by a service that stopped mid-call is the run's
 `claude-plugins` resource, which release or `jigs resources prune` removes.
-Pi offers skills only to an agent that has its `read` or `bash` tool, so a Pi `tools` list needs one of them.
+Pi offers skills only to an agent that has its `read` or `bash` tool, so a Pi
+`tools` list needs one of them.
 
 A folder that is missing or has no `SKILL.md` fails preflight before the run
 starts, and `jigs doctor` reports it for every agent in `requires.agents`. A

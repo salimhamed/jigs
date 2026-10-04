@@ -225,6 +225,7 @@ release: { onSuccess: "release", onFailure: "keep" },
 That is the default. `onSuccess` applies to completed runs and `onFailure` to
 failed and cancelled ones. A workflow's `defineWorkflow` can set its own `release`.
 The service applies the policy when a run ends; waiting runs always keep everything.
+Copies of Claude Code skills are always removed, since they hold nothing to inspect.
 A workflow that wants to release early, or needs the report, can call
 `await release()` from `#jigs/steps`.
 
