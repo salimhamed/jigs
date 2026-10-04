@@ -35,7 +35,7 @@ type RunResourceState = Pick<ResourceRow, "kind" | "state">;
  * it recorded: the run ID, the identity, and a worktree's clone and branch. A decision's checks
  * change nothing; the removal it returns acts on exactly what they checked.
  */
-type ResourceKind = (
+type DecideRelease = (
   row: ResourceRow,
   run: readonly RunResourceState[],
 ) => Promise<ReleaseDecision>;
@@ -44,7 +44,7 @@ const keep = (reason: string): ReleaseOutcome => ({ state: "kept", reason });
 const released = (reason: string): ReleaseOutcome => ({ state: "released", reason });
 
 const removeDirectory =
-  (directory: (runId: string) => string): ResourceKind =>
+  (directory: (runId: string) => string): DecideRelease =>
   async (row) =>
   async () => {
     await rm(directory(row.runId), { recursive: true, force: true });
@@ -58,7 +58,7 @@ function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: 
   return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
 }
 
-const worktree: ResourceKind = async (row) => {
+const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
   return async () => {
@@ -91,7 +91,7 @@ const worktree: ResourceKind = async (row) => {
 // Harness homes hold the agent sessions that resume work in the run's worktree,
 // so they wait for its outcome and stay when it stays.
 const harnessHome =
-  (directory: (runId: string) => string): ResourceKind =>
+  (directory: (runId: string) => string): DecideRelease =>
   async (row, run) => {
     const trees = run.filter((other) => other.kind === "worktree");
     if (trees.some((tree) => tree.state === "kept")) return keep("kept with the run's worktree");
@@ -102,7 +102,7 @@ const harnessHome =
   };
 
 interface KindRules {
-  decide: ResourceKind;
+  decide: DecideRelease;
   /** Whether a keep policy leaves it in place for a person to inspect. */
   inspectable: boolean;
 }
@@ -125,7 +125,7 @@ const KINDS: Record<ReleasableKind, KindRules> = {
 };
 
 /** Whether a keep policy keeps this kind; one with nothing to inspect is always released. */
-export const keptByPolicy = (kind: string): boolean => !releasable(kind) || KINDS[kind].inspectable;
+export const keptByPolicy = (kind: string): boolean => releasable(kind) && KINDS[kind].inspectable;
 
 /** The releasable rows, in the order release must visit them; recorded-only kinds are left out. */
 export const releaseOrder = (rows: readonly ResourceRow[]): ResourceRow[] => {
