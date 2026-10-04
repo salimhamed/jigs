@@ -1,8 +1,9 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import { JigsError } from "../../errors.ts";
+import type { HarnessRuntime } from "../../steps/agents/drivers/harness-runtime.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
+import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
 import {
   announceSlackApp,
   fenceTerminalWorkflowDeliveries,
@@ -355,7 +356,7 @@ test("the resolved World is shared by startup and application-managed shutdown",
 });
 
 // Only the gate's decision; the check itself is covered in
-// checks/harness-runtime.test.ts.
+// steps/agents/drivers/harness-runtime.test.ts.
 const passing = (over: Partial<HarnessRuntime> = {}): HarnessRuntime =>
   ({
     harness: "codex",

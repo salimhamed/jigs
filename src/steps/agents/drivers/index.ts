@@ -1,4 +1,4 @@
-import type { HarnessKind, ModelKind } from "../../../workflow/agents/harness-config.ts";
+import type { AskableModelSource, HarnessKind } from "../../../workflow/agents/harness-config.ts";
 import { claudeDriver } from "./claude.ts";
 import { codexDriver } from "./codex.ts";
 import { openaiCompatibleDriver } from "./openai-compatible.ts";
@@ -6,8 +6,8 @@ import { openrouterDriver } from "./openrouter.ts";
 import { piDriver } from "./pi.ts";
 import type { Driver } from "./types.ts";
 
-export type DriverKind = HarnessKind | ModelKind;
-type DriverRegistry = Partial<{ [K in DriverKind]: Driver<K> }>;
+// Pi's Codex subscription source runs only inside Pi, so it has no driver of its own.
+export type DriverKind = HarnessKind | AskableModelSource["kind"];
 
 /** Every installed execution driver, keyed by its descriptor kind. */
 export const drivers = {
@@ -18,10 +18,10 @@ export const drivers = {
   pi: piDriver,
 } as const;
 
-const registry: DriverRegistry = drivers;
+const registry: { [K in DriverKind]: Driver<K> } = drivers;
 
-/** Return the installed driver for a descriptor kind, if this release provides one. */
-export function driverFor<K extends DriverKind>(kind: K): Driver<K> | undefined {
+/** Return the driver for a descriptor kind. */
+export function driverFor<K extends DriverKind>(kind: K): Driver<K> {
   return registry[kind];
 }
 

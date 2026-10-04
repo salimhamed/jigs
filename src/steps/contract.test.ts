@@ -50,6 +50,7 @@ test("Driver keeps its published members", () => {
     | "jitChecks"
     | "envAllowlist"
     | "setsEnv"
+    | "mcpInheritsEnv"
     | "sessionPointer"
     | "displayName"
     | "resolveExecutable"

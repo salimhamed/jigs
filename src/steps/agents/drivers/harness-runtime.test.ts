@@ -1,15 +1,20 @@
 import { DEFAULT_MIN_CODEX_VERSION } from "ai-sdk-provider-codex-cli";
 import { expect, test } from "vitest";
-import { MIN_PI_VERSION } from "../steps/agents/harnesses/executables.ts";
+import { MIN_PI_VERSION } from "../harnesses/executables.ts";
+import { claudeDriver } from "./claude.ts";
+import { codexDriver } from "./codex.ts";
 import { harnessRuntime } from "./harness-runtime.ts";
+import { piDriver } from "./pi.ts";
+
+const clis = { claude: claudeDriver, codex: codexDriver, pi: piDriver };
 
 const found = (path: string) => () => path;
 const answers =
   (stdout: string, stderr = "") =>
   async () => ({ stdout, stderr });
 
-const one = (...[harness, deps]: Parameters<typeof harnessRuntime>) =>
-  harnessRuntime(harness, { factoryEnv: () => [], ...deps });
+const one = (harness: keyof typeof clis, deps: Parameters<typeof harnessRuntime>[1]) =>
+  harnessRuntime(clis[harness], { factoryEnv: () => [], ...deps });
 
 test("a codex past the provider's floor passes and reports path, version and minimum", async () => {
   const runtime = await one("codex", {
@@ -113,7 +118,7 @@ test("an unreadable --version answer is not evidence of a usable CLI", async () 
 
 test("the version probe runs under the agent environment, with the factory's declared names", async () => {
   let spawned: Record<string, string> | undefined;
-  await harnessRuntime("codex", {
+  await harnessRuntime(codexDriver, {
     resolve: found("/c"),
     env: {
       PATH: "/usr/bin",

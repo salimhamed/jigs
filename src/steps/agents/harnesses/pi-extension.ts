@@ -21,9 +21,6 @@ type PiMcpServer = {
   includeTools: string[];
 };
 
-const ENV_NAME = /^[A-Za-z_][A-Za-z0-9_]*$/;
-const SERVER_NAME = /^[A-Za-z0-9_-]+$/;
-
 function environmentSnapshot(values: Record<string, string> | undefined) {
   if (values === undefined) return undefined;
   return Object.fromEntries(
@@ -31,55 +28,12 @@ function environmentSnapshot(values: Record<string, string> | undefined) {
   );
 }
 
+// The descriptor constructor has already rejected every shape the adapter cannot represent.
 function piMcpServers(servers: Record<string, PiMcpServerConfig>): Record<string, PiMcpServer> {
   return Object.fromEntries(
     Object.entries(servers).map(([name, server]) => {
-      if (!SERVER_NAME.test(name))
-        throw new Error(`Pi MCP server '${name}' must use only letters, numbers, '_' or '-'`);
-      if (typeof server !== "object" || server === null || Array.isArray(server))
-        throw new Error(`Pi MCP server '${name}' must be an object`);
-      if (
-        !Array.isArray(server.tools) ||
-        server.tools.length === 0 ||
-        server.tools.some((tool) => typeof tool !== "string" || tool.trim() === "")
-      )
-        throw new Error(`Pi MCP server '${name}' must allow at least one named tool`);
-      if (
-        typeof server.probe !== "object" ||
-        server.probe === null ||
-        typeof server.probe.tool !== "string" ||
-        server.probe.tool === ""
-      )
-        throw new Error(`Pi MCP server '${name}' must declare a probe tool`);
-      if ("disabledTools" in server)
-        throw new Error(
-          `Pi MCP server '${name}' sets disabledTools; Pi exposes only its tools list, so leave the tools out of that instead`,
-        );
-      if (!server.tools.includes(server.probe.tool))
-        throw new Error(`Pi MCP server '${name}' must allow its probe tool '${server.probe.tool}'`);
-      if ("command" in server) {
-        if ("url" in server)
-          throw new Error(`Pi MCP server '${name}' must declare exactly one transport`);
-        const unsupported = Object.keys(server).filter(
-          (key) => !["command", "args", "env", "probe", "tools"].includes(key),
-        );
-        if (unsupported.length > 0)
-          throw new Error(
-            `Pi MCP server '${name}' declares unsupported field(s): ${unsupported.join(", ")}`,
-          );
-        if (typeof server.command !== "string" || server.command.trim() === "")
-          throw new Error(`Pi MCP server '${name}' must declare a non-empty command`);
-        if (server.args !== undefined && !server.args.every((arg) => typeof arg === "string"))
-          throw new Error(`Pi MCP server '${name}' args must contain only strings`);
-        if (
-          server.env !== undefined &&
-          Object.values(server.env).some((value) => typeof value !== "string")
-        )
-          throw new Error(`Pi MCP server '${name}' env must contain only strings`);
-        if (Object.values(server.env ?? {}).some((source) => !ENV_NAME.test(source)))
-          throw new Error(
-            `Pi MCP server '${name}' env values must name step-side environment variables`,
-          );
+      const tools = { directTools: server.tools, includeTools: server.tools };
+      if ("command" in server)
         return [
           name,
           {
@@ -89,47 +43,9 @@ function piMcpServers(servers: Record<string, PiMcpServerConfig>): Record<string
             inheritEnv: false,
             exposeResources: false,
             lifecycle: "eager",
-            directTools: server.tools,
-            includeTools: server.tools,
+            ...tools,
           },
         ];
-      }
-      const unsupported = Object.keys(server).filter(
-        (key) => !["url", "headers", "auth", "bearerTokenEnv", "probe", "tools"].includes(key),
-      );
-      if (unsupported.length > 0)
-        throw new Error(
-          `Pi MCP server '${name}' declares unsupported field(s): ${unsupported.join(", ")}`,
-        );
-      if (typeof server.url !== "string" || server.url.trim() === "")
-        throw new Error(`Pi MCP server '${name}' must declare a non-empty URL`);
-      if (server.bearerTokenEnv !== undefined && server.auth !== undefined)
-        throw new Error(`Pi MCP server '${name}' cannot declare both auth and bearerTokenEnv`);
-      if (
-        server.bearerTokenEnv !== undefined &&
-        (typeof server.bearerTokenEnv !== "string" || !ENV_NAME.test(server.bearerTokenEnv))
-      )
-        throw new Error(
-          `Pi MCP server '${name}' bearerTokenEnv must name a step-side environment variable`,
-        );
-      try {
-        const url = new URL(server.url);
-        if (url.protocol !== "http:" && url.protocol !== "https:") throw new Error();
-        if (url.username !== "" || url.password !== "") throw new Error();
-      } catch {
-        throw new Error(`Pi MCP server '${name}' must declare an HTTP or HTTPS URL`);
-      }
-      if (server.auth !== undefined && server.auth !== "oauth" && server.auth !== false)
-        throw new Error(`Pi MCP server '${name}' declares unsupported authentication`);
-      if (
-        server.headers !== undefined &&
-        Object.values(server.headers).some((value) => typeof value !== "string")
-      )
-        throw new Error(`Pi MCP server '${name}' headers must contain only strings`);
-      if (Object.values(server.headers ?? {}).some((source) => !ENV_NAME.test(source)))
-        throw new Error(
-          `Pi MCP server '${name}' header values must name step-side environment variables`,
-        );
       return [
         name,
         {
@@ -141,8 +57,7 @@ function piMcpServers(servers: Record<string, PiMcpServerConfig>): Record<string
             : { auth: "bearer" as const, bearerTokenEnv: server.bearerTokenEnv }),
           exposeResources: false,
           lifecycle: "eager",
-          directTools: server.tools,
-          includeTools: server.tools,
+          ...tools,
         },
       ];
     }),
@@ -222,14 +137,6 @@ export default function (pi: ExtensionAPI) {
 `,
   );
   return extension;
-}
-
-/** Reject Pi MCP shapes that cannot be represented by the pinned adapter. */
-export function validatePiMcpServers(servers: Record<string, PiMcpServerConfig>): void {
-  piMcpServers(servers);
-  const names = piMcpToolNames(servers);
-  if (new Set(names).size !== names.length)
-    throw new Error("Pi MCP direct tool names must be unique after adapter prefixing");
 }
 
 /** Return the Pi-visible names of every explicitly allowed direct MCP tool. */

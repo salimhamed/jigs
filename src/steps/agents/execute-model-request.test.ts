@@ -191,31 +191,6 @@ test("OpenRouter evaluates typed questions and normalizes metadata", async () =>
   });
 });
 
-test("a malformed question raises a JigsError naming its key before the provider call", async () => {
-  vi.stubEnv("OPENROUTER_API_KEY", "test-key");
-  const evaluate = vi.fn(async () => {
-    throw new Error("provider must not run");
-  });
-  await expect(
-    executeJevWith(
-      {
-        model: models.openrouter("typesafe/jev-1.13"),
-        state: "evidence",
-        questions: {
-          accountRisk: {
-            type: "score",
-            instructions: "How risky is this account?",
-            levels: null as unknown as string[],
-          },
-        },
-      },
-      { workflowRunId: "run-1" },
-      { ...executionSeams, evaluate },
-    ),
-  ).rejects.toThrow('question "accountRisk" is malformed');
-  expect(evaluate).not.toHaveBeenCalled();
-});
-
 test("a provider argument error is translated to the offending question key", async () => {
   vi.stubEnv("OPENROUTER_API_KEY", "test-key");
   const providerError = new Error(

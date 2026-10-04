@@ -72,6 +72,21 @@ test("a Pi descriptor is refused, pointing at runAgent", async () => {
   await expect(opening).rejects.toThrow("runAgent");
 });
 
+test("a driver with no provider model is refused before tokens, checks or the lock", async () => {
+  const { seams } = fakeClaude();
+  const driver = seams.resolveDriver("claude");
+  seams.resolveDriver = (() => ({ ...driver, open: undefined })) as unknown as DriverResolver;
+  seams.accessEnv = vi.fn(async () => ({}));
+  seams.jitFailures = vi.fn(async () => undefined);
+  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toThrow(
+    "createAgentRunner cannot open a Claude Code harness",
+  );
+  expect(seams.accessEnv).not.toHaveBeenCalled();
+  expect(seams.jitFailures).not.toHaveBeenCalled();
+  const { seams: healthy } = fakeClaude();
+  await (await openAgentRunner(claude, { cwd: worktree, run }, healthy)).close();
+});
+
 test("the runner holds the worktree until it is closed, and closes once", async () => {
   const { seams, closed } = fakeClaude();
   const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);

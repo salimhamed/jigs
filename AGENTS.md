@@ -38,8 +38,7 @@ has to keep:
 - `checks/` may not import `service/` or `cli/`.
 - `build/` is the template and generated-integration writer, used by the CLI
   and the service build. It may not import `service/` or `cli/`.
-- No value-import cycles. The one exemption is the cycle through
-  `checks/harnesses.ts` and the drivers, which is temporary.
+- No value-import cycles.
 - A type used by one module stays in that module. A type used on both sides of
   the workflow/steps line lives in `workflow/`, under the same topic. There is
   no shared types folder.

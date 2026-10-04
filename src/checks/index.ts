@@ -168,9 +168,7 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
   const servers = new Map<string, { checks: Check[]; workflows: string[] }>();
   for (const [workflow, { requires }] of Object.entries(workflows)) {
     for (const harness of Object.values(requires?.agents ?? {})) {
-      // A kind with no driver is the harness checks' diagnosis.
       const driver = driverFor(harness.kind);
-      if (driver === undefined) continue;
       for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
         const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
         const entry = servers.get(key) ?? {
@@ -188,11 +186,13 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
                     ),
                   ]
                 : [];
-            return agentMcpServerChecks(
-              harness.kind,
+            return mcpServerChecks(
               { [name]: server },
               root,
               agentStepEnv(driver, { harness, cwd: root }, agentEnv),
+              {
+                inherit: driver.mcpInheritsEnv === true,
+              },
             );
           }),
           workflows: [],
@@ -222,17 +222,6 @@ function serverChecks(name: string, build: () => Check[]): Check[] {
       ),
     ];
   }
-}
-
-// Claude Code and Codex pass a step's environment on to a stdio server; Pi's
-// adapter starts it from its declaration alone.
-function agentMcpServerChecks(
-  kind: Harness["kind"],
-  servers: Harness["mcpServers"],
-  cwd: string,
-  env: Record<string, string>,
-): Check[] {
-  return mcpServerChecks(servers ?? {}, cwd, env, { inherit: kind !== "pi" });
 }
 
 /** Run doctor's checks, giving each MCP probe the allowance a step gives it. */
@@ -303,8 +292,10 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
   const harness = target.harness;
   const driver = driverFor(harness.kind);
   return [
-    ...(driver?.jitChecks?.(target) ?? []),
+    ...(driver.jitChecks?.(target) ?? []),
     ...skillChecks(harness.skills ?? []),
-    ...agentMcpServerChecks(harness.kind, harness.mcpServers, target.cwd, env),
+    ...mcpServerChecks(harness.mcpServers ?? {}, target.cwd, env, {
+      inherit: driver.mcpInheritsEnv === true,
+    }),
   ];
 }

@@ -64,7 +64,6 @@ export async function prepareAgentRun(
 ): Promise<PreparedRun> {
   const { harness, cwd, resume } = target;
   const driver = seams.resolveDriver(harness.kind);
-  if (driver === undefined) throw new JigsError(`no driver is registered for ${harness.kind}`);
   if (driver.family !== "harness")
     throw new JigsError(`${harness.kind} is a model source, not an agent harness`);
   if (resume !== undefined && resume.harness !== harness.kind) {
@@ -155,9 +154,10 @@ export async function openAgentRunner(
   options: AgentRunnerOptions,
   seams: ExecutionSeams,
 ): Promise<OpenedAgentRunner> {
-  if (harness.kind === "pi")
+  const { displayName, open } = seams.resolveDriver(harness.kind);
+  if (open === undefined)
     throw new JigsError(
-      "createAgentRunner cannot open a Pi harness: Pi has no AI SDK provider model. Run Pi with runAgent from #jigs/routines",
+      `createAgentRunner cannot open a ${displayName} harness: it has no AI SDK provider model. Run it with runAgent from #jigs/routines`,
     );
   const target: HarnessTarget = { harness, cwd: options.cwd, resume: options.resume };
   const cancellation = await watchRunCancellation(options.run.workflowRunId, seams.runStatus);
@@ -170,8 +170,7 @@ export async function openAgentRunner(
   }
   const { driver } = prepared;
   try {
-    if (driver.open === undefined) throw new JigsError(`the ${harness.kind} driver cannot run`);
-    const opened = await driver.open(target, {
+    const opened = await open(target, {
       metadata: options.run,
       env: prepared.env,
       signal: cancellation.signal,

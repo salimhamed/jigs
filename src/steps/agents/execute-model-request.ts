@@ -23,8 +23,7 @@ export async function executeModelWith(
   deps: ExecutionSeams,
 ): Promise<ModelResult> {
   const driver = deps.resolveDriver(wire.model.kind);
-  if (driver?.ask === undefined)
-    throw new JigsError(`no driver is registered for ${wire.model.kind}`);
+  if (driver.ask === undefined) throw new JigsError(`the ${wire.model.kind} driver cannot ask`);
   if (driver.family !== "model")
     throw new JigsError(`${wire.model.kind} is an agent harness, not a model source`);
   const requestReport = await runChecks(driver.descriptorChecks(wire.model));
@@ -56,33 +55,12 @@ export async function executeJevWith<const QUESTIONS extends JevQuestions>(
   deps: ExecutionSeams,
 ): Promise<JevResult<QUESTIONS>> {
   const driver = deps.resolveDriver(wire.model.kind);
-  if (driver?.decide === undefined)
+  if (driver.decide === undefined)
     throw new JigsError(
       `${wire.model.model} cannot be used with askJev: no decision driver exists`,
     );
   if (!isJsonValue(wire.state, new Set()))
     throw new JigsError("askJev state must be JSON-compatible and contain no cycles");
-  for (const [key, question] of Object.entries(wire.questions)) {
-    if (typeof question.instructions !== "string" || question.instructions.trim() === "")
-      throw new JigsError(`question "${key}" is malformed: instructions must not be empty`);
-    if (
-      question.type === "choice" &&
-      (Object.keys(question.options).length === 0 ||
-        Object.values(question.options).some((description) => description.trim() === ""))
-    )
-      throw new JigsError(
-        `question "${key}" is malformed: choices need at least one described option`,
-      );
-    if (
-      question.type === "score" &&
-      (!Array.isArray(question.levels) ||
-        question.levels.length < 2 ||
-        question.levels.some((level) => typeof level !== "string" || level.trim() === ""))
-    )
-      throw new JigsError(
-        `question "${key}" is malformed: scores need at least two described levels`,
-      );
-  }
   const requestReport = await runChecks(driver.descriptorChecks(wire.model));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const generation = await driver.decide(wire, {

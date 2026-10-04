@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
-import { claudeAuthCheck, codexAuthCheck } from "../harnesses.ts";
+import { claudeAuthCheck } from "../../steps/agents/drivers/claude-checks.ts";
+import { codexAuthCheck } from "../../steps/agents/drivers/codex-checks.ts";
 
 // The live half of the harness auth checks: the unit tests feed recorded
 // payloads, this one asks the machine's real logins.

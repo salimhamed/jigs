@@ -4,6 +4,7 @@ import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { JigsError } from "../errors.ts";
 import { assertAgentAccess } from "./agent-access.ts";
+import { assertPiMcpServers } from "./pi-mcp.ts";
 
 /**
  * A harmless MCP tool call used to prove that a configured server is available.
@@ -469,7 +470,8 @@ export type HarnessForOptions<H, O> = [Extract<keyof O, keyof ToolFree>] extends
 /**
  * Build a Pi harness around a model source. `compat` applies only to an
  * OpenAI-compatible source; each hint omitted from it defaults to `false`.
- * Without `tools` or `mcpServers` the harness also works with `askAgent`.
+ * Without `tools` or `mcpServers` the harness also works with `askAgent`. An
+ * MCP server Pi cannot run throws here, when the workflow module loads.
  */
 function piHarness<O extends PiHarnessOptions = Record<never, never>>(
   model: OpenaiCompatibleSource,
@@ -488,6 +490,7 @@ function piHarness<
 >(model: M, options?: O): HarnessForOptions<PiHarness, O>;
 function piHarness(model: ModelSource, options: PiHarnessOptions = {}): PiHarness {
   const { compat, ...harnessOptions } = options;
+  if (harnessOptions.mcpServers !== undefined) assertPiMcpServers(harnessOptions.mcpServers);
   assertAgentAccess(harnessOptions);
   if (model.kind === "openai-compatible") {
     return {

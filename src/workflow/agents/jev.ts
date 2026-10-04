@@ -1,3 +1,4 @@
+import { JigsError } from "../errors.ts";
 import type { OpenrouterSource } from "./harness-config.ts";
 
 /**
@@ -115,11 +116,12 @@ export type ExecuteJevStep = <const QUESTIONS extends JevQuestions>(
  * @group Decision models
  */
 export function yesNo(instructions: string): YesNoQuestion {
-  return { type: "yes-no", instructions };
+  return { type: "yes-no", instructions: described(instructions) };
 }
 
 /**
- * Build a question answered with one named option.
+ * Build a question answered with one named option. It throws unless every option has a
+ * description.
  *
  * @group Decision models
  */
@@ -127,16 +129,30 @@ export function choice<const OPTIONS extends Record<string, string>>(
   instructions: string,
   options: OPTIONS,
 ): ChoiceQuestion<OPTIONS> {
-  return { type: "choice", instructions, options };
+  if (
+    Object.keys(options).length === 0 ||
+    Object.values(options).some((description) => description.trim() === "")
+  )
+    throw new JigsError("a choice question needs at least one option, each with a description");
+  return { type: "choice", instructions: described(instructions), options };
 }
 
 /**
- * Build a question scored over ordered levels, from lowest to highest.
+ * Build a question scored over ordered levels, from lowest to highest. It throws unless there
+ * are at least two levels, each described.
  *
  * @group Decision models
  */
 export function score(instructions: string, levels: string[]): ScoreQuestion {
-  return { type: "score", instructions, levels };
+  if (levels.length < 2 || levels.some((level) => level.trim() === ""))
+    throw new JigsError("a score question needs at least two levels, each with a description");
+  return { type: "score", instructions: described(instructions), levels };
+}
+
+function described(instructions: string): string {
+  if (instructions.trim() === "")
+    throw new JigsError("a question's instructions must not be empty");
+  return instructions;
 }
 
 /** Evaluate named typed questions against one shared state. */

@@ -2,7 +2,6 @@ import { randomUUID } from "node:crypto";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { harnessRuntimeCheck, piOpenaiCodexAuthCheck } from "../../../checks/harnesses.ts";
 import { modelApiKeyCheck, openaiCompatibleRuntimeCheck } from "../../../checks/models.ts";
 import { JigsError } from "../../../errors.ts";
 import type { PiHarness } from "../../../workflow/agents/harness-config.ts";
@@ -15,7 +14,6 @@ import { executePi } from "../harnesses/pi.ts";
 import {
   piMcpToolNames,
   SUBMIT_RESULT_TOOL,
-  validatePiMcpServers,
   writePiMcpExtension,
   writePiSubmitResultExtension,
 } from "../harnesses/pi-extension.ts";
@@ -29,6 +27,8 @@ import { type PiModelPlan, planPiModel } from "../harnesses/pi-model.ts";
 import { createPiStreamTap } from "../harnesses/pi-stream.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { openStepStream, type StepStream } from "../step-stream.ts";
+import { type HarnessCli, harnessRuntimeCheck } from "./harness-runtime.ts";
+import { piMcpToolNamesCheck, piOpenaiCodexAuthCheck } from "./pi-checks.ts";
 import type {
   Driver,
   DriverContext,
@@ -90,6 +90,13 @@ const defaultDependencies: PiDriverDependencies = {
     return preparePiInvocationHome(runId, source, skills === undefined ? {} : { skills });
   },
   executePi,
+};
+
+const cli: HarnessCli<"pi"> = {
+  kind: "pi",
+  displayName: "Pi",
+  resolveExecutable: resolvePiExecutable,
+  minimumVersion: MIN_PI_VERSION,
 };
 
 export function createPiDriver(deps: PiDriverDependencies = defaultDependencies): Driver<"pi"> {
@@ -235,15 +242,14 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
   }
 
   return {
-    kind: "pi",
     family: "harness",
     ask,
     run,
-    installationChecks: () => [harnessRuntimeCheck("pi")],
+    installationChecks: () => [harnessRuntimeCheck(cli)],
     descriptorChecks: (harness) => {
-      if (harness.mcpServers !== undefined) validatePiMcpServers(harness.mcpServers);
       const model = planPiModel(harness);
       return [
+        ...(harness.mcpServers === undefined ? [] : [piMcpToolNamesCheck(harness.mcpServers)]),
         ...(model.runtimeSource === undefined
           ? []
           : [openaiCompatibleRuntimeCheck(model.runtimeSource)]),
@@ -268,9 +274,7 @@ export function createPiDriver(deps: PiDriverDependencies = defaultDependencies)
     },
     sessionPointer: { providerKey: "pi", field: "sessionId" },
     setsEnv: ["PI_CODING_AGENT_DIR"],
-    displayName: "Pi",
-    resolveExecutable: resolvePiExecutable,
-    minimumVersion: MIN_PI_VERSION,
+    ...cli,
   } satisfies Driver<"pi">;
 }
 
