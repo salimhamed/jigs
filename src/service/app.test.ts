@@ -592,7 +592,7 @@ test("every response names the jigs the service runs, misses included", async ()
   }
 });
 
-test("health names the factory that answers here, and the injected workflows", async () => {
+test("health names the factory and the process that answer here, and the injected workflows", async () => {
   const res = await createApp(fixture, {
     ...deps,
     context: testFactoryContext({ root: "/factories/acme" }),
@@ -605,6 +605,7 @@ test("health names the factory that answers here, and the injected workflows", a
     ready: false,
     phase: "starting",
     factoryRoot: "/factories/acme",
+    pid: process.pid,
     workflows: ["plain", "dated"],
   });
 });
