@@ -10,7 +10,7 @@
   "scripts": {
     "dev": "node packages/jigs/src/cli/cli.ts",
     "build": "pnpm -r --if-present build",
-    "test": "pnpm -r --if-present test",
+    "test": "pnpm -r --workspace-concurrency=1 --if-present test",
     "test:db": "pnpm --filter @jigs-ai/jigs test:db",
     "test:live": "pnpm --filter @jigs-ai/jigs test:live",
     "typecheck": "pnpm -r --if-present typecheck",
