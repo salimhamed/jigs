@@ -70,24 +70,26 @@ async function runAgent(
   // Pi has no provider model: its driver runs the whole call itself and builds
   // its own result tool from the schema.
   if (wire.harness.kind === "pi") {
-    const prepared = await prepareAgentRun(wire, seams);
-    try {
-      const run = prepared.driver.run;
-      if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
-      const generation = await withRunCancellation(
-        metadata.workflowRunId,
-        (signal) => run(wire, { metadata, deps: seams, env: prepared.env, signal }),
-        seams.runStatus,
-      );
-      const session = extractAgentSession(
-        wire.harness,
-        generation.providerMetadata,
-        prepared.driver.sessionPointer,
-      );
-      return resultOf(wire, generation, session);
-    } finally {
-      prepared.release();
-    }
+    return withRunCancellation(
+      metadata.workflowRunId,
+      async (signal) => {
+        const prepared = await prepareAgentRun(wire, seams, signal);
+        try {
+          const run = prepared.driver.run;
+          if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
+          const generation = await run(wire, { metadata, deps: seams, env: prepared.env, signal });
+          const session = extractAgentSession(
+            wire.harness,
+            generation.providerMetadata,
+            prepared.driver.sessionPointer,
+          );
+          return resultOf(wire, generation, session);
+        } finally {
+          prepared.release();
+        }
+      },
+      seams.runStatus,
+    );
   }
   const runner = await openAgentRunner(
     wire.harness,

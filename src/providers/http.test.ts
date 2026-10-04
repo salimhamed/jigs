@@ -116,3 +116,37 @@ test("a provider can name another answer a rate limit, and it is waited out like
   expect(sleeps).toEqual([3000]);
   expect(calls).toHaveLength(2);
 });
+
+test("an abort ends a rate-limit wait with the signal's reason", async () => {
+  const { fetch, calls } = fakeFetch(() => jsonResponse({}, 429, { "retry-after": "30" }));
+  const controller = new AbortController();
+  const cancelled = new Error("run cancelled");
+  const request = providerRequest({
+    provider: "linear",
+    auth: { bearer: async () => "t" },
+    url: "https://linear.test/graphql",
+    fetch,
+    signal: controller.signal,
+  });
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  controller.abort(cancelled);
+  await expect(request).rejects.toBe(cancelled);
+  expect(calls).toHaveLength(1);
+});
+
+test("an already-aborted signal skips the rate-limit wait", async () => {
+  const { fetch, calls } = fakeFetch(() => jsonResponse({}, 429, { "retry-after": "1" }));
+  const { sleep, sleeps } = fakeSleep();
+  await expect(
+    providerRequest({
+      provider: "slack",
+      auth: { bearer: async () => "t" },
+      url: "https://slack.test/api/auth.test",
+      fetch,
+      sleep,
+      signal: AbortSignal.abort(new Error("gone")),
+    }),
+  ).rejects.toThrow("gone");
+  expect(calls).toHaveLength(1);
+  expect(sleeps).toEqual([]);
+});

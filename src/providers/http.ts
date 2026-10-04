@@ -95,7 +95,9 @@ export interface ProviderRequest<T> {
    */
   decode?: (res: Response, text: string, fail: Fail) => T;
   fetch?: typeof fetch;
-  sleep?: (ms: number) => Promise<void>;
+  sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
+  /** Ends a rate-limit wait early, failing with the signal's reason. */
+  signal?: AbortSignal;
 }
 
 /** A JSON body on success, nothing on 204, and a failure for any error status. */
@@ -104,7 +106,24 @@ function jsonDecode<T>(res: Response, text: string, fail: Fail): T {
   return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
 }
 
-const realSleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+const realSleep = (ms: number, signal?: AbortSignal) =>
+  new Promise<void>((resolve) => {
+    const timer = setTimeout(resolve, ms);
+    signal?.addEventListener("abort", () => clearTimeout(timer), { once: true });
+  });
+
+const abortReason = (signal: AbortSignal): unknown => signal.reason ?? new JigsError("cancelled");
+
+/** `promise`, or a rejection with the signal's reason as soon as `signal` aborts. */
+export function abortable<T>(promise: Promise<T>, signal?: AbortSignal): Promise<T> {
+  if (signal === undefined) return promise;
+  if (signal.aborted) return Promise.reject(abortReason(signal));
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => reject(abortReason(signal));
+    signal.addEventListener("abort", onAbort, { once: true });
+    promise.then(resolve, reject).finally(() => signal.removeEventListener("abort", onAbort));
+  });
+}
 
 function retryAfterHeader(res: Response): number {
   const seconds = Number.parseInt(res.headers.get("retry-after") ?? "", 10);
@@ -147,7 +166,8 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
       if (wait > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${wait}s`;
       else if (rateLimited < RATE_LIMIT_RETRIES) {
         rateLimited += 1;
-        await sleep(wait * 1000);
+        if (spec.signal?.aborted) throw abortReason(spec.signal);
+        await abortable(sleep(wait * 1000, spec.signal), spec.signal);
         continue;
       }
     }
