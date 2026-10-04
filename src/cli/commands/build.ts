@@ -6,7 +6,7 @@ import { JigsError } from "../../errors.ts";
 import { type ExecFile, type ExecOutput, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { displayPath } from "../output.ts";
-import { SERVICE_ENTRY } from "./service-lifecycle.ts";
+import { SERVICE_ENTRY } from "./service-process.ts";
 
 // Compiles a factory repo's own workflows into its own service bundle. Both
 // halves of the work belong to the factory, not to this CLI: the generated

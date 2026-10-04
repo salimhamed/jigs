@@ -20,12 +20,10 @@ import {
   section,
   tone,
 } from "../output.ts";
+import { requireServiceStopped } from "./service.ts";
 import { runNotFound } from "./service-client.ts";
-import {
-  acquireServiceExclusion,
-  requireServiceStopped,
-  type ServiceProcesses,
-} from "./service-lifecycle.ts";
+import type { ServiceProcesses } from "./service-process.ts";
+import { acquireServiceExclusion } from "./service-record.ts";
 
 export interface ResourcesOptions {
   run?: string;

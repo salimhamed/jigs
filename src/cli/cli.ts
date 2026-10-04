@@ -21,14 +21,14 @@ import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
 import { showRuns } from "./commands/run-list.ts";
-import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import {
   restartService,
   serviceLogs,
   serviceStatus,
   startService,
   stopService,
-} from "./commands/service-lifecycle.ts";
+} from "./commands/service.ts";
+import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";

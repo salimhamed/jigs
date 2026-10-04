@@ -6,7 +6,7 @@ import { JigsError } from "../../errors.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir, stubService } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { coerceInputs, launchRun, splitInputs, validateInputs } from "./run.ts";
-import { SERVICE_ENTRY } from "./service-lifecycle.ts";
+import { SERVICE_ENTRY } from "./service-process.ts";
 
 const fetchMock = vi.fn();
 let lines: string[];

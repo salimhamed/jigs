@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { JigsError } from "../../errors.ts";
+import { JigsError } from "../errors.ts";
 import {
   judgeRecord,
   type ProcessControl,

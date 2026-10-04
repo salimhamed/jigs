@@ -1,6 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFileSync } from "node:fs";
-import { JigsError } from "../../errors.ts";
+import { JigsError } from "../errors.ts";
 
 /** One row of a process snapshot. */
 export interface ProcessEntry {

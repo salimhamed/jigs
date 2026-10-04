@@ -1253,21 +1253,24 @@ function lines(file) {
   return readFileSync(file, "utf8").trim().split("\n").filter(Boolean);
 }
 
-function pidFiles(dataHome) {
+function recordedProcesses(dataHome) {
   const services = path.join(dataHome, "jigs", "services");
   if (!existsSync(services)) return [];
   return readdirSync(services)
-    .filter((name) => name.endsWith(".pid"))
-    .map((name) => path.join(services, name));
+    .filter((name) => name.endsWith(".supervision"))
+    .map((name) => path.join(services, name))
+    .flatMap((file) => {
+      const { processGroup } = JSON.parse(readFileSync(file, "utf8"));
+      return processGroup === undefined ? [] : [{ file, pid: processGroup }];
+    });
 }
 
 function assertNoRecordedProcess(dataHome) {
-  assert.deepEqual(pidFiles(dataHome), [], "service stop left a pidfile behind");
+  assert.deepEqual(recordedProcesses(dataHome), [], "service stop left a recorded process behind");
 }
 
 function killRecordedProcesses(dataHome) {
-  for (const file of pidFiles(dataHome)) {
-    const pid = Number(readFileSync(file, "utf8").trim());
+  for (const { file, pid } of recordedProcesses(dataHome)) {
     if (Number.isInteger(pid) && pid > 1) {
       try {
         process.kill(pid, "SIGKILL");

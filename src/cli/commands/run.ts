@@ -4,7 +4,7 @@ import { JigsError } from "../../errors.ts";
 import { columns, hint, indent, runHeading } from "../output.ts";
 import { checkLines } from "./doctor.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
-import { serviceBehindSources } from "./service-lifecycle.ts";
+import { serviceBehindSources } from "./service-process.ts";
 
 export interface LaunchDeps extends ServiceDeps {
   // Set only when the run goes to the local factory's own service, so the

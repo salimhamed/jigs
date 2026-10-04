@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveService } from "../../config/factory-config.ts";
@@ -6,7 +6,7 @@ import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { downFactory } from "./down.ts";
-import { servicePidfilePath, serviceSupervisionPath } from "./service-lifecycle.ts";
+import { serviceRecordPath } from "./service-record.ts";
 import {
   closeFakeServices,
   execError,
@@ -14,8 +14,8 @@ import {
   fakeExec,
   fakeProcesses,
   fakeService,
+  recordService,
   factory as scaffold,
-  serviceRecord,
 } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -43,10 +43,7 @@ function down(root: string, io: { exec: ReturnType<typeof fakeExec>; procs: Fake
 
 function running(root: string, procs: FakeProcesses, pid: number): string {
   const { slug } = resolveService(resolveFactoryContext(root));
-  const pidfile = servicePidfilePath(slug);
-  mkdirSync(path.dirname(pidfile), { recursive: true });
-  writeFileSync(pidfile, `${pid}\n`);
-  writeFileSync(serviceSupervisionPath(slug), serviceRecord(pid));
+  recordService(slug, pid);
   procs.alive.add(pid);
   return slug;
 }
@@ -59,7 +56,7 @@ test("stops the service process, then Postgres without removing its volume", asy
   await down(root, io);
 
   expect(io.procs.signals).toContainEqual({ pid: 53812, sig: "SIGTERM" });
-  expect(existsSync(servicePidfilePath(slug))).toBe(false);
+  expect(existsSync(serviceRecordPath(slug))).toBe(false);
   expect(io.exec.calls.map((call) => [call.file, ...call.args])).toEqual([
     ["docker", "compose", "ps", "-a", "--format", "json"],
     ["docker", "compose", "config", "--format", "json"],
