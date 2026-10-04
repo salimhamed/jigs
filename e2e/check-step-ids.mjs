@@ -1139,9 +1139,16 @@ if (postgresUrl === undefined || postgresUrl === "") {
       { cwd: repo, stdio: "inherit" },
     );
     console.log(
-      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM",
+      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",
     );
-    const boot = await bootOutcome(postgresUrl);
+    // The service runs on the configuration it was built with: a config on
+    // disk that throws when loaded must not stop it.
+    const configFile = path.join(factory, "jigs.config.ts");
+    const builtConfig = readFileSync(configFile, "utf8");
+    writeFileSync(configFile, 'throw new Error("the service read jigs.config.ts");\n');
+    const boot = await bootOutcome(postgresUrl).finally(() =>
+      writeFileSync(configFile, builtConfig),
+    );
     if (boot.problem === null) {
       console.log(`ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`);
     } else {

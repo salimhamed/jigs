@@ -313,8 +313,7 @@ export interface RunRegistry {
 }
 
 function processRegistry(): RunRegistry {
-  const ctx = currentFactoryContext();
-  return { sql: registrySql(ctx), factory: ctx.slug };
+  return { sql: registrySql(), factory: currentFactoryContext().slug };
 }
 
 /** Every run this factory's World holds, described the way `readRunState` describes one. */

@@ -1,0 +1,39 @@
+import { writeFileSync } from "node:fs";
+import path from "node:path";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { removeTmpDir, useTestFactory } from "../test-fixtures.ts";
+import { parseFactoryConfig } from "../workflow/factory-schema.ts";
+import { currentFactoryContext, seedFactoryContext } from "./factory-context.ts";
+
+let parent: string;
+
+beforeEach(() => {
+  parent = useTestFactory({ service: { port: 8990, dashboardPort: 9090 } });
+});
+afterEach(() => {
+  delete (globalThis as Record<symbol, unknown>)[Symbol.for("jigs.factory-context")];
+  vi.unstubAllEnvs();
+  removeTmpDir(parent);
+});
+
+test("a seeded context answers with the built configuration and never reads jigs.config.ts", () => {
+  const root = currentFactoryContext().root;
+  seedFactoryContext(
+    parseFactoryConfig({ service: { port: 7001, dashboardPort: 7002 }, workflows: {} }),
+  );
+  writeFileSync(path.join(root, "jigs.config.ts"), 'throw new Error("read from disk");\n');
+
+  const ctx = currentFactoryContext();
+  expect(ctx.root).toBe(root);
+  expect(ctx.config.service.port).toBe(7001);
+});
+
+test("a seeded context outlives a change of working factory", () => {
+  seedFactoryContext(
+    parseFactoryConfig({ service: { port: 7001, dashboardPort: 7002 }, workflows: {} }),
+  );
+  const seeded = currentFactoryContext();
+  vi.stubEnv("JIGS_FACTORY_ROOT", path.join(parent, "elsewhere"));
+
+  expect(currentFactoryContext()).toBe(seeded);
+});

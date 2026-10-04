@@ -32,7 +32,8 @@ test("the service plugin is generated beside the entry and starts the factory's 
   const source = readFileSync(path.join(root, GENERATED, "service.ts"), "utf8");
   expect(source).toContain('from "@jigs-ai/jigs/service"');
   expect(source).toContain('from "./server.ts"');
-  expect(source).toContain("startService(factory)");
+  expect(source).toContain('from "../jigs.config.ts"');
+  expect(source).toContain("startService(factory, config)");
 });
 
 test("preparing writes only the entry and the plugin, dropping what an earlier release wrote", () => {

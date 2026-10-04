@@ -18,7 +18,7 @@ import { type Check, type CheckResult, failedCheck } from "./check.ts";
 
 export interface BindingChecksOptions {
   // Reading its config is fallible, and one unreadable jigs.config.ts must
-  // collapse to one failed check rather than a throw out of the trigger path.
+  // collapse to one failed check rather than a throw out of the whole report.
   context: FactoryContext;
   // Omitted means every declared binding — what doctor needs, having no
   // workflow manifest to name them.
@@ -34,7 +34,7 @@ function factoryConfigFailure(err: unknown, factoryRoot?: string): Check {
     `the factory config could not be read: ${err instanceof Error ? err.message : String(err)}`,
     factoryRoot === undefined
       ? `start the service from a factory repo, the directory holding ${FACTORY_CONFIG_FILE}`
-      : `create or repair ${path.join(factoryRoot, FACTORY_CONFIG_FILE)}, then: \`${RESTART_SERVICE}\``,
+      : `create or repair ${path.join(factoryRoot, FACTORY_CONFIG_FILE)}, then: \`pnpm exec jigs up\``,
   );
 }
 

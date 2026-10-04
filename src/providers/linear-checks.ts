@@ -122,7 +122,7 @@ export function linearChecks(ctx: FactoryContext): Check[] {
         "linear.identity",
         "Linear identity",
         err instanceof Error ? err.message : String(err),
-        `repair ${FACTORY_CONFIG_FILE}, then: \`${RESTART_SERVICE}\``,
+        `repair ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
       ),
     ];
   }

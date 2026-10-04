@@ -2,6 +2,7 @@ import { existsSync, readFileSync, statSync } from "node:fs";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { parsePs, type ServiceTarget } from "../../service/process-tree.ts";
+import { FACTORY_CONFIG_FILE } from "../../workflow/factory-schema.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, indent, layout } from "../output.ts";
 import {
@@ -13,6 +14,7 @@ import {
   runningBundleHash,
   type ServiceLifecycleDeps,
   spawnService,
+  staleWorkflowSources,
   stopRecorded,
   tailLines,
 } from "./service-process.ts";
@@ -72,8 +74,21 @@ function reportStarted(out: (line: string) => void, { pid, service }: Launched):
   }
 }
 
+// The service runs on the configuration it was built with, but is spawned on
+// the ports jigs.config.ts declares now; the two must not disagree.
+function refuseUnbuiltConfig(deps: ServiceLifecycleDeps): void {
+  const { root } = factoryContextAt(deps.cwd);
+  if (staleWorkflowSources(root).includes(FACTORY_CONFIG_FILE)) {
+    throw new JigsError(
+      `${FACTORY_CONFIG_FILE} changed since the service was built`,
+      "build and restart onto it: `pnpm exec jigs up`",
+    );
+  }
+}
+
 /** Starts the service and waits until it reports itself ready. */
 export async function startService(deps: ServiceLifecycleDeps): Promise<void> {
+  refuseUnbuiltConfig(deps);
   const launched = await launch(deps);
   if (launched === undefined) return;
   await awaitReady(deps, launched.service.slug, launched.service.serviceUrl, launched.pid);
@@ -81,6 +96,7 @@ export async function startService(deps: ServiceLifecycleDeps): Promise<void> {
 }
 
 export async function restartService(deps: ServiceLifecycleDeps): Promise<void> {
+  refuseUnbuiltConfig(deps);
   await stopService(deps);
   await startService(deps);
 }

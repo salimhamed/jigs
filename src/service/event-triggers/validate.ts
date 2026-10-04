@@ -1,12 +1,12 @@
-// What makes a declared trigger or schedule runnable: the boot refuses one
-// that fails, and doctor reports the same failure on demand.
+// What makes a trigger or schedule runnable beyond what jigs.config.ts checks
+// when it loads: the parts that need the service's sources or the loaded
+// workflow. The boot refuses one that fails, and doctor reports the same
+// failure on demand.
 
 import type { z } from "zod";
 import type { EventTrigger, Factory } from "../../workflow/factory.ts";
+import { DEFAULT_LOOKBACK_MINUTES, DEFAULT_MAX_ACTIVE } from "../../workflow/factory-schema.ts";
 import type { Source, SourceRegistry } from "./sources.ts";
-
-const DEFAULT_MAX_ACTIVE = 20;
-const DEFAULT_LOOKBACK_MINUTES = 60;
 
 /** Why a declaration in jigs.config.ts cannot run, and how to fix it there. */
 export interface ConfigProblem {
@@ -25,28 +25,6 @@ export interface ValidTrigger {
   workflowName: string | undefined;
 }
 
-/** A name a run's trigger id cannot carry: the id is read back by splitting on the first ":". */
-export function nameProblem(kind: "schedule" | "trigger", name: string): ConfigProblem | null {
-  if (!name.includes(":")) return null;
-  return {
-    reason: `${kind} name "${name}" contains ":"`,
-    repair: `rename the "${name}" ${kind} in jigs.config.ts to a name without ":"\na run's trigger id is read back out of the name`,
-  };
-}
-
-/** A workflow name that is not one of the factory's, configured at `at` in jigs.config.ts. */
-export function workflowProblem(
-  factory: Factory,
-  at: string,
-  workflow: string,
-): ConfigProblem | null {
-  if (factory.workflows[workflow]) return null;
-  return {
-    reason: `workflow "${workflow}" is not one of this factory's workflows`,
-    repair: `set ${at}.workflow in jigs.config.ts to one of: ${Object.keys(factory.workflows).join(", ")}`,
-  };
-}
-
 export function issues(list: z.core.$ZodIssue[]): string {
   return list.map((issue) => `${issue.path.join(".") || "(root)"} ${issue.message}`).join("; ");
 }
@@ -58,10 +36,6 @@ export function resolveTrigger(
   sources: SourceRegistry,
 ): ValidTrigger | ConfigProblem {
   const at = `triggers.${name}`;
-  // The occurrence follows the name after a ":", and the trigger column reads
-  // the name back by splitting on the first one.
-  const problem = nameProblem("trigger", name) ?? workflowProblem(factory, at, trigger.workflow);
-  if (problem !== null) return problem;
   const entry = factory.workflows[trigger.workflow] as Factory["workflows"][string];
   const source = sources[trigger.source.kind];
   if (source === undefined) {
@@ -75,20 +49,6 @@ export function resolveTrigger(
     return {
       reason: `source params do not satisfy ${trigger.source.kind}: ${issues(params.error.issues)}`,
       repair: `fix ${at}.source in jigs.config.ts`,
-    };
-  }
-  const maxActive = trigger.maxActive ?? DEFAULT_MAX_ACTIVE;
-  if (!Number.isInteger(maxActive) || maxActive < 1) {
-    return {
-      reason: `maxActive ${maxActive} is not a whole number of at least 1`,
-      repair: `set ${at}.maxActive in jigs.config.ts to 1 or more, or remove it for the default of ${DEFAULT_MAX_ACTIVE}`,
-    };
-  }
-  const lookbackMinutes = trigger.lookbackMinutes ?? DEFAULT_LOOKBACK_MINUTES;
-  if (!Number.isFinite(lookbackMinutes) || lookbackMinutes <= 0) {
-    return {
-      reason: `lookbackMinutes ${lookbackMinutes} is not a positive number of minutes`,
-      repair: `set ${at}.lookbackMinutes in jigs.config.ts above 0, or remove it for the default of ${DEFAULT_LOOKBACK_MINUTES}`,
     };
   }
   const clash = Object.keys(trigger.inputs ?? {}).filter((key) => key in source.sampleInputs);
@@ -106,5 +66,13 @@ export function resolveTrigger(
     };
   }
   const workflowName = (entry.workflow as { workflowId?: string }).workflowId;
-  return { name, trigger, source, params: params.data, maxActive, lookbackMinutes, workflowName };
+  return {
+    name,
+    trigger,
+    source,
+    params: params.data,
+    maxActive: trigger.maxActive ?? DEFAULT_MAX_ACTIVE,
+    lookbackMinutes: trigger.lookbackMinutes ?? DEFAULT_LOOKBACK_MINUTES,
+    workflowName,
+  };
 }

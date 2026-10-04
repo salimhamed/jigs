@@ -56,7 +56,7 @@ export async function provisionWorktree(
 ): Promise<Worktree> {
   const runId = metadata.workflowRunId;
   const ctx = currentFactoryContext();
-  const sql = registrySql(ctx);
+  const sql = registrySql();
 
   return withRunResourceLock(sql, runId, async (lockedSql) => {
     const binding = resolveBinding(ctx.config, request.binding);

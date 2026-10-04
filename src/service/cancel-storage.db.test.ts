@@ -10,7 +10,7 @@ import { afterAll, beforeAll, expect, vi } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { databaseUrl, dbTest, postgresAdminUrl } from "../db-test-fixtures.ts";
-import { ensureRegistry, registrySql } from "../steps/runtime/registry.ts";
+import { ensureRegistry, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
 import { listRunDeadJobs } from "./queue.ts";
@@ -48,6 +48,7 @@ const fixture = {
 const app = createApp(fixture);
 
 let world: ReturnType<typeof createWorld>;
+let registry: RegistrySql;
 let oldBaseUrl: string | undefined;
 let oldPostgresUrl: string | undefined;
 
@@ -70,14 +71,15 @@ beforeAll(async () => {
   });
   setWorld(world);
   await world.start();
-  await ensureRegistry(registrySql());
+  registry = registrySql();
+  await ensureRegistry(registry);
 });
 
 afterAll(async () => {
   vi.unstubAllEnvs();
   deliveryHandlers.clear();
   await world?.close?.();
-  await registrySql().$client.end();
+  await registry.$client.end();
   setWorld(undefined);
   await new Promise<void>((resolve) => {
     server.close(() => resolve());

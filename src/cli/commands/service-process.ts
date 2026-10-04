@@ -11,7 +11,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
-import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { JigsError } from "../../errors.ts";
 import {
@@ -89,8 +88,6 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
     const file = path.join(output, name);
     if (statSync(file).isFile()) hash.update(name).update("\0").update(readFileSync(file));
   }
-  // Service ports and binding settings are also read from the factory at boot.
-  hash.update(JSON.stringify(resolveFactoryContext(factoryRoot).config));
   return hash.digest("hex");
 }
 
