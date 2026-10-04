@@ -4,7 +4,7 @@ import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts
 
 export interface PokeResult {
   runId: string;
-  poked: Array<{ token: string; resumed: boolean }>;
+  poked: Array<{ token: string; outcome: "woken" | "gone" | "failed"; error?: string }>;
 }
 
 export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeResult> {
@@ -22,9 +22,18 @@ export async function pokeRun(runId: string, deps: ServiceDeps): Promise<PokeRes
     throw new JigsError(`poke failed: HTTP ${res.status} ${await res.text()}`);
   }
   const result = (await res.json()) as PokeResult;
+  const failures: string[] = [];
   for (const wake of result.poked) {
     const { label } = hookSubject(wake.token);
-    deps.out(wake.resumed ? `woke the wait on ${label}` : `already gone: ${label}`);
+    if (wake.outcome === "woken") deps.out(`woke the wait on ${label}`);
+    else if (wake.outcome === "gone") deps.out(`already gone: ${label}`);
+    else failures.push(`${label}: ${wake.error}`);
+  }
+  if (failures.length > 0) {
+    throw new JigsError(
+      `could not wake ${failures.join("; ")}`,
+      "the run is still waiting; poke again, and run `pnpm exec jigs doctor` if it keeps failing",
+    );
   }
   return result;
 }
