@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { runChecks } from "../checks/catalog.ts";
-import type { LinearIdentity } from "../config/factory-config.ts";
+import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import {
   type LinearIdentityProbes,
   type LinearOperatorProbes,

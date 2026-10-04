@@ -1,5 +1,5 @@
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { type ExecFile, nodeExecFile } from "../exec.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { detail, hint, section } from "../output.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { type ServiceProcesses, stopService } from "./service-lifecycle.ts";
@@ -19,7 +19,7 @@ export interface DownDeps {
  */
 export async function downFactory(deps: DownDeps): Promise<void> {
   const execFile = deps.execFile ?? nodeExecFile;
-  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const factoryRoot = factoryContextAt(deps.cwd).root;
   await stopService({ cwd: factoryRoot, out: deps.out, processes: deps.processes });
   // Asked before `down`, which removes the container compose would name.
   const { container, volume } = await postgresNames(execFile, factoryRoot);

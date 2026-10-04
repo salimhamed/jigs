@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resetGithubAuth } from "./github-auth.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import {
   ensureRepoWebhook,
   inspectRepoWebhook,
@@ -11,15 +11,13 @@ import type { FetchCall } from "./test-support.ts";
 
 let github: FakeGithub;
 
+const context = testFactoryContext({ env: { GITHUB_TOKEN: "gh_test_token" } });
+
 beforeEach(() => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
-  resetGithubAuth();
   github = fakeGithub();
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  vi.unstubAllEnvs();
-  resetGithubAuth();
 });
 
 test("parseGithubRemote handles ssh, git@, and https forms and returns null for non-github remotes", () => {
@@ -41,6 +39,7 @@ const opts = {
   repo: "api",
   webhooksUrl: "https://factory.example.ts.net",
   secret: "hook-secret",
+  context,
 };
 
 test("creates the webhook when none matches", async () => {

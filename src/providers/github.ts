@@ -3,7 +3,8 @@
 // forbidden. The credential comes from github-auth.ts, whichever identity the
 // factory configured.
 
-import type { MergeMethod } from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
+import type { MergeMethod } from "../workflow/factory-schema.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
@@ -39,13 +40,14 @@ export async function getAuthenticatedUser(): Promise<{ login: string }> {
 export async function findOpenPullRequestsByHeadSha(
   repository: Pick<PullRequestRef, "owner" | "repo">,
   sha: string,
+  context?: FactoryContext,
 ): Promise<PullRequestRef[]> {
   const pulls = await githubGetAll<{
     number: number;
     state: string;
     head: { sha: string };
     base: { repo: { name: string; owner: { login: string } } };
-  }>(`/repos/${repository.owner}/${repository.repo}/commits/${sha}/pulls`);
+  }>(`/repos/${repository.owner}/${repository.repo}/commits/${sha}/pulls`, context);
   return pulls
     .filter((pull) => pull.state === "open" && pull.head.sha === sha)
     .map((pull) => ({
@@ -390,7 +392,7 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
     }`,
       variables: { pullRequestId },
     },
-    pr.owner,
+    { account: pr.owner },
   );
   if (result.errors !== undefined && result.errors.length > 0) {
     throw new GitHubApiError(

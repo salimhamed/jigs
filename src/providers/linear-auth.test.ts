@@ -1,8 +1,8 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { resetProviderContext, useFactoryRoot } from "./credentials.ts";
 import { createLinearClient } from "./linear.ts";
 import {
   createLinearAuth,
@@ -10,7 +10,6 @@ import {
   LINEAR_TOKEN_URL,
   linearAuthFor,
   missingLinearVariables,
-  resolveLinearIdentity,
 } from "./linear-auth.ts";
 import { fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
@@ -22,7 +21,6 @@ beforeEach(() => {
     vi.stubEnv(name, "");
 });
 afterEach(() => {
-  resetProviderContext();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
@@ -124,16 +122,11 @@ test("a missing variable is named along with the mode that needs it", async () =
   ]);
 });
 
-test("outside a factory the identity is a key read from the shell", async () => {
-  expect(resolveLinearIdentity()).toEqual({ mode: "key" });
-  vi.stubEnv("LINEAR_API_KEY", "from-shell");
-  expect(await linearAuthFor().bearer()).toBe("from-shell");
-});
-
-test("a factory's key comes from its .env", async () => {
+test("a factory's key comes from its .env, unless the shell sets one", async () => {
   writeFactory({ mode: "key" }, "LINEAR_API_KEY=from-dotenv\n");
-  useFactoryRoot(tmp);
-  expect(await linearAuthFor().bearer()).toBe("from-dotenv");
+  expect(await linearAuthFor(resolveFactoryContext(tmp)).bearer()).toBe("from-dotenv");
+  vi.stubEnv("LINEAR_API_KEY", "from-shell");
+  expect(await linearAuthFor(resolveFactoryContext(tmp)).bearer()).toBe("from-shell");
 });
 
 const AUTHENTICATION_ERROR = {

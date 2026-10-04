@@ -1,5 +1,4 @@
-import { readFactoryConfig } from "../../../config/factory-config.ts";
-import { factoryRoot } from "../../../config/factory-root.ts";
+import { currentFactoryContext, type FactoryContext } from "../../../config/factory-context.ts";
 import type { DriverRequest } from "../drivers/types.ts";
 
 // Every harness process gets these when the service has them, and nothing else
@@ -62,8 +61,8 @@ export function harnessEnv(
 
 // What this factory declares under agents.env. Steps and checks both read it
 // here, so a check probes the environment its step will run under.
-export function factoryAgentEnv(): readonly string[] {
-  return readFactoryConfig(factoryRoot()).agents.env;
+export function factoryAgentEnv(ctx: FactoryContext = currentFactoryContext()): readonly string[] {
+  return ctx.config.agents.env;
 }
 
 // What a step hands a harness: the names its driver needs and the names the

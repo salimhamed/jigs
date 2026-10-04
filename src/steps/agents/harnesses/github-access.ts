@@ -1,4 +1,3 @@
-import type { ResolvedAppIdentity } from "../../../config/factory-config.ts";
 import { gitConfigEnv, githubAuthHeader, resolveRemoteUrl } from "../../../providers/git.ts";
 import {
   type AppBot,
@@ -10,6 +9,7 @@ import { parseGithubRemote } from "../../../providers/github-webhook.ts";
 import { AGENT_TOKEN_ENV } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { JigsError } from "../../../workflow/errors.ts";
+import type { ResolvedAppIdentity } from "../../../workflow/factory-schema.ts";
 
 // An agent's turn gets no refresh, so its token starts with close to the full hour.
 export const AGENT_TOKEN_MIN_LIFETIME_MS = 55 * 60 * 1000;

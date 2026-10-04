@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
+import { inTestFactory } from "../../test-fixtures.ts";
 import { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 
 const fetchMock = vi.fn();
@@ -13,6 +14,7 @@ afterEach(() => {
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
 });
+inTestFactory();
 
 const respond = (data: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ data }), { status: 200 }));

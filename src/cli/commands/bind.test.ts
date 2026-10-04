@@ -401,6 +401,7 @@ test("bind ensures every jigs label on every run, whatever the approval", async 
     owner: "acme",
     repo: "Api",
     label: expect.objectContaining({ name: "jigs:approved" }),
+    context: expect.objectContaining({ root: factory }),
   });
   expect(lines).toContain("label created: acme/Api#jigs:approved");
   expect(lines).toContain("label verified: acme/Api#jigs:approved");

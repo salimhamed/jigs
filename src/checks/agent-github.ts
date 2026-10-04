@@ -1,11 +1,11 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import type { GithubIdentity } from "../config/factory-config.ts";
 import { RESTART_SERVICE } from "../providers/credentials.ts";
-import { resolveGithubIdentities } from "../providers/github-auth.ts";
+import { githubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { NEEDS_APP_IDENTITY } from "../steps/agents/harnesses/github-access.ts";
 import type { Harness } from "../workflow/agents/harness-config.ts";
+import type { GithubIdentity } from "../workflow/factory-schema.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
 
@@ -63,7 +63,7 @@ export function agentGithubChecks(
       id: "github.agent-identity",
       label: "GitHub App for agents",
       run: async (): Promise<CheckResult> => {
-        const identities = (deps.identities ?? resolveGithubIdentities)();
+        const identities = (deps.identities ?? githubIdentities)();
         if (identities.some((identity) => identity.mode === "app")) return { ok: true };
         return {
           ok: false,

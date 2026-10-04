@@ -4,8 +4,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { Pool, type PoolConfig } from "pg";
-import { factoryRoot } from "../../config/factory-root.ts";
-import { factorySlug } from "../../config/paths.ts";
+import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
 import type { ResourceRecord, ResourceState } from "../../workflow/runtime/resources.ts";
 
 // Several factories may share one database, so every row names its factory and
@@ -35,9 +34,6 @@ export type ResourceKey = Pick<ResourceRow, "factory" | "runId" | "kind" | "iden
 
 export type RegistrySql = NodePgDatabase & { $client: Pool };
 
-/** The factory slug rows are recorded under by the running service. */
-export const currentFactory = (): string => factorySlug(factoryRoot());
-
 /** The caller owns this pool; registrySql() owns the shared process pool. */
 export function connectRegistry(url: string, options: PoolConfig = {}): RegistrySql {
   const pool = new Pool({ ...options, connectionString: url });
@@ -55,9 +51,9 @@ export function connectRegistry(url: string, options: PoolConfig = {}): Registry
 // drains active work. CLI commands use their own pool.
 let client: RegistrySql | undefined;
 
-export function registrySql(): RegistrySql {
+export function registrySql(ctx?: FactoryContext): RegistrySql {
   if (client === undefined) {
-    const url = process.env.WORKFLOW_POSTGRES_URL;
+    const url = (ctx ?? currentFactoryContext()).env("WORKFLOW_POSTGRES_URL");
     if (url === undefined || url === "") {
       throw new Error("WORKFLOW_POSTGRES_URL is not set");
     }
@@ -117,8 +113,9 @@ export async function recordRunDirectory(
   runId: string,
   directory: string,
 ): Promise<void> {
-  await recordResource(registrySql(), {
-    factory: currentFactory(),
+  const ctx = currentFactoryContext();
+  await recordResource(registrySql(ctx), {
+    factory: ctx.slug,
     runId,
     kind,
     identity: runId,

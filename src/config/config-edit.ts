@@ -8,7 +8,7 @@ import {
   ts,
 } from "ts-morph";
 import { JigsError } from "../errors.ts";
-import { FACTORY_CONFIG_FILE } from "./factory-config.ts";
+import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
 
 function propertyName(property: PropertyAssignment): string {
   const node = property.getNameNode();

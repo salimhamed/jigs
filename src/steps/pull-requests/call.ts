@@ -39,7 +39,7 @@ export async function callGitHub<T = unknown>(
   options: { body?: JsonValue; account?: string } = {},
 ): Promise<T> {
   if (!path.startsWith("/")) throw new JigsError(`GitHub path ${path} must start with /`);
-  const response = await githubRequest<T>(method, path, options.body, options.account);
+  const response = await githubRequest<T>(method, path, options.body, { account: options.account });
   console.log(`[github] called ${method} ${path.split("?")[0]}`);
   return response;
 }

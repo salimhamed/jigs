@@ -1,9 +1,9 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import type { PagerDutyIdentity } from "../config/factory-config.ts";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
-import { resetProviderContext, useFactoryRoot } from "./credentials.ts";
+import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import {
   createPagerDutyAuth,
   missingPagerDutyVariables,
@@ -54,7 +54,6 @@ beforeEach(() => {
   for (const name of Object.keys(ENV)) vi.stubEnv(name, "");
 });
 afterEach(() => {
-  resetProviderContext();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
@@ -192,14 +191,15 @@ function writeFactory(pagerduty: unknown): void {
 
 test("the identity is read from the factory config", () => {
   writeFactory({ identity: IDENTITY });
-  useFactoryRoot(tmp);
-  expect(resolvePagerDutyIdentity()).toEqual(IDENTITY);
-  expect(pagerDutyAuthFor().identity).toEqual(IDENTITY);
-  expect(pagerDutyAuthFor()).toBe(pagerDutyAuthFor());
+  const ctx = resolveFactoryContext(tmp);
+  expect(resolvePagerDutyIdentity(ctx)).toEqual(IDENTITY);
+  expect(pagerDutyAuthFor(ctx).identity).toEqual(IDENTITY);
+  expect(pagerDutyAuthFor(ctx)).toBe(pagerDutyAuthFor(ctx));
 });
 
 test("a factory without a pagerduty section says where to add one", () => {
   writeFactory(undefined);
-  useFactoryRoot(tmp);
-  expect(() => resolvePagerDutyIdentity()).toThrow("jigs.config.ts has no pagerduty section");
+  expect(() => resolvePagerDutyIdentity(resolveFactoryContext(tmp))).toThrow(
+    "jigs.config.ts has no pagerduty section",
+  );
 });

@@ -4,17 +4,18 @@
  * @packageDocumentation
  */
 
+import type { World } from "@workflow/world";
 import { type Context, Hono } from "hono";
 import { getRun, resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import { doctorChecks, failedChecks, runDoctorChecks } from "../checks/index.ts";
-import { factoryRoot } from "../config/factory-root.ts";
+import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { webhookSecret } from "../config/webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
-import { currentFactory, listResources, registrySql } from "../steps/runtime/registry.ts";
+import { listResources, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import { readRunState } from "../steps/runtime/run-state.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
@@ -31,17 +32,48 @@ import {
 import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
-import { enrichSuspensions, listRunSteps, listRuns, runExists, worldRunFacts } from "./runs.ts";
+import {
+  enrichSuspensions,
+  listRunSteps,
+  listRuns,
+  type RunRegistry,
+  runExists,
+  worldRunFacts,
+} from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
 import { startRun } from "./trigger.ts";
+import { triggerStore } from "./trigger-store.ts";
 import { listTriggers, pushEvent, triggerChecks, triggerProviders } from "./triggers.ts";
 import { noteWake, recordWake } from "./wake-note.ts";
+
+/** What the routes reach beyond the request. Each defaults to the service's own. */
+export interface AppDeps {
+  /** The factory the service answers for. */
+  context: FactoryContext;
+  /** The World whose hooks a poke and a cancel list. */
+  world: () => Promise<{ hooks: Pick<World["hooks"], "list"> }>;
+  /** The jigs registry. */
+  registry: () => RegistrySql;
+  /** Where a PagerDuty delivery is handed to the event triggers. */
+  triggers: { push: typeof pushEvent };
+}
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
 /** Build the service HTTP application for one factory's workflows and webhooks. */
-export function createApp(factory: Factory): Hono {
+export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   const app = new Hono();
+  // Resolved on first use rather than here: liveness answers even from a
+  // service started outside a factory.
+  const context = () => deps.context ?? currentFactoryContext();
+  const registry = deps.registry ?? (() => registrySql(context()));
+  const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });
+  const triggers = () => triggerStore(registry(), context().slug);
+  const routes: IngressDeps = {
+    context,
+    world: deps.world ?? getWorld,
+    push: deps.triggers?.push ?? pushEvent,
+  };
 
   app.use(async (c, next) => {
     await next();
@@ -59,7 +91,7 @@ export function createApp(factory: Factory): Hono {
       ready: isReady(),
       phase: bootPhase(),
       world: process.env.WORKFLOW_TARGET_WORLD ?? "local (default)",
-      factoryRoot: factoryRootOrNull(),
+      factoryRoot: factoryRootOrNull(context),
       workflows: Object.keys(factory.workflows),
       uptimeSeconds: Math.round(process.uptime()),
     }),
@@ -103,7 +135,7 @@ export function createApp(factory: Factory): Hono {
   app.post("/api/workflows/:name/runs", async (c) => {
     const name = c.req.param("name");
     const body = await c.req.json<{ inputs?: unknown }>().catch(() => ({}) as { inputs?: unknown });
-    const result = await startRun(factory, name, body.inputs, crypto.randomUUID());
+    const result = await startRun(factory, name, body.inputs, crypto.randomUUID(), context());
     switch (result.kind) {
       case "unknown-workflow":
         return c.json(unknownWorkflow(name), 404);
@@ -116,7 +148,7 @@ export function createApp(factory: Factory): Hono {
           {
             runId: result.runId,
             workflow: name,
-            dashboard: dashboardPointer(result.runId),
+            dashboard: dashboardPointer(context(), result.runId),
           },
           201,
         );
@@ -125,16 +157,18 @@ export function createApp(factory: Factory): Hono {
 
   // What this factory fires on its own, with the next occurrence of each and
   // the run it is already waiting on.
-  app.get("/api/schedules", async (c) => c.json(await listSchedules(factory)));
+  app.get("/api/schedules", async (c) =>
+    c.json(await listSchedules(factory, { listRuns: () => listRuns(factory, runRegistry()) })),
+  );
 
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
   app.get("/api/doctor", async (c) =>
     c.json(
       await runDoctorChecks([
-        ...doctorChecks(factory.workflows, triggerProviders(factory)),
+        ...doctorChecks(factory.workflows, triggerProviders(factory), context()),
         ...scheduleChecks(factory),
-        ...triggerChecks(factory),
+        ...triggerChecks(factory, undefined, { store: triggers }),
       ]),
     ),
   );
@@ -144,9 +178,9 @@ export function createApp(factory: Factory): Hono {
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
   // provider. A provider whose webhooks are off has no route at all, so a
   // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.github?.enabled) mountGithubIngress(app);
-  if (factory.webhooks?.linear?.enabled) mountLinearIngress(app);
-  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app);
+  if (factory.webhooks?.github?.enabled) mountGithubIngress(app, routes);
+  if (factory.webhooks?.linear?.enabled) mountLinearIngress(app, routes);
+  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app, routes);
 
   // Manual wake on the same code path as the ingress: resume every token the
   // run's suspensions are satisfied by. The fallback when a delivery was missed.
@@ -154,7 +188,7 @@ export function createApp(factory: Factory): Hono {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const run = getRun(runId);
-    const tokens = await runResourceTokens(run.runId);
+    const tokens = await runResourceTokens(routes, run.runId);
     if (tokens.length === 0) {
       return c.json({ error: "run has no suspensions to poke" }, 409);
     }
@@ -181,7 +215,7 @@ export function createApp(factory: Factory): Hono {
   // Everything `jigs status` renders: each run's state, described as the
   // single-run route describes it, with the resources it recorded.
   app.get("/api/runs", async (c) => {
-    const runs = await listRuns(factory);
+    const runs = await listRuns(factory, runRegistry());
     // The schedules ride along on the same run listing the table above
     // renders, so status stays one round trip and the two tables can never
     // disagree about which schedule is busy.
@@ -189,11 +223,13 @@ export function createApp(factory: Factory): Hono {
       listRuns: async () => runs,
     });
     // A registry error costs the triggers section, never the runs above it.
-    const triggers = await listTriggers(factory).then(
-      (views) => ({ triggers: views }),
-      (error: unknown) => ({ triggers: [], triggersError: String(error) }),
-    );
-    return c.json({ runs, schedules, ...triggers });
+    const listed = await Promise.resolve()
+      .then(() => listTriggers(factory, { store: triggers() }))
+      .then(
+        (views) => ({ triggers: views }),
+        (error: unknown) => ({ triggers: [], triggersError: String(error) }),
+      );
+    return c.json({ runs, schedules, ...listed });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum
@@ -207,7 +243,7 @@ export function createApp(factory: Factory): Hono {
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
       return c.json({ error: `run ${runId} is already ${status}`, status }, 409);
     }
-    const claimedTokens = await runResourceTokens(runId);
+    const claimedTokens = await runResourceTokens(routes, runId);
     if (status !== "cancelled") {
       try {
         await run.cancel();
@@ -225,14 +261,14 @@ export function createApp(factory: Factory): Hono {
         throw error;
       }
     }
-    const retainedTokens = await runResourceTokens(runId);
+    const retainedTokens = await runResourceTokens(routes, runId);
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
     // where it is and that offline resource prune is the way to reclaim it.
     const worktrees = (
-      await listResources(registrySql(), {
-        factory: currentFactory(),
+      await listResources(registry(), {
+        factory: context().slug,
         runId,
         kind: "worktree",
         states: UNRELEASED_STATES,
@@ -258,7 +294,7 @@ export function createApp(factory: Factory): Hono {
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const [steps, deadJobs] = await Promise.all([
       listRunSteps(runId),
-      listRunDeadJobs(registrySql(), runId),
+      listRunDeadJobs(registry(), runId),
     ]);
     return c.json({ steps, deadJobs });
   });
@@ -269,13 +305,13 @@ export function createApp(factory: Factory): Hono {
   app.get("/api/runs/:runId", async (c) => {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
-    const state = await readRunState(registrySql(), currentFactory(), runId, (id) =>
-      worldRunFacts(id, factory),
+    const state = await readRunState(registry(), context().slug, runId, (id) =>
+      worldRunFacts(id, factory, runRegistry()),
     );
     const body: Record<string, unknown> = {
       ...state,
       suspensions: await enrichSuspensions(state.suspensions, runId),
-      dashboard: dashboardPointer(runId),
+      dashboard: dashboardPointer(context(), runId),
     };
     // Read only where there is one: a running run's return value is a promise
     // that settles long after this response.
@@ -301,12 +337,18 @@ export function createApp(factory: Factory): Hono {
   return app;
 }
 
-function mountGithubIngress(app: Hono): void {
+interface IngressDeps {
+  context: () => FactoryContext;
+  world: AppDeps["world"];
+  push: typeof pushEvent;
+}
+
+function mountGithubIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/github", async (c) => {
     const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
     // The boot gate refuses a service without the secret; a missing one here
     // still fails closed.
-    const secret = webhookSecret("github");
+    const secret = webhookSecret("github", deps.context());
     const rawBody = await c.req.text();
     const signature = c.req.header("x-hub-signature-256");
     if (secret === undefined || !verifyGithubSignature(rawBody, signature, secret)) {
@@ -326,7 +368,7 @@ function mountGithubIngress(app: Hono): void {
       }
       let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
       try {
-        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha);
+        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context());
       } catch (error) {
         const reason =
           error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
@@ -358,9 +400,9 @@ function mountGithubIngress(app: Hono): void {
   });
 }
 
-function mountLinearIngress(app: Hono): void {
+function mountLinearIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/linear", async (c) => {
-    const secret = webhookSecret("linear");
+    const secret = webhookSecret("linear", deps.context());
     const rawBody = await c.req.text();
     const signature = c.req.header("linear-signature");
     if (secret === undefined || !verifyLinearSignature(rawBody, signature, secret)) {
@@ -387,9 +429,9 @@ function mountLinearIngress(app: Hono): void {
 // PagerDuty events start runs rather than wake them. The answer waits only
 // for the occurrence's row, never the start, so it lands well inside
 // PagerDuty's timeout; an event no trigger takes, of any type, is acknowledged.
-function mountPagerDutyIngress(app: Hono): void {
+function mountPagerDutyIngress(app: Hono, deps: IngressDeps): void {
   app.post("/ingress/pagerduty", async (c) => {
-    const secret = webhookSecret("pagerduty");
+    const secret = webhookSecret("pagerduty", deps.context());
     const rawBody = await c.req.text();
     const signature = c.req.header("x-pagerduty-signature");
     if (secret === undefined || !verifyPagerDutySignature(rawBody, signature, secret)) {
@@ -400,7 +442,7 @@ function mountPagerDutyIngress(app: Hono): void {
     const event = `event=${sanitizeForLog(pagerDutyEventType(payload) ?? "unknown")}`;
     let triggers: string[];
     try {
-      triggers = await pushEvent("pagerduty", payload);
+      triggers = await deps.push("pagerduty", payload);
     } catch (error) {
       // Still a 2xx: PagerDuty switches a subscription off after repeated
       // failures, and the poll finds the incident anyway.
@@ -418,9 +460,9 @@ function mountPagerDutyIngress(app: Hono): void {
 
 // Liveness must answer from anywhere, including a service started outside a
 // factory, so an unlocatable root is reported rather than thrown as a 500.
-function factoryRootOrNull(): string | null {
+function factoryRootOrNull(context: () => FactoryContext): string | null {
   try {
-    return factoryRoot();
+    return context().root;
   } catch {
     return null;
   }
@@ -430,8 +472,8 @@ function factoryRootOrNull(): string | null {
 // without a dashboard port has none to point at, and the answer is not to name
 // a standalone `workflow web`: run against a live World it opens a second queue
 // worker and steals the jobs this run is waiting on.
-function dashboardPointer(runId: string): string {
-  const port = process.env.JIGS_DASHBOARD_PORT;
+function dashboardPointer(ctx: FactoryContext, runId: string): string {
+  const port = ctx.env("JIGS_DASHBOARD_PORT");
   return port === undefined || port === ""
     ? "dashboard: not configured"
     : `http://localhost:${port}/run/${runId}`;
@@ -510,8 +552,8 @@ async function resumeAndLog(
 // The hooks that name an external resource: what another run can be blocked
 // on, and what a poke can wake. The needs-human marker is neither — the reply
 // that ends that halt lands on the ticket claim beside it.
-async function runResourceTokens(runId: string): Promise<string[]> {
-  const hooks = await (await getWorld()).hooks.list({ runId });
+async function runResourceTokens(deps: IngressDeps, runId: string): Promise<string[]> {
+  const hooks = await (await deps.world()).hooks.list({ runId });
   return hooks.data
     .map((hook) => hook.token)
     .filter((token) => parseHookToken(token)?.kind !== "needs-human");

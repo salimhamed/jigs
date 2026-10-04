@@ -1,4 +1,5 @@
 import type { StepMetadata, WorkflowMetadata } from "workflow";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 
 /**
  * The run a step belongs to: `getWorkflowMetadata()` inside the step.
@@ -30,7 +31,7 @@ export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
  * @group Advanced run context
  */
 export function dashboardRunUrl(runId: string): string | undefined {
-  const port = process.env.JIGS_DASHBOARD_PORT;
+  const port = currentFactoryContext().env("JIGS_DASHBOARD_PORT");
   if (port === undefined || port === "") return undefined;
   return `http://localhost:${port}/run/${runId}`;
 }

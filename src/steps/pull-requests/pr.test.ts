@@ -13,9 +13,10 @@ import {
   mergePr,
   postPullRequestReview,
 } from "../../providers/github.ts";
-import { resolveGithubIdentity } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import type { ResolvedGithubIdentity } from "../../workflow/factory-schema.ts";
 import {
   createPullRequest,
   markPullRequestReady,
@@ -36,9 +37,12 @@ vi.mock("../../providers/github.ts", () => ({
   postPullRequestReview: vi.fn(),
 }));
 vi.mock("../../providers/github-auth.ts", () => ({
-  resolveGithubIdentity: vi.fn(),
-  githubAuthFor: () => ({ identity: { mode: "pat" }, bearer: async () => "token" }),
+  githubAuthFor: vi.fn(),
+  appBotFor: async () => ({ login: "jigs[bot]", id: 1 }),
 }));
+
+const asIdentity = (identity: ResolvedGithubIdentity) =>
+  vi.mocked(githubAuthFor).mockReturnValue({ identity, bearer: async () => "token" });
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const repo = { owner: "owner", repo: "repo" };
@@ -52,7 +56,7 @@ const worktree = {
 let root: string;
 
 const asApp = (coAuthor?: string) =>
-  vi.mocked(resolveGithubIdentity).mockReturnValue({
+  asIdentity({
     mode: "app",
     appId: 1,
     installationId: 2,
@@ -93,7 +97,7 @@ beforeEach(() => {
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", root);
   vi.resetAllMocks();
-  vi.mocked(resolveGithubIdentity).mockReturnValue({ mode: "pat" });
+  asIdentity({ mode: "pat" });
   vi.mocked(fetchPrSnapshot).mockResolvedValue(snapshot);
   vi.mocked(fetchPrTitle).mockResolvedValue("fix: title");
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
@@ -385,7 +389,7 @@ test("opening a PR derives its repository, head and default branch from the supp
     "update-guide",
     "trunk",
   );
-  expect(resolveGithubIdentity).toHaveBeenCalledWith("acme");
+  expect(githubAuthFor).toHaveBeenCalledWith("acme");
   expect(createPr).toHaveBeenCalledExactlyOnceWith({
     owner: "acme",
     repo: "docs",

@@ -3,13 +3,13 @@ import { afterAll, afterEach, beforeEach, expect, test, vi } from "vitest";
 import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import * as config from "../config/factory-config.ts";
-import * as root from "../config/factory-root.ts";
+import * as factoryContext from "../config/factory-context.ts";
 import * as github from "../providers/github.ts";
 import * as githubAuth from "../providers/github-auth.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
@@ -54,7 +54,9 @@ const RUN_B = "wrun_01K3ANC1P0R4S6TXZ8B3F5G7HJ";
 beforeEach(() => {
   clearWakes();
   vi.spyOn(sql, "registrySql").mockReturnValue({} as never);
-  vi.spyOn(sql, "currentFactory").mockReturnValue("factory-test");
+  vi.spyOn(factoryContext, "currentFactoryContext").mockReturnValue(
+    testFactoryContext({ slug: "factory-test" }),
+  );
   vi.spyOn(sql, "listResources").mockResolvedValue([]);
   world();
 });
@@ -89,23 +91,25 @@ const prSnapshot = (
 // The factory's approval signal decides what "approved" means, so the
 // enrichment reads the same config the merge gate does.
 function reviewApproval(): void {
-  vi.spyOn(root, "factoryRoot").mockReturnValue("/factory");
-  vi.spyOn(config, "readFactoryConfig").mockReturnValue({
-    bindings: {},
-    service: {
-      port: 8990,
-      dashboardPort: 9090,
-      pollIntervalSeconds: { github: 300, linear: 300, slack: 300, pagerduty: 300 },
-    },
-    github: {
-      identities: [
-        { mode: "app", appId: 1, installations: { acme: 2 }, privateKeyPath: "k", operator: "me" },
-      ],
-      mergeApproval: "review",
-    },
-    linear: { identity: { mode: "key" } },
-    agents: { env: [] },
-  });
+  vi.spyOn(factoryContext, "currentFactoryContext").mockReturnValue(
+    testFactoryContext({
+      slug: "factory-test",
+      config: {
+        github: {
+          identities: [
+            {
+              mode: "app",
+              appId: 1,
+              installations: { acme: 2 },
+              privateKeyPath: "k",
+              operator: "me",
+            },
+          ],
+          mergeApproval: "review",
+        },
+      },
+    }),
+  );
   vi.spyOn(githubAuth, "appBotFor").mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
 }
 

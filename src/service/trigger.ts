@@ -1,6 +1,7 @@
 import { start } from "workflow/api";
 import type { z } from "zod";
 import { type CheckReport, preflightChecks, runChecks } from "../checks/index.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import type { Factory, Injected } from "../workflow/factory.ts";
 
 type Refusal =
@@ -24,6 +25,7 @@ export async function prepareRun(
   factory: Factory,
   workflowName: string,
   inputs: unknown,
+  context?: FactoryContext,
 ): Promise<PreparedRun> {
   const entry = factory.workflows[workflowName];
   if (!entry) {
@@ -42,7 +44,7 @@ export async function prepareRun(
 
   // Before the run exists: every failure at once, each carrying its repair,
   // and no run created. There is no skip flag.
-  const report = await runChecks(preflightChecks(entry.requires ?? {}, parsed.data));
+  const report = await runChecks(preflightChecks(entry.requires ?? {}, parsed.data, context));
   if (!report.ok) return { kind: "preflight-failed", report };
 
   return {
@@ -63,8 +65,9 @@ export async function startRun(
   workflowName: string,
   inputs: unknown,
   triggerId: string,
+  context?: FactoryContext,
 ): Promise<StartRunResult> {
-  const prepared = await prepareRun(factory, workflowName, inputs);
+  const prepared = await prepareRun(factory, workflowName, inputs, context);
   if (prepared.kind !== "ready") return prepared;
   return { kind: "started", runId: await prepared.launch(triggerId) };
 }

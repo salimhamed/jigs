@@ -5,13 +5,10 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { defineFactory } from "../workflow/factory.ts";
+import { parseFactoryConfig } from "../workflow/factory-schema.ts";
 import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
-import {
-  parseFactoryConfig,
-  readFactoryConfig,
-  resolveBinding,
-  resolveService,
-} from "./factory-config.ts";
+import { readFactoryConfig, resolveBinding, resolveService } from "./factory-config.ts";
+import { resolveFactoryContext } from "./factory-context.ts";
 
 const roots: string[] = [];
 afterEach(() => {
@@ -73,7 +70,7 @@ test("an unknown top-level section is rejected by name", () => {
   );
 });
 
-test("defineFactory rejects an unknown top-level section at compile time", () => {
+test("defineFactory rejects an unknown top-level section at compile time and when loaded", () => {
   expect(() =>
     defineFactory({
       service: { dashboardPort: 9090 },
@@ -81,7 +78,7 @@ test("defineFactory rejects an unknown top-level section at compile time", () =>
       // @ts-expect-error lienar is not a factory section
       lienar: {},
     }),
-  ).not.toThrow();
+  ).toThrow(/\(root\): Unrecognized key: "lienar"/);
 });
 
 test.each([
@@ -395,8 +392,9 @@ test("config loading supports computed settings without invoking workflow loader
   const root = factory(
     `const service = { dashboardPort: 9090 }; export default { service, bindings: { api: { remote: "url" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
-  expect(resolveService(root).dashboardPort).toBe(9090);
-  expect(resolveBinding(root, "api").remote).toBe("url");
+  const ctx = resolveFactoryContext(root);
+  expect(resolveService(ctx).dashboardPort).toBe(9090);
+  expect(resolveBinding(ctx.config, "api").remote).toBe("url");
 });
 
 test("native TypeScript config is one snapshot per process and a new process sees edits", () => {
@@ -406,9 +404,9 @@ test("native TypeScript config is one snapshot per process and a new process see
     settings,
     "const service: { dashboardPort: number } = { dashboardPort: 9090 }; export default service;",
   );
-  expect(resolveService(root).dashboardPort).toBe(9090);
+  expect(resolveService(resolveFactoryContext(root)).dashboardPort).toBe(9090);
   writeFileSync(settings, "export default { dashboardPort: 9091 };");
-  expect(resolveService(root).dashboardPort).toBe(9090);
+  expect(resolveService(resolveFactoryContext(root)).dashboardPort).toBe(9090);
 
   const moduleUrl = pathToFileURL(
     fileURLToPath(new URL("./factory-config.ts", import.meta.url)),
@@ -562,7 +560,7 @@ test("a PAT cannot approve by review, because GitHub refuses an author's own app
 });
 
 test("App maps and lists normalize and reject ambiguous account ownership", async () => {
-  const { installationFor } = await import("./factory-config.ts");
+  const { installationFor } = await import("../workflow/factory-schema.ts");
   const app = {
     mode: "app",
     appId: 1,

@@ -3,6 +3,7 @@ import { WorkflowRunNotFoundError } from "workflow/errors";
 import { JigsError } from "../../errors.ts";
 import type { HarnessRuntime } from "../../steps/agents/drivers/harness-runtime.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
+import { inTestFactory } from "../../test-fixtures.ts";
 import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
 import {
   announceSlackApp,
@@ -138,6 +139,7 @@ const connected = () => ({}) as RegistrySql;
 afterEach(() => {
   vi.unstubAllEnvs();
 });
+inTestFactory();
 
 test("a rejected ensure exits the process instead of leaving the service up", async () => {
   const exits: number[] = [];

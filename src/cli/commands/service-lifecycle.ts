@@ -12,16 +12,13 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import {
-  type ResolvedService,
-  readFactoryConfig,
-  resolveService,
-} from "../../config/factory-config.ts";
+import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
+import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { jigsDataDir } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agents/harnesses/env.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, indent, layout, note } from "../output.ts";
 import {
   judgeRecord,
@@ -277,7 +274,7 @@ export function builtBundleHash(factoryRoot: string): string | undefined {
     if (statSync(file).isFile()) hash.update(name).update("\0").update(readFileSync(file));
   }
   // Service ports and binding settings are also read from the factory at boot.
-  hash.update(JSON.stringify(readFactoryConfig(factoryRoot)));
+  hash.update(JSON.stringify(resolveFactoryContext(factoryRoot).config));
   return hash.digest("hex");
 }
 
@@ -318,7 +315,7 @@ type BundleDeps = Pick<ServiceLifecycleDeps, "cwd" | "processes">;
 
 export function runningBundleHash(deps: BundleDeps): string | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug } = resolveService(factoryContextAt(deps.cwd));
   if (livePid(slug, processes) === undefined) return undefined;
   const file = serviceBundlePath(slug);
   return existsSync(file) ? readFileSync(file, "utf8").trim() : undefined;
@@ -328,7 +325,7 @@ export function runningBundleHash(deps: BundleDeps): string | undefined {
 // behind them, or the running process is behind the bundle — a build nobody
 // restarted onto. Undefined for an unbuilt factory.
 export function serviceBehindSources(deps: BundleDeps): string | undefined {
-  const factoryRoot = locateFactoryRoot(deps.cwd);
+  const factoryRoot = factoryContextAt(deps.cwd).root;
   if (!existsSync(path.join(factoryRoot, SERVICE_ENTRY))) return undefined;
   const stale = staleWorkflowSources(factoryRoot);
   if (stale.length > 0) {
@@ -356,7 +353,7 @@ function livePid(slug: string, processes: ServiceProcesses): number | undefined 
 // For a caller deciding on liveness rather than reporting it.
 export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug } = resolveService(factoryContextAt(deps.cwd));
   return livePid(slug, processes);
 }
 
@@ -391,8 +388,9 @@ export async function startService(
   options: StartOptions = {},
 ): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const factoryRoot = locateFactoryRoot(deps.cwd);
-  const service = resolveService(factoryRoot);
+  const ctx = factoryContextAt(deps.cwd);
+  const factoryRoot = ctx.root;
+  const service = resolveService(ctx);
   const { slug, serviceUrl, dashboardUrl } = service;
   const releaseExclusion = acquireServiceExclusion(slug, "start");
   try {
@@ -477,7 +475,7 @@ export async function startService(
  */
 export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const { slug, serviceUrl } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug, serviceUrl } = resolveService(factoryContextAt(deps.cwd));
   const pid = readPid(slug);
   if (pid === undefined) {
     throw new JigsError(`not running: ${slug}`, "start it: `pnpm exec jigs service start`");
@@ -564,7 +562,7 @@ const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve,
  */
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug } = resolveService(factoryContextAt(deps.cwd));
   const state = inspectService(slug, processes, { cleanUp: true });
   const target: ServiceTarget =
     state.kind === "running"
@@ -620,7 +618,7 @@ async function stopRecorded(
  */
 export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug } = resolveService(factoryContextAt(deps.cwd));
   const stop =
     "prune never stops or kills processes, so stop the service first: `pnpm exec jigs service stop`";
   const state = inspectService(slug, processes, { cleanUp: true });
@@ -657,8 +655,9 @@ export async function restartService(
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
   const { out, processes = nodeProcesses, now = () => new Date() } = deps;
-  const factoryRoot = locateFactoryRoot(deps.cwd);
-  const { slug, serviceUrl, dashboardUrl } = resolveService(factoryRoot);
+  const ctx = factoryContextAt(deps.cwd);
+  const factoryRoot = ctx.root;
+  const { slug, serviceUrl, dashboardUrl } = resolveService(ctx);
   const pid = livePid(slug, processes);
   out(
     pid === undefined
@@ -725,7 +724,7 @@ function signalSince(log: string, offset: number): string | undefined {
 // one shadowing the other.
 export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: number } = {}): void {
   const { out } = deps;
-  const { slug } = resolveService(locateFactoryRoot(deps.cwd));
+  const { slug } = resolveService(factoryContextAt(deps.cwd));
   const file = serviceLogPath(slug);
   if (!existsSync(file)) {
     throw new JigsError(

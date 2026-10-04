@@ -2,18 +2,18 @@
 
 import { z } from "zod";
 import type { WorkflowRequires } from "../checks/index.ts";
-// The schemas that validate these sections, named for their types alone: a
-// second hand-written copy of either would drift from what jigs accepts.
-import type {
-  bindingSchema,
-  githubSchema,
-  linearSchema,
-  pagerDutySchema,
-  slackSchema,
-  webhooksSchema,
-} from "../config/factory-config.ts";
-import { JigsError } from "./errors.ts";
-import type { Provider } from "./providers.ts";
+import {
+  type agentsSchema,
+  type bindingSchema,
+  type factoryConfigSchema,
+  type githubSchema,
+  type linearSchema,
+  type pagerDutySchema,
+  parseFactoryConfig,
+  type slackSchema,
+  type WorkflowImport,
+  type webhooksSchema,
+} from "./factory-schema.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
 /**
@@ -22,33 +22,6 @@ import type { ReleasePolicy } from "./runtime/release.ts";
  * @group Factory and workflows
  */
 export const ticketInputSchema = z.union([z.uuid(), z.string().regex(/^[A-Z][A-Z0-9]*-\d+$/)]);
-
-// A driver sets or passes these itself, and a model credential comes from the
-// model source; declaring one would override the subscription login or the
-// invocation's private home.
-export const RESERVED_AGENT_ENV: readonly string[] = [
-  "CLAUDE_CONFIG_DIR",
-  "CODEX_HOME",
-  "PI_CODING_AGENT_DIR",
-  "ANTHROPIC_API_KEY",
-  "ANTHROPIC_AUTH_TOKEN",
-  "CLAUDE_CODE_OAUTH_TOKEN",
-  "OPENAI_API_KEY",
-  "CODEX_API_KEY",
-  "OPENROUTER_API_KEY",
-];
-
-const envName = z
-  .string()
-  .regex(/^[A-Za-z_][A-Za-z0-9_]*$/, "must be an environment variable name, never a value")
-  .refine(
-    (name) => !RESERVED_AGENT_ENV.includes(name),
-    "is set by jigs or selects a model credential; name a model credential on its model source instead",
-  );
-
-// Names only: values stay in the service environment and are read when an
-// agent starts, so none reaches the factory definition or workflow data.
-export const agentsSchema = z.strictObject({ env: z.array(envName).default([]) });
 
 /** Metadata supplied to every workflow run. */
 export type Injected = { triggerId: string };
@@ -350,50 +323,20 @@ export type BindingDefinition = z.input<typeof bindingSchema>;
  *
  * @group Factory and workflows
  */
-export interface AgentsDefinition {
-  /**
-   * Names of service environment variables every agent harness also receives.
-   * A harness otherwise starts with only a small base set, such as `PATH` and
-   * `HOME`, and the variables its own driver needs. Model credentials and
-   * the variables jigs sets itself are refused: name a model credential on
-   * its model source instead.
-   */
-  env?: string[];
-}
+export type AgentsDefinition = z.input<typeof agentsSchema>;
 
 /**
  * Operating settings and deferred workflow modules declared by a factory.
  *
  * @group Factory and workflows
  */
-export interface FactoryDefinition {
-  service: {
-    port?: number;
-    dashboardPort: number;
-    /**
-     * Seconds between the service's reads of each provider: re-reading
-     * parked runs, and polling the event triggers whose source is on that
-     * provider. Each defaults to 300 and may not go below 30. Up to a tenth
-     * of the interval is taken off at random so services do not all poll at
-     * once.
-     */
-    pollIntervalSeconds?: Partial<Record<Provider, number>>;
-  };
-  agents?: AgentsDefinition;
-  webhooks?: WebhooksDefinition;
-  github?: GitHubDefinition;
-  linear?: LinearDefinition;
-  pagerduty?: PagerDutyDefinition;
-  slack?: SlackDefinition;
-  release?: ReleasePolicy;
-  bindings?: Record<string, BindingDefinition>;
-  workflows: Record<string, () => Promise<{ default: AnyWorkflowDefinition }>>;
-  schedules?: Record<string, Schedule>;
-  triggers?: Record<string, EventTrigger>;
-}
+export type FactoryDefinition = z.input<typeof factoryConfigSchema> & {
+  workflows: Record<string, WorkflowImport>;
+};
 
 /**
- * Preserve the declaration's inferred keys without loading its workflows.
+ * Check the declaration against what jigs accepts and preserve its inferred keys, without loading
+ * its workflows.
  *
  * @group Factory and workflows
  */
@@ -401,10 +344,6 @@ export function defineFactory<const T extends FactoryDefinition>(
   // A generic parameter skips excess-property checks, so a misspelled section needs this to fail in tsc.
   factory: T & Record<Exclude<keyof T, keyof FactoryDefinition>, never>,
 ): T {
-  const agents = agentsSchema.safeParse(factory.agents ?? {});
-  if (!agents.success)
-    throw new JigsError(
-      `invalid agents in defineFactory: ${agents.error.issues.map((issue) => `agents.${issue.path.join(".")}: ${issue.message}`).join("; ")}`,
-    );
+  parseFactoryConfig(factory);
   return factory;
 }

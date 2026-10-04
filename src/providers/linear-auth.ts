@@ -3,12 +3,10 @@
 // client-credentials grant. Reads the environment and the network, so it is
 // only reached from a step, a check or the CLI — never from workflow code.
 
-import { type LinearIdentity, readFactoryConfig } from "../config/factory-config.ts";
+import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import {
-  credentialRoot,
-  credentialValue,
   type EnvLookup,
-  onProviderReset,
+  perContext,
   RESTART_SERVICE,
   requireCredential,
   SERVICE_ENV_FILE,
@@ -31,10 +29,7 @@ export const LINEAR_IDENTITY_VARIABLES = {
 type FetchLike = typeof fetch;
 
 /** The variables the identity needs that are unset. */
-export function missingLinearVariables(
-  identity: LinearIdentity,
-  env: EnvLookup = credentialValue,
-): string[] {
+export function missingLinearVariables(identity: LinearIdentity, env: EnvLookup): string[] {
   return LINEAR_IDENTITY_VARIABLES[identity.mode].filter((name) => !env(name));
 }
 
@@ -66,11 +61,11 @@ export interface LinearAuth extends ProviderAuth {
 
 export interface LinearAuthDeps {
   fetch?: FetchLike;
-  env?: EnvLookup;
+  env: EnvLookup;
 }
 
-export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps = {}): LinearAuth {
-  const env = deps.env ?? credentialValue;
+export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps): LinearAuth {
+  const env = deps.env;
   const required = (name: string): string =>
     requireCredential(name, `linear.identity mode "${identity.mode}"`, env);
   if (identity.mode === "key") {
@@ -103,28 +98,7 @@ export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps 
   };
 }
 
-/**
- * The Linear identity this factory is configured with. Outside a factory there
- * is no config to read and a personal key is the only credential there is.
- */
-export function resolveLinearIdentity(root?: string): LinearIdentity {
-  let dir: string;
-  try {
-    dir = root ?? credentialRoot();
-  } catch {
-    return { mode: "key" };
-  }
-  return readFactoryConfig(dir).linear.identity;
-}
-
-let processAuth: LinearAuth | null = null;
-
-/** This process's Linear credential, cached once per process. */
-export function linearAuthFor(): LinearAuth {
-  processAuth ??= createLinearAuth(resolveLinearIdentity());
-  return processAuth;
-}
-
-onProviderReset(() => {
-  processAuth = null;
-});
+/** The factory's Linear credential, cached once per factory context. */
+export const linearAuthFor = perContext((ctx) =>
+  createLinearAuth(ctx.config.linear.identity, { env: ctx.env }),
+);

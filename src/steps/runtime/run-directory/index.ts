@@ -1,7 +1,8 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import { currentFactoryContext } from "../../../config/factory-context.ts";
 import { jigsDataDir } from "../../../config/paths.ts";
-import { currentFactory, recordRunDirectory, registrySql, setResourceState } from "../registry.ts";
+import { recordRunDirectory, registrySql, setResourceState } from "../registry.ts";
 import type { RunMetadata } from "../run-context.ts";
 
 export function runDirectory(metadata: RunMetadata): string {
@@ -33,7 +34,7 @@ export async function removeRunDirectory(metadata: RunMetadata): Promise<void> {
   const runId = metadata.workflowRunId;
   await setResourceState(
     registrySql(),
-    { factory: currentFactory(), runId, kind: "run-directory", identity: runId },
+    { factory: currentFactoryContext().slug, runId, kind: "run-directory", identity: runId },
     "released",
     "removed by the workflow",
   );

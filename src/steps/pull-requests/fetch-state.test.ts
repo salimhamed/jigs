@@ -11,9 +11,8 @@ vi.mock("../../providers/github-auth.ts", () => ({
     bearer: async () => "token",
   }),
 }));
-vi.mock("../../config/factory-root.ts", () => ({ factoryRoot: () => "/factory" }));
-vi.mock("../../config/factory-config.ts", () => ({
-  readFactoryConfig: () => ({ github: { mergeApproval: "review" } }),
+vi.mock("../../config/factory-context.ts", () => ({
+  currentFactoryContext: () => ({ config: { github: { mergeApproval: "review" } } }),
 }));
 
 const pr = { owner: "acme", repo: "api", number: 1 };

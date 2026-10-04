@@ -9,12 +9,15 @@ import {
   writeFileSync,
 } from "node:fs";
 import path from "node:path";
-import { factoryRoot } from "../../../config/factory-root.ts";
+import { currentFactoryContext } from "../../../config/factory-context.ts";
 import { jigsDataDir } from "../../../config/paths.ts";
 import { JigsError } from "../../../errors.ts";
 
 /** The folder a declared skill path names: absolute as given, otherwise under the factory root. */
-export function skillFolder(entry: string, root: () => string = factoryRoot): string {
+export function skillFolder(
+  entry: string,
+  root: () => string = () => currentFactoryContext().root,
+): string {
   return path.isAbsolute(entry) ? path.resolve(entry) : path.resolve(root(), entry);
 }
 
@@ -50,7 +53,7 @@ function copyTree(source: string, target: string, ancestors: ReadonlySet<string>
 export function copySkills(
   skills: readonly string[],
   destination: string,
-  root: () => string = factoryRoot,
+  root: () => string = () => currentFactoryContext().root,
 ): string[] {
   const copied = new Map<string, string>();
   for (const entry of skills) {

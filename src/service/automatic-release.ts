@@ -5,10 +5,8 @@
  */
 
 import { getWorld } from "workflow/runtime";
-import { readFactoryConfig } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import {
-  currentFactory,
   listResources,
   type RegistrySql,
   registrySql,
@@ -212,11 +210,11 @@ export function startAutomaticRelease(
 /** The service's real operations: this factory's registry rows and the configured World. */
 export function automaticReleaseDeps(): AutomaticReleaseDeps {
   const readState = (runId: string) =>
-    readRunState(registrySql(), currentFactory(), runId, worldRunFacts);
+    readRunState(registrySql(), currentFactoryContext().slug, runId, worldRunFacts);
   return {
     pendingRuns: async () => {
       const rows = await listResources(registrySql(), {
-        factory: currentFactory(),
+        factory: currentFactoryContext().slug,
         kinds: RELEASABLE_KINDS,
         states: ["live", "failed"],
       });
@@ -237,11 +235,11 @@ export function automaticReleaseDeps(): AutomaticReleaseDeps {
         factory,
         run.workflowName ?? "",
         outcome,
-        readFactoryConfig(factoryRoot()).release,
+        currentFactoryContext().config.release,
       ),
     withLock: async (runId, action) => withRunResourceLock(registrySql(), runId, action),
     release: (sql, runId, action, outcome) =>
-      releaseRun(sql, currentFactory(), runId, action, outcome),
+      releaseRun(sql, currentFactoryContext().slug, runId, action, outcome),
     ready: isReady,
     log: console.log,
     warn: console.error,

@@ -2,8 +2,8 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { globSync } from "tinyglobby";
-import type { Binding } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
+import type { Binding } from "../../workflow/factory-schema.ts";
 import { bindingFilesDir } from "./layout.ts";
 
 // Provisioning ports .worktreerc.yml semantics: gitignore-blind disk globs

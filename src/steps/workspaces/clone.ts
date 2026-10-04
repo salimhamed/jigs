@@ -1,6 +1,6 @@
 import { existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
-import { readFactoryConfig } from "../../config/factory-config.ts";
+import type { FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { git, tryGit } from "../../providers/git.ts";
 import { cloneRepoDir } from "./layout.ts";
@@ -25,12 +25,11 @@ export interface BindingClone {
 
 // What the service's startup gate clones, in one call: every binding the
 // factory declares, with the directory its clone belongs in.
-export function bindingClones(factoryRoot: string): BindingClone[] {
-  const { bindings } = readFactoryConfig(factoryRoot);
-  return Object.entries(bindings).map(([name, binding]) => ({
+export function bindingClones(ctx: FactoryContext): BindingClone[] {
+  return Object.entries(ctx.config.bindings).map(([name, binding]) => ({
     name,
     remote: binding.remote,
-    repoDir: cloneRepoDir({ factoryRoot, bindingName: name }),
+    repoDir: cloneRepoDir({ factoryRoot: ctx.root, bindingName: name }),
   }));
 }
 

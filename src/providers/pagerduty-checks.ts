@@ -1,12 +1,8 @@
 import { type Check, failedCheck } from "../checks/check.ts";
-import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import {
-  credentialValue,
-  type EnvLookup,
-  RESTART_SERVICE,
-  SERVICE_ENV_FILE,
-} from "./credentials.ts";
+import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../workflow/factory-schema.ts";
+import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
 import { type PagerDutyUser, pagerDutyClientFor } from "./pagerduty.ts";
 import {
@@ -34,7 +30,7 @@ const forbidden = (err: unknown): boolean =>
 export function pagerDutyIdentityChecks(
   identity: PagerDutyIdentity,
   probes: PagerDutyIdentityProbes,
-  env: EnvLookup = credentialValue,
+  env: EnvLookup,
 ): Check[] {
   const account = `${identity.subdomain} (${identity.region})`;
   return [
@@ -126,16 +122,16 @@ export function pagerDutyFromChecks(
   ];
 }
 
-async function pagerDutyToken(): Promise<void> {
-  await pagerDutyAuthFor().bearer();
+async function pagerDutyToken(ctx: FactoryContext): Promise<void> {
+  await pagerDutyAuthFor(ctx).bearer();
 }
 
 // A missing or unreadable pagerduty section fails as itself, with the section
 // to add, rather than as a credential PagerDuty rejected.
-export function pagerDutyChecks(): Check[] {
+export function pagerDutyChecks(ctx: FactoryContext): Check[] {
   let identity: PagerDutyIdentity;
   try {
-    identity = resolvePagerDutyIdentity();
+    identity = resolvePagerDutyIdentity(ctx);
   } catch (err) {
     return [
       failedCheck(
@@ -148,28 +144,29 @@ export function pagerDutyChecks(): Check[] {
       ),
     ];
   }
-  return pagerDutyIdentityChecks(identity, {
-    token: pagerDutyToken,
-    read: () => pagerDutyClientFor().verifyAccess(),
-  });
+  return pagerDutyIdentityChecks(
+    identity,
+    { token: () => pagerDutyToken(ctx), read: () => pagerDutyClientFor(ctx).verifyAccess() },
+    ctx.env,
+  );
 }
 
 // An unreadable config is the identity check's diagnosis, so it adds nothing here.
-export function pagerDutyFromDoctorChecks(): Check[] {
+export function pagerDutyFromDoctorChecks(ctx: FactoryContext): Check[] {
   let identity: PagerDutyIdentity;
   try {
-    identity = resolvePagerDutyIdentity();
+    identity = resolvePagerDutyIdentity(ctx);
   } catch {
     return [];
   }
   return pagerDutyFromChecks(identity, {
-    token: pagerDutyToken,
-    userByEmail: (email) => pagerDutyClientFor().findUserByEmail(email),
+    token: () => pagerDutyToken(ctx),
+    userByEmail: (email) => pagerDutyClientFor(ctx).findUserByEmail(email),
   });
 }
 
 /** The real lookups for the PagerDuty webhook check. */
-export const pagerDutyWebhookProbes = {
-  token: pagerDutyToken,
-  subscriptions: (url: string) => pagerDutyClientFor().listWebhookSubscriptions({ url }),
-};
+export const pagerDutyWebhookProbes = (ctx: FactoryContext) => ({
+  token: () => pagerDutyToken(ctx),
+  subscriptions: (url: string) => pagerDutyClientFor(ctx).listWebhookSubscriptions({ url }),
+});

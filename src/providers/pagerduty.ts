@@ -3,10 +3,20 @@
 // network, so a caller reaches them from a step, a check or the service —
 // never from a workflow body.
 
-import type { PagerDutyIdentity } from "../config/factory-config.ts";
+import {
+  currentFactoryContext,
+  type FactoryContext,
+  runSignal,
+} from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
+import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
+import { perContext } from "./credentials.ts";
 import { providerRequest } from "./http.ts";
-import { type PagerDutyAuth, pagerDutyAuthFor } from "./pagerduty-auth.ts";
+import {
+  type PagerDutyAuth,
+  pagerDutyAuthFor,
+  resolvePagerDutyIdentity,
+} from "./pagerduty-auth.ts";
 
 export const PAGERDUTY_API_URL = "https://api.pagerduty.com";
 
@@ -90,6 +100,8 @@ export interface PagerDutyClientDeps {
   auth?: PagerDutyAuth;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** The factory it acts for. Defaults to the process's own, resolved on each call. */
+  context?: FactoryContext;
 }
 
 function queryString(query: Record<string, QueryValue>): string {
@@ -111,7 +123,8 @@ export function createPagerDutyClient(
   identity: PagerDutyIdentity,
   deps: PagerDutyClientDeps = {},
 ): PagerDutyClient {
-  const auth = (): PagerDutyAuth => deps.auth ?? pagerDutyAuthFor();
+  const ctx = () => deps.context ?? currentFactoryContext();
+  const auth = (): PagerDutyAuth => deps.auth ?? pagerDutyAuthFor(ctx());
 
   const request = <T>(method: string, apiPath: string, body?: unknown): Promise<T> =>
     providerRequest<T>({
@@ -128,6 +141,7 @@ export function createPagerDutyClient(
       retryAfter: rateLimitWaitSeconds,
       fetch: deps.fetch,
       sleep: deps.sleep,
+      signal: deps.context?.runSignal ?? runSignal,
     });
 
   async function listAll<T>(
@@ -194,13 +208,10 @@ export function createPagerDutyClient(
   };
 }
 
-let processClient: { auth: PagerDutyAuth; client: PagerDutyClient } | null = null;
-
-/** This process's PagerDuty client, for the factory's configured identity. */
-export function pagerDutyClientFor(): PagerDutyClient {
-  const auth = pagerDutyAuthFor();
-  if (processClient?.auth !== auth) {
-    processClient = { auth, client: createPagerDutyClient(auth.identity, { auth }) };
-  }
-  return processClient.client;
-}
+/** The factory's PagerDuty client, for its configured identity. */
+export const pagerDutyClientFor = perContext((ctx) =>
+  createPagerDutyClient(resolvePagerDutyIdentity(ctx), {
+    auth: pagerDutyAuthFor(ctx),
+    context: ctx,
+  }),
+);

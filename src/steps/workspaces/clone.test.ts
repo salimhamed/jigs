@@ -1,6 +1,7 @@
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../../config/factory-context.ts";
 import { git, makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { bindingClones, ensureBindingClone, hasBindingClone } from "./clone.ts";
 import { cloneRepoDir } from "./layout.ts";
@@ -117,7 +118,7 @@ test("every declared binding is listed with the directory its clone belongs in",
   const root = makeFactoryRepo(tmp, {
     bindings: { api: { remote: remoteDir } },
   });
-  expect(bindingClones(root)).toEqual([
+  expect(bindingClones(resolveFactoryContext(root))).toEqual([
     {
       name: "api",
       remote: remoteDir,

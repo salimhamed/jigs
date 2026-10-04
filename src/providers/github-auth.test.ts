@@ -2,6 +2,7 @@ import { generateKeyPairSync } from "node:crypto";
 import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   appBotFor,
@@ -9,7 +10,6 @@ import {
   mintAppJwt,
   mintInstallationToken,
   readAppPrivateKey,
-  resetGithubAuth,
 } from "./github-auth.ts";
 import { useGithubClient } from "./test-fixtures.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
@@ -84,6 +84,7 @@ test("a minted token is reused until five minutes are left, then re-minted", asy
     tokenResponse("second", NOW + 7_200_000),
   );
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => now,
     readPrivateKey: () => ({ key: privateKey }),
   });
@@ -105,6 +106,7 @@ test("a caller can ask for a token with more time left than jigs' own margin", a
     tokenResponse("second", NOW + 600_000 + 3_600_000),
   );
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => now,
     readPrivateKey: () => ({ key: privateKey }),
   });
@@ -119,7 +121,6 @@ test("a caller can ask for a token with more time left than jigs' own margin", a
 });
 
 test("the App's bot is looked up once per App, as <slug>[bot] with its user id", async () => {
-  resetGithubAuth();
   const { calls } = github(
     jsonResponse({ slug: "jigs-dev", name: "jigs dev" }),
     jsonResponse({ id: 4242, login: "jigs-dev[bot]" }),
@@ -133,7 +134,6 @@ test("the App's bot is looked up once per App, as <slug>[bot] with its user id",
     "https://api.github.com/app",
     "https://api.github.com/users/jigs-dev%5Bbot%5D",
   ]);
-  resetGithubAuth();
 });
 
 test("a rejected exchange names the configuration, and never the token", async () => {
@@ -153,6 +153,7 @@ test("no minted token ever reaches a log line or an error message", async () => 
   const log = vi.spyOn(console, "log").mockImplementation((...args) => logged.push(...args));
   github(tokenResponse("ghs_secret_value", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => NOW,
     readPrivateKey: () => ({ key: privateKey }),
   });
@@ -187,6 +188,7 @@ test("a missing or non-PEM key file names the repair", () => {
 test("callers that arrive together share one mint rather than each making their own", async () => {
   const { calls } = github(tokenResponse("shared", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => NOW,
     readPrivateKey: () => ({ key: privateKey }),
   });
@@ -199,6 +201,7 @@ test("callers that arrive together share one mint rather than each making their 
 test("a failed mint is not cached, so the next caller tries again", async () => {
   github(new Response("nope", { status: 401 }), tokenResponse("second-time", NOW + 3_600_000));
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => NOW,
     readPrivateKey: () => ({ key: privateKey }),
   });
@@ -207,8 +210,7 @@ test("a failed mint is not cached, so the next caller tries again", async () => 
 });
 
 test("accounts select independent cached installation tokens across Apps", async () => {
-  const { githubAuthFor, resetGithubAuth } = await import("./github-auth.ts");
-  const { useFactoryRoot } = await import("./credentials.ts");
+  const { githubAuthFor } = await import("./github-auth.ts");
   const { installationId: _, ...app } = APP;
   writeFileSync(path.join(tmp, "key.pem"), privateKey, { mode: 0o600 });
   writeFileSync(
@@ -227,27 +229,22 @@ test("accounts select independent cached installation tokens across Apps", async
     tokenResponse(`token-${calls.length}`, Date.now() + 3_600_000),
   );
   useGithubClient({ fetch: doFetch });
-  useFactoryRoot(tmp);
-  try {
-    expect(await githubAuthFor("FIRST").bearer()).toBe("token-1");
-    // The process keeps its factory configuration after the file changes.
-    writeFileSync(
-      path.join(tmp, "jigs.config.ts"),
-      'export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
-    );
-    expect(await githubAuthFor("first").bearer()).toBe("token-1");
-    expect(await githubAuthFor("Second").bearer()).toBe("token-2");
-    expect(await githubAuthFor("Third").bearer()).toBe("token-3");
-    expect(calls).toHaveLength(3);
-    expect(calls[0]?.url.pathname).toBe("/app/installations/10/access_tokens");
-    expect(calls[1]?.url.pathname).toBe("/app/installations/20/access_tokens");
-    expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
-    // Resetting the credential cache does not reload the process's config.
-    useFactoryRoot(tmp);
-    expect(() => githubAuthFor("uncovered")).toThrow("account uncovered");
-  } finally {
-    resetGithubAuth();
-  }
+  const ctx = resolveFactoryContext(tmp);
+  expect(await githubAuthFor("FIRST", ctx).bearer()).toBe("token-1");
+  // The process keeps its factory configuration after the file changes.
+  writeFileSync(
+    path.join(tmp, "jigs.config.ts"),
+    'export default { service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] } }',
+  );
+  expect(await githubAuthFor("first", ctx).bearer()).toBe("token-1");
+  expect(await githubAuthFor("Second", ctx).bearer()).toBe("token-2");
+  expect(await githubAuthFor("Third", ctx).bearer()).toBe("token-3");
+  expect(calls).toHaveLength(3);
+  expect(calls[0]?.url.pathname).toBe("/app/installations/10/access_tokens");
+  expect(calls[1]?.url.pathname).toBe("/app/installations/20/access_tokens");
+  expect(() => githubAuthFor("uncovered", ctx)).toThrow("account uncovered");
+  // A new context starts with no credentials, but does not reload the process's config.
+  expect(() => githubAuthFor("uncovered", resolveFactoryContext(tmp))).toThrow("account uncovered");
 });
 
 test("a token GitHub rejects is minted again once, so a revoked token does not wait out its hour", async () => {
@@ -258,6 +255,7 @@ test("a token GitHub rejects is minted again once, so a revoked token does not w
     jsonResponse({ id: 1 }),
   );
   const auth = createGithubAuth(APP, {
+    env: () => undefined,
     now: () => NOW,
     readPrivateKey: () => ({ key: privateKey }),
   });

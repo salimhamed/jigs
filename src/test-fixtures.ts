@@ -2,8 +2,11 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { type Mock, vi } from "vitest";
+import { afterEach, beforeEach, type Mock, vi } from "vitest";
+import type { FactoryContext } from "./config/factory-context.ts";
+import { factorySlug } from "./config/paths.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "./version.ts";
+import { type FactoryConfig, parseFactoryConfig } from "./workflow/factory-schema.ts";
 
 export function makeTmpDir(): string {
   return mkdtempSync(path.join(tmpdir(), "jigs-test-"));
@@ -81,4 +84,51 @@ export function stubService(fetchMock: Mock): void {
     res.headers.set(VERSION_HEADER, JIGS_VERSION);
     return res;
   });
+}
+
+export interface TestContextInit {
+  root?: string;
+  slug?: string;
+  config?: Record<string, unknown>;
+  env?: Record<string, string | undefined>;
+}
+
+// A context built in memory: no jigs.config.ts or .env on disk, and no run to watch.
+export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
+  const root = init.root ?? "/factory";
+  const env = init.env ?? {};
+  let config: FactoryConfig | undefined;
+  return {
+    root,
+    slug: init.slug ?? factorySlug(root),
+    get config() {
+      config ??= parseFactoryConfig({
+        service: { port: 8990, dashboardPort: 9090 },
+        workflows: {},
+        ...init.config,
+      });
+      return config;
+    },
+    env: (name) => (env[name] === "" ? undefined : env[name]),
+    runSignal: async () => undefined,
+  };
+}
+
+// Point the process's own factory context at a new factory repo, for code that reads it
+// ambiently. Undone by `vi.unstubAllEnvs()`; the caller removes the returned directory.
+export function useTestFactory(config: Record<string, unknown> | string = {}): string {
+  const parent = makeTmpDir();
+  const root = makeFactoryRepo(parent, config);
+  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  return parent;
+}
+
+// `useTestFactory` around every test of a file. Call it after the file's own hooks, so an
+// `unstubAllEnvs` there does not undo it.
+export function inTestFactory(config: Record<string, unknown> | string = {}): void {
+  let parent: string;
+  beforeEach(() => {
+    parent = useTestFactory(config);
+  });
+  afterEach(() => removeTmpDir(parent));
 }

@@ -98,12 +98,16 @@ export interface ProviderRequest<T> {
   fetch?: typeof fetch;
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /**
-   * Ends a rate-limit wait early, failing with the signal's reason. Without one, a call made from
-   * a step ends its wait when that step's run is cancelled; `null` never ends it, for work shared
-   * between runs such as a token mint.
+   * Ends a rate-limit wait early, failing with the signal's reason: a signal, or a watch started
+   * when a wait begins, such as a factory context's `runSignal`. Absent or `null`, nothing ends it.
    */
-  signal?: AbortSignal | null;
+  signal?: AbortSignal | WaitSignal | null;
 }
+
+/** A signal for one wait, started when the wait begins and disposed when it ends. */
+export type WaitSignal = (
+  subject: string,
+) => Promise<{ signal: AbortSignal; dispose(): void } | undefined>;
 
 /** A JSON body on success, nothing on 204, and a failure for any error status. */
 function jsonDecode<T>(res: Response, text: string, fail: Fail): T {
@@ -135,29 +139,17 @@ function retryAfterHeader(res: Response): number {
   return Number.isNaN(seconds) ? 1 : seconds;
 }
 
-// Imported on demand, so the CLI, which runs where the workflow SDK may not be
-// installed, never loads it.
-async function watchCallingRun(subject: string) {
-  let cancellation: typeof import("../run-cancellation.ts");
-  try {
-    cancellation = await import("../run-cancellation.ts");
-  } catch {
-    return undefined;
-  }
-  return cancellation.watchCallingRun(subject);
-}
-
 async function waitOut(
   ms: number,
   spec: Pick<ProviderRequest<unknown>, "provider" | "signal">,
   sleep: NonNullable<ProviderRequest<unknown>["sleep"]>,
 ): Promise<void> {
-  if (spec.signal === null) return sleep(ms);
+  if (spec.signal === null || spec.signal === undefined) return sleep(ms);
   const watch =
-    spec.signal === undefined
-      ? await watchCallingRun(`waiting out ${PROVIDER_NAMES[spec.provider]}'s rate limit`)
+    typeof spec.signal === "function"
+      ? await spec.signal(`waiting out ${PROVIDER_NAMES[spec.provider]}'s rate limit`)
       : undefined;
-  const signal = spec.signal ?? watch?.signal;
+  const signal = typeof spec.signal === "function" ? watch?.signal : spec.signal;
   try {
     if (signal?.aborted) throw abortReason(signal);
     await abortable(sleep(ms, signal), signal);

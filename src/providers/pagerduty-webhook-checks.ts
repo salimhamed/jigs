@@ -1,10 +1,11 @@
 import type { Check, CheckResult } from "../checks/check.ts";
-import { readFactoryConfig, type WebhooksConfig } from "../config/factory-config.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
+import type { WebhooksConfig } from "../workflow/factory-schema.ts";
 import { RESTART_SERVICE } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
 import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";
@@ -20,12 +21,13 @@ const CREATE =
   "in PagerDuty, add a Generic Webhook (v3) subscription under Integrations → Generic Webhooks (v3)";
 
 export function pagerDutyWebhookChecks(options: {
-  factoryRoot: () => string;
+  context: FactoryContext;
   probes: PagerDutyWebhookProbes;
 }): Check[] {
+  const ctx = options.context;
   let webhooks: WebhooksConfig | undefined;
   try {
-    ({ webhooks } = readFactoryConfig(options.factoryRoot()));
+    ({ webhooks } = ctx.config);
   } catch {
     // The binding catalog owns the single factory-config failure.
     return [];
@@ -39,13 +41,12 @@ export function pagerDutyWebhookChecks(options: {
       id: "pagerduty.webhook-secret",
       label: "PagerDuty webhook secret",
       run: async () => {
-        const root = options.factoryRoot();
-        return webhookSecret("pagerduty", root) !== undefined
+        return webhookSecret("pagerduty", ctx) !== undefined
           ? { ok: true }
           : {
               ok: false,
-              reason: `webhooks.pagerduty is enabled but ${missingWebhookSecret("pagerduty", root)}`,
-              repair: webhookSecretRepair("pagerduty", root),
+              reason: `webhooks.pagerduty is enabled but ${missingWebhookSecret("pagerduty", ctx.root)}`,
+              repair: webhookSecretRepair("pagerduty", ctx.root),
             };
       },
     },

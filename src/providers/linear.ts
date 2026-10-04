@@ -3,6 +3,11 @@
 // "use step" function or from a route handler (the trigger's ticket lookup,
 // the run-ref resolver) — never from a workflow body, where both are forbidden.
 
+import {
+  currentFactoryContext,
+  type FactoryContext,
+  runSignal,
+} from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { type Fail, providerRequest } from "./http.ts";
 import { LINEAR_API_URL, type LinearAuth, linearAuthFor } from "./linear-auth.ts";
@@ -60,6 +65,8 @@ export interface LinearClientDeps {
   auth?: LinearAuth;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
+  /** The factory it acts for. Defaults to the process's own, resolved on each call. */
+  context?: FactoryContext;
 }
 
 export interface LinearWebhook {
@@ -149,8 +156,9 @@ export interface LinearIssueMatch {
 }
 
 export function createLinearClient(deps: LinearClientDeps = {}) {
+  const ctx = () => deps.context ?? currentFactoryContext();
   function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const auth = deps.auth ?? linearAuthFor();
+    const auth = deps.auth ?? linearAuthFor(ctx());
     return providerRequest<T>({
       provider: "linear",
       auth,
@@ -164,6 +172,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       decode: decodeGraphql<T>,
       fetch: deps.fetch,
       sleep: deps.sleep,
+      signal: deps.context?.runSignal ?? runSignal,
     });
   }
 

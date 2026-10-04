@@ -5,12 +5,18 @@ import { getRun } from "workflow/api";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import type { PullRequestRef } from "../providers/github.ts";
 import { getComment } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
-import { currentFactory, listResources, registrySql, toRecord } from "../steps/runtime/registry.ts";
+import {
+  listResources,
+  type RegistrySql,
+  registrySql,
+  toRecord,
+} from "../steps/runtime/registry.ts";
 import {
   describeRunState,
   type RunFacts,
@@ -253,6 +259,7 @@ const runFacts = (run: WorldRun): NonNullable<RunFacts["run"]> => ({
 export async function worldRunFacts(
   runId: string,
   detail?: Pick<Factory, "triggers">,
+  registry?: RunRegistry,
 ): Promise<RunFacts> {
   let run: WorldRun;
   try {
@@ -261,7 +268,9 @@ export async function worldRunFacts(
     if (WorkflowRunNotFoundError.is(error)) return { run: null };
     throw error;
   }
-  const source = detail ? (await runSources([run], detail)).get(runId) : undefined;
+  const source = detail
+    ? (await runSources([run], detail, registry ?? processRegistry())).get(runId)
+    : undefined;
   const facts = { run: runFacts(run), ...(source === undefined ? {} : { source }) };
   if (TERMINAL_RUN_STATUSES.has(run.status)) {
     return detail ? { ...facts, steps: await listRunSteps(runId) } : facts;
@@ -279,9 +288,10 @@ export async function worldRunFacts(
 async function runSources(
   runs: readonly WorldRun[],
   factory: Pick<Factory, "triggers">,
+  registry: RunRegistry,
 ): Promise<Map<string, RunSource>> {
   const attributes = runs.flatMap((run) => run.attributes?.[OCCURRENCE_ATTRIBUTE] ?? []);
-  const rows = await occurrencesByAttribute(registrySql(), currentFactory(), attributes);
+  const rows = await occurrencesByAttribute(registry.sql, registry.factory, attributes);
   const byAttribute = new Map(
     rows.flatMap((row) => {
       const kind = factory.triggers?.[row.trigger]?.source.kind;
@@ -299,15 +309,29 @@ async function runSources(
   );
 }
 
+/** Where this factory's rows are: its registry, and the slug they are recorded under. */
+export interface RunRegistry {
+  sql: RegistrySql;
+  factory: string;
+}
+
+function processRegistry(): RunRegistry {
+  const ctx = currentFactoryContext();
+  return { sql: registrySql(ctx), factory: ctx.slug };
+}
+
 /** Every run this factory's World holds, described the way `readRunState` describes one. */
-export async function listRuns(factory: Factory): Promise<RunRow[]> {
+export async function listRuns(
+  factory: Factory,
+  registry: RunRegistry = processRegistry(),
+): Promise<RunRow[]> {
   const [runs, hooks] = await Promise.all([worldRuns(), listWorldHooks()]);
   const [rows, sources] = await Promise.all([
-    listResources(registrySql(), {
-      factory: currentFactory(),
+    listResources(registry.sql, {
+      factory: registry.factory,
       runIds: runs.map((run) => run.runId),
     }),
-    runSources(runs, factory),
+    runSources(runs, factory, registry),
   ]);
   const tokensByRun = Map.groupBy(hooks, (hook) => hook.runId);
   const rowsByRun = Map.groupBy(rows, (row) => row.runId);

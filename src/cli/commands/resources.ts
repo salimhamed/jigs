@@ -1,6 +1,3 @@
-import { factoryEnvValue } from "../../config/factory-env.ts";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
-import { factorySlug } from "../../config/paths.ts";
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { RunFacts } from "../../steps/runtime/run-state.ts";
@@ -9,6 +6,7 @@ import {
   type ResourceRecord,
   UNRELEASED_STATES,
 } from "../../workflow/runtime/resources.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import {
   columns,
   detail,
@@ -379,8 +377,8 @@ async function withDatabase<T>(
   deps: ResourcesDeps,
   action: (sql: RegistrySql, factory: string) => Promise<T>,
 ): Promise<T> {
-  const root = locateFactoryRoot(deps.cwd);
-  const url = factoryEnvValue(root, "WORKFLOW_POSTGRES_URL");
+  const ctx = factoryContextAt(deps.cwd);
+  const url = ctx.env("WORKFLOW_POSTGRES_URL");
   if (url === undefined) {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set for this factory",
@@ -390,7 +388,7 @@ async function withDatabase<T>(
   const { connectRegistry } = await modules();
   const sql = (deps.connect ?? ((value) => connectRegistry(value, { max: 1 })))(url);
   try {
-    return await action(sql, factorySlug(root));
+    return await action(sql, ctx.slug);
   } finally {
     await sql.$client.end();
   }
@@ -410,12 +408,9 @@ export async function runResourcesPrune(
   options: ResourcesOptions = {},
 ): Promise<ResourceInventory> {
   if (options.apply !== true) return listResources(deps, options);
-  const factoryRoot = locateFactoryRoot(deps.cwd);
-  const { resolveService } = await modules();
-  const releaseExclusion = acquireServiceExclusion(
-    resolveService(factoryRoot).slug,
-    "resources-prune",
-  );
+  const ctx = factoryContextAt(deps.cwd);
+  const factoryRoot = ctx.root;
+  const releaseExclusion = acquireServiceExclusion(ctx.slug, "resources-prune");
   try {
     requireServiceStopped({ cwd: factoryRoot, out: deps.out, processes: deps.processes });
     const result = await withDatabase(deps, (sql, factory) => inventory(sql, factory, options));

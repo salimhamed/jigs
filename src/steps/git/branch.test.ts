@@ -2,7 +2,13 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { pushCommit } from "../../providers/git.ts";
-import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import {
+  git,
+  inTestFactory,
+  makeRemoteBackedRepo,
+  makeTmpDir,
+  removeTmpDir,
+} from "../../test-fixtures.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { pushApprovedChange, readBranchState, readWorktreeDiff } from "./branch.ts";
 
@@ -26,6 +32,7 @@ beforeEach(() => {
   };
 });
 afterEach(() => removeTmpDir(tmp));
+inTestFactory();
 
 test("publishes the approved commit and accepts a retry after a successful push", async () => {
   await expect(pushApprovedChange(worktree, approved)).resolves.toEqual({

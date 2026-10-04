@@ -1,5 +1,4 @@
-import { type ResolvedAppIdentity, readFactoryConfig } from "../../config/factory-config.ts";
-import { factoryRoot } from "../../config/factory-root.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import {
   fetchPrSnapshot,
@@ -7,6 +6,7 @@ import {
   type PullRequestSnapshot,
 } from "../../providers/github.ts";
 import { appBotFor, type GithubAuth, githubAuthFor } from "../../providers/github-auth.ts";
+import type { ResolvedAppIdentity } from "../../workflow/factory-schema.ts";
 import { approvalState } from "../../workflow/pull-requests/merge-ready.ts";
 import type {
   FetchPrState,
@@ -22,7 +22,7 @@ export async function readPullRequestSnapshot(
   { approvalCovers = "latest-commit" }: PullRequestReadOptions = {},
 ): Promise<PullRequestSnapshot> {
   const facts = await fetchPrSnapshot(pr);
-  const signal = readFactoryConfig(factoryRoot()).github.mergeApproval;
+  const signal = currentFactoryContext().config.github.mergeApproval;
   const state = approvalState(facts, signal, { covers: approvalCovers });
   const snapshot: PullRequestSnapshot = { ...facts, approval: { signal, state } };
   const auth = githubAuthFor(pr.owner);

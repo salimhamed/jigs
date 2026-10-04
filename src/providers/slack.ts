@@ -4,9 +4,14 @@
 // connection. Reads env and hits the network, so it is reached from a step, a
 // check or the service, never from workflow code.
 
+import {
+  currentFactoryContext,
+  type FactoryContext,
+  runSignal,
+} from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { type EnvLookup, onProviderReset, requireCredential } from "./credentials.ts";
+import { perContext, requireCredential } from "./credentials.ts";
 import { ProviderApiError, providerRequest } from "./http.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
@@ -71,7 +76,8 @@ export interface SlackReply {
 export interface SlackClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
-  env?: EnvLookup;
+  /** The factory whose token it sends. Defaults to the process's own, resolved on each call. */
+  context?: FactoryContext;
 }
 
 /** Who the bot token acts as, and the scopes Slack reports it holds. */
@@ -103,6 +109,7 @@ export interface SlackUser {
 }
 
 export function createSlackClient(deps: SlackClientDeps = {}) {
+  const ctx = () => deps.context ?? currentFactoryContext();
   // Form-encoded, because every Web API method accepts it and not every read
   // method accepts JSON.
   function slackCall<T extends SlackReply>(
@@ -117,7 +124,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
     }
     return providerRequest({
       provider: "slack",
-      auth: { bearer: async () => requireCredential(token, undefined, deps.env) },
+      auth: { bearer: async () => requireCredential(token, undefined, ctx().env) },
       url: `${SLACK_API_URL}/${method}`,
       method: "POST",
       request: method,
@@ -125,6 +132,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
       body: form.toString(),
       fetch: deps.fetch,
       sleep: deps.sleep,
+      signal: deps.context?.runSignal ?? runSignal,
       decode: (res, text, fail) => {
         let body: T;
         try {
@@ -276,16 +284,14 @@ export const slackUser: SlackClient["slackUser"] = (...args) => slackClient.slac
 export const slackOpenConnection: SlackClient["slackOpenConnection"] = () =>
   slackClient.slackOpenConnection();
 
-let bot: Promise<SlackAuth> | null = null;
-onProviderReset(() => {
-  bot = null;
-});
+const bots = perContext(() => ({ bot: null as Promise<SlackAuth> | null }));
 
-/** The factory's own bot, from `auth.test` once per process. */
+/** The factory's own bot, from `auth.test` once per factory context. */
 export function slackBot(): Promise<SlackAuth> {
-  bot ??= slackAuthTest().catch((err: unknown) => {
-    bot = null;
+  const cache = bots();
+  cache.bot ??= slackAuthTest().catch((err: unknown) => {
+    cache.bot = null;
     throw err;
   });
-  return bot;
+  return cache.bot;
 }

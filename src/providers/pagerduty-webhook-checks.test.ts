@@ -2,6 +2,7 @@ import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { ProviderApiError } from "./http.ts";
 import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";
 import { type PagerDutyWebhookProbes, pagerDutyWebhookChecks } from "./pagerduty-webhook-checks.ts";
@@ -46,7 +47,10 @@ function checks(
 ) {
   vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "pd-secret");
   const root = factoryWith(pagerduty);
-  return pagerDutyWebhookChecks({ factoryRoot: () => root, probes: { token, subscriptions } });
+  return pagerDutyWebhookChecks({
+    context: resolveFactoryContext(root),
+    probes: { token, subscriptions },
+  });
 }
 
 const run = (...args: Parameters<typeof checks>) =>

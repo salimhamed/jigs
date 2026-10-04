@@ -1,6 +1,5 @@
 import path from "node:path";
-import { readFactoryConfig } from "../config/factory-config.ts";
-import { factoryRoot } from "../config/factory-root.ts";
+import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { githubChecks } from "../providers/github-checks.ts";
 import { webhookChecks } from "../providers/github-webhook-checks.ts";
@@ -69,6 +68,7 @@ function integrationsOf(requires: WorkflowRequires): Provider[] {
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
+  ctx: FactoryContext = currentFactoryContext(),
 ): Check[] {
   const integrations = integrationsOf(requires);
   // A binding selected by this run is more specific than the workflow's
@@ -77,16 +77,16 @@ export function preflightChecks(
   const bindings =
     typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
   return [
-    ...(integrations.includes("linear") ? linearChecks() : []),
-    ...(integrations.includes("github") ? githubChecks() : []),
-    ...(integrations.includes("pagerduty") ? pagerDutyChecks() : []),
-    ...(integrations.includes("slack") ? slackChecks() : []),
-    ...bindingChecks({ factoryRoot, names: bindings }),
+    ...(integrations.includes("linear") ? linearChecks(ctx) : []),
+    ...(integrations.includes("github") ? githubChecks(ctx) : []),
+    ...(integrations.includes("pagerduty") ? pagerDutyChecks(ctx) : []),
+    ...(integrations.includes("slack") ? slackChecks(ctx) : []),
+    ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
     ...declaredSkillChecks({ workflow: { requires } }).flatMap(({ checks }) => checks),
     ...(requires.aws ? [awsCredentialsCheck()] : []),
-    ...secretChecks(requires, { factoryRoot }),
+    ...secretChecks(requires, { context: ctx }),
   ];
 }
 
@@ -96,11 +96,9 @@ export function preflightChecks(
 // section or a slack section is set up on purpose. The key and PAT identities
 // are what every scaffold states, so they ask for nothing. An unreadable config
 // asks for nothing either: the binding checks report it.
-function configuredProviders(): Record<Provider, boolean> {
+function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
   try {
-    const { bindings, webhooks, github, linear, pagerduty, slack } = readFactoryConfig(
-      factoryRoot(),
-    );
+    const { bindings, webhooks, github, linear, pagerduty, slack } = ctx.config;
     return {
       github:
         Object.keys(bindings).length > 0 ||
@@ -155,12 +153,11 @@ function declaredSkillChecks(
 }
 
 // Doctor has no worktree, so it starts the servers from the factory root.
-function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
-  let root: string;
+function requiredMcpServerChecks(workflows: WorkflowManifests, ctx: FactoryContext): Check[] {
+  const { root } = ctx;
   let agentEnv: readonly string[];
   try {
-    root = factoryRoot();
-    agentEnv = factoryAgentEnv();
+    agentEnv = factoryAgentEnv(ctx);
   } catch {
     // The binding checks report a configuration that cannot be read.
     return [];
@@ -243,12 +240,13 @@ export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
 export function doctorChecks(
   workflows: WorkflowManifests,
   triggers: Record<string, Provider> = {},
+  ctx: FactoryContext = currentFactoryContext(),
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
     ...integrationsOf(requires),
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
-  const configured = configuredProviders();
+  const configured = configuredProviders(ctx);
   const provider = (name: Provider, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
     const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
@@ -258,24 +256,24 @@ export function doctorChecks(
   };
   const aws = users.get("aws") ?? [];
   return [
-    ...provider("linear", () => [...linearChecks(), ...linearOperatorDoctorChecks()]),
-    ...provider("github", githubChecks),
-    ...provider("pagerduty", () => [...pagerDutyChecks(), ...pagerDutyFromDoctorChecks()]),
-    ...provider("slack", slackDoctorChecks),
+    ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
+    ...provider("github", () => githubChecks(ctx)),
+    ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
+    ...provider("slack", () => slackDoctorChecks(ctx)),
     // Keyed on the config rather than the Linear credential: a Linear webhook
     // switched on without its secret is a failure even where that is missing too.
-    ...linearWebhookChecks({ factoryRoot }),
-    ...pagerDutyWebhookChecks({ factoryRoot, probes: pagerDutyWebhookProbes }),
-    ...bindingChecks({ factoryRoot }),
-    ...webhookChecks({ factoryRoot }),
+    ...linearWebhookChecks({ context: ctx }),
+    ...pagerDutyWebhookChecks({ context: ctx, probes: pagerDutyWebhookProbes(ctx) }),
+    ...bindingChecks({ context: ctx }),
+    ...webhookChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),
-    ...requiredMcpServerChecks(workflows),
+    ...requiredMcpServerChecks(workflows, ctx),
     ...declaredSkillChecks(workflows).flatMap(({ checks, workflows }) =>
       neededByUsers(checks, workflows),
     ),
     ...(aws.length > 0 ? neededByUsers([awsCredentialsCheck()], aws) : []),
-    ...doctorSecretChecks(workflows, { factoryRoot }),
+    ...doctorSecretChecks(workflows, { context: ctx }),
   ];
 }
 

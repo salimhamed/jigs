@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resetProviderContext } from "./credentials.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import {
   createSlackClient,
   SLACK_API_URL,
@@ -34,6 +34,7 @@ function reply(body: unknown, init: { status?: number; headers?: Record<string, 
 }
 
 let tokens: Record<string, string>;
+let factories = 0;
 let answers: Array<() => Response>;
 let calls: FetchCall[];
 let sleeps: number[];
@@ -65,14 +66,20 @@ beforeEach(() => {
   const sleep = fakeSleep();
   calls = fake.calls;
   sleeps = sleep.sleeps;
-  const deps = { fetch: fake.fetch, sleep: sleep.sleep, env: (name: string) => tokens[name] };
+  const deps = {
+    fetch: fake.fetch,
+    sleep: sleep.sleep,
+    context: testFactoryContext({ env: tokens }),
+  };
   slack = createSlackClient(deps);
-  // slackBot caches on the process client.
+  // slackBot caches on the process client, once per factory context.
   useSlackClient(deps);
+  factories += 1;
+  vi.stubEnv("JIGS_FACTORY_ROOT", `/slack-test-${factories}`);
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  resetProviderContext();
+  vi.unstubAllEnvs();
 });
 
 test("auth.test names the bot and reads its scopes from the response header", async () => {
@@ -177,13 +184,13 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
   expect(sleeps).toEqual([1_000, 1_000, 1_000]);
 });
 
-test("the bot's own identity is read once per process", async () => {
+test("the bot's own identity is read once per factory context", async () => {
   answer(() => reply(AUTH_OK));
   const [first, second] = await Promise.all([slackBot(), slackBot()]);
   expect(first).toEqual(second);
   expect(await slackBot()).toMatchObject({ userId: "U0C59SU5V29", botId: "B0C5JPZUW1J" });
   expect(calls).toHaveLength(1);
-  resetProviderContext();
+  vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
   await slackBot();
   expect(calls).toHaveLength(2);
 });

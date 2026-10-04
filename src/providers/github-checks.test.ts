@@ -1,6 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { runChecks } from "../checks/catalog.ts";
-import type { AppIdentity } from "../config/factory-config.ts";
+import type { AppIdentity } from "../workflow/factory-schema.ts";
 import { type GithubIdentityProbes, githubIdentityChecks } from "./github-checks.ts";
 
 const APP: AppIdentity = {

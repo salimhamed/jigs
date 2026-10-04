@@ -1,6 +1,7 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { resolveFactoryContext } from "../config/factory-context.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { WEBHOOK_EVENTS } from "./github-webhook.ts";
 import { webhookChecks } from "./github-webhook-checks.ts";
@@ -34,7 +35,7 @@ function configure(github = true): void {
   );
 }
 
-const checks = () => webhookChecks({ factoryRoot: () => factory });
+const checks = () => webhookChecks({ context: resolveFactoryContext(factory) });
 const check = () => {
   const [, found] = checks();
   if (found === undefined) throw new Error("expected a webhook check");
@@ -123,7 +124,7 @@ test("a passing webhook check does not resolve the GitHub identity", async () =>
   configure();
   respond([hook()]);
   const identity = vi.fn();
-  const [, found] = webhookChecks({ factoryRoot: () => factory, identity });
+  const [, found] = webhookChecks({ context: resolveFactoryContext(factory), identity });
   if (found === undefined) throw new Error("expected a webhook check");
   expect(await found.run()).toEqual({ ok: true });
   expect(identity).not.toHaveBeenCalled();
@@ -168,7 +169,7 @@ test("an App that cannot read a repo's hooks names installation access", async (
   configure();
   github.reply(new Response("Not Found", { status: 404 }));
   const [, appCheck] = webhookChecks({
-    factoryRoot: () => factory,
+    context: resolveFactoryContext(factory),
     identity: () => ({
       mode: "app",
       appId: 4958325,
@@ -187,7 +188,7 @@ test("an installed App missing hook permission gets the permission repair", asyn
   configure();
   github.reply(new Response("Forbidden", { status: 403 }));
   const [, appCheck] = webhookChecks({
-    factoryRoot: () => factory,
+    context: resolveFactoryContext(factory),
     identity: () => ({
       mode: "app",
       appId: 4958325,

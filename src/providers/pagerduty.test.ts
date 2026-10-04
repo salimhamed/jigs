@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import type { PagerDutyIdentity } from "../config/factory-config.ts";
+import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { ProviderApiError } from "./http.ts";
 import { createPagerDutyClient, PAGERDUTY_API_URL } from "./pagerduty.ts";
 import type { PagerDutyAuth } from "./pagerduty-auth.ts";

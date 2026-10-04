@@ -1,10 +1,10 @@
 import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";
-import type { PagerDutyIdentity } from "../config/factory-config.ts";
 import { createPagerDutyClient, type PagerDutyIncident } from "../providers/pagerduty.ts";
 import type { PagerDutyAuth } from "../providers/pagerduty-auth.ts";
 import type { Factory } from "../workflow/factory.ts";
+import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { POLL_OVERLAP_MS, pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import { eventTriggerId } from "./runs.ts";

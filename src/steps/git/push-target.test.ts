@@ -5,7 +5,6 @@
 
 import { writeFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { useFactoryRoot } from "../../providers/credentials.ts";
 import {
   git,
   pushBranch as gitPushBranch,
@@ -13,7 +12,7 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor, resetGithubAuth } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { pushApprovedChange, pushBranch } from "./branch.ts";
@@ -36,6 +35,9 @@ vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_
 vi.mock("../runtime/registry.ts", async () =>
   (await import("../runtime/test-fixtures.ts")).memoryRegistry(),
 );
+vi.mock("../../config/factory-context.ts", async (original) =>
+  (await import("../runtime/test-fixtures.ts")).memoryFactoryContext(original as never),
+);
 
 const worktree = {
   binding: "api",
@@ -54,7 +56,7 @@ function configure(identity: string) {
     `${factory}/jigs.config.ts`,
     `export default { service: { dashboardPort: 9090 }, github: { identities: [${identity}] } }`,
   );
-  useFactoryRoot(factory);
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
 }
 
 const remote = (url: string) =>
@@ -74,7 +76,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  resetGithubAuth();
+  vi.unstubAllEnvs();
   removeTmpDir(factory);
 });
 

@@ -1,9 +1,6 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { afterEach, expect, test, vi } from "vitest";
+import { expect, test } from "vitest";
 import { z } from "zod";
-import { parseFactoryConfig } from "../../config/factory-config.ts";
+import { parseFactoryConfig } from "../../workflow/factory-schema.ts";
 import {
   effectiveReleasePolicy,
   resolveReleasePolicy,
@@ -42,34 +39,24 @@ test("two workflows can differ and match compiled IDs rather than config names",
   expect(workflowReleasePolicy(factory, "missing")).toBeUndefined();
 });
 
-test("resolver combines compiled entry and current factory defaults", async () => {
-  const root = mkdtempSync(path.join(tmpdir(), "jigs-release-policy-"));
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
-  try {
-    writeFileSync(
-      path.join(root, "jigs.config.ts"),
-      `export default { service: { dashboardPort: 9000 }, release: ${JSON.stringify(keep)} };`,
-    );
-    const definition = {
-      service: { dashboardPort: 9000 },
-      workflows: {
-        first: async () => ({
-          default: {
-            workflow: Object.assign(async () => {}, { workflowId: "compiled" }),
-            inputs: z.object({}),
-            release: discard,
-          },
-        }),
-      },
-    };
-    expect(
-      await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "compiled" }, definition),
-    ).toEqual(discard);
-    expect(
-      await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "missing" }, definition),
-    ).toEqual(keep);
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
+test("resolver combines compiled entry and the factory's own default", async () => {
+  const definition = {
+    service: { dashboardPort: 9000 },
+    release: keep,
+    workflows: {
+      first: async () => ({
+        default: {
+          workflow: Object.assign(async () => {}, { workflowId: "compiled" }),
+          inputs: z.object({}),
+          release: discard,
+        },
+      }),
+    },
+  };
+  expect(
+    await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "compiled" }, definition),
+  ).toEqual(discard);
+  expect(
+    await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "missing" }, definition),
+  ).toEqual(keep);
 });
-afterEach(() => vi.unstubAllEnvs());

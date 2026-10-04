@@ -2,8 +2,8 @@ import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
-import { locateFactoryRoot } from "../../config/factory-root.ts";
 import { JigsError } from "../../errors.ts";
+import { factoryContextAt } from "../factory-context.ts";
 import { detail } from "../output.ts";
 
 // What releases before the generated jigs/ directory wrote into a factory.
@@ -17,7 +17,7 @@ export async function generateIntegration(deps: {
   cwd: string;
   out: (line: string) => void;
 }): Promise<void> {
-  const root = locateFactoryRoot(deps.cwd);
+  const { root } = factoryContextAt(deps.cwd);
   const resolve = createRequire(path.join(root, "package.json"));
   let entry: string;
   try {
