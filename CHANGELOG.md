@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.95.0](https://github.com/salimhamed/jigs/compare/jigs-v0.94.0...jigs-v0.95.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* cancel-aware provider calls, one token exchange, and drop routines no factory calls ([#552](https://github.com/salimhamed/jigs/issues/552))
+
+### Code Refactoring
+
+* cancel-aware provider calls, one token exchange, and drop routines no factory calls ([#552](https://github.com/salimhamed/jigs/issues/552)) ([4bffa86](https://github.com/salimhamed/jigs/commit/4bffa86ea38811f6d8d6e19e046afbe90fe99441))
+
 ## [0.94.0](https://github.com/salimhamed/jigs/compare/jigs-v0.93.0...jigs-v0.94.0) (2026-10-04)
 
 
