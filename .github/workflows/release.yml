@@ -15,7 +15,7 @@ permissions:
 # a run waiting in a group replaces the one already waiting there, so sharing
 # the group could drop a pending main run.
 concurrency:
-  group: ${{ github.event_name == 'workflow_dispatch' && 'release-preview' || 'release' }}
+  group: release-${{ github.event_name }}
   cancel-in-progress: false
 
 jobs:
@@ -153,11 +153,17 @@ jobs:
           set -euo pipefail
           IFS=. read -r major minor _ < <(node -p "require('./packages/jigs/package.json').version")
           prefix="$major.$((minor + 1)).0-hub."
-          n="$(npm view @jigs-ai/jigs versions --json | PREFIX="$prefix" node -e '
-            const versions = [].concat(JSON.parse(require("fs").readFileSync(0, "utf8")));
-            const ns = versions
-              .filter((v) => v.startsWith(process.env.PREFIX))
-              .map((v) => Number(v.slice(process.env.PREFIX.length)))
+          # Past both packages' previews, so every run publishes a fresh,
+          # matching pair; a partial failure just burns a number. Before the
+          # hub's first publish, npm has no versions of it.
+          jigs="$(npm view @jigs-ai/jigs versions --json)"
+          hub="$(npm view @jigs-ai/hub versions --json 2>/dev/null)" || hub='[]'
+          n="$(JIGS="$jigs" HUB="$hub" PREFIX="$prefix" node -e '
+            const { JIGS, HUB, PREFIX } = process.env;
+            const ns = [JIGS, HUB]
+              .flatMap((list) => [].concat(JSON.parse(list)))
+              .filter((v) => v.startsWith(PREFIX))
+              .map((v) => Number(v.slice(PREFIX.length)))
               .filter(Number.isInteger);
             console.log(ns.length ? Math.max(...ns) + 1 : 0);
           ')"
@@ -175,17 +181,9 @@ jobs:
             npm install -g npm@11
           fi
           npm -v
-      # Hub first: N counts jigs versions, so a run that fails after the hub
-      # publish re-runs at the same N, skips the hub and publishes jigs.
       - name: Publish to npm
         run: |
           set -euo pipefail
           for dir in packages/hub packages/jigs; do
-            name="$(node -p "require('./$dir/package.json').name")"
-            version="$(node -p "require('./$dir/package.json').version")"
-            if npm view "$name@$version" version >/dev/null 2>&1; then
-              echo "$name@$version is already published — skipping"
-            else
-              (cd "$dir" && npm publish --tag hub --access public)
-            fi
+            (cd "$dir" && npm publish --tag hub --access public)
           done

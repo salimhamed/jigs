@@ -180,12 +180,13 @@ What is easy to break:
 ### Hub previews
 
 The `preview` job in `release.yml` publishes `@jigs-ai/jigs` and `@jigs-ai/hub`
-from the `hub` branch. Run the release workflow from Actions with **Use
-workflow from** set to `hub`, or `gh workflow run release.yml --ref hub`; any
-other ref fails. Both packages get `X.(Y+1).0-hub.N`, where `X.Y.Z` is the
-version on the branch and `N` counts up from 0 per minor, under the npm
-dist-tag `hub`, so `latest` never moves. The version lives only in the job's
-checkout. Re-running skips a version npm already holds.
+from the `hub` branch. Run it with `gh workflow run release.yml --ref hub`; any
+other ref fails. (The Actions UI shows **Run workflow** only once `main`'s
+`release.yml` has `workflow_dispatch`.) Both packages get `X.(Y+1).0-hub.N`,
+where `X.Y.Z` is the version on the branch and `N` is one past the highest
+preview of either package for that minor, under the npm dist-tag `hub`, so
+`latest` never moves. Every run publishes a fresh pair; a run that fails
+halfway just skips a number. The version lives only in the job's checkout.
 
 Install a preview by its exact version, as pnpm will not resolve a release
 younger than a day otherwise: `pnpm dlx @jigs-ai/jigs@0.103.0-hub.0`, and
@@ -196,6 +197,8 @@ preview.
 The hub publishes before jigs, so it must be publishable first: its first
 publish is by hand with an npm token, then add an npm trusted publisher for
 `@jigs-ai/hub` with the same repository and `release.yml` workflow as jigs.
+npm points `latest` at a package's first version whatever `--tag` says, so the
+hub's `latest` is that hand-published version until it ships for real.
 
 ## Website
 

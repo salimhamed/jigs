@@ -40,8 +40,8 @@ server from source, serves the web app through Vite and reads
 `jigs-hub` bin. The package ships `bin/`, `dist/`, `build/` and `migrations/`;
 anything the built hub imports must be a dependency, not a devDependency.
 Paths to `migrations/` and `build/` resolve from `src/package-root.ts`, so
-they hold from `src/` and `dist/` alike. Tests ending in `.db.test.ts` need Postgres and run under
-`pnpm test:db`, which builds first.
+they hold from `src/` and `dist/` alike. Tests ending in `.db.test.ts` need
+Postgres and run under `pnpm test:db`, which builds first.
 
 Keep `main.db.test.ts` passing: the built hub must exit 0 on SIGTERM once open
 connections close, so its process manager can stop it.
