@@ -62,10 +62,12 @@ Jigs has no compatibility obligation. Change a contract in place: rename,
 remove and reshape types, exports, config and durable addresses without shims,
 deprecation paths, fallbacks for old callers or dual code paths. A breaking
 change is a `!` in the PR title and one footer line in the commit, nothing more.
-Factories adopt a release by upgrading and fixing what breaks. `Driver`,
-`DriverContext`, `AgentRunner` and the types they reach, exported from
-`@jigs-ai/jigs/steps`, are a published contract pinned by
-`src/steps/contract.test.ts`; changing them is a breaking release.
+Factories adopt a release by upgrading and fixing what breaks.
+`@jigs-ai/jigs/steps` exports only what a custom agent step uses:
+`createAgentRunner`, `AgentRunner`, `AgentRunnerOptions`, `RunMetadata`,
+`AgentSessionError` and `ProviderApiError`. Their shapes are a published
+contract pinned by `src/steps/contract.test.ts`, and `src/package.test.ts`
+pins the list; changing either is a breaking release. Drivers stay internal.
 
 The delivery routines (`buildAndReview`, `publishPullRequest`,
 `followPullRequestToOutcome`) run steps inside a factory's runs, and a parked

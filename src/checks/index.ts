@@ -12,8 +12,8 @@ import {
 } from "../providers/pagerduty-checks.ts";
 import { pagerDutyWebhookChecks } from "../providers/pagerduty-webhook-checks.ts";
 import { slackChecks, slackDoctorChecks } from "../providers/slack-checks.ts";
-import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
-import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
+import { driverFor, type HarnessTarget } from "../steps/agents/shared/drivers.ts";
+import { agentStepEnv, factoryAgentEnv } from "../steps/agents/shared/env.ts";
 import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import type { Provider } from "../workflow/providers.ts";

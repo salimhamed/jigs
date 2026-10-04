@@ -9,5 +9,5 @@
  * @packageDocumentation
  */
 
-export { executeAgent } from "./execute-agent.ts";
-export { executeJev, executeModel } from "./execute-model-request.ts";
+export { executeAgent } from "./shared/execute-agent.ts";
+export { executeJev, executeModel } from "./shared/execute-model-request.ts";

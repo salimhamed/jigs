@@ -2,7 +2,7 @@ import { existsSync, statSync } from "node:fs";
 import path from "node:path";
 import { currentFactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { skillFolder, skillName } from "../steps/agents/harnesses/skills.ts";
+import { skillFolder, skillName } from "../steps/agents/shared/skills.ts";
 import type { Check, CheckResult } from "./check.ts";
 
 const DESCRIPTOR = "the agent's harness descriptor";

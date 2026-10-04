@@ -23,7 +23,6 @@ export const sharedOptions = {
     "Errors and utilities",
     "Agent runner",
     "Errors",
-    "Advanced driver contracts",
     "Runtime metadata",
     "Execution primitives",
     "Agent execution",

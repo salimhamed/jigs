@@ -1,10 +1,10 @@
 import { JigsError } from "../errors.ts";
+import { driverFor } from "../steps/agents/shared/drivers.ts";
 import {
   type HarnessRuntime,
   type HarnessRuntimeDeps,
   harnessRuntime,
-} from "../steps/agents/drivers/harness-runtime.ts";
-import { driverFor } from "../steps/agents/drivers/index.ts";
+} from "../steps/agents/shared/harness-runtime.ts";
 import type {
   AskableModelSource,
   Harness,
