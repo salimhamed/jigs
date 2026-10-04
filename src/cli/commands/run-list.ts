@@ -93,7 +93,7 @@ export async function showRuns(
         run.ticket ?? "-",
         tone(run.status),
         run.trigger,
-        run.source === null ? "-" : sourceLine(run.source),
+        run.source ? sourceLine(run.source) : "-",
         age(run.createdAt, now),
         age(run.lastActivityAt, now),
         waitingCell(run),

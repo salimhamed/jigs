@@ -91,6 +91,14 @@ test("a trigger's run names the message it was started for before it waits", asy
   expect(lines[2]).toContain("trigger:pages    pagerduty Q1ABCDEF");
 });
 
+// After an upgrade, `jigs status` runs before `jigs up` restarts the older service.
+test("a run from a service too old to report its source shows a dash", async () => {
+  const { source: _, ...older } = run();
+  respond({ runs: [older], schedules: [], triggers: [] });
+  await showRuns(deps(), { now: NOW });
+  expect(lines[1]).toContain("manual   -");
+});
+
 test("runs are distinguished by SDK status", async () => {
   respond({
     runs: [
