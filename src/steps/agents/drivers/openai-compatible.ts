@@ -43,10 +43,6 @@ export const openaiCompatibleDriver = {
   ask,
   installationChecks: () => [],
   descriptorChecks,
-  requestChecks: (request) => {
-    const source = descriptor(request);
-    return source === undefined ? [] : descriptorChecks(source);
-  },
   envAllowlist: (request: DriverRequest) => {
     const variable = descriptor(request)?.apiKeyEnv;
     return variable === undefined ? [] : [variable];

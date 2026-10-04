@@ -46,7 +46,7 @@ function fakeClaude(model = new MockLanguageModelV4()) {
       return { model, close: closed };
     },
     installationChecks: () => [],
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     envAllowlist: () => [],
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
     setsEnv: [],

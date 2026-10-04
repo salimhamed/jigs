@@ -132,7 +132,7 @@ async function askAgent(
   const env = agentStepEnv(driver, wire, seams.factoryEnv());
   assertAskableHarness(wire.harness);
   if (driver.ask === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot ask`);
-  const requestReport = await runChecks(driver.requestChecks(wire));
+  const requestReport = await runChecks(driver.descriptorChecks(wire.harness));
   if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
   const ask = driver.ask;
   const generation = await withRunCancellation(

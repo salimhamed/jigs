@@ -156,7 +156,7 @@ export function createCodexDriver(
     family: "harness",
     open,
     installationChecks: () => [harnessRuntimeCheck("codex"), codexAuthCheck()],
-    requestChecks: () => [],
+    descriptorChecks: () => [],
     jitChecks: (target) => [codexWorktreeConfigCheck(target.cwd)],
     envAllowlist: (request) =>
       "harness" in request && request.harness.kind === "codex"

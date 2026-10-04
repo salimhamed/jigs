@@ -32,6 +32,7 @@ export type {
   Driver,
   DriverContext,
   DriverDependencies,
+  DriverDescriptor,
   EvaluationGeneration,
   ExecutorGeneration,
   HarnessTarget,

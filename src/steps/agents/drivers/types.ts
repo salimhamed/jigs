@@ -58,7 +58,7 @@ export type HarnessTarget = {
   resume?: AgentSessionRef | undefined;
 };
 /**
- * Any request a driver's checks and environment allowlist are asked about.
+ * Any request a driver's environment allowlist is asked about.
  *
  * @group Advanced driver contracts
  */
@@ -67,6 +67,15 @@ export type DriverRequest =
   | ModelRequest
   | AskJevOptions<JevQuestions>
   | HarnessTarget;
+
+/**
+ * The descriptor a driver of kind `K` runs: a harness for a harness kind, a model source otherwise.
+ *
+ * @group Advanced driver contracts
+ */
+export type DriverDescriptor<K extends HarnessKind | ModelKind> = K extends HarnessKind
+  ? Extract<Harness, { kind: K }>
+  : Extract<ModelSource, { kind: K }>;
 
 /**
  * What a driver's `open` receives: the run, the harness environment jigs built, and a signal
@@ -160,9 +169,14 @@ export interface Driver<K extends HarnessKind | ModelKind> {
     request: AskJevOptions<QUESTIONS>,
     context: DriverContext,
   ): Promise<DecisionGeneration<QUESTIONS>>;
+  /** Checks that hold for every descriptor of this kind, such as the installed CLI. */
   installationChecks(): Check[];
-  descriptorChecks?(source: Extract<ModelSource, { kind: K }>): Check[];
-  requestChecks(request: DriverRequest): Check[];
+  /**
+   * Every check the descriptor alone decides, such as the credential its model source reads.
+   * Preflight and doctor run them ahead of a run, and the step runs them again before it starts.
+   */
+  descriptorChecks(descriptor: DriverDescriptor<K>): Check[];
+  /** Checks that need the worktree the harness runs in. */
   jitChecks?(target: HarnessTarget): Check[];
   envAllowlist(request: DriverRequest): readonly string[];
   /** Names the driver sets in the harness environment itself, such as a private home. */
