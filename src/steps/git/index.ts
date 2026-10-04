@@ -14,5 +14,6 @@ export {
   pushBranch,
   readBranchState,
   readWorktreeDiff,
+  restoreWorktree,
 } from "./branch.ts";
 export { readChange, readPatch } from "./change.ts";

@@ -91,7 +91,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(handed()?.work).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.work.instructions).toContain("## Implementation brief\nUse the flag.");
   expect(routines.buildAndReview).toHaveBeenCalledWith(expect.anything(), { rounds: 3 });
-  expect(routines.describePullRequest).toHaveBeenCalledWith(handed());
+  expect(routines.describePullRequest).toHaveBeenCalledWith(handed(), { commit: "h1" });
   expect(routines.publishPullRequest).toHaveBeenCalledWith(handed(), {
     commit: "h1",
     title: "Add a flag",
@@ -310,6 +310,13 @@ test("the reviewer is told no pull request or CI exists yet and to stay off GitH
     expect(text).toContain("No pull request exists yet and CI has not run");
     expect(text).toContain("do not look up pull requests, branches or CI status on GitHub");
   }
+});
+
+test("a resumed builder's findings are listed without crediting them to the reviewer", () => {
+  const findings = [{ summary: "The worktree has uncommitted changes.", blocking: true }];
+  const prompt = prompts.build.resume({ findings });
+  expect(prompt).toContain("Open findings:\n- The worktree has uncommitted changes.");
+  expect(prompt).not.toContain("The reviewer found");
 });
 
 test("the maintenance prompt says when to wait, when to ask for a person, and what wakes the builder", () => {

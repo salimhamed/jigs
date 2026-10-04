@@ -200,13 +200,19 @@ everything in between:
   then the reviewer review the commit, until the reviewer raises no blocking
   finding. It returns the reviewed commit, or `{ stopped }` with the reason
   (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings and
-  the round it stopped in. A stop pushes nothing: push the branch with the
-  `pushBranch` step if whoever takes over should find the work on the remote.
-- `describePullRequest(delivery, { check })` has the writer write the pull
-  request's title and body from the diff. The optional `check` returns the
-  problems with an answer, such as a title that breaks your convention; the
-  writer is sent back once with them, and a second answer with problems throws.
-  Nothing is pushed.
+  the round it stopped in. A builder that leaves uncommitted changes is sent
+  back once to commit or delete them before the round stops as `uncommitted`.
+  After each review the worktree is reset to the reviewed commit and its
+  untracked files removed, so files the reviewer's checks leave behind never
+  reach the pull request; ignored files are kept. A stop pushes nothing: push
+  the branch with the `pushBranch` step if whoever takes over should find the
+  work on the remote.
+- `describePullRequest(delivery, { commit, check })` has the writer write the
+  pull request's title and body from the diff, then resets the worktree to
+  `commit` the same way. It throws first unless the worktree is clean at
+  `commit`. The optional `check` returns the problems with an
+  answer, such as a title that breaks your convention; the writer is sent back
+  once with them, and a second answer with problems throws. Nothing is pushed.
 - `publishPullRequest(delivery, { commit, title, body, draft })` pushes exactly
   `commit` and opens the pull request with the title and body you pass. No
   agent runs, and it needs no review: any clean commit at the worktree's HEAD
@@ -363,6 +369,7 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
       );
     }
     const { title, body } = await describePullRequest(delivery, {
+      commit: built.reviewedCommit,
       check: (described) =>
         described.title.startsWith("chore(deps): ")
           ? []

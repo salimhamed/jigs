@@ -70,7 +70,7 @@ const build =
   "Implement the requirements and address the findings. Follow the repository instructions, run relevant checks, and commit before you finish: only committed work is reviewed. Do not push or open a pull request. A finding you decline stays open until the reviewer accepts your reason, so give one it can judge.";
 
 const review =
-  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. No pull request exists yet and CI has not run: review only the diff and worktree you are given, do not look up pull requests, branches or CI status on GitHub, and leave acceptance criteria about CI or the pull request to the pull-request phase that follows. A finding is blocking when it is a stated requirement left unmet, a defect a user could hit, or an untested risk that matters; preferences about naming, structure, comments, extra tests and wording are not. Only a blocking finding sends the change back to the builder; non-blocking findings are kept for a human to read on the pull request.";
+  "Review the changes against the requirements and repository instructions. Inspect the diff between the base and head commits and check for correctness and regressions. Do not edit files. Checks you run may leave files behind; the worktree is restored after your review. No pull request exists yet and CI has not run: review only the diff and worktree you are given, do not look up pull requests, branches or CI status on GitHub, and leave acceptance criteria about CI or the pull request to the pull-request phase that follows. A finding is blocking when it is a stated requirement left unmet, a defect a user could hit, or an untested risk that matters; preferences about naming, structure, comments, extra tests and wording are not. Only a blocking finding sends the change back to the builder; non-blocking findings are kept for a human to read on the pull request.";
 
 const maintain = join([
   "Continue maintaining the pull request you implemented.",
@@ -100,10 +100,7 @@ export const prompts: DeliveryPrompts<Ticket> = {
         build,
       ]),
     resume: ({ findings }) =>
-      join([
-        findings.length === 0 ? "" : `The reviewer found:\n${renderFindings(findings)}`,
-        build,
-      ]),
+      join([findings.length === 0 ? "" : `Open findings:\n${renderFindings(findings)}`, build]),
   },
 
   review: {

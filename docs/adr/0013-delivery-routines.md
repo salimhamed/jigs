@@ -13,7 +13,7 @@ factory's steps in the generated `jigs/routines.ts`:
   as a value: `rounds-exhausted`, `uncommitted` or `no-commits`, with the round
   it stopped in. A stop pushes nothing; the caller pushes the branch if it
   wants the work on the remote.
-- `describePullRequest(delivery, { check? })` has the writer write the title
+- `describePullRequest(delivery, { commit, check? })` has the writer write the title
   and body. The caller's `check` returns problems; the writer is sent back once
   with them, and a second answer with problems throws.
 - `publishPullRequest(delivery, { commit, title, body, draft? })` pushes

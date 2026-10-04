@@ -166,7 +166,7 @@ export async function deliverTicket(
     await setTicketStatus(snapshot.id, "Todo");
     throw new JigsError(`delivery stopped: ${built.stopped.reason}`);
   }
-  const { title, body } = await describePullRequest(delivery);
+  const { title, body } = await describePullRequest(delivery, { commit: built.reviewedCommit });
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
   await setTicketStatus(snapshot.id, "In Review");
   const outcome = await followPullRequestToOutcome(delivery, pr, {
@@ -190,14 +190,19 @@ export async function deliverTicket(
 - **`buildAndReview`** runs the builder, then the reviewer on what it
   committed, until the reviewer raises no blocking finding. It returns the
   approved commit and the approving round's non-blocking findings, which the
-  workflow appends to the pull request body. When the rounds run out, or the
-  builder leaves uncommitted work or commits nothing, it returns `{ stopped }`
-  with the reason, the open findings and the round it stopped in. It pushes
-  nothing; the workflow pushes the branch with the `pushBranch` step before it
-  writes its ticket note, and says so when the push fails.
-- **`describePullRequest`** has the builder write the title and body. A title
-  that is not one plain line, or a body with a "Title:" or "Description:" label
-  line, is sent back once with the reasons; a second bad answer fails the run.
+  workflow appends to the pull request body. A builder that leaves
+  uncommitted changes is sent back once to commit or delete them. After each
+  review the worktree is reset to the reviewed commit and its untracked files
+  removed, so files the reviewer's checks leave behind are never published.
+  When the rounds run out, or the builder still leaves uncommitted work or
+  commits nothing, it returns `{ stopped }` with the reason, the open findings
+  and the round it stopped in. It pushes nothing; the workflow pushes the
+  branch with the `pushBranch` step before it writes its ticket note, and says
+  so when the push fails.
+- **`describePullRequest`** has the builder write the title and body, then
+  resets the worktree to the reviewed commit it is given. A title that is not
+  one plain line, or a body with a "Title:" or "Description:" label line, is
+  sent back once with the reasons; a second bad answer fails the run.
   Pass `check` to add your own rules, such as a title convention, the same way.
 - **`publishPullRequest`** pushes exactly the given commit and opens the pull
   request with the title and body it is given, so a failed description pushes
