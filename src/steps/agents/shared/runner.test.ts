@@ -94,6 +94,35 @@ test("the runner holds the worktree until it is closed, and closes once", async 
   await next.close();
 });
 
+test("a second agent on a locked worktree is refused before tokens or checks", async () => {
+  const { seams } = fakeClaude();
+  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  try {
+    const { seams: second } = fakeClaude();
+    second.accessEnv = vi.fn(async () => ({}));
+    second.jitFailures = vi.fn(async () => undefined);
+    await expect(openAgentRunner(claude, { cwd: worktree, run }, second)).rejects.toThrow(
+      `an agent is already running in ${worktree} — refusing to start a second one in the same worktree`,
+    );
+    expect(second.accessEnv).not.toHaveBeenCalled();
+    expect(second.jitFailures).not.toHaveBeenCalled();
+  } finally {
+    await runner.close();
+  }
+});
+
+test("a failed token mint releases the worktree", async () => {
+  const { seams } = fakeClaude();
+  seams.accessEnv = async () => {
+    throw new Error("mint failed");
+  };
+  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toThrow(
+    "mint failed",
+  );
+  const { seams: healthy } = fakeClaude();
+  await (await openAgentRunner(claude, { cwd: worktree, run }, healthy)).close();
+});
+
 test("the session comes from the provider metadata, recorded on this descriptor", async () => {
   const { seams } = fakeClaude();
   const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
@@ -107,7 +136,7 @@ test("the session comes from the provider metadata, recorded on this descriptor"
   }
 });
 
-test("a failed JIT check throws before the lock is taken", async () => {
+test("a failed JIT check releases the worktree", async () => {
   const { seams } = fakeClaude();
   const failure = {
     ok: false as const,

@@ -71,24 +71,30 @@ export async function prepareAgentRun(
       `session ${resume.id} was recorded on the ${resume.harness} harness and this step runs on ${harness.kind}`,
     );
   }
-  // Built once, so the JIT checks probe exactly what the harness gets.
-  const base = agentStepEnv(driver, target, seams.factoryEnv());
-  const env = { ...base, ...(await abortable(seams.accessEnv(target, base), signal)) };
-  const requestReport = await runChecks(driver.descriptorChecks(harness));
-  if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
-  const jitFailure = await seams.jitFailures(target, env);
-  if (jitFailure !== undefined) throw new JitCheckError(jitFailure);
+  let release: () => void;
   try {
-    const release = await acquireFileLock(lockPathFor(cwd, "agent-step"), {
+    release = await acquireFileLock(lockPathFor(cwd, "agent-step"), {
       timeoutMs: 0,
       staleMs: LOCK_STALE_MS,
     });
-    return { driver, env, release };
   } catch (err) {
     if (err instanceof FileLockTimeoutError)
       throw new Error(
         `an agent is already running in ${cwd} — refusing to start a second one in the same worktree`,
       );
+    throw err;
+  }
+  try {
+    // Built once, so the JIT checks probe exactly what the harness gets.
+    const base = agentStepEnv(driver, target, seams.factoryEnv());
+    const env = { ...base, ...(await abortable(seams.accessEnv(target, base), signal)) };
+    const requestReport = await runChecks(driver.descriptorChecks(harness));
+    if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
+    const jitFailure = await seams.jitFailures(target, env);
+    if (jitFailure !== undefined) throw new JitCheckError(jitFailure);
+    return { driver, env, release };
+  } catch (err) {
+    release();
     throw err;
   }
 }
