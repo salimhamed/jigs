@@ -158,6 +158,19 @@ test("stopping aborts the poll in flight", async () => {
   expect(errors).not.toHaveBeenCalled();
 });
 
+test("stopping mid-batch routes no further message and confirms nothing", async () => {
+  let release = () => {};
+  push.mockImplementationOnce(() => new Promise((resolve) => (release = () => resolve([]))));
+  const { seen } = await start([[event("5", "first"), event("6", "second")]]);
+  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+
+  const stopped = stop?.();
+  release();
+  await stopped;
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
+});
+
 test("backs off on a server error, doubling up to a minute", async () => {
   expect([1, 2, 3, 7, 20].map(hubBackoff)).toEqual([1000, 2000, 4000, 60_000, 60_000]);
 

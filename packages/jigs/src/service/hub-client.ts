@@ -16,8 +16,8 @@ import { type RouteDeps, routeProviderEvent } from "./provider-events.ts";
 
 const MAX_BACKOFF_MS = 60_000;
 const UNAUTHORIZED_RETRY_MS = 5 * 60_000;
-// Room past the hub's own wait before a silent connection counts as dead.
-const POLL_GRACE_MS = 15_000;
+// How long a silent connection gets, past any wait the hub was asked to hold, before it counts as dead.
+const GRACE_MS = 15_000;
 
 export interface HubClientOptions {
   url: string;
@@ -53,7 +53,7 @@ export function startHubClient(options: HubClientOptions): { stop: () => Promise
 }
 
 async function run(options: HubClientOptions, signal: AbortSignal): Promise<void> {
-  const request = async (path: string, init: RequestInit, timeoutMs?: number) => {
+  const request = async (path: string, init: RequestInit, timeoutMs: number) => {
     const response = await fetch(new URL(path, options.url), {
       ...init,
       headers: {
@@ -61,20 +61,21 @@ async function run(options: HubClientOptions, signal: AbortSignal): Promise<void
         authorization: `Bearer ${options.token}`,
         "user-agent": `jigs/${options.version}`,
       },
-      signal:
-        timeoutMs === undefined
-          ? signal
-          : AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
+      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
     });
     if (!response.ok) throw new HubResponseError(response.status);
     return response;
   };
   const confirm = (position: string) =>
-    request(cursorPath, {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ position }),
-    });
+    request(
+      cursorPath,
+      {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify({ position }),
+      },
+      GRACE_MS,
+    );
 
   let unconfirmed: string | null = null;
   let failures = 0;
@@ -87,14 +88,17 @@ async function run(options: HubClientOptions, signal: AbortSignal): Promise<void
       const response = await request(
         `${messagesPath}?wait=${maxWaitSeconds}`,
         {},
-        maxWaitSeconds * 1000 + POLL_GRACE_MS,
+        maxWaitSeconds * 1000 + GRACE_MS,
       );
       const { messages } = (await response.json()) as MessagesResponse;
       if (failures > 0) console.log("[hub] reconnected");
       failures = 0;
       const last = messages.at(-1);
       if (last === undefined) continue;
-      for (const message of messages) await handle(message, options);
+      for (const message of messages) {
+        if (signal.aborted) return;
+        await handle(message, options);
+      }
       unconfirmed = last.position;
       await confirm(unconfirmed);
       unconfirmed = null;
