@@ -12,12 +12,6 @@
     "noEmit": true,
     "module": "nodenext",
     "moduleResolution": "nodenext",
-    "allowImportingTsExtensions": true,
-    "plugins": [
-      {
-        "name": "workflow"
-      }
-    ]
-  },
-  "include": ["src", "tsdown.config.ts"]
+    "allowImportingTsExtensions": true
+  }
 }

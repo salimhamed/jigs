@@ -22,7 +22,7 @@ jobs:
       - run: pnpm docs:check
 
   # The only job that compiles a workflow directive — see
-  # e2e/check-step-ids.mjs for why nothing else can.
+  # packages/jigs/e2e/check-step-ids.mjs for why nothing else can.
   step-ids:
     runs-on: ubuntu-latest
     # The boot half of the check starts the built service, whose registry gate

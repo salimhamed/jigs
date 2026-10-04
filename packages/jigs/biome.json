@@ -1,0 +1,22 @@
+{
+  "$schema": "https://biomejs.dev/schemas/2.5.9/schema.json",
+  "root": false,
+  "extends": "//",
+  "overrides": [
+    {
+      "includes": [
+        "src/**/*.ts",
+        "!src/config/factory-context.ts",
+        "!**/*.test.ts",
+        "!**/*test-fixtures.ts"
+      ],
+      "linter": {
+        "rules": {
+          "style": {
+            "noProcessEnv": "error"
+          }
+        }
+      }
+    }
+  ]
+}

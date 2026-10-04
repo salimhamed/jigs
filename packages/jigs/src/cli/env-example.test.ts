@@ -76,7 +76,10 @@ test(".env.example covers every variable jigs reads from a factory's .env", () =
 });
 
 test("the configuration guide's .env table lists exactly the .env.example variables", () => {
-  const guide = readFileSync(path.join(packageRoot(), "site", "guide", "configuration.md"), "utf8");
+  const guide = readFileSync(
+    path.join(packageRoot(), "..", "..", "site", "guide", "configuration.md"),
+    "utf8",
+  );
   const start = guide.indexOf("## `.env` {#env}");
   const table = guide.slice(start, guide.indexOf("\n## ", start + 1));
   const documented = [...table.matchAll(/^\| (.+?) \|/gm)].flatMap(([, variables]) =>

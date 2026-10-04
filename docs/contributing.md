@@ -6,7 +6,8 @@ By opening a pull request, you confirm you have the right to submit your contrib
 
 ## Commands
 
-Requires Node 24 or newer, pnpm and Docker.
+Requires Node 24 or newer, pnpm and Docker. Run every command from the repo
+root; each delegates to the packages that have the script.
 
 ```sh
 pnpm install
@@ -32,13 +33,14 @@ or step transport, run the long-step regression once with the real value:
 the **Long step regression** workflow in Actions with the revision to test. It
 takes over five minutes and never runs on pull requests.
 
-Biome formats at 100 columns. Keep `templates/jigs/*.ts.tmpl` formatted the same
+Biome formats at 100 columns. Keep `packages/jigs/templates/jigs/*.ts.tmpl` formatted the same
 way, or a formatted factory reports its `jigs/` files as stale.
 
 ## Tests
 
-Vitest runs three projects from `vitest.config.ts`, each named for what its
-tests need:
+Each package runs its own tests from its own Vitest config. `packages/jigs`
+splits its tests into three projects in `packages/jigs/vitest.config.ts`, each
+named for what its tests need:
 
 | Project | Files | Needs |
 | --- | --- | --- |
@@ -48,18 +50,38 @@ tests need:
 
 A `db` test creates and drops its own databases on the server at
 `WORKFLOW_POSTGRES_URL`, or on the container from
-`docker compose -f test/docker-compose.yml up -d --wait` when that is unset.
-Take the URL and `dbTest` from `src/db-test-fixtures.ts`: with no URL set and
+`docker compose up -d --wait` (the root `compose.yaml`) when that is unset.
+Take the URL and `dbTest` from `packages/jigs/src/db-test-fixtures.ts`: with no URL set and
 no container listening, `dbTest` skips; with a URL set, an unreachable server
 fails. Each `live` file names the login or credentials it needs. Both
 projects read `.env.e2e.local` and run their files one at a time.
 
 ## Layout
 
-jigs is one package, `@jigs-ai/jigs`. `src/` is the library and CLI,
-`templates/` the bare factory `jigs init` writes, `recipes/` the workflows
-`jigs recipe add` copies into a factory. `pnpm-workspace.yaml` has one member,
-`tools/api-docs` (the TypeDoc and VitePress tooling), plus build permissions.
+A pnpm workspace. Every package shares the version release-please cuts; only
+`@jigs-ai/jigs` publishes.
+
+```
+packages/
+  jigs/          @jigs-ai/jigs: the library, CLI and service (published)
+  hub/           @jigs-ai/hub: the hub server (private until it ships)
+  hub-protocol/  @jigs-ai/hub-protocol: hub messages, bundled into jigs (private)
+tools/api-docs/  TypeDoc and VitePress tooling for site/
+site/            the website
+skills/          the jigs agent skill
+compose.yaml     the Postgres the db tests use
+```
+
+The root `package.json` is private and holds shared tooling (Biome) and the
+scripts above. `biome.json` and `tsconfig.base.json` are the shared bases each
+package's own `biome.json` and `tsconfig.json` extend. Each package has an
+`AGENTS.md` with the rules for working in it.
+
+In `packages/jigs`, `src/` is the library and CLI, `templates/` the bare
+factory `jigs init` writes, `recipes/` the workflows `jigs recipe add` copies
+into a factory, `migrations/` the jigs tables and `e2e/` the packed-install
+check. The npm README and LICENSE are the root copies, which `prepack` copies
+in.
 
 ```
 src/
@@ -78,9 +100,9 @@ src/
   config/     factory config, root, env and paths
 ```
 
-`.dependency-cruiser.cjs` enforces these boundaries; `pnpm lint` runs it.
+`packages/jigs/.dependency-cruiser.cjs` enforces these boundaries; `pnpm lint` runs it.
 
-`src/steps/agents/` has one folder per harness, `claude/`, `codex/` and `pi/`,
+`packages/jigs/src/steps/agents/` has one folder per harness, `claude/`, `codex/` and `pi/`,
 each holding that harness's driver, process launcher, checks, home handling,
 fixtures and tests. `models/` holds the model-source drivers (OpenRouter,
 OpenAI-compatible). `shared/` holds what every harness uses: the driver
@@ -111,8 +133,11 @@ native builds they bring; the CLI must never import them.
 
 PR titles are conventional commits, checked by CI. Merging to `main` opens or
 updates a release-please PR; it auto-merges once its checks pass, then the tag,
-GitHub release and npm publish follow. The publish job generates the Markdown
-API reference in `docs/api/` from the tag; it ships in the package and is never
+GitHub release and npm publish follow. release-please bumps the root
+`package.json` and, through `extra-files`, every `packages/*/package.json`, so
+all share one version and one `jigs-vX` tag. The publish job builds and
+publishes `packages/jigs`, generating the Markdown API reference in
+`packages/jigs/docs/api/` from the tag; it ships in the package and is never
 committed.
 
 Repository settings the release depends on:
@@ -133,6 +158,8 @@ What is easy to break:
   lose a release. Below 1.0.0, `feat:` and `fix:` are patches, `feat!:` is a
   minor, and anything else releases nothing. The title check re-runs on
   `edited`, so fixing a title needs no push.
+- **A new package needs an `extra-files` entry** in
+  `release-please-config.json`, or its version drifts from the tag.
 - **`group-pull-request-title-pattern` is load-bearing.** release-please parses
   its own merged release PR with the same string; changing it breaks the next
   release.
@@ -141,7 +168,7 @@ What is easy to break:
   like no release.
 - **Publish is idempotent.** It checks out the tag, refuses a version that does
   not match it, and skips a version npm already holds, so re-running the
-  workflow repairs a failed publish. `repository.url` in `package.json` must
+  workflow repairs a failed publish. `repository.url` in `packages/jigs/package.json` must
   name this repository exactly, or trusted publishing refuses.
 - Automatic releases are safe only because step ids are factory-local paths: a
   version bump never renames a factory's durable addresses.

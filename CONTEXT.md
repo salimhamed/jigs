@@ -1,6 +1,6 @@
 # jigs
 
-The vocabulary a maintainer meets in `src/`. Use these words in code, comments
+The vocabulary a maintainer meets in `packages/jigs/src/`. Use these words in code, comments
 and issues; the _Avoid_ lists name the words that mean something else here.
 
 ## Code

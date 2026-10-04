@@ -31,22 +31,5 @@
         "organizeImports": "on"
       }
     }
-  },
-  "overrides": [
-    {
-      "includes": [
-        "src/**/*.ts",
-        "!src/config/factory-context.ts",
-        "!**/*.test.ts",
-        "!**/*test-fixtures.ts"
-      ],
-      "linter": {
-        "rules": {
-          "style": {
-            "noProcessEnv": "error"
-          }
-        }
-      }
-    }
-  ]
+  }
 }

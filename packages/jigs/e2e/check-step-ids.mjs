@@ -51,9 +51,10 @@ import {
 import { staticModuleSpecifiers } from "./module-imports.mjs";
 
 const here = path.dirname(fileURLToPath(import.meta.url));
-const repo = path.join(here, "..");
-const cli = path.join(repo, "dist", "cli.js");
-const jigsPackage = path.join(repo, "package.json");
+const packageRoot = path.join(here, "..");
+const workspaceRoot = path.join(packageRoot, "..", "..");
+const cli = path.join(packageRoot, "dist", "cli.js");
+const jigsPackage = path.join(packageRoot, "package.json");
 const JIGS = "@jigs-ai/jigs";
 const FAKE_VERSION = "9.9.9-e2e";
 const PNPM = process.env.JIGS_E2E_PNPM ?? "pnpm";
@@ -86,7 +87,7 @@ function pack() {
   const into = (name) => path.join(dir, `${name}.tgz`);
   const packInto = (file) =>
     execFileSync(PNPM, ["pack", "--out", file], {
-      cwd: repo,
+      cwd: packageRoot,
       stdio: "inherit",
     });
   packInto(into("jigs"));
@@ -181,7 +182,7 @@ function checkCliBundle() {
   if (crossings.length > 0) {
     for (const name of crossings) console.error(`  ${name}`);
     fail(
-      `${path.relative(repo, cli)} imports ${crossings.length} package(s) outside the CLI's own set (${CLI_IMPORTS.join(", ")})`,
+      `${path.relative(packageRoot, cli)} imports ${crossings.length} package(s) outside the CLI's own set (${CLI_IMPORTS.join(", ")})`,
       "a CLI path now reaches the service half — make the crossing a dynamic import resolved from the factory, the way build.ts does, or add the package here if the CLI genuinely owns it",
     );
   }
@@ -946,9 +947,9 @@ async function checkScaffold(name) {
   for (const file of ["jigs/steps.ts", "jigs/routines.ts"]) {
     const generated = readFileSync(path.join(factory, file), "utf8");
     const formatted = execFileSync(
-      path.join(repo, "node_modules", ".bin", "biome"),
+      path.join(workspaceRoot, "node_modules", ".bin", "biome"),
       ["check", "--write", `--stdin-file-path=${file}`],
-      { cwd: repo, input: generated, encoding: "utf8" },
+      { cwd: packageRoot, input: generated, encoding: "utf8" },
     );
     if (formatted !== generated) {
       fail(`generated ${file} changes under Biome`, `format templates/${file}.tmpl as TypeScript`);
@@ -1136,7 +1137,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
     execFileSync(
       PNPM,
       ["vitest", "run", "--project", "db", "src/service/cancel-storage.db.test.ts"],
-      { cwd: repo, stdio: "inherit" },
+      { cwd: packageRoot, stdio: "inherit" },
     );
     console.log(
       "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",

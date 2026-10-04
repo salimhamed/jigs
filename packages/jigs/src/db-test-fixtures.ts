@@ -1,7 +1,7 @@
 import { connect } from "node:net";
 import { test } from "vitest";
 
-// The container test/docker-compose.yml brings up, never a factory's World.
+// The container the repo root's compose.yaml brings up, never a factory's World.
 const FALLBACK_URL = "postgres://jigs:jigs@localhost:5439/jigs";
 
 /** The server the db tests create their own databases on. */
