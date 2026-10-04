@@ -176,9 +176,12 @@ For delivery, run `jigs recipe add linear-ticket-to-pr`; it registers the workfl
 four routines from `#jigs/routines` in order: `buildAndReview`, `describePullRequest`,
 `publishPullRequest` and `followPullRequestToOutcome`. They take a delivery, a plain object the
 workflow builds once: the work, a `key` (one per pull request), the worktree, the prompts and
-the agent sessions it creates itself. The routines return stops as values, without pushing, and
-report needs-human, a blocked merge included, through `onNeedsHuman` with facts; the workflow
-writes every note and decides where it goes. The workflow also owns three rules:
+the agent sessions it creates itself. A routine that can end short returns an object whose
+`outcome` names how it ended: `approved` or `stopped` from `buildAndReview`, `merged` or
+`closed` from `followPullRequestToOutcome`, and `replied`, `timed-out` or `gone` from
+`waitForSlackReply`. A stop pushes nothing. Needs-human, a blocked merge included, reaches the
+workflow through `onNeedsHuman` with facts; the workflow writes every note and decides where it
+goes. The workflow also owns three rules:
 `describePullRequest`'s optional `check` on the title and body, and
 `followPullRequestToOutcome`'s `wake` (pass `builderWakeFacts` for the default) and
 `mergeWhen`, which can only hold back a merge GitHub reports ready. To change a prompt, edit

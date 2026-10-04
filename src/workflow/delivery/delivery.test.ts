@@ -163,8 +163,8 @@ test("a blocking finding sends the round back, and the resumed builder is told o
 
   const built = await build();
 
-  expect(built).toMatchObject({ reviewedCommit: "h1", notes: ["Rename x"] });
-  if ("stopped" in built) return expect.unreachable();
+  expect(built).toMatchObject({ outcome: "approved", reviewedCommit: "h1", notes: ["Rename x"] });
+  if (built.outcome === "stopped") return expect.unreachable();
   expect(built.ledger.map((round) => round.verdict)).toEqual(["changes-requested", "approved"]);
   const [firstBuild, firstReview, secondBuild, secondReview] = calls;
   expect(firstBuild?.resumed).toBe(false);
@@ -209,7 +209,10 @@ test("exhausted rounds stop with the open findings and the last round, and push 
   answer(reviewVerdict, blocked, blocked);
 
   await expect(build()).resolves.toEqual({
-    stopped: { reason: "rounds-exhausted", findings: ["Broken"], round: 2 },
+    outcome: "stopped",
+    reason: "rounds-exhausted",
+    findings: ["Broken"],
+    round: 2,
   });
   expect(steps.pushApprovedChange).not.toHaveBeenCalled();
 });
@@ -219,7 +222,10 @@ test("uncommitted work stops the delivery before any review", async () => {
   at("h1", true);
 
   await expect(build()).resolves.toEqual({
-    stopped: { reason: "uncommitted", findings: [], round: 1 },
+    outcome: "stopped",
+    reason: "uncommitted",
+    findings: [],
+    round: 1,
   });
   expect(calls).toHaveLength(1);
 });
@@ -229,7 +235,10 @@ test("a build round that commits nothing stops the delivery before any review", 
   head = { headSha: "base", dirty: false, commits: 0 };
 
   await expect(build()).resolves.toEqual({
-    stopped: { reason: "no-commits", findings: [], round: 1 },
+    outcome: "stopped",
+    reason: "no-commits",
+    findings: [],
+    round: 1,
   });
   expect(steps.readBranchState).toHaveBeenCalledWith(worktree, "base");
   expect(calls).toHaveLength(1);
@@ -243,7 +252,10 @@ test("a stop after a reviewed round reports the round it stopped in", async () =
   answer(reviewVerdict, { findings: [{ summary: "Broken", blocking: true }] });
 
   await expect(build(3)).resolves.toEqual({
-    stopped: { reason: "uncommitted", findings: [], round: 2 },
+    outcome: "stopped",
+    reason: "uncommitted",
+    findings: [],
+    round: 2,
   });
 });
 
@@ -253,11 +265,10 @@ test("a stopped delivery never puts the local worktree path in its findings", as
   answer(reviewVerdict, blocked, blocked);
 
   await expect(build()).resolves.toEqual({
-    stopped: {
-      reason: "rounds-exhausted",
-      findings: ["Broken in the run's worktree/src/x.ts"],
-      round: 2,
-    },
+    outcome: "stopped",
+    reason: "rounds-exhausted",
+    findings: ["Broken in the run's worktree/src/x.ts"],
+    round: 2,
   });
 });
 
@@ -454,7 +465,7 @@ test("the implementation builder resumes to judge the PR and merges only after G
   steps.fetchPullRequestState.mockResolvedValue(commented);
   steps.mergePullRequest.mockResolvedValue({ merged: true, mergeCommitSha: "m" });
   await build();
-  await expect(follow()).resolves.toBe("merged");
+  await expect(follow()).resolves.toEqual({ outcome: "merged" });
   expect(calls[2]?.harness).toBe(builderHarness);
   expect(calls[2]?.resumed).toBe(true);
   expect(calls[2]?.prompt).not.toContain("THE TASK BRIEF");
@@ -483,13 +494,13 @@ test("attempt allowance resets for every update and permits more than six update
 test("a human merger means jigs never merges", async () => {
   answer(maintenanceReport, finished);
   watch(snapshot, commented, closed);
-  await expect(follow()).resolves.toBe("merged");
+  await expect(follow()).resolves.toEqual({ outcome: "merged" });
   expect(steps.mergePullRequest).not.toHaveBeenCalled();
 });
 
 test("closed snapshots run no agent and closing without merging returns closed without a push", async () => {
   watch({ ...closed, merged: false });
-  await expect(follow()).resolves.toBe("closed");
+  await expect(follow()).resolves.toEqual({ outcome: "closed" });
   expect(calls).toHaveLength(0);
 });
 
@@ -667,9 +678,9 @@ test("a no from mergeWhen while polling after a refusal keeps polling", async ()
   steps.fetchPullRequestState.mockResolvedValueOnce(snapshot).mockResolvedValueOnce(ship);
   watch(ship);
 
-  await expect(follow({ mergeWhen: (state) => state.labels.includes("ship") })).resolves.toBe(
-    "merged",
-  );
+  await expect(follow({ mergeWhen: (state) => state.labels.includes("ship") })).resolves.toEqual({
+    outcome: "merged",
+  });
 
   expect(steps.mergePullRequest).toHaveBeenCalledTimes(2);
   expect(sleep).toHaveBeenCalledTimes(2);
@@ -1106,7 +1117,7 @@ test.each([true, false])(
     steps.fetchPullRequestState
       .mockResolvedValueOnce(commented)
       .mockResolvedValueOnce({ ...closed, merged });
-    await expect(follow()).resolves.toBe(merged ? "merged" : "closed");
+    await expect(follow()).resolves.toEqual({ outcome: merged ? "merged" : "closed" });
     expect(calls).toHaveLength(1);
     expect(sleep).toHaveBeenCalledTimes(1);
   },
@@ -1276,13 +1287,13 @@ test("two deliveries in one run, with their own keys, each go from build to merg
   const outcomes = [];
   for (const each of [api, web]) {
     const built = await buildAndReview(each, { rounds: 1 });
-    if ("stopped" in built) return expect.unreachable();
+    if (built.outcome === "stopped") return expect.unreachable();
     const described = await describePullRequest(each);
     const opened = await publishPullRequest(each, { commit: built.reviewedCommit, ...described });
     outcomes.push(await followPullRequestToOutcome(each, opened, options));
   }
 
-  expect(outcomes).toEqual(["merged", "merged"]);
+  expect(outcomes).toEqual([{ outcome: "merged" }, { outcome: "merged" }]);
   expect(
     steps.mergePullRequest.mock.calls.map(([tree, merged]) => [tree.path, merged.repo]),
   ).toEqual([

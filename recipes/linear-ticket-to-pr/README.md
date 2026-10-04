@@ -157,19 +157,19 @@ export async function deliverTicket(
   snapshot: TicketSnapshot,
 ) {
   const built = await buildAndReview(delivery, { rounds: 3 });
-  if ("stopped" in built) {
+  if (built.outcome === "stopped") {
     await noteOnTicket(claim, {
-      headline: `jigs stopped work on ${delivery.key} (${built.stopped.reason}).`,
-      notes: built.stopped.findings,
+      headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
+      notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
     });
     await setTicketStatus(snapshot.id, "Todo");
-    throw new JigsError(`delivery stopped: ${built.stopped.reason}`);
+    throw new JigsError(`delivery stopped: ${built.reason}`);
   }
   const { title, body } = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
   await setTicketStatus(snapshot.id, "In Review");
-  const outcome = await followPullRequestToOutcome(delivery, pr, {
+  const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
     mergeWhen: () => false,
@@ -181,17 +181,17 @@ export async function deliverTicket(
         closing: "jigs keeps watching the pull request.",
       }),
   });
-  if (outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
+  if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
   await setTicketStatus(snapshot.id, "Done");
   return { pr: pr.url };
 }
 ```
 
 - **`buildAndReview`** runs the builder, then the reviewer on what it
-  committed, until the reviewer raises no blocking finding. It returns the
-  approved commit and the approving round's non-blocking findings, which the
-  workflow appends to the pull request body. When the rounds run out, or the
-  builder leaves uncommitted work or commits nothing, it returns `{ stopped }`
+  committed, until the reviewer raises no blocking finding. It ends `approved`
+  with the approved commit and the approving round's non-blocking findings,
+  which the workflow appends to the pull request body. When the rounds run out,
+  or the builder leaves uncommitted work or commits nothing, it ends `stopped`
   with the reason, the open findings and the round it stopped in. It pushes
   nothing; the workflow pushes the branch with the `pushBranch` step before it
   writes its ticket note, and says so when the push fails.
@@ -231,7 +231,7 @@ export async function deliverTicket(
   The watcher never merges, and the agent is instructed not to merge or approve;
   see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
   for what actually holds a merge back.
-  It returns `"merged"` once the pull request merges, or `"closed"` when it is
+  It ends `merged` once the pull request merges, or `closed` when it is
   closed without merging; local work is never pushed on the way out.
 
 The routines word nothing a person reads. Stops are return values, and

@@ -9,9 +9,10 @@ one factory's copy, and every fix needed a hand merge into each copy. Under
 extract, so the engine moves into jigs as four routines, bound to the
 factory's steps in the generated `jigs/routines.ts`:
 
-- `buildAndReview(delivery, { rounds })` returns the reviewed commit, or a stop
-  as a value: `rounds-exhausted`, `uncommitted` or `no-commits`, with the round
-  it stopped in. A stop pushes nothing; the caller pushes the branch if it
+- `buildAndReview(delivery, { rounds })` returns outcome `approved` with the
+  reviewed commit, or a stop as a value: outcome `stopped` with
+  `rounds-exhausted`, `uncommitted` or `no-commits` and the round it stopped
+  in. A stop pushes nothing; the caller pushes the branch if it
   wants the work on the remote.
 - `describePullRequest(delivery, { check? })` has the writer write the title
   and body. The caller's `check` returns problems; the writer is sent back once
@@ -19,8 +20,11 @@ factory's steps in the generated `jigs/routines.ts`:
 - `publishPullRequest(delivery, { commit, title, body, draft? })` pushes
   exactly `commit`, opens the pull request and records it. No agent runs and
   it needs no review.
-- `followPullRequestToOutcome(delivery, pr, options)` returns `"merged"` or
-  `"closed"`.
+- `followPullRequestToOutcome(delivery, pr, options)` returns outcome
+  `merged` or `closed`.
+
+Both results follow the outcome-object rule of
+[0014](./0014-routine-outcomes.md).
 
 Each routine types its delivery as only the fields it reads; the full
 `Delivery<W>` satisfies all four.

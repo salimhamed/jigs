@@ -61,6 +61,7 @@ const thread = (...replies: SlackPost[]): SlackMessageSnapshot => ({
   ...post(threadTs, salim, "which service owns checkout?"),
   replies,
 });
+const replied = (...replies: SlackPost[]) => ({ outcome: "replied", replies });
 const future = "2999-01-01T00:00:00Z";
 const past = "2000-01-01T00:00:00Z";
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
@@ -68,9 +69,9 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 test("returns the human replies after the last read, without parking", async () => {
   const answer = post("1790723501.000300", salim, "the payments team");
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot), answer));
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual([
-    answer,
-  ]);
+  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
+    replied(answer),
+  );
   expect(createHook).toHaveBeenCalledWith({ token: `slack:thread:${channel}:${threadTs}` });
   expect(fetchSlackMessage).toHaveBeenCalledExactlyOnceWith({ channel, ts: threadTs });
   expect(hook.awaited).toBe(0);
@@ -93,7 +94,7 @@ test("a bot's reply and a reply before the last read never count, however often 
   await flush();
   expect(hook.awaited).toBe(2);
   hook.wake?.();
-  expect(await waiting).toEqual([answer]);
+  expect(await waiting).toEqual(replied(answer));
   expect(fetchSlackMessage).toHaveBeenCalledTimes(3);
   expect(hook.disposed).toBe(1);
 });
@@ -103,9 +104,9 @@ test("replies within the same second are ordered by their microseconds", async (
   const fetchSlackMessage = vi.fn(async () =>
     thread(post("1790723480.100199", salim), post(lastRead, ownBot), answer),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual([
-    answer,
-  ]);
+  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
+    replied(answer),
+  );
 });
 
 test("a reply posted between the last read and the workflow's question is returned", async () => {
@@ -113,9 +114,9 @@ test("a reply posted between the last read and the workflow's question is return
   const fetchSlackMessage = vi.fn(async () =>
     thread(post(lastRead, salim), between, post("1790723495.000001", ownBot, "which service?")),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual([
-    between,
-  ]);
+  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
+    replied(between),
+  );
 });
 
 test("every human reply after the last read comes back, oldest first, without bots", async () => {
@@ -124,10 +125,9 @@ test("every human reply after the last read comes back, oldest first, without bo
   const fetchSlackMessage = vi.fn(async () =>
     thread(post(lastRead, salim), first, post("1790723501.500000", ownBot, "thanks"), second),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual([
-    first,
-    second,
-  ]);
+  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
+    replied(first, second),
+  );
   expect(hook.awaited).toBe(0);
 });
 
@@ -135,9 +135,9 @@ const gone = async (): Promise<SlackMessageSnapshot> => ({ gone: true, channel, 
 
 test("a message already deleted returns gone, without parking", async () => {
   const fetchSlackMessage = vi.fn(gone);
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toBe(
-    "gone",
-  );
+  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual({
+    outcome: "gone",
+  });
   expect(hook.awaited).toBe(0);
   expect(hook.disposed).toBe(1);
 });
@@ -152,7 +152,7 @@ test("a message deleted while the run waits returns gone", async () => {
   await flush();
   expect(hook.awaited).toBe(1);
   hook.wake?.();
-  expect(await waiting).toBe("gone");
+  expect(await waiting).toEqual({ outcome: "gone" });
   expect(fetchSlackMessage).toHaveBeenCalledTimes(2);
   expect(hook.disposed).toBe(1);
 });
@@ -174,7 +174,7 @@ test("a reply before the deadline is returned, with one timer for the whole wait
   await flush();
   expect(hook.awaited).toBe(2);
   hook.wake?.();
-  expect(await waiting).toEqual([answer]);
+  expect(await waiting).toEqual(replied(answer));
   expect(sleep).toHaveBeenCalledExactlyOnceWith(new Date(future));
   expect(hook.disposed).toBe(1);
 });
@@ -183,7 +183,7 @@ test("a deadline already passed times out after one read, without parking", asyn
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot)));
   expect(
     await waitForSlackReply({ channel, threadTs, lastRead, until: past }, { fetchSlackMessage }),
-  ).toBe("timed-out");
+  ).toEqual({ outcome: "timed-out" });
   expect(fetchSlackMessage).toHaveBeenCalledOnce();
   expect(sleep).not.toHaveBeenCalled();
   expect(hook.awaited).toBe(0);
@@ -195,7 +195,7 @@ test("a reply already in the thread wins over a deadline that has passed", async
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot), answer));
   expect(
     await waitForSlackReply({ channel, threadTs, lastRead, until: past }, { fetchSlackMessage }),
-  ).toEqual([answer]);
+  ).toEqual(replied(answer));
 });
 
 test("when the deadline wins, the wait times out and releases the thread's hook", async () => {
@@ -208,7 +208,7 @@ test("when the deadline wins, the wait times out and releases the thread's hook"
   expect(hook.awaited).toBe(1);
   expect(hook.disposed).toBe(0);
   timer.fire?.();
-  expect(await waiting).toBe("timed-out");
+  expect(await waiting).toEqual({ outcome: "timed-out" });
   expect(fetchSlackMessage).toHaveBeenCalledOnce();
   expect(hook.disposed).toBe(1);
 });
@@ -225,7 +225,7 @@ test("a wake that reads the thread after the deadline times out without the time
   expect(hook.awaited).toBe(1);
   vi.setSystemTime(new Date("2026-10-02T12:00:06Z"));
   hook.wake?.();
-  expect(await waiting).toBe("timed-out");
+  expect(await waiting).toEqual({ outcome: "timed-out" });
   expect(fetchSlackMessage).toHaveBeenCalledTimes(2);
   expect(sleep).toHaveBeenCalledOnce();
   expect(hook.disposed).toBe(1);

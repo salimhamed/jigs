@@ -219,9 +219,9 @@ risk posting twice.
 ## Wait for a reply
 
 `waitForSlackReply({ channel, threadTs, lastRead })` parks the run until someone
-replies in the thread under `threadTs`, and returns every reply posted after
-`lastRead`, oldest first. `threadTs` must be the thread's top-level message,
-never a reply.
+replies in the thread under `threadTs`, and ends `replied` with every reply
+posted after `lastRead`, oldest first. `threadTs` must be the thread's top-level
+message, never a reply.
 
 `lastRead` is the ts of the newest post the workflow has read: usually the
 last reply in its latest `fetchSlackMessage`, or `threadTs` when the thread had
@@ -229,10 +229,10 @@ no replies. Never pass the question the workflow just posted, or a reply
 posted while the run was working is missed. A reply already in the thread
 returns at once, so it may not answer the question just asked.
 
-The replies come back as an array, never empty, each with its text and
-author. The wait returns `"timed-out"` instead when `until` passes, and
-`"gone"` when the thread's top-level message was deleted, before or during the
-wait:
+The result's `outcome` says how the wait ended. With `replied`, `replies` is
+never empty, and each reply has its text and author. The outcome is
+`timed-out` instead when `until` passes, and `gone` when the thread's top-level
+message was deleted, before or during the wait:
 
 ```ts
 import { waitForSlackReply } from "#jigs/routines";
@@ -244,17 +244,17 @@ export async function askInThread(channel: string, ts: string, question: string)
   const lastRead = thread.replies.at(-1)?.ts ?? ts;
   await postSlackMessage({ channel, threadTs: ts, text: question });
   const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const replies = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
-  if (replies === "timed-out") return "no reply within a day";
-  if (replies === "gone") return "the message was deleted";
-  return replies.map((reply) => `${reply.author.name}: ${reply.text}`).join("\n");
+  const result = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+  if (result.outcome === "timed-out") return "no reply within a day";
+  if (result.outcome === "gone") return "the message was deleted";
+  return result.replies.map((reply) => `${reply.author.name}: ${reply.text}`).join("\n");
 }
 ```
 
 Any person's reply counts. Replies from bots, including the factory's own, never
 do. Without `until`, the wait has no time limit: it ends with a reply, or when
 you cancel the run with `jigs cancel`. With `until`, an ISO 8601 timestamp, it
-returns `"timed-out"` once that time passes with no reply. The thread is always
+ends `timed-out` once that time passes with no reply. The thread is always
 read once first, so a reply already there still wins when `until` is in the
 past. With Socket Mode on, a reply wakes the run within a second.
 The service also re-reads the thread every
@@ -344,9 +344,9 @@ export async function answer(input: WorkflowInputs<typeof inputs>) {
       text: "Which part of the codebase do you mean?",
     });
     const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const replies = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
-    if (replies === "timed-out" || replies === "gone") return { answered: false };
-    for (const reply of replies) {
+    const result = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+    if (result.outcome !== "replied") return { answered: false };
+    for (const reply of result.replies) {
       question += `\n\n${reply.author.name} added: ${reply.text}`;
     }
   }

@@ -97,14 +97,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
 
   const { reviewRounds, attemptsPerUpdate } = input.budget;
   const built = await buildAndReview(delivery, { rounds: reviewRounds });
-  if ("stopped" in built) {
+  if (built.outcome === "stopped") {
     // The push keeps committed work on the remote for whoever takes it over.
     // Its error can name local paths, so it stays in the service log.
     const pushed = await pushBranch(worktree).then(
       () => true,
       () => false,
     );
-    return stop(stoppedNote(key, worktree, built.stopped, pushed));
+    return stop(stoppedNote(key, worktree, built, pushed));
   }
 
   const described = await describePullRequest(delivery);
@@ -115,7 +115,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   });
   await setTicketStatus(snapshot.id, "In Review");
 
-  const outcome = await followPullRequestToOutcome(delivery, pr, {
+  const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate,
     wake: builderWakeFacts,
     mergeWhen: () => mergedBy === "jigs",
@@ -134,7 +134,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
           })
         : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
   });
-  if (outcome === "closed") return stop(closedNote(key, worktree, pr.url));
+  if (followed.outcome === "closed") return stop(closedNote(key, worktree, pr.url));
 
   await setTicketStatus(snapshot.id, "Done");
   return { pr: pr.url };

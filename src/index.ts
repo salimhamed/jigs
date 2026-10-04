@@ -99,9 +99,10 @@ export type {
 } from "./workflow/delivery/answers.ts";
 export type {
   BuildAndReviewOptions,
+  BuildApproved,
   BuildDelivery,
+  BuildResult,
   BuildStopped,
-  Built,
 } from "./workflow/delivery/build-and-review.ts";
 export type {
   BuildFacts,
@@ -116,7 +117,12 @@ export type {
   Described,
   DescribeOptions,
 } from "./workflow/delivery/describe.ts";
-export type { FollowDelivery, FollowOptions, NeedsHuman } from "./workflow/delivery/follow.ts";
+export type {
+  FollowDelivery,
+  FollowOptions,
+  FollowResult,
+  NeedsHuman,
+} from "./workflow/delivery/follow.ts";
 export type { PublishDelivery, PublishOptions } from "./workflow/delivery/publish.ts";
 export { builderWakeFacts } from "./workflow/delivery/wake.ts";
 export { JigsError } from "./workflow/errors.ts";
@@ -210,6 +216,6 @@ export type {
 } from "./workflow/runtime/resources.ts";
 export type { SlackAuthor, SlackMessageSnapshot, SlackPost } from "./workflow/slack/snapshot.ts";
 export { slack } from "./workflow/slack/sources.ts";
-export type { SlackQuestion } from "./workflow/slack/wait-for-reply.ts";
+export type { SlackQuestion, SlackReplyResult } from "./workflow/slack/wait-for-reply.ts";
 export { unreachable } from "./workflow/unreachable.ts";
 export type { Worktree } from "./workflow/workspaces/worktree.ts";

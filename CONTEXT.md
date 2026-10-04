@@ -26,6 +26,11 @@ something outside the run, such as `runAgent` or `watchPullRequest`. It has no
 directive and no recorded result of its own.
 _Avoid_: helper, primitive, sub-workflow
 
+**Outcome**: How a routine that can end short ended, named by the `outcome`
+field of the object it returns, such as `stopped` or `timed-out`. That ending's
+facts sit beside it. Not an error: errors throw.
+_Avoid_: status
+
 **Workflow code**: Code that runs inside the workflow bundle and so must be
 replay-safe, with no Node built-ins, environment or network.
 _Avoid_: block, workflow-side

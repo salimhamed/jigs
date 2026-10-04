@@ -82,6 +82,13 @@ export interface FollowOptions {
   onNeedsHuman: (facts: NeedsHuman) => Promise<void>;
 }
 
+/**
+ * How `followPullRequestToOutcome` ended: the pull request merged, or closed unmerged.
+ *
+ * @group Pull request delivery
+ */
+export type FollowResult = { outcome: "merged" } | { outcome: "closed" };
+
 const MERGE_TRIES = 10;
 
 /** One pull request's maintenance: its inputs, and what it remembers between watcher yields. */
@@ -114,7 +121,7 @@ interface Following<W> {
  *
  * When `mergeWhen` agrees, an approved, green, clean pull request is merged after every read and
  * builder turn, whatever the builder reported; a transient refusal is retried up to ten times,
- * 30 seconds apart. Returns `"merged"`, or `"closed"` when it closes unmerged. Nothing
+ * 30 seconds apart. Returns outcome `merged`, or `closed` when it closes unmerged. Nothing
  * is pushed on the way out.
  *
  * @group Pull request delivery
@@ -124,7 +131,7 @@ export async function followPullRequestToOutcome<W>(
   pr: PullRequestRef,
   options: FollowOptions,
   steps: DeliverySteps,
-): Promise<"merged" | "closed"> {
+): Promise<FollowResult> {
   const following: Following<W> = {
     delivery,
     pr,
@@ -151,10 +158,10 @@ export async function followPullRequestToOutcome<W>(
         if (current.state === "open" && current.headSha !== snapshot.headSha) continue;
       }
     }
-    if (current.state === "closed") return current.merged ? "merged" : "closed";
+    if (current.state === "closed") return { outcome: current.merged ? "merged" : "closed" };
     // Checked after every yield and every builder turn: a turn that changes
     // nothing on GitHub produces no new yield to merge on.
-    if (await mergeIfReady(following, current)) return "merged";
+    if (await mergeIfReady(following, current)) return { outcome: "merged" };
   }
 
   throw new JigsError(

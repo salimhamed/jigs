@@ -14,10 +14,11 @@ import type {
   AskAgentOptions,
   AskModelOptions,
   BuildAndReviewOptions,
+  BuildApproved,
   BuildDelivery,
   BuildFacts,
+  BuildResult,
   BuildStopped,
-  Built,
   ChangePatch,
   ChangeStatus,
   ChangeSummary,
@@ -37,6 +38,7 @@ import type {
   FindingResponse,
   FollowDelivery,
   FollowOptions,
+  FollowResult,
   Halt,
   HaltOption,
   HaltQuestion,
@@ -80,6 +82,7 @@ import type {
   SlackMessageSnapshot,
   SlackPost,
   SlackQuestion,
+  SlackReplyResult,
   StatusReason,
   ThreadAnswers,
   TicketClaim,
@@ -114,8 +117,9 @@ type RootTypeSurface = {
   askModelOptions: AskModelOptions;
   buildAndReviewOptions: BuildAndReviewOptions;
   buildFacts: BuildFacts<unknown>;
+  buildApproved: BuildApproved;
+  buildResult: BuildResult;
   buildStopped: BuildStopped;
-  built: Built;
   changePatch: ChangePatch;
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;
@@ -137,6 +141,7 @@ type RootTypeSurface = {
   deliveryPrompts: DeliveryPrompts<unknown>;
   fileChange: FileChange;
   followOptions: FollowOptions;
+  followResult: FollowResult;
   findingResponse: FindingResponse;
   halt: Halt;
   haltOption: HaltOption;
@@ -181,6 +186,7 @@ type RootTypeSurface = {
   slackMessageSnapshot: SlackMessageSnapshot;
   slackPost: SlackPost;
   slackQuestion: SlackQuestion;
+  slackReplyResult: SlackReplyResult;
   statusReason: StatusReason;
   threadAnswers: ThreadAnswers;
   ticketClaim: TicketClaim;

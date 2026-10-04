@@ -38,7 +38,8 @@ export interface BuildAndReviewOptions {
  *
  * @group Pull request delivery
  */
-export interface Built {
+export interface BuildApproved {
+  outcome: "approved";
   /** The commit the reviewer approved. Publish exactly this one. */
   reviewedCommit: string;
   /** The non-blocking findings of the approving round, for a person to read. */
@@ -57,11 +58,19 @@ export interface Built {
  * @group Pull request delivery
  */
 export interface BuildStopped {
+  outcome: "stopped";
   reason: "rounds-exhausted" | "uncommitted" | "no-commits";
   findings: string[];
   /** The round it stopped in; for `rounds-exhausted`, the last round. */
   round: number;
 }
+
+/**
+ * What `buildAndReview` returns: an approved change, or a stop.
+ *
+ * @group Pull request delivery
+ */
+export type BuildResult = BuildApproved | BuildStopped;
 
 /**
  * Build and review until the reviewer raises no blocking finding, or the rounds run out.
@@ -77,7 +86,7 @@ export async function buildAndReview<W>(
   delivery: BuildDelivery<W>,
   { rounds }: BuildAndReviewOptions,
   steps: Pick<DeliverySteps, "readBranchState" | "readWorktreeDiff">,
-): Promise<Built | { stopped: BuildStopped }> {
+): Promise<BuildResult> {
   const { work, worktree, prompts } = delivery;
   const diff = () => steps.readWorktreeDiff(worktree);
   const ledger: ReviewRound[] = [];
@@ -125,7 +134,7 @@ export async function buildAndReview<W>(
     });
     if (!blocking) {
       const notes = findings.map((finding) => withoutLocalPath(worktree, finding.summary));
-      return { reviewedCommit: state.headSha, notes, ledger };
+      return { outcome: "approved", reviewedCommit: state.headSha, notes, ledger };
     }
   }
 
@@ -138,10 +147,9 @@ const stop = (
   reason: BuildStopped["reason"],
   findings: string[],
   round: number,
-): { stopped: BuildStopped } => ({
-  stopped: {
-    reason,
-    findings: findings.map((finding) => withoutLocalPath(worktree, finding)),
-    round,
-  },
+): BuildStopped => ({
+  outcome: "stopped",
+  reason,
+  findings: findings.map((finding) => withoutLocalPath(worktree, finding)),
+  round,
 });

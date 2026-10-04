@@ -209,7 +209,8 @@ const delivery = bindDeliverySteps({
 
 /**
  * Build and review a delivery's change until the reviewer raises no blocking finding.
- * Returns the approved commit, or `{ stopped }` when the rounds run out or there is nothing to review.
+ * Ends `approved` with the reviewed commit, or `stopped` when the rounds run out or there is
+ * nothing to review.
  *
  * @group Pull request delivery
  */
@@ -232,6 +233,7 @@ export const publishPullRequest = delivery.publishPullRequest;
 
 /**
  * Follow a delivery's pull request until it merges or closes, waking the builder for feedback.
+ * Ends `merged` or `closed`.
  *
  * @group Pull request delivery
  *
@@ -244,8 +246,8 @@ export const publishPullRequest = delivery.publishPullRequest;
 export const followPullRequestToOutcome = delivery.followPullRequestToOutcome;
 
 /**
- * Wait for a human reply in a Slack thread after `lastRead`. Returns every such reply,
- * never empty and oldest first, `"timed-out"` after `until`, or `"gone"` if deleted.
+ * Wait for a human reply in a Slack thread after `lastRead`. Ends `replied` with every such
+ * reply, never empty and oldest first, `timed-out` after `until`, or `gone` if deleted.
  *
  * @remarks
  * Binds the library's `waitForSlackReply` routine to this factory's `fetchSlackMessage`
