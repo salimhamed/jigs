@@ -68,7 +68,7 @@ test("the Claude plugin holds a manifest and the skills, and cleanup removes it"
     root: () => factory,
   });
 
-  expect(path.dirname(plugin.path)).toBe(path.join(tmp, "plugins"));
+  expect(path.dirname(plugin.path)).toBe(path.join(tmp, "plugins", "wrun_1"));
   expect(
     JSON.parse(readFileSync(path.join(plugin.path, ".claude-plugin/plugin.json"), "utf8")),
   ).toEqual({ name: "jigs-skills", description: "Skills declared by the workflow" });
@@ -82,7 +82,7 @@ test("a plugin that cannot be built leaves nothing behind", () => {
   expect(() =>
     prepareClaudeSkillsPlugin("wrun_1", ["skills/missing"], { baseDir: base, root: () => factory }),
   ).toThrow();
-  expect(readdirSync(base)).toEqual([]);
+  expect(readdirSync(path.join(base, "wrun_1"))).toEqual([]);
 });
 
 test("a path naming no folder of its own is refused rather than copied into the destination", () => {

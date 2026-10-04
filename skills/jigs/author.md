@@ -156,9 +156,10 @@ After a workflow creates something an operator may need to find, call the
 generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
-workflow's result. jigs records its own worktrees, run directories, agent homes and
-pushed branches itself, and those kinds (`worktree`, `branch`, `run-directory`,
-`codex-home`, `pi-home`) are reserved: `registerResource` refuses them.
+workflow's result. jigs records its own worktrees, run directories, agent homes,
+Claude skills plugins and pushed branches itself, and those kinds (`worktree`,
+`branch`, `run-directory`, `codex-home`, `pi-home`, `claude-plugins`) are reserved:
+`registerResource` refuses them.
 
 Keep a non-idempotent external creator and registration as two durable steps.
 Await the creator, then register what it returned; replay reuses the creator's

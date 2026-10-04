@@ -8,6 +8,9 @@ import { prepareClaudeSkillsPlugin } from "../harnesses/skills.ts";
 import { makeTmpDir, removeTmpDir } from "../harnesses/test-fixtures.ts";
 import { createClaudeDriver } from "./claude.ts";
 
+const registry = vi.hoisted(() => ({ recordRunDirectory: vi.fn(async () => {}) }));
+vi.mock("../../runtime/registry.ts", () => registry);
+
 let tmp: string;
 let worktree: string;
 let skill: string;
@@ -31,7 +34,7 @@ afterEach(() => {
 const driver = () =>
   createClaudeDriver({
     sessionMessages: async () => [{ type: "user" }],
-    prepareSkillsPlugin: (runId, skills) =>
+    prepareSkillsPlugin: async (runId, skills) =>
       prepareClaudeSkillsPlugin(runId, skills, { baseDir: pluginBase }),
   });
 const context = () => ({
@@ -55,7 +58,27 @@ test("open loads the declared skills as a private plugin that close removes", as
   expect(settings.skills).toBeUndefined();
 
   await opened?.close();
-  expect(readdirSync(pluginBase)).toEqual([]);
+  expect(readdirSync(path.join(pluginBase, "wrun_skills"))).toEqual([]);
+});
+
+test("the plugin lives in a per-run folder recorded as the run's claude-plugins resource", async () => {
+  vi.stubEnv("XDG_DATA_HOME", tmp);
+  const runFolder = path.join(tmp, "jigs", "claude-plugins", "wrun_skills");
+  const opened = await createClaudeDriver({
+    sessionMessages: async () => [{ type: "user" }],
+  }).open?.(
+    { harness: harnesses.claude({ model: "opus", skills: [skill] }), cwd: worktree },
+    context(),
+  );
+
+  expect(registry.recordRunDirectory).toHaveBeenCalledWith(
+    "claude-plugins",
+    "wrun_skills",
+    runFolder,
+  );
+  expect(path.dirname(settingsOf(opened?.model).plugins?.[0]?.path ?? "")).toBe(runFolder);
+  await opened?.close();
+  expect(readdirSync(runFolder)).toEqual([]);
 });
 
 test("open without skills builds no plugin", async () => {
@@ -78,7 +101,7 @@ test("a failed open removes the plugin it built", async () => {
       context(),
     ),
   ).rejects.toThrow();
-  expect(readdirSync(pluginBase)).toEqual([]);
+  expect(readdirSync(path.join(pluginBase, "wrun_skills"))).toEqual([]);
 });
 
 test("ask builds no plugin even when the descriptor declares skills", async () => {

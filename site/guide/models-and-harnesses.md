@@ -233,8 +233,11 @@ the same as the `name` in its `SKILL.md`. `askAgent` loads no skills.
 On Claude Code the skills load as a plugin and appear under the `jigs-skills:`
 prefix, such as `jigs-skills:snowflake`. They add to the repository's own
 `.claude/skills` rather than replacing them. A Claude `tools` list must include
-`Skill` for the agent to use them. Pi offers skills only to an agent
-that has its `read` or `bash` tool, so a Pi `tools` list needs one of them.
+`Skill` for the agent to use them. The plugin is removed when the agent call
+ends; one left behind by a service that stopped mid-call is the run's
+`claude-plugins` resource, which release or `jigs resources prune` removes.
+Pi offers skills only to an agent that has its `read` or `bash` tool, so a Pi
+`tools` list needs one of them.
 
 A folder that is missing or has no `SKILL.md` fails preflight before the run
 starts, and `jigs doctor` reports it for every agent in `requires.agents`. A

@@ -82,7 +82,9 @@ export async function releaseRun(
   const rows = await listResources(db, { factory, runId });
   const kept = { state: "kept" as const, reason: keepReason(outcome) };
   for (const row of releaseOrder(rows)) {
-    if (releaseDue(row)) await releaseOne(db, row, rows, action === "keep" ? kept : undefined);
+    // Skills plugins are copies of factory files, with nothing to inspect after the run.
+    const keep = action === "keep" && row.kind !== "claude-plugins";
+    if (releaseDue(row)) await releaseOne(db, row, rows, keep ? kept : undefined);
   }
   return rows.map(toRecord);
 }

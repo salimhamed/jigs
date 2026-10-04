@@ -31,7 +31,13 @@ export const UNRELEASED_STATES = [
  * The kinds jigs records and releases itself, in the order release visits them. Every other kind
  * is recorded only: it stays `live` as history and is never deleted.
  */
-export const RELEASABLE_KINDS = ["worktree", "run-directory", "codex-home", "pi-home"] as const;
+export const RELEASABLE_KINDS = [
+  "worktree",
+  "run-directory",
+  "codex-home",
+  "pi-home",
+  "claude-plugins",
+] as const;
 
 export type ReleasableKind = (typeof RELEASABLE_KINDS)[number];
 

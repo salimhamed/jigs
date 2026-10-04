@@ -90,6 +90,32 @@ test("release removes run-owned directories and leaves branches and recorded-onl
   expect(fetchSpy).not.toHaveBeenCalled();
 });
 
+test("release removes a Claude skills plugin a stopped service left behind", async () => {
+  const plugins = directory("claude-plugins", RUN, "plugin-abc123", "skills", "snowflake");
+  seed(row("claude-plugins"));
+
+  await releaseRun({} as never, "factory-a", RUN, "release", "failure");
+
+  expect(existsSync(path.join(data, "jigs", "claude-plugins", RUN))).toBe(false);
+  expect(existsSync(plugins)).toBe(false);
+  expect(states()).toEqual({ "claude-plugins": ["released", "removed"] });
+});
+
+test("a keep policy still removes the run's Claude skills plugins", async () => {
+  const scratch = directory("scratch", RUN);
+  const plugins = directory("claude-plugins", RUN, "plugin-abc123");
+  seed(row("run-directory"), row("claude-plugins"));
+
+  await releaseRun({} as never, "factory-a", RUN, "keep", "failure");
+
+  expect(existsSync(scratch)).toBe(true);
+  expect(existsSync(plugins)).toBe(false);
+  expect(states()).toEqual({
+    "run-directory": ["kept", "onFailure policy keeps run resources"],
+    "claude-plugins": ["released", "removed"],
+  });
+});
+
 test("keep marks every releasable resource kept with the policy's reason", async () => {
   const scratch = directory("scratch", RUN);
   seed(row("run-directory"), row("pull-request", { identity: "a/b#1" }));

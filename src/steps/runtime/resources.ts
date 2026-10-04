@@ -26,7 +26,7 @@ function assertResource(resource: RunResource): void {
  * Repeating kind + identity is idempotent; a new URL for that identity replaces the old one.
  * The record is observation only: it stays `live` as the run's history and jigs never deletes
  * what it names. The kinds jigs records itself (`worktree`, `run-directory`, `branch`,
- * `codex-home`, `pi-home`) are reserved.
+ * `codex-home`, `pi-home`, `claude-plugins`) are reserved.
  *
  * @group Recorded resources
  */

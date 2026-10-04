@@ -34,7 +34,7 @@ test.each([
   expect(recorded).not.toHaveBeenCalled();
 });
 
-test.each(["worktree", "branch", "run-directory", "codex-home", "pi-home"])(
+test.each(["worktree", "branch", "run-directory", "codex-home", "pi-home", "claude-plugins"])(
   "the %s kind jigs releases itself is reserved",
   async (kind) => {
     await expect(registerResource({ ...pr, kind })).rejects.toThrow(

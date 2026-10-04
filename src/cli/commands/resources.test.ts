@@ -360,6 +360,19 @@ test("one apply releases a worktree and then the harness homes that waited for i
   expect(existsSync(pi)).toBe(false);
 });
 
+test("an apply removes a Claude skills plugin a stopped service left behind", async () => {
+  seed("claude-plugins");
+  const plugins = path.join(tmp, "data", "jigs", "claude-plugins", RUN);
+  mkdirSync(path.join(plugins, "plugin-abc123", "skills"), { recursive: true });
+
+  await pruneAll({ [RUN]: "failed" });
+
+  expect(existsSync(plugins)).toBe(false);
+  expect(memoryRows.find((row) => row.kind === "claude-plugins")).toMatchObject({
+    state: "released",
+  });
+});
+
 function leftover() {
   const parent = path.join(tmp, "leftover");
   mkdirSync(parent);
