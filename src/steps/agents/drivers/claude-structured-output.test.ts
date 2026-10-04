@@ -68,6 +68,14 @@ test("a JSON stream without text forwards its finish alone", async () => {
   expect(await convertReadableStreamToArray(stream)).toEqual(parts);
 });
 
+test("a JSON stream that fails drops the rejected submissions", async () => {
+  const error = { type: "error", error: new Error("max structured output retries") } as const;
+  const parts = [...retriedAnswer.slice(0, 5), error] as StreamPart[];
+  const { stream } = await wrapped(parts).doStream({ prompt: [], responseFormat: json });
+
+  expect(await convertReadableStreamToArray(stream)).toEqual([retriedAnswer[0], error]);
+});
+
 test("streamText reads the structured output from the accepted submission", async () => {
   const result = streamText({
     model: wrapped(retriedAnswer),

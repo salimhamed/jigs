@@ -46,6 +46,11 @@ function lastTextOnly(): TransformStream<StreamPart, StreamPart> {
         }
         case "text-end":
           return;
+        case "error":
+          // A failed call has no accepted submission to read.
+          texts.length = 0;
+          controller.enqueue(part);
+          return;
         case "finish":
           emitLast(controller);
           controller.enqueue(part);
