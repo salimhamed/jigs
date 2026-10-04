@@ -2,6 +2,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { inTestFactory } from "../test-fixtures.ts";
 import {
   createPr,
+  fetchAllowedMergeMethods,
   fetchPrCommitMessages,
   fetchPrSnapshot,
   fetchPrTitle,
@@ -616,6 +617,17 @@ test("the PR title is read back from GitHub, not remembered", async () => {
 
   expect(await fetchPrTitle(pr)).toBe("fix(gate): retry on 502");
   expect(github.calls[0]?.url.href).toBe("https://api.github.com/repos/acme/api/pulls/41");
+});
+
+test("the allowed merge methods are the repository's enabled settings", async () => {
+  github
+    .reply(json({ allow_squash_merge: false, allow_merge_commit: true, allow_rebase_merge: true }))
+    .reply(json({ name: "api" }));
+
+  expect(await fetchAllowedMergeMethods(pr)).toEqual(new Set(["merge", "rebase"]));
+  expect(github.calls[0]?.url.href).toBe("https://api.github.com/repos/acme/api");
+  // GitHub leaves the settings out for a token without push access.
+  expect(await fetchAllowedMergeMethods(pr)).toEqual(new Set());
 });
 
 test("a squash merge PUTs merge_method squash with the commit title", async () => {

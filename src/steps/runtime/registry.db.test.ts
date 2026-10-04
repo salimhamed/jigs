@@ -1,7 +1,8 @@
 import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { Pool } from "pg";
-import { afterAll, beforeAll, expect, test } from "vitest";
+import { afterAll, beforeAll, expect } from "vitest";
+import { databaseUrl, dbTest, postgresAdminUrl } from "../../db-test-fixtures.ts";
 import { ticketToken } from "../../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../../workflow/pull-requests/pull-request.ts";
 import {
@@ -18,18 +19,14 @@ import { readRunState } from "./run-state.ts";
 
 // Every suite owns its databases, including migration history. Never rebuild a
 // table in an existing development or factory database to test a migration.
-const adminUrl = new URL(
-  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
-);
-const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
 const created: string[] = [];
 
 async function freshDatabase(): Promise<{ url: string; db: RegistrySql }> {
   const name = `jigs_registry_${crypto.randomUUID().replaceAll("-", "")}`;
   await admin.query(`CREATE DATABASE "${name}"`);
   created.push(name);
-  const url = new URL(adminUrl);
-  url.pathname = `/${name}`;
+  const url = databaseUrl(name);
   return { url: url.toString(), db: connectRegistry(url.toString(), { max: 2 }) };
 }
 
@@ -44,7 +41,7 @@ afterAll(async () => {
   await admin.end();
 });
 
-test("a failed attempt's count is kept until the record is live again", async () => {
+dbTest("a failed attempt's count is kept until the record is live again", async () => {
   const counted = { ...key, factory: "factory-attempts" };
   await recordResource(db, { ...counted, url: "file:///w/feat", repoDir: "/r", branch: "feat" });
   await setResourceState(db, counted, "failed", "release failed: EBUSY", 3);
@@ -66,7 +63,7 @@ const tables = async (target: RegistrySql) =>
 const migrations = async (target: RegistrySql) =>
   (await target.$client.query("SELECT id FROM jigs_drizzle.jigs_migrations")).rows;
 
-test("a fresh database gets the resource and trigger tables, twice without change", async () => {
+dbTest("a fresh database gets the resource and trigger tables, twice without change", async () => {
   const fresh = await freshDatabase();
   try {
     await ensureRegistry(fresh.db);
@@ -82,80 +79,86 @@ test("a fresh database gets the resource and trigger tables, twice without chang
   }
 });
 
-test("a database with the old worktree table loses it without touching World history", async () => {
-  const old = await freshDatabase();
-  try {
-    await old.db.$client.query("CREATE SCHEMA workflow_drizzle");
-    await old.db.$client.query(
-      "CREATE TABLE workflow_drizzle.workflow_migrations (id int, hash text)",
-    );
-    await old.db.$client.query(
-      "INSERT INTO workflow_drizzle.workflow_migrations VALUES (42, 'world')",
-    );
-    // Exactly what the previous release left behind: its one migration applied, with a row.
-    const sql = readFileSync(
-      new URL("../../../migrations/0000_worktree_registry.sql", import.meta.url),
-      "utf8",
-    );
-    await old.db.$client.query(sql);
-    await old.db.$client.query(
-      "INSERT INTO jigs_worktrees (path, branch, owner_run_id, state, repo_dir) VALUES ('/w', 'b', 'run', 'active', '/r')",
-    );
-    await old.db.$client.query("CREATE SCHEMA jigs_drizzle");
-    await old.db.$client.query(
-      "CREATE TABLE jigs_drizzle.jigs_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)",
-    );
-    await old.db.$client.query(
-      "INSERT INTO jigs_drizzle.jigs_migrations (hash, created_at) VALUES ($1, 1789689600000)",
-      [createHash("sha256").update(sql).digest("hex")],
-    );
+dbTest(
+  "a database with the old worktree table loses it without touching World history",
+  async () => {
+    const old = await freshDatabase();
+    try {
+      await old.db.$client.query("CREATE SCHEMA workflow_drizzle");
+      await old.db.$client.query(
+        "CREATE TABLE workflow_drizzle.workflow_migrations (id int, hash text)",
+      );
+      await old.db.$client.query(
+        "INSERT INTO workflow_drizzle.workflow_migrations VALUES (42, 'world')",
+      );
+      // Exactly what the previous release left behind: its one migration applied, with a row.
+      const sql = readFileSync(
+        new URL("../../../migrations/0000_worktree_registry.sql", import.meta.url),
+        "utf8",
+      );
+      await old.db.$client.query(sql);
+      await old.db.$client.query(
+        "INSERT INTO jigs_worktrees (path, branch, owner_run_id, state, repo_dir) VALUES ('/w', 'b', 'run', 'active', '/r')",
+      );
+      await old.db.$client.query("CREATE SCHEMA jigs_drizzle");
+      await old.db.$client.query(
+        "CREATE TABLE jigs_drizzle.jigs_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)",
+      );
+      await old.db.$client.query(
+        "INSERT INTO jigs_drizzle.jigs_migrations (hash, created_at) VALUES ($1, 1789689600000)",
+        [createHash("sha256").update(sql).digest("hex")],
+      );
 
-    await migrateRegistry(old.url);
+      await migrateRegistry(old.url);
 
-    expect(await tables(old.db)).toEqual([
-      "jigs_resources",
-      "jigs_trigger_markers",
-      "jigs_triggers",
-    ]);
-    expect(await migrations(old.db)).toHaveLength(5);
-    expect(
-      (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
-    ).toEqual([{ id: 42, hash: "world" }]);
-  } finally {
-    await old.db.$client.end();
-  }
-});
+      expect(await tables(old.db)).toEqual([
+        "jigs_resources",
+        "jigs_trigger_markers",
+        "jigs_triggers",
+      ]);
+      expect(await migrations(old.db)).toHaveLength(5);
+      expect(
+        (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
+      ).toEqual([{ id: 42, hash: "world" }]);
+    } finally {
+      await old.db.$client.end();
+    }
+  },
+);
 
 const key = { factory: "factory-a", runId: "run_1", kind: "worktree", identity: "/w/feat" };
 
-test("recording again refreshes the URL and liveness but keeps creation and kind columns", async () => {
-  await recordResource(db, {
-    ...key,
-    url: "file:///w/feat",
-    repoDir: "/r/repo.git",
-    branch: "feat",
-  });
-  await setResourceState(db, key, "kept", "uncommitted work kept");
-  await db.$client.query(
-    "UPDATE jigs_resources SET created_at = '2020-01-01', updated_at = '2020-01-01'",
-  );
+dbTest(
+  "recording again refreshes the URL and liveness but keeps creation and kind columns",
+  async () => {
+    await recordResource(db, {
+      ...key,
+      url: "file:///w/feat",
+      repoDir: "/r/repo.git",
+      branch: "feat",
+    });
+    await setResourceState(db, key, "kept", "uncommitted work kept");
+    await db.$client.query(
+      "UPDATE jigs_resources SET created_at = '2020-01-01', updated_at = '2020-01-01'",
+    );
 
-  await recordResource(db, { ...key, url: "file:///w/feat?again" });
+    await recordResource(db, { ...key, url: "file:///w/feat?again" });
 
-  const [row] = await listResources(db, { factory: "factory-a", runId: "run_1" });
-  expect(row).toMatchObject({
-    ...key,
-    url: "file:///w/feat?again",
-    state: "live",
-    reason: null,
-    repoDir: "/r/repo.git",
-    branch: "feat",
-    createdAt: new Date("2020-01-01"),
-  });
-  expect(row?.updatedAt.getTime()).toBeGreaterThan(new Date("2020-01-01").getTime());
-});
+    const [row] = await listResources(db, { factory: "factory-a", runId: "run_1" });
+    expect(row).toMatchObject({
+      ...key,
+      url: "file:///w/feat?again",
+      state: "live",
+      reason: null,
+      repoDir: "/r/repo.git",
+      branch: "feat",
+      createdAt: new Date("2020-01-01"),
+    });
+    expect(row?.updatedAt.getTime()).toBeGreaterThan(new Date("2020-01-01").getTime());
+  },
+);
 
-test("rows are this factory's alone and filter by run, kind, identity and state", async () => {
+dbTest("rows are this factory's alone and filter by run, kind, identity and state", async () => {
   await recordResource(db, { ...key, factory: "factory-b", url: "file:///w/feat" });
   await recordResource(db, {
     ...key,
@@ -187,7 +190,7 @@ test("rows are this factory's alone and filter by run, kind, identity and state"
   expect(await listResources(db, { factory: "factory-a", runIds: [] })).toEqual([]);
 });
 
-test("a run's state is its records plus the hooks the World holds", async () => {
+dbTest("a run's state is its records plus the hooks the World holds", async () => {
   const claim = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
   const watch = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
 
@@ -246,7 +249,7 @@ test("a run's state is its records plus the hooks the World holds", async () => 
   });
 });
 
-test("the run lock serializes holders of the same run", async () => {
+dbTest("the run lock serializes holders of the same run", async () => {
   const order: string[] = [];
   let release!: () => void;
   const gate = new Promise<void>((resolve) => {

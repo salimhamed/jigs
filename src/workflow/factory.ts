@@ -299,8 +299,8 @@ export type SlackDefinition = z.input<typeof slackSchema>;
 export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
 /**
- * A repository this factory works in: its remote, how a worktree cut from it
- * is provisioned, and the merge method jigs uses there.
+ * A repository this factory works in: its remote and how a worktree cut from
+ * it is provisioned.
  *
  * @example
  * Use this value for `bindings.api` in `jigs.config.ts`.
@@ -310,7 +310,6 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
  * const api = {
  *   remote: "git@github.com:acme/api.git",
  *   postCreate: ["pnpm install"],
- *   mergeMethod: "rebase",
  * } satisfies BindingDefinition;
  * ```
  *

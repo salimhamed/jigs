@@ -397,7 +397,7 @@ function withFakeVersion(packJigs) {
 // /health reports ready the child gets SIGTERM and must leave on its own,
 // with code 0, inside the time `jigs service stop` gives it before SIGKILL.
 // What this proves: imports, both listeners, readiness, the clean exit. What
-// it does not: the graphile path, which the shutdown live test covers.
+// it does not: the graphile path, which the shutdown db test covers.
 const BOOT_PORT = 18990;
 const BOOT_DASHBOARD_PORT = 18991;
 const BOOT_TIMEOUT_MS = 90_000;
@@ -1127,13 +1127,7 @@ if (postgresUrl === undefined || postgresUrl === "") {
     console.log("\n=== cancel storage/transport scope: Postgres fencing and queue diagnostics");
     execFileSync(
       PNPM,
-      [
-        "vitest",
-        "run",
-        "--config",
-        "vitest.live.config.ts",
-        "src/service/cancel-storage.live.test.ts",
-      ],
+      ["vitest", "run", "--project", "db", "src/service/cancel-storage.db.test.ts"],
       { cwd: repo, stdio: "inherit" },
     );
     console.log(

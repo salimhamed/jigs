@@ -124,9 +124,10 @@
   "scripts": {
     "dev": "node src/cli/cli.ts",
     "build": "tsdown",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:live": "vitest run --config vitest.live.config.ts",
+    "test": "vitest run --project unit",
+    "test:db": "vitest run --project db",
+    "test:watch": "vitest --project unit",
+    "test:live": "vitest run --project live",
     "typecheck": "tsc --noEmit",
     "lint": "biome check . && pnpm depcruise",
     "depcruise": "depcruise src --config .dependency-cruiser.cjs",

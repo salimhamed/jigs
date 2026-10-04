@@ -1,11 +1,14 @@
 import { resolveBinding } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
+import { JigsError } from "../../errors.ts";
 import {
   assignPullRequest,
   createPr,
+  fetchAllowedMergeMethods,
   fetchPrCommitMessages,
   fetchPrTitle,
   findOpenPullRequestByBranch,
+  type MergeMethod,
   markPrReady,
   mergePr,
   type PullRequestRef,
@@ -18,7 +21,6 @@ import {
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { parseGithubRemote } from "../../providers/github-webhook.ts";
-import type { MergeMethod } from "../../workflow/factory-schema.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -173,8 +175,10 @@ export type MergeOutcome =
 const STATE_CHANGED = new Set([405, 409]);
 
 /**
- * Merge the pull request with the worktree binding's `mergeMethod`, pinned to the head the
- * caller judged ready.
+ * Merge the pull request, pinned to the head the caller judged ready.
+ *
+ * The method is the first one the repository allows of squash, merge commit
+ * and rebase, read from GitHub at each merge.
  *
  * The title is re-read here rather than carried in from `describePullRequest`:
  * a reviewer who corrects it, usually to satisfy a conventional-commit check
@@ -186,7 +190,6 @@ const STATE_CHANGED = new Set([405, 409]);
  * @group Merge
  */
 export async function mergePullRequest(
-  worktree: Worktree,
   pr: PullRequestRef,
   expectedHeadSha: string,
   options: PullRequestReadOptions = {},
@@ -195,7 +198,7 @@ export async function mergePullRequest(
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
   const refusal = mergeRefusal(before, expectedHeadSha);
   if (refusal !== null) return { merged: false, ...refusal };
-  const method = resolveBinding(currentFactoryContext().config, worktree.binding).mergeMethod;
+  const method = await allowedMergeMethod(pr);
   const message = await suppliedCommitMessageBody(pr, method);
   try {
     const result = await mergePr(pr, {
@@ -215,9 +218,9 @@ export async function mergePullRequest(
   const after = await readPullRequestSnapshot(pr, options);
   if (after.merged) return { merged: true, mergeCommitSha: after.mergeCommitSha };
   // A snapshot that still reads mergeable after GitHub refused the merge is
-  // one no later wake will read differently: the configured method is disabled
-  // on the repository, or a protection GitHub does not express in
-  // `mergeable_state` stopped it. Retrying that on every nudge would never end.
+  // one no later wake will read differently: the method was disabled since it
+  // was read, or a protection GitHub does not express in `mergeable_state`
+  // stopped it. Retrying that on every nudge would never end.
   return {
     merged: false,
     ...(mergeRefusal(after, expectedHeadSha) ?? {
@@ -225,6 +228,18 @@ export async function mergePullRequest(
       transient: false,
     }),
   };
+}
+
+const METHOD_PREFERENCE: readonly MergeMethod[] = ["squash", "merge", "rebase"];
+
+async function allowedMergeMethod(pr: PullRequestRef): Promise<MergeMethod> {
+  const allowed = await fetchAllowedMergeMethods(pr);
+  const method = METHOD_PREFERENCE.find((candidate) => allowed.has(candidate));
+  if (method !== undefined) return method;
+  throw new JigsError(
+    `GitHub allows no merge method on ${pr.owner}/${pr.repo} that jigs can use`,
+    "enable squash merging, merge commits or rebase merging in the repository's settings, and give jigs' GitHub credential write access to it",
+  );
 }
 
 /**

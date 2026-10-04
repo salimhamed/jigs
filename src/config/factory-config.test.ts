@@ -38,30 +38,10 @@ test("binding defaults and declared provisioning are validated", () => {
   const config = readFactoryConfig(factory(source));
   expect(config.bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
-    mergeMethod: "squash",
     copy: [],
     postCreate: ["npm ci"],
     hookTimeoutMinutes: 10,
   });
-});
-
-test("a binding's merge method is exactly GitHub's three", () => {
-  for (const mergeMethod of ["squash", "merge", "rebase"]) {
-    const config = withSettings({ bindings: { api: { remote: "url", mergeMethod } } });
-    expect(config.bindings.api?.mergeMethod).toBe(mergeMethod);
-  }
-  expect(() =>
-    withSettings({ bindings: { api: { remote: "url", mergeMethod: "fast-forward" } } }),
-  ).toThrow("mergeMethod");
-});
-
-test("defineFactory accepts a binding merge method", () => {
-  const definition = defineFactory({
-    service: { dashboardPort: 9090 },
-    bindings: { api: { remote: "url", mergeMethod: "rebase" } },
-    workflows: {},
-  });
-  expect(definition.bindings.api.mergeMethod).toBe("rebase");
 });
 
 test("an unknown top-level section is rejected by name", () => {

@@ -312,7 +312,7 @@ async function mergeIfReady<W>(following: Following<W>, snapshot: PullRequestSna
     const local = await steps.readBranchState(delivery.worktree);
     if (unpublished(following, local, current) !== undefined) return false;
     const result = await steps
-      .mergePullRequest(delivery.worktree, pr, current.headSha, {
+      .mergePullRequest(pr, current.headSha, {
         approvalCovers: options.approvalCovers,
       })
       .catch((error: unknown) => ({

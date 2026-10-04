@@ -1,8 +1,9 @@
 import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { Pool } from "pg";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, expect, vi } from "vitest";
 import { currentFactoryContext } from "../../config/factory-context.ts";
+import { databaseUrl, dbTest, postgresAdminUrl } from "../../db-test-fixtures.ts";
 import {
   type AutomaticReleaseDeps,
   reconcileAutomaticRelease,
@@ -23,13 +24,9 @@ import { makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts"
 
 // Real Postgres, a real clone and real cuts: provisioning, explicit release and
 // automatic release all through the one registry and the one release function.
-const adminUrl = new URL(
-  process.env.WORKFLOW_POSTGRES_URL ?? "postgres://jigs:jigs@localhost:5439/jigs",
-);
 const database = `jigs_workspaces_${crypto.randomUUID().replaceAll("-", "")}`;
-const testUrl = new URL(adminUrl);
-testUrl.pathname = `/${database}`;
-const admin = new Pool({ connectionString: adminUrl.toString(), max: 1 });
+const testUrl = databaseUrl(database);
+const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
 
 const tmp = makeTmpDir();
 const factoryRoot = path.join(tmp, "factory");
@@ -65,7 +62,7 @@ afterAll(async () => {
   removeTmpDir(tmp);
 });
 
-test("a second run asking for the same branch works on its own branch and worktree", async () => {
+dbTest("a second run asking for the same branch works on its own branch and worktree", async () => {
   const request = { binding: "api", branch: "same" };
   const first = await provisionWorktree(request, { workflowRunId: "wrun_first1" });
   const second = await provisionWorktree(request, { workflowRunId: "wrun_second" });
@@ -77,7 +74,7 @@ test("a second run asking for the same branch works on its own branch and worktr
   expect(await states("wrun_second")).toEqual([["worktree", "live", null]]);
 });
 
-test("explicit release keeps, then removes, through the real registry", async () => {
+dbTest("explicit release keeps, then removes, through the real registry", async () => {
   const runId = "run_release";
   const tree = await provisionWorktree(
     { binding: "api", branch: "released" },
@@ -102,7 +99,7 @@ test("explicit release keeps, then removes, through the real registry", async ()
   expect(existsSync(directory)).toBe(true);
 });
 
-test("automatic release uses the same release and preserves dirty work", async () => {
+dbTest("automatic release uses the same release and preserves dirty work", async () => {
   const runId = "run_automatic";
   const tree = await provisionWorktree(
     { binding: "api", branch: "dirty" },
