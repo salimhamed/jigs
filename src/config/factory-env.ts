@@ -7,13 +7,3 @@ export function readFactoryEnv(factoryRoot: string): Record<string, string> {
   if (!existsSync(file)) return {};
   return parseEnv(readFileSync(file, "utf8")) as Record<string, string>;
 }
-
-// The shell wins: exporting a value for a single command is how an operator
-// overrides the factory's own. The scaffolded `.env` declares every slot it
-// knows about and leaves it empty, so empty is unset on either side.
-export function factoryEnvValue(factoryRoot: string, key: string): string | undefined {
-  const exported = process.env[key];
-  if (exported !== undefined && exported !== "") return exported;
-  const declared = readFactoryEnv(factoryRoot)[key];
-  return declared === undefined || declared === "" ? undefined : declared;
-}

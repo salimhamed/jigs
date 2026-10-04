@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { tmpdir } from "node:os";
 import { promisify } from "node:util";
+import { processEnv } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 
 const execFileAsync = promisify(execFile);
@@ -15,7 +16,7 @@ function nonInteractiveGitEnv(): NodeJS.ProcessEnv {
     GIT_TERMINAL_PROMPT: "0",
     GIT_ASKPASS: "",
     SSH_ASKPASS: "",
-    GIT_SSH_COMMAND: `${process.env.GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
+    GIT_SSH_COMMAND: `${processEnv().GIT_SSH_COMMAND ?? "ssh"} -oBatchMode=yes`,
     LC_ALL: "C",
   };
 }
@@ -30,7 +31,7 @@ export async function git(
   const { stdout } = await execFileAsync("git", args, {
     cwd,
     maxBuffer: 64 * 1024 * 1024,
-    env: { ...process.env, ...nonInteractiveGitEnv(), ...env },
+    env: { ...processEnv(), ...nonInteractiveGitEnv(), ...env },
   });
   return stdout.trim();
 }
@@ -78,7 +79,7 @@ export async function probeRemoteAuth(url: string, timeoutMs: number): Promise<s
     await execFileAsync("git", ["ls-remote", "--heads", "--end-of-options", url, "HEAD"], {
       cwd: tmpdir(),
       timeout: timeoutMs,
-      env: { ...process.env, ...nonInteractiveGitEnv() },
+      env: { ...processEnv(), ...nonInteractiveGitEnv() },
     });
     return null;
   } catch (err) {

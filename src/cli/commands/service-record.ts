@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { z } from "zod";
-import { jigsDataDir } from "../../config/paths.ts";
+import { jigsDataDir } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import {
   judgeRecord,

@@ -170,7 +170,7 @@ export function serviceBehindSources(deps: BundleDeps): string | undefined {
 function childEnv(factoryRoot: string, service: ResolvedService): Record<string, string> {
   const declared = Object.entries(readFactoryEnv(factoryRoot)).filter(([, value]) => value !== "");
   return {
-    ...stringEnv(process.env),
+    ...stringEnv(),
     ...Object.fromEntries(declared),
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),

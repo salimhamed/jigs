@@ -1,7 +1,7 @@
 import { createHash, randomUUID } from "node:crypto";
 import { closeSync, mkdirSync, openSync, readFileSync, rmSync, statSync, writeSync } from "node:fs";
 import path from "node:path";
-import { jigsDataDir } from "../../../config/paths.ts";
+import { jigsDataDir } from "../../../config/factory-context.ts";
 
 // The worktree advisory lock, hand-rolled on O_EXCL: one dependency-free
 // primitive whose stale and retry policy is visible in place. Lock files live

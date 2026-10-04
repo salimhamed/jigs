@@ -1,7 +1,6 @@
 import { mkdir, rm } from "node:fs/promises";
 import path from "node:path";
-import { currentFactoryContext } from "../../../config/factory-context.ts";
-import { jigsDataDir } from "../../../config/paths.ts";
+import { currentFactoryContext, jigsDataDir } from "../../../config/factory-context.ts";
 import { recordRunDirectory, registrySql, setResourceState } from "../registry.ts";
 import type { RunMetadata } from "../run-context.ts";
 

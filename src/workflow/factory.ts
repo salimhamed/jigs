@@ -56,8 +56,8 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    * everything listed before every run. List only what the workflow uses.
    *
    * @remarks
-   * A secret is set in the factory's `.env` and read in a step from
-   * `process.env`. The variables an agent's MCP servers name count as secrets
+   * A secret is set in the factory's `.env` and read in a step from the
+   * process environment. The variables an agent's MCP servers name count as secrets
    * without being listed. Listing a secret does not pass it to agents.
    *
    * @example

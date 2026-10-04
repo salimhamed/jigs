@@ -2,6 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { PROBE_TIMEOUT_MS } from "../../../checks/catalog.ts";
 import type { Check, CheckResult } from "../../../checks/check.ts";
+import { processEnv } from "../../../config/factory-context.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../../../providers/credentials.ts";
 import { factoryAgentEnv, harnessEnv } from "../shared/env.ts";
 import { resolveClaudeExecutable } from "../shared/executables.ts";
@@ -30,7 +31,7 @@ type ClaudeAuthStatus = {
 // gives Claude Code, so it sees the same login the step will.
 export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? processEnv();
   return {
     id: "harness.claude-auth",
     label: "Claude subscription login",

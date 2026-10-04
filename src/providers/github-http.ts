@@ -2,14 +2,8 @@
 // signals. Credential minting sends through here too, so it cannot
 // live beside the per-account credential choice in github-api.ts.
 
-import { type FactoryContext, runSignal } from "../config/factory-context.ts";
-import {
-  ProviderApiError,
-  type ProviderAuth,
-  rateLimitWait,
-  reauthorize,
-  type WaitSignal,
-} from "./http.ts";
+import { runSignal } from "../config/factory-context.ts";
+import { ProviderApiError, type ProviderAuth, rateLimitWait, reauthorize } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -92,12 +86,9 @@ export interface GithubSend {
 export interface GithubClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
-  /** The factory whose runs a wait belongs to. Defaults to the process's own. */
-  context?: FactoryContext;
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
-  const runWatch: WaitSignal = deps.context?.runSignal ?? runSignal;
   async function send<T>({
     auth,
     method = "GET",
@@ -125,7 +116,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         reauthorized = true;
         continue;
       }
-      const watch = signal === null ? null : runWatch;
+      const watch = signal === null ? null : runSignal;
       if (
         isRateLimited(res) &&
         (await rateLimitWait("github", rateLimitSeconds(res), waits++, watch, deps.sleep))

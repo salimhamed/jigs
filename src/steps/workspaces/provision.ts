@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { cpSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { globSync } from "tinyglobby";
+import { processEnv } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import type { Binding } from "../../workflow/factory-schema.ts";
 import { bindingFilesDir } from "./layout.ts";
@@ -168,7 +169,7 @@ async function runPostCreate(
   hookTimeoutMinutes: number,
 ): Promise<void> {
   if (commands.length === 0) return;
-  const env = { ...process.env };
+  const env = { ...processEnv() };
   // A venv activated in the operator's shell would point the hook's tooling
   // at an interpreter outside the worktree.
   delete env.VIRTUAL_ENV;

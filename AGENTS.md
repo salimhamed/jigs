@@ -49,7 +49,9 @@ has to keep:
   workflow use the same mechanism; single-caller composition stays in the recipe.
 
 `pnpm lint` runs dependency-cruiser with these rules, and biome forbids
-`process.env` under `workflow/`.
+`process.env` everywhere but `src/config/factory-context.ts` and tests: read a
+setting through `currentFactoryContext().env`, and an environment for a child
+process through `processEnv()`.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
 live in factory code, including the copied recipes

@@ -1,5 +1,6 @@
 import { accessSync, constants, statSync } from "node:fs";
 import path from "node:path";
+import { processEnv } from "../../../config/factory-context.ts";
 
 // Which binary a harness step runs. Both providers would otherwise pick a copy
 // out of their own node_modules, which is not the one the operator logged in.
@@ -19,7 +20,7 @@ function findOnPath(name: string, env: NodeJS.ProcessEnv): string | undefined {
   return undefined;
 }
 
-export function resolveClaudeExecutable(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveClaudeExecutable(env: NodeJS.ProcessEnv = processEnv()): string {
   const override = env.JIGS_CLAUDE_EXECUTABLE;
   if (override !== undefined && override !== "") return override;
   const found = findOnPath("claude", env);
@@ -29,7 +30,7 @@ export function resolveClaudeExecutable(env: NodeJS.ProcessEnv = process.env): s
   );
 }
 
-export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): string {
+export function resolveCodexExecutable(env: NodeJS.ProcessEnv = processEnv()): string {
   const found = findOnPath("codex", env);
   if (found !== undefined) return found;
   throw new Error("no `codex` executable found on PATH — install the Codex CLI");
@@ -39,7 +40,7 @@ export function resolveCodexExecutable(env: NodeJS.ProcessEnv = process.env): st
 // the completion boundary the JSON-mode driver requires.
 export const MIN_PI_VERSION = "0.85.1";
 
-export function resolvePiExecutable(env: NodeJS.ProcessEnv = process.env): string {
+export function resolvePiExecutable(env: NodeJS.ProcessEnv = processEnv()): string {
   const found = findOnPath("pi", env);
   if (found !== undefined) return found;
   throw new Error("no `pi` executable found on PATH — install @earendil-works/pi-coding-agent");

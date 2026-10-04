@@ -2,7 +2,7 @@
 // answers. Every provider call, env read and time read lives in the two step
 // implementations this routine is handed — ../../steps/linear/needs-human-comments.ts —
 // so the body here only sequences memoized step results. Cursors and ids come
-// from step returns, never from Date.now() or process.env.
+// from step returns, never from Date.now() or the environment.
 
 import { createHook } from "workflow";
 import { NEEDS_HUMAN_TOKEN_PREFIX } from "../hook-tokens.ts";

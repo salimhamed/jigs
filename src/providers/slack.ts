@@ -135,10 +135,9 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         body: form.toString(),
       });
       const text = await res.text();
-      const watch = deps.context?.runSignal ?? runSignal;
       if (
         res.status === 429 &&
-        (await rateLimitWait("slack", retryAfterSeconds(res), waits++, watch, deps.sleep))
+        (await rateLimitWait("slack", retryAfterSeconds(res), waits++, runSignal, deps.sleep))
       ) {
         continue;
       }

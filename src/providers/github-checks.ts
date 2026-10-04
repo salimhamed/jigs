@@ -4,7 +4,7 @@
 // each gets its own checks and its own repair.
 
 import type { Check, CheckResult } from "../checks/check.ts";
-import type { FactoryContext } from "../config/factory-context.ts";
+import { type FactoryContext, processEnv } from "../config/factory-context.ts";
 import type {
   AppIdentity,
   GithubIdentity,
@@ -76,7 +76,7 @@ export interface GithubIdentityCheckOptions {
 export function githubIdentityChecks(
   identities: GithubIdentity[],
   probes: GithubIdentityProbes,
-  env: NodeJS.ProcessEnv = process.env,
+  env: NodeJS.ProcessEnv = processEnv(),
   { webhooks = false }: GithubIdentityCheckOptions = {},
 ): Check[] {
   const registrations = new Map<number, Promise<{ slug: string }>>();
@@ -220,7 +220,7 @@ export function githubChecks(ctx: FactoryContext): Check[] {
   const probes = realGithubIdentityProbes(getAuthenticatedUser);
   try {
     const { webhooks } = ctx.config;
-    return githubIdentityChecks(githubIdentities(ctx), probes, process.env, {
+    return githubIdentityChecks(githubIdentities(ctx), probes, processEnv(), {
       webhooks: webhooks?.github.enabled ?? false,
     });
   } catch {

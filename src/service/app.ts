@@ -6,7 +6,11 @@ import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import { doctorChecks, failedChecks, runDoctorChecks } from "../checks/index.ts";
-import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
+import {
+  currentFactoryContext,
+  type FactoryContext,
+  processEnv,
+} from "../config/factory-context.ts";
 import { webhookSecret } from "../config/webhook-secret.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
@@ -86,7 +90,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
       ok: true,
       ready: isReady(),
       phase: bootPhase(),
-      world: process.env.WORKFLOW_TARGET_WORLD ?? "local (default)",
+      world: processEnv().WORKFLOW_TARGET_WORLD ?? "local (default)",
       factoryRoot: factoryRootOrNull(context),
       pid: process.pid,
       workflows: Object.keys(factory.workflows),

@@ -89,9 +89,9 @@ export async function memoryFactoryContext(
   return {
     ...actual,
     currentFactoryContext: (): FactoryContext => {
-      const ctx = actual.currentFactoryContext();
+      let ctx: FactoryContext;
       try {
-        void ctx.root;
+        ctx = actual.currentFactoryContext();
       } catch {
         return outside;
       }

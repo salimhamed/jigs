@@ -9,7 +9,7 @@ import { createHash } from "node:crypto";
 import { mkdirSync, readdirSync, readFileSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { uptime } from "node:os";
 import path from "node:path";
-import { jigsDataDir } from "./paths.ts";
+import { jigsDataDir } from "./factory-context.ts";
 
 /** A service holding Socket Mode connections for one Slack app. */
 export interface SlackAppHolder {

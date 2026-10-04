@@ -1,17 +1,17 @@
 // Which factory a process answers for, and what it is configured with. Each
 // entry point resolves one and hands it down: the service at boot, a CLI verb
 // for the factory it was typed in, and step code through
-// `currentFactoryContext()`.
+// `currentFactoryContext()`. This is the one module that reads the process
+// environment.
 
+import { homedir } from "node:os";
+import path from "node:path";
 import type { RunCancellation } from "../run-cancellation.ts";
 import type { FactoryConfig } from "../workflow/factory-schema.ts";
 import { readFactoryConfig } from "./factory-config.ts";
-import { factoryEnvValue } from "./factory-env.ts";
+import { readFactoryEnv } from "./factory-env.ts";
 import { locateFactoryRoot } from "./factory-root.ts";
 import { factorySlug } from "./paths.ts";
-
-/** A watch on the calling step's run, for a wait that should end when the run is cancelled. */
-export type RunWatch = Pick<RunCancellation, "signal" | "dispose">;
 
 export interface FactoryContext {
   readonly root: string;
@@ -21,11 +21,6 @@ export interface FactoryContext {
   readonly config: FactoryConfig;
   /** The shell's value, else the factory's `.env`, read afresh on each call. Empty is unset. */
   env(name: string): string | undefined;
-  /**
-   * Watch the calling step's run for `subject`, or undefined outside a step or when its status
-   * cannot be read. Rejects once the run is cancelled.
-   */
-  runSignal(subject: string): Promise<RunWatch | undefined>;
 }
 
 export function resolveFactoryContext(root: string): FactoryContext {
@@ -37,46 +32,15 @@ export function resolveFactoryContext(root: string): FactoryContext {
       config ??= readFactoryConfig(root);
       return config;
     },
-    env: (name) => factoryEnvValue(root, name),
-    runSignal,
-  };
-}
-
-// The same for every factory: it watches whichever run the calling step belongs
-// to. Imported on demand, because the CLI reaches this module and runs where the
-// workflow SDK may not be installed.
-/** {@link FactoryContext.runSignal}, for a provider client handed no context. */
-export async function runSignal(subject: string): Promise<RunWatch | undefined> {
-  let cancellation: typeof import("../run-cancellation.ts");
-  try {
-    cancellation = await import("../run-cancellation.ts");
-  } catch {
-    return undefined;
-  }
-  return cancellation.watchCallingRun(subject);
-}
-
-// Locating the factory is fallible, so it waits for the first read: a caller
-// that never reads the context, or reads it inside a check, fails where it
-// reads rather than where it was handed one.
-function deferred(resolve: () => FactoryContext): FactoryContext {
-  let resolved: FactoryContext | undefined;
-  const ctx = () => {
-    resolved ??= resolve();
-    return resolved;
-  };
-  return {
-    get root() {
-      return ctx().root;
+    // The shell wins: exporting a value for a single command is how an operator
+    // overrides the factory's own. The scaffolded `.env` declares every slot it
+    // knows about and leaves it empty, so empty is unset on either side.
+    env: (name) => {
+      const exported = process.env[name];
+      if (exported !== undefined && exported !== "") return exported;
+      const declared = readFactoryEnv(root)[name];
+      return declared === undefined || declared === "" ? undefined : declared;
     },
-    get slug() {
-      return ctx().slug;
-    },
-    get config() {
-      return ctx().config;
-    },
-    env: (name) => ctx().env(name),
-    runSignal,
   };
 }
 
@@ -85,6 +49,7 @@ let current: { key: string; context: FactoryContext } | undefined;
 /**
  * The factory this process runs for: `JIGS_FACTORY_ROOT`, which the service is started with, or
  * the factory around the working directory. The one ambient lookup, resolved once per process.
+ * Throws outside a factory.
  */
 export function currentFactoryContext(): FactoryContext {
   const override = process.env.JIGS_FACTORY_ROOT;
@@ -92,10 +57,42 @@ export function currentFactoryContext(): FactoryContext {
   if (current?.key !== key) {
     current = {
       key,
-      context: deferred(() =>
-        resolveFactoryContext(key === override ? key : locateFactoryRoot(key)),
-      ),
+      context: resolveFactoryContext(key === override ? key : locateFactoryRoot(key)),
     };
   }
   return current.context;
+}
+
+/**
+ * This process's own environment: what a child process inherits, and the variables the operating
+ * system defines. A factory setting is read through {@link FactoryContext.env} instead.
+ */
+export function processEnv(): NodeJS.ProcessEnv {
+  return process.env;
+}
+
+/** Where jigs keeps what it owns on this machine: clones, logs, locks and harness homes. */
+export function jigsDataDir(): string {
+  return path.join(process.env.XDG_DATA_HOME ?? path.join(homedir(), ".local", "share"), "jigs");
+}
+
+/** A watch on the calling step's run, for a wait that should end when the run is cancelled. */
+export type RunWatch = Pick<RunCancellation, "signal" | "dispose">;
+
+// Imported on demand, because the CLI reaches this module and runs where the
+// workflow SDK may not be installed. Any other import failure is a broken
+// build, and swallowing it would silently stop waits from ending on cancel.
+/**
+ * Watch the calling step's run for `subject`, or undefined outside a step or when its status
+ * cannot be read. Rejects once the run is cancelled.
+ */
+export async function runSignal(subject: string): Promise<RunWatch | undefined> {
+  let cancellation: typeof import("../run-cancellation.ts");
+  try {
+    cancellation = await import("../run-cancellation.ts");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ERR_MODULE_NOT_FOUND") return undefined;
+    throw error;
+  }
+  return cancellation.watchCallingRun(subject);
 }

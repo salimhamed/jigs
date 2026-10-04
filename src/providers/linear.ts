@@ -189,8 +189,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       let detail: string | undefined;
       if (res.status === 429) {
         const seconds = retryAfterSeconds(res);
-        const watch = deps.context?.runSignal ?? runSignal;
-        if (await rateLimitWait("linear", seconds, waits++, watch, deps.sleep)) continue;
+        if (await rateLimitWait("linear", seconds, waits++, runSignal, deps.sleep)) continue;
         if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${seconds}s`;
       }
       const fail: Fail = (extra = {}) =>

@@ -1,4 +1,4 @@
-import type { FactoryContext } from "../config/factory-context.ts";
+import { type FactoryContext, processEnv } from "../config/factory-context.ts";
 import { readFactoryEnv } from "../config/factory-env.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/shared/mcp-credentials.ts";
@@ -51,7 +51,7 @@ function secretCheck(name: string, options: SecretChecksOptions): Check {
     id: `secret.${name}`,
     label: `secret ${name}`,
     run: async () => {
-      const value = (options.env ?? process.env)[name];
+      const value = (options.env ?? processEnv())[name];
       if (value === undefined || value.trim() === "")
         return {
           ok: false,

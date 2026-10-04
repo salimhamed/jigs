@@ -12,7 +12,7 @@ import {
 } from "node:fs";
 import { homedir } from "node:os";
 import path from "node:path";
-import { jigsDataDir } from "../../../config/paths.ts";
+import { jigsDataDir } from "../../../config/factory-context.ts";
 import { copySkills } from "../shared/skills.ts";
 
 // Codex has no strict-config flag. Each invocation therefore receives a

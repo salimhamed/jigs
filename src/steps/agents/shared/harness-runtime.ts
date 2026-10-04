@@ -3,6 +3,7 @@ import { promisify } from "node:util";
 import semver from "semver";
 import { PROBE_TIMEOUT_MS } from "../../../checks/catalog.ts";
 import type { Check, CheckResult } from "../../../checks/check.ts";
+import { processEnv } from "../../../config/factory-context.ts";
 import type { HarnessKind } from "../../../workflow/agents/harness-config.ts";
 import { factoryAgentEnv, harnessEnv } from "./env.ts";
 
@@ -62,7 +63,7 @@ export async function harnessRuntime(
   const harness = cli.kind;
   const resolve = deps.resolve ?? cli.resolveExecutable;
   const exec = deps.exec ?? execFileAsync;
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? processEnv();
   const minimum = cli.minimumVersion ?? null;
   const floor = minimum === null ? "" : ` (minimum ${minimum})`;
   const fail = (path: string | null, version: string | null, line: string): HarnessRuntime => ({

@@ -2,6 +2,7 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { ClaudeCodeSettings, SpawnedProcess, SpawnOptions } from "ai-sdk-provider-claude-code";
+import { processEnv } from "../../../config/factory-context.ts";
 import { resolveClaudeExecutable } from "../shared/executables.ts";
 import { groupReaper, OWN_GROUP } from "../shared/process-group.ts";
 
@@ -224,7 +225,7 @@ export function claudeProcessSpawner(
   env: Record<string, string>,
   options: ClaudeLaunchOptions = {},
 ): ClaudeProcessSpawner {
-  const { signal, owner = "Claude Code", host = process.env } = options;
+  const { signal, owner = "Claude Code", host = processEnv() } = options;
   const live = new Set<ClaudeLaunch>();
   const spawnHook = (spawnOptions: SpawnOptions): SpawnedProcess => {
     const sdkAdded = Object.entries(spawnOptions.env).filter(

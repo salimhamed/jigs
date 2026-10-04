@@ -3,6 +3,7 @@ import { mkdir, mkdtemp, rm, symlink } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
+import { processEnv } from "../config/factory-context.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { stringEnv } from "../steps/agents/shared/env.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
@@ -95,7 +96,7 @@ async function withoutCachedRoleCredentials<T>(
 // identical from the config file and different from get-caller-identity.
 export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
   const exec = deps.exec ?? execFileAsync;
-  const env = deps.env ?? process.env;
+  const env = deps.env ?? processEnv();
   const callerIdentity = (probeEnv: Record<string, string>) =>
     exec("aws", ["sts", "get-caller-identity"], { env: probeEnv, timeout: PROBE_TIMEOUT_MS });
   return {

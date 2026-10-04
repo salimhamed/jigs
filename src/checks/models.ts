@@ -1,10 +1,11 @@
+import { processEnv } from "../config/factory-context.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import type { OpenaiCompatibleSource } from "../workflow/agents/harness-config.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
 
 /** Check that a model API credential is present without spending a request. */
-export function modelApiKeyCheck(variable: string, env: NodeJS.ProcessEnv = process.env): Check {
+export function modelApiKeyCheck(variable: string, env: NodeJS.ProcessEnv = processEnv()): Check {
   const credential = env[variable];
   return {
     id: `model.${variable.toLowerCase().replaceAll("_", "-")}`,
@@ -37,7 +38,7 @@ export function openaiCompatibleRuntimeCheck(
   dependencies: OpenaiCompatibleCheckDependencies = {},
 ): Check {
   const request = dependencies.fetch ?? fetch;
-  const env = dependencies.env ?? process.env;
+  const env = dependencies.env ?? processEnv();
   const endpoint = `${source.baseUrl.replace(/\/$/, "")}/models`;
   const credential = source.apiKeyEnv === undefined ? undefined : env[source.apiKeyEnv];
   return {

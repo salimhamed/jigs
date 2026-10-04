@@ -1,12 +1,14 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { githubMcp } from "../workflow/agents/github-mcp.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { agentGithubChecks } from "./agent-github.ts";
 import { runChecks } from "./catalog.ts";
 import { doctorChecks, preflightChecks } from "./index.ts";
+
+inTestFactory();
 
 const APP = {
   mode: "app",
