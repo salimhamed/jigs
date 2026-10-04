@@ -1,6 +1,7 @@
-// Which factory a process answers for, and what it is configured with. There
-// is one ambient lookup, `currentFactoryContext()`, called wherever it is
-// needed. This is the one module that reads the process environment.
+// Which factory a process answers for, and what it is configured with, read
+// through `currentFactoryContext()`. The service seeds it at boot with the
+// configuration it was built with; a CLI verb or a test resolves it from disk.
+// This is the one module that reads the process environment.
 
 import { homedir } from "node:os";
 import path from "node:path";
@@ -23,12 +24,18 @@ export interface FactoryContext {
 
 export function resolveFactoryContext(root: string): FactoryContext {
   let config: FactoryConfig | undefined;
+  return contextAt(root, () => {
+    config ??= readFactoryConfig(root);
+    return config;
+  });
+}
+
+function contextAt(root: string, config: () => FactoryConfig): FactoryContext {
   return {
     root,
     slug: factorySlug(root),
     get config() {
-      config ??= readFactoryConfig(root);
-      return config;
+      return config();
     },
     // The shell wins: exporting a value for a single command is how an operator
     // overrides the factory's own. The scaffolded `.env` declares every slot it
@@ -42,14 +49,30 @@ export function resolveFactoryContext(root: string): FactoryContext {
   };
 }
 
+// On the process, not in this module: the service's steps run from the
+// workflow bundle, which carries its own copy of this module.
+const SEEDED = Symbol.for("jigs.factory-context");
+type SeededGlobal = typeof globalThis & { [SEEDED]?: FactoryContext };
+
+/**
+ * Fix this process's factory to the configuration the service was built with, so the running
+ * service never reads `jigs.config.ts`. The service calls it once, at boot.
+ */
+export function seedFactoryContext(config: FactoryConfig): void {
+  const { root } = currentFactoryContext();
+  (globalThis as SeededGlobal)[SEEDED] = contextAt(root, () => config);
+}
+
 let current: { key: string; context: FactoryContext } | undefined;
 
 /**
- * The factory this process runs for: `JIGS_FACTORY_ROOT`, which the service is started with, or
- * the factory around the working directory. The one ambient lookup, resolved once per process.
+ * The factory this process runs for. In the service, the one seeded at boot. Elsewhere,
+ * `JIGS_FACTORY_ROOT` or the factory around the working directory, resolved once per process.
  * Throws outside a factory.
  */
 export function currentFactoryContext(): FactoryContext {
+  const seeded = (globalThis as SeededGlobal)[SEEDED];
+  if (seeded !== undefined) return seeded;
   const override = process.env.JIGS_FACTORY_ROOT;
   const key = override !== undefined && override !== "" ? override : process.cwd();
   if (current?.key !== key) {

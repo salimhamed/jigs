@@ -4,7 +4,7 @@ import { drizzle, type NodePgDatabase } from "drizzle-orm/node-postgres";
 import { migrate } from "drizzle-orm/node-postgres/migrator";
 import { integer, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import { Pool, type PoolConfig } from "pg";
-import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import type { ResourceRecord, ResourceState } from "../../workflow/runtime/resources.ts";
 
 // Several factories may share one database, so every row names its factory and
@@ -45,19 +45,20 @@ export function connectRegistry(url: string, options: PoolConfig = {}): Registry
   return drizzle(pool);
 }
 
-// One lazily-opened connection for the process: the plugin's startup ensure,
-// steps and automatic release all share it, so nothing ends a pool another
-// caller still holds. The service owns process exit after World shutdown
-// drains active work. CLI commands use their own pool.
-let client: RegistrySql | undefined;
+// One lazily-opened pool per registry URL: the plugin's startup ensure, steps
+// and automatic release share it, so nothing ends a pool another caller still
+// holds. The service owns process exit after World shutdown drains active
+// work. CLI commands use their own pool.
+const clients = new Map<string, RegistrySql>();
 
-export function registrySql(ctx?: FactoryContext): RegistrySql {
+/** The current factory's registry, on the process's pool for its URL. */
+export function registrySql(): RegistrySql {
+  const url = currentFactoryContext().env("WORKFLOW_POSTGRES_URL");
+  if (url === undefined) throw new Error("WORKFLOW_POSTGRES_URL is not set");
+  let client = clients.get(url);
   if (client === undefined) {
-    const url = (ctx ?? currentFactoryContext()).env("WORKFLOW_POSTGRES_URL");
-    if (url === undefined || url === "") {
-      throw new Error("WORKFLOW_POSTGRES_URL is not set");
-    }
     client = connectRegistry(url);
+    clients.set(url, client);
   }
   return client;
 }
@@ -113,9 +114,8 @@ export async function recordRunDirectory(
   runId: string,
   directory: string,
 ): Promise<void> {
-  const ctx = currentFactoryContext();
-  await recordResource(registrySql(ctx), {
-    factory: ctx.slug,
+  await recordResource(registrySql(), {
+    factory: currentFactoryContext().slug,
     runId,
     kind,
     identity: runId,

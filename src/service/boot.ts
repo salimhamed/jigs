@@ -23,8 +23,8 @@ import { installShutdown, onShutdown } from "./shutdown.ts";
 // up to do it. Inside startWorld the deferral also orders the boot: nothing
 // fallible resolves until installShutdown() can turn its failure into an exit.
 
-// The service's one factory context: every gate and the boot after them read
-// the same one.
+// The context startService seeded from the built configuration: every gate
+// and the boot after them read it.
 async function serviceContext(): Promise<FactoryContext> {
   return (await import("../config/factory-context.ts")).currentFactoryContext();
 }

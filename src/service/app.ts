@@ -66,7 +66,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // Resolved on first use rather than here: liveness answers even from a
   // service started outside a factory.
   const context = () => deps.context ?? currentFactoryContext();
-  const registry = deps.registry ?? (() => registrySql(context()));
+  const registry = deps.registry ?? registrySql;
   const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });
   const triggers = () => triggerStore(registry(), context().slug);
   const routes: IngressDeps = {

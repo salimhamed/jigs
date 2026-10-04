@@ -72,6 +72,9 @@ afterAll(async () => {
 });
 inTestFactory();
 
+// Preflight reads the factory a launch runs in.
+inTestFactory();
+
 const workflowName = "workflow//./workflows/respond//respond";
 const factory = {
   workflows: {
