@@ -39,7 +39,8 @@ server from source, serves the web app through Vite and reads
 (Node will not strip types under `node_modules`) and the web app into `build/`;
 `start` runs `dist/main.js` in production mode, as does the published
 `jigs-hub` bin. The package ships `bin/`, `dist/`, `build/` and `migrations/`;
-anything the built hub imports must be a dependency, not a devDependency.
+anything the built hub imports must be a dependency, not a devDependency,
+except the private `@jigs-ai/hub-protocol`, which the build bundles.
 Paths to `migrations/` and `build/` resolve from `src/package-root.ts`, so
 they hold from `src/` and `dist/` alike. Tests ending in `.db.test.ts` need
 Postgres and run under `pnpm test:db`, which builds first.
