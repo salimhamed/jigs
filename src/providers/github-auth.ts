@@ -15,11 +15,17 @@ import {
   type ResolvedGithubIdentity,
   readFactoryConfig,
 } from "../config/factory-config.ts";
-import { factoryEnvValue } from "../config/factory-env.ts";
 import { JigsError } from "../errors.ts";
-import { credentialRoot, onProviderReset, setCredentialRoot } from "./credentials.ts";
-
-export const GITHUB_API_BASE = (): string => process.env.GITHUB_API_URL ?? "https://api.github.com";
+import {
+  credentialRoot,
+  credentialValue,
+  type EnvLookup,
+  onProviderReset,
+  requireCredential,
+  setCredentialRoot,
+} from "./credentials.ts";
+import { githubSend } from "./github-http.ts";
+import type { ProviderAuth } from "./http.ts";
 
 /** An installation token lives an hour; renew it while there is still time to fail and retry. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
@@ -90,83 +96,57 @@ interface MintedToken {
   expiresAt: number;
 }
 
-export type FetchLike = typeof fetch;
+// The App's own credential, signed afresh for each attempt.
+const appJwtAuth = (
+  identity: Pick<AppIdentity, "appId">,
+  privateKey: string,
+  now: () => number,
+): ProviderAuth => ({ bearer: async () => mintAppJwt(identity.appId, privateKey, now()) });
 
 /** Exchange the App JWT for a token scoped to one installation. */
 export async function mintInstallationToken(
   identity: ResolvedAppIdentity,
   privateKey: string,
-  deps: { now?: () => number; fetch?: FetchLike } = {},
+  deps: { now?: () => number } = {},
 ): Promise<MintedToken> {
-  const now = deps.now ?? Date.now;
-  const doFetch = deps.fetch ?? fetch;
-  const jwt = mintAppJwt(identity.appId, privateKey, now());
-  const res = await doFetch(
-    `${GITHUB_API_BASE()}/app/installations/${identity.installationId}/access_tokens`,
-    {
-      method: "POST",
-      headers: {
-        authorization: `Bearer ${jwt}`,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-      },
-    },
-  );
-  if (!res.ok) {
-    throw new JigsError(
-      `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,
-      `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations and privateKeyPath, and that installation ${identity.installationId} still exists\nfind which one is wrong: \`pnpm exec jigs doctor\``,
-    );
-  }
-  const body = (await res.json()) as { token: string; expires_at: string };
+  const body = await githubSend<{ token: string; expires_at: string }>({
+    auth: appJwtAuth(identity, privateKey, deps.now ?? Date.now),
+    method: "POST",
+    apiPath: `/app/installations/${identity.installationId}/access_tokens`,
+    refuse: (res) =>
+      new JigsError(
+        `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,
+        `check App ${identity.appId}’s entry in jigs.config.ts: appId, installations and privateKeyPath, and that installation ${identity.installationId} still exists\nfind which one is wrong: \`pnpm exec jigs doctor\``,
+      ),
+  });
   return { token: body.token, expiresAt: Date.parse(body.expires_at) };
 }
 
 /** Read the installation's granted permissions, for doctor. */
-export async function fetchAppInstallation(
+export function fetchAppInstallation(
   identity: ResolvedAppIdentity,
   privateKey: string,
-  deps: { now?: () => number; fetch?: FetchLike } = {},
+  deps: { now?: () => number } = {},
 ): Promise<AppInstallation> {
-  return appJwtGet<AppInstallation>(
-    `/app/installations/${identity.installationId}`,
-    identity,
-    privateKey,
-    deps,
-  );
+  return githubSend<AppInstallation>({
+    auth: appJwtAuth(identity, privateKey, deps.now ?? Date.now),
+    apiPath: `/app/installations/${identity.installationId}`,
+  });
 }
 
 /** Read the App registration, whose slug is the `<slug>[bot]` login jigs posts as. */
-export async function fetchAppRegistration(
+export function fetchAppRegistration(
   identity: Pick<AppIdentity, "appId">,
   privateKey: string,
-  deps: { now?: () => number; fetch?: FetchLike } = {},
+  deps: { now?: () => number } = {},
 ): Promise<AppRegistration> {
-  return appJwtGet<AppRegistration>("/app", identity, privateKey, deps);
-}
-
-async function appJwtGet<T>(
-  apiPath: string,
-  identity: Pick<AppIdentity, "appId">,
-  privateKey: string,
-  deps: { now?: () => number; fetch?: FetchLike },
-): Promise<T> {
-  const doFetch = deps.fetch ?? fetch;
-  const jwt = mintAppJwt(identity.appId, privateKey, (deps.now ?? Date.now)());
-  const res = await doFetch(`${GITHUB_API_BASE()}${apiPath}`, {
-    headers: {
-      authorization: `Bearer ${jwt}`,
-      accept: "application/vnd.github+json",
-      "x-github-api-version": "2022-11-28",
-    },
+  return githubSend<AppRegistration>({
+    auth: appJwtAuth(identity, privateKey, deps.now ?? Date.now),
+    apiPath: "/app",
   });
-  if (!res.ok) {
-    throw new JigsError(`GitHub API ${res.status} on ${apiPath}`);
-  }
-  return (await res.json()) as T;
 }
 
-export interface GithubAuth {
+export interface GithubAuth extends ProviderAuth {
   identity: ResolvedGithubIdentity;
   /**
    * The bearer token for a REST or GraphQL call, minted or renewed as needed. An App token is
@@ -177,18 +157,23 @@ export interface GithubAuth {
 
 export interface GithubAuthDeps {
   now?: () => number;
-  fetch?: FetchLike;
   readPrivateKey?: (file: string) => PrivateKeyFile;
-  patToken?: () => string | undefined;
+  env?: EnvLookup;
 }
 
 export function createGithubAuth(
   identity: ResolvedGithubIdentity,
   deps: GithubAuthDeps = {},
 ): GithubAuth {
+  if (identity.mode === "pat") {
+    const env = deps.env ?? credentialValue;
+    return {
+      identity,
+      bearer: async () => requireCredential("GITHUB_TOKEN", "the GitHub identity", env),
+    };
+  }
   const now = deps.now ?? Date.now;
   const mint = async (): Promise<MintedToken> => {
-    if (identity.mode !== "app") throw new Error("only an App identity mints tokens");
     const { key } = (deps.readPrivateKey ?? readAppPrivateKey)(identity.privateKeyPath);
     return mintInstallationToken(identity, key, deps);
   };
@@ -199,16 +184,6 @@ export function createGithubAuth(
   return {
     identity,
     async bearer(minLifetimeMs = REFRESH_MARGIN_MS): Promise<string> {
-      if (identity.mode === "pat") {
-        const token = (deps.patToken ?? environmentPat)();
-        if (token === undefined || token === "") {
-          throw new JigsError(
-            "GITHUB_TOKEN is not set",
-            "set GITHUB_TOKEN in the factory repo's .env, then: `pnpm exec jigs service restart`",
-          );
-        }
-        return token;
-      }
       if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached.token;
       if (minting === null) {
         minting = mint().finally(() => {
@@ -219,16 +194,11 @@ export function createGithubAuth(
       cached = await pending;
       return cached.token;
     },
+    // A late 401 on an old token must not discard one minted since.
+    invalidate(stale: string): void {
+      if (cached?.token === stale) cached = null;
+    },
   };
-}
-
-function environmentPat(): string | undefined {
-  try {
-    return factoryEnvValue(credentialRoot(), "GITHUB_TOKEN");
-  } catch {
-    // Outside a factory the shell is the only environment there is.
-    return process.env.GITHUB_TOKEN;
-  }
 }
 
 /**
@@ -260,6 +230,12 @@ export function resolveGithubIdentity(account: string, root?: string): ResolvedG
 const processAuth = new Map<string, GithubAuth>();
 let processIdentities: GithubIdentity[] | null = null;
 
+/** Whether this factory acts through a personal access token, which is then its only identity. */
+export function githubUsesPat(): boolean {
+  processIdentities ??= resolveGithubIdentities();
+  return processIdentities.some((identity) => identity.mode === "pat");
+}
+
 export function githubAuthFor(account: string): GithubAuth {
   processIdentities ??= resolveGithubIdentities();
   const identity = installationFor(processIdentities, account);
@@ -284,7 +260,7 @@ const appBots = new Map<number, Promise<AppBot>>();
 export function appBotFor(
   identity: ResolvedAppIdentity,
   bearer: () => Promise<string>,
-  deps: Pick<GithubAuthDeps, "fetch" | "readPrivateKey"> = {},
+  deps: Pick<GithubAuthDeps, "readPrivateKey"> = {},
 ): Promise<AppBot> {
   let bot = appBots.get(identity.appId);
   if (bot === undefined) {
@@ -298,23 +274,15 @@ export function appBotFor(
 async function lookupAppBot(
   identity: ResolvedAppIdentity,
   bearer: () => Promise<string>,
-  deps: Pick<GithubAuthDeps, "fetch" | "readPrivateKey">,
+  deps: Pick<GithubAuthDeps, "readPrivateKey">,
 ): Promise<AppBot> {
   const { key } = (deps.readPrivateKey ?? readAppPrivateKey)(identity.privateKeyPath);
-  const { slug } = await fetchAppRegistration(identity, key, deps);
+  const { slug } = await fetchAppRegistration(identity, key);
   const login = `${slug}[bot]`;
-  const res = await (deps.fetch ?? fetch)(
-    `${GITHUB_API_BASE()}/users/${encodeURIComponent(login)}`,
-    {
-      headers: {
-        authorization: `Bearer ${await bearer()}`,
-        accept: "application/vnd.github+json",
-        "x-github-api-version": "2022-11-28",
-      },
-    },
-  );
-  if (!res.ok) throw new JigsError(`GitHub API ${res.status} on /users/${login}`);
-  const { id } = (await res.json()) as { id: number };
+  const { id } = await githubSend<{ id: number }>({
+    auth: { bearer },
+    apiPath: `/users/${encodeURIComponent(login)}`,
+  });
   return { login, id };
 }
 

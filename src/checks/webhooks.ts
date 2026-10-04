@@ -5,8 +5,8 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import { GitHubApiError } from "../providers/github-api.ts";
 import { resolveGithubIdentity } from "../providers/github-auth.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
 import { inspectRepoWebhook, parseGithubRemote } from "../providers/github-webhook.ts";
 import type { Check, CheckResult } from "./catalog.ts";
 

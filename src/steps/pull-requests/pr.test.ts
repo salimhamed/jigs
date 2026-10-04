@@ -13,8 +13,8 @@ import {
   mergePr,
   postPullRequestReview,
 } from "../../providers/github.ts";
-import { GitHubApiError } from "../../providers/github-api.ts";
 import { resolveGithubIdentity } from "../../providers/github-auth.ts";
+import { GitHubApiError } from "../../providers/github-http.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import {
   createPullRequest,

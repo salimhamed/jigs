@@ -40,7 +40,11 @@ export interface ProviderApiErrorInit {
   message?: string;
 }
 
-/** A provider answered a call with a failure: an error status, or a refusal in its body. */
+/**
+ * A provider answered a call with a failure: an error status, or a refusal in its body.
+ *
+ * @group Errors
+ */
 export class ProviderApiError extends JigsError {
   readonly provider: Provider;
   readonly status: number;
@@ -81,10 +85,12 @@ export interface ProviderRequest<T> {
   authorization?: (credential: string) => string;
   /** Whether the provider rejected the credential. Defaults to a 401. */
   isAuthFailure?: (res: Response, text: string) => boolean;
-  /** Seconds a 429 asks to wait. Defaults to `retry-after`, else 1. */
+  /** Whether the answer is a rate limit to wait out. Defaults to a 429. */
+  isRateLimited?: (res: Response) => boolean;
+  /** Seconds a rate limit asks to wait. Defaults to `retry-after`, else 1. */
   retryAfter?: (res: Response) => number;
   /**
-   * Every answer not retried, including a 429 the loop gave up on, becomes a value or a thrown
+   * Every answer not retried, including a rate limit the loop gave up on, becomes a value or a thrown
    * failure here. Defaults to `jsonDecode`.
    */
   decode?: (res: Response, text: string, fail: Fail) => T;
@@ -136,7 +142,7 @@ export async function providerRequest<T>(spec: ProviderRequest<T>): Promise<T> {
       spec.auth.invalidate(credential);
       continue;
     }
-    if (res.status === 429) {
+    if (spec.isRateLimited?.(res) ?? res.status === 429) {
       const wait = (spec.retryAfter ?? retryAfterHeader)(res);
       if (wait > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${wait}s`;
       else if (rateLimited < RATE_LIMIT_RETRIES) {

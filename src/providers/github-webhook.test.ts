@@ -1,23 +1,24 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resetGithubAuth } from "./github-auth.ts";
+import { configureGithub } from "./github-http.ts";
+import { type FakeGithub, fakeGithub } from "./github-test-support.ts";
 import {
   ensureRepoWebhook,
   inspectRepoWebhook,
   parseGithubRemote,
   WEBHOOK_EVENTS,
 } from "./github-webhook.ts";
+import type { FetchCall } from "./test-support.ts";
 
-const fetchMock = vi.fn();
+let github: FakeGithub;
 
 beforeEach(() => {
-  vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   resetGithubAuth();
-  fetchMock.mockReset();
+  github = fakeGithub();
 });
 afterEach(() => {
-  vi.unstubAllGlobals();
+  configureGithub();
   vi.unstubAllEnvs();
   resetGithubAuth();
 });
@@ -45,19 +46,20 @@ const opts = {
 
 test("creates the webhook when none matches", async () => {
   expect(WEBHOOK_EVENTS).toContain("status");
-  fetchMock.mockResolvedValueOnce(jsonResponse([])).mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  github.reply(jsonResponse([])).reply(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook(opts)).toEqual({
     outcome: "created",
     otherHosts: [],
   });
 
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  const [listUrl] = fetchMock.mock.calls[0] as [string];
-  expect(listUrl).toBe("http://mock.test/github/repos/acme/api/hooks?per_page=100");
-  const [createUrl, createInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-  expect(createUrl).toBe("http://mock.test/github/repos/acme/api/hooks");
+  expect(github.calls).toHaveLength(2);
+  const listUrl = github.calls[0]?.url.href;
+  expect(listUrl).toBe("https://api.github.com/repos/acme/api/hooks?per_page=100");
+  const createInit = github.calls[1] as FetchCall;
+  const createUrl = createInit.url.href;
+  expect(createUrl).toBe("https://api.github.com/repos/acme/api/hooks");
   expect(createInit.method).toBe("POST");
-  expect(JSON.parse(String(createInit.body))).toEqual({
+  expect(createInit.json).toEqual({
     config: {
       url: "https://factory.example.ts.net/ingress/github",
       content_type: "json",
@@ -71,8 +73,8 @@ test("creates the webhook when none matches", async () => {
 // GitHub never returns the secret, so a hook that looks right may still carry
 // a stale one: bind must send the current secret regardless.
 test("a matching webhook is verified and still PATCHed with the rotated secret", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  github
+    .reply(
       jsonResponse([
         {
           id: 9,
@@ -85,16 +87,17 @@ test("a matching webhook is verified and still PATCHed with the rotated secret",
         },
       ]),
     )
-    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+    .reply(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook({ ...opts, secret: "rotated-secret" })).toEqual({
     outcome: "verified",
     otherHosts: [],
   });
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  const [patchUrl, patchInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-  expect(patchUrl).toBe("http://mock.test/github/repos/acme/api/hooks/9");
+  expect(github.calls).toHaveLength(2);
+  const patchInit = github.calls[1] as FetchCall;
+  const patchUrl = patchInit.url.href;
+  expect(patchUrl).toBe("https://api.github.com/repos/acme/api/hooks/9");
   expect(patchInit.method).toBe("PATCH");
-  expect(JSON.parse(String(patchInit.body))).toEqual({
+  expect(patchInit.json).toEqual({
     config: {
       url: "https://factory.example.ts.net/ingress/github",
       content_type: "json",
@@ -119,20 +122,18 @@ test("a hook missing status is repaired by bind and failed by doctor", async () 
       },
     },
   ];
-  fetchMock.mockResolvedValueOnce(jsonResponse(stale));
+  github.reply(jsonResponse(stale));
   expect(await inspectRepoWebhook({ ...opts })).toEqual({ state: "missing" });
 
-  fetchMock
-    .mockResolvedValueOnce(jsonResponse(stale))
-    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+  github.reply(jsonResponse(stale)).reply(jsonResponse({ id: 9 }));
   expect((await ensureRepoWebhook(opts)).outcome).toBe("updated");
-  const [, patchInit] = fetchMock.mock.calls[2] as [string, RequestInit];
-  expect(JSON.parse(String(patchInit.body)).events).toEqual(WEBHOOK_EVENTS);
+  const patchInit = github.calls[2] as FetchCall;
+  expect((patchInit.json as Record<string, unknown>).events).toEqual(WEBHOOK_EVENTS);
 });
 
 test("patches a webhook whose events drifted", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  github
+    .reply(
       jsonResponse([
         {
           id: 9,
@@ -145,21 +146,22 @@ test("patches a webhook whose events drifted", async () => {
         },
       ]),
     )
-    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+    .reply(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook(opts)).toEqual({
     outcome: "updated",
     otherHosts: [],
   });
 
-  const [patchUrl, patchInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-  expect(patchUrl).toBe("http://mock.test/github/repos/acme/api/hooks/9");
+  const patchInit = github.calls[1] as FetchCall;
+  const patchUrl = patchInit.url.href;
+  expect(patchUrl).toBe("https://api.github.com/repos/acme/api/hooks/9");
   expect(patchInit.method).toBe("PATCH");
-  expect(JSON.parse(String(patchInit.body)).events).toEqual(WEBHOOK_EVENTS);
+  expect((patchInit.json as Record<string, unknown>).events).toEqual(WEBHOOK_EVENTS);
 });
 
 test("creates our webhook and leaves another host's jigs hook untouched", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  github
+    .reply(
       jsonResponse([
         {
           id: 9,
@@ -172,24 +174,25 @@ test("creates our webhook and leaves another host's jigs hook untouched", async 
         },
       ]),
     )
-    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+    .reply(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook(opts)).toEqual({
     outcome: "created",
     otherHosts: ["old-tunnel.example.ts.net"],
   });
 
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  const [createUrl, createInit] = fetchMock.mock.calls[1] as [string, RequestInit];
-  expect(createUrl).toBe("http://mock.test/github/repos/acme/api/hooks");
+  expect(github.calls).toHaveLength(2);
+  const createInit = github.calls[1] as FetchCall;
+  const createUrl = createInit.url.href;
+  expect(createUrl).toBe("https://api.github.com/repos/acme/api/hooks");
   expect(createInit.method).toBe("POST");
-  expect(JSON.parse(String(createInit.body)).config.url).toBe(
+  expect((createInit.json as { config: { url: string } }).config.url).toBe(
     "https://factory.example.ts.net/ingress/github",
   );
 });
 
 test("patches a webhook whose content_type drifted from json", async () => {
-  fetchMock
-    .mockResolvedValueOnce(
+  github
+    .reply(
       jsonResponse([
         {
           id: 9,
@@ -202,7 +205,7 @@ test("patches a webhook whose content_type drifted from json", async () => {
         },
       ]),
     )
-    .mockResolvedValueOnce(jsonResponse({ id: 9 }));
+    .reply(jsonResponse({ id: 9 }));
   expect(await ensureRepoWebhook(opts)).toEqual({
     outcome: "updated",
     otherHosts: [],
@@ -210,6 +213,6 @@ test("patches a webhook whose content_type drifted from json", async () => {
 });
 
 test("a non-2xx response surfaces as a JigsError naming the path", async () => {
-  fetchMock.mockResolvedValueOnce(new Response("forbidden", { status: 403 }));
+  github.reply(new Response("forbidden", { status: 403 }));
   await expect(ensureRepoWebhook(opts)).rejects.toThrow("/repos/acme/api/hooks");
 });

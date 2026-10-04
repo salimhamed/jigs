@@ -1,5 +1,6 @@
 import { APPROVED_LABEL } from "../workflow/pull-requests/policy.ts";
-import { GitHubApiError, githubGet, githubRequest } from "./github-api.ts";
+import { githubGet, githubRequest } from "./github-api.ts";
+import { GitHubApiError } from "./github-http.ts";
 
 /** A label jigs creates on every GitHub repository it is bound to. */
 export interface JigsLabel {

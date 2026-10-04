@@ -2,6 +2,8 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { configureGithub } from "../../providers/github-http.ts";
+import { type FakeGithub, fakeGithub } from "../../providers/github-test-support.ts";
 import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
@@ -27,21 +29,19 @@ async function refusal(row: ResourceRow, run: Run) {
 let tmp: string;
 let repoDir: string;
 let worktreesDir: string;
-const fetchMock = vi.fn();
+let github: FakeGithub;
 const at = new Date("2026-09-25T00:00:00.000Z");
 
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-kinds-test-"));
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
-  vi.stubGlobal("fetch", fetchMock);
-  fetchMock.mockReset();
+  github = fakeGithub();
   ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  vi.unstubAllGlobals();
+  configureGithub();
   rmSync(tmp, { recursive: true, force: true });
 });
 
@@ -167,7 +167,7 @@ test("recorded-only kinds are never dispatched", async () => {
   await expect(releaseResource(row("pull-request", "acme/api#1"), [])).rejects.toThrow(
     "jigs does not release pull-request resources",
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("ancestry counts commits the default branch lacks, and answers null without one", async () => {

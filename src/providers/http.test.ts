@@ -99,3 +99,20 @@ test("a 429 asking for more than a minute fails at once, naming the wait", async
   ).rejects.toThrow("PagerDuty API 429 on GET /x: rate limited for 61s");
   expect(sleeps).toEqual([]);
 });
+
+test("a provider can name another answer a rate limit, and it is waited out like a 429", async () => {
+  const replies = [jsonResponse({}, 403, { "retry-after": "3" }), jsonResponse({ ok: true })];
+  const { fetch, calls } = fakeFetch(() => replies.shift() as Response);
+  const { sleep, sleeps } = fakeSleep();
+  const reply = await providerRequest({
+    provider: "github",
+    auth: { bearer: async () => "t" },
+    url: "https://gh.test/x",
+    isRateLimited: (res) => res.status === 403 && res.headers.has("retry-after"),
+    fetch,
+    sleep,
+  });
+  expect(reply).toEqual({ ok: true });
+  expect(sleeps).toEqual([3000]);
+  expect(calls).toHaveLength(2);
+});

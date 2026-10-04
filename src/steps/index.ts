@@ -11,6 +11,7 @@
  */
 
 export type { Check, CheckResult } from "../checks/catalog.ts";
+export { ProviderApiError } from "../providers/http.ts";
 export type {
   DecisionGeneration,
   Driver,

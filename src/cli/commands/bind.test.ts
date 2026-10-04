@@ -1,8 +1,10 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { GitHubApiError } from "../../providers/github-api.ts";
+import { configureGithub, GitHubApiError } from "../../providers/github-http.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
+import { type FakeGithub, fakeGithub } from "../../providers/github-test-support.ts";
+import type { FetchCall } from "../../providers/test-support.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
@@ -107,7 +109,7 @@ test("re-bind refuses an expression-backed remote before the webhook leg", async
   await expect(bindRepo(API, deps())).rejects.toThrow("Cannot edit bindings");
 
   expect(jigsConfig()).toBe(expressionConfig);
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("a prototype-chain repo name creates an own binding", async () => {
@@ -233,24 +235,23 @@ test("bind outside a factory repo fails with guidance", async () => {
 
 // ---- the webhook leg --------------------------------------------------------
 
-const fetchMock = vi.fn();
+let github: FakeGithub = fakeGithub();
 
 function stubWebhookEnv() {
-  vi.stubGlobal("fetch", fetchMock);
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "gh-hook-secret");
-  fetchMock.mockReset();
+  github = fakeGithub();
 }
 afterEach(() => {
-  vi.unstubAllGlobals();
+  configureGithub();
   vi.unstubAllEnvs();
 });
 
-function bearerOf(call: number): string | null {
-  const [, init] = fetchMock.mock.calls[call] as [string, RequestInit];
-  return new Headers(init.headers).get("authorization");
+type Hook = { events: string[]; config: Record<string, string> };
+
+function bearerOf(call: number): string | undefined {
+  return github.calls[call]?.headers.authorization;
 }
 
 function makeWebhookFactory(): void {
@@ -263,13 +264,11 @@ function makeWebhookFactory(): void {
 test("re-bind verifies the webhook and re-sends the current secret", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   const first = await bindRepo(API, deps());
   expect(first.webhook).toBe("created");
-  expect(fetchMock).toHaveBeenCalledTimes(2);
-  const created = JSON.parse(String((fetchMock.mock.calls[1] as [string, RequestInit])[1].body));
+  expect(github.calls).toHaveLength(2);
+  const created = github.calls[1]?.json as Hook;
   expect(created.config.secret).toBe("gh-hook-secret");
 
   // Rotated in the factory's .env: GitHub cannot show the old one, so the
@@ -277,7 +276,7 @@ test("re-bind verifies the webhook and re-sends the current secret", async () =>
   vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
   writeFileSync(path.join(factory, ".env"), "GITHUB_WEBHOOK_SECRET=rotated\n");
 
-  fetchMock.mockResolvedValueOnce(
+  github.reply(
     new Response(
       JSON.stringify([
         {
@@ -292,15 +291,15 @@ test("re-bind verifies the webhook and re-sends the current secret", async () =>
       ]),
     ),
   );
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response(JSON.stringify({ id: 9 })));
   const lines: string[] = [];
   const second = await bindRepo(API, { ...deps(), out: (line) => lines.push(line) });
   expect(second.webhook).toBe("verified");
   expect(lines).toContain("webhook verified: acme/Api (signing secret re-sent)");
-  expect(fetchMock).toHaveBeenCalledTimes(4);
-  const [, patchInit] = fetchMock.mock.calls[3] as [string, RequestInit];
-  expect(patchInit.method).toBe("PATCH");
-  expect(JSON.parse(String(patchInit.body)).config.secret).toBe("rotated");
+  expect(github.calls).toHaveLength(4);
+  const patch = github.calls[3] as FetchCall;
+  expect(patch.method).toBe("PATCH");
+  expect((patch.json as Hook).config.secret).toBe("rotated");
 });
 
 test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub call", async () => {
@@ -318,14 +317,14 @@ test("bind refuses a webhook without GITHUB_WEBHOOK_SECRET and makes no GitHub c
   expect((failure as { hint?: string }).hint).toBe(
     `generate a secret: \`openssl rand -hex 32\`\nset it as GITHUB_WEBHOOK_SECRET in ${envFile}\nrestart the service: \`pnpm exec jigs service restart\`\nthen re-run: \`pnpm exec jigs bind ${API}\``,
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("bind names other jigs hook hosts after its result", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock
-    .mockResolvedValueOnce(
+  github
+    .reply(
       new Response(
         JSON.stringify([
           {
@@ -343,7 +342,7 @@ test("bind names other jigs hook hosts after its result", async () => {
         ]),
       ),
     )
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 10 })));
+    .reply(new Response(JSON.stringify({ id: 10 })));
   await bindRepo(API, deps());
   expect(lines).toContain("other jigs hooks on this repo: old.example.test, teammate.example.test");
 });
@@ -355,7 +354,7 @@ test("bind without a webhooks section skips the webhook leg and says PR waits po
   expect(lines).toContain(
     "note: skipping webhook (GitHub webhooks are off), so pull request waits poll every 300 seconds",
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("the label leg without GITHUB_TOKEN fails with the credential repair, after recording the binding", async () => {
@@ -384,7 +383,7 @@ test("bind with GitHub webhooks off needs no webhook secret, and names the inter
   expect(lines).toContain(
     "note: skipping webhook (GitHub webhooks are off), so pull request waits poll every 60 seconds",
   );
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("bind ensures every jigs label on every run, whatever the approval", async () => {
@@ -425,9 +424,7 @@ test("a label permission failure preserves the binding after ensuring the webhoo
     path.join(factory, "jigs.config.ts"),
     'export default { webhooks: { url: "https://factory.example.ts.net", github: { enabled: true } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   const ensureLabel = vi
     .fn()
     .mockRejectedValue(
@@ -454,15 +451,13 @@ test("no GITHUB_TOKEN anywhere fails with the repair, and the retry ensures the 
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("GITHUB_TOKEN is not set");
   expect((failure as { hint?: string }).hint).toContain("admin:repo_hook");
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
   // The binding is already recorded, so the retry is the same command again.
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   lines = [];
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
   // The failed run wrote the binding but nothing cloned it.
@@ -501,7 +496,7 @@ test("an alias match is named in the repair command", async () => {
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock.mockRejectedValueOnce(new Error("fetch failed"));
+  github.reply(new Error("fetch failed"));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("fetch failed");
   const { hint } = failure as { hint?: string };
@@ -512,15 +507,13 @@ test("a failure GitHub did not lay on the token does not send the operator after
 test("a token GitHub rejects fails with the repair, and the retry ensures the webhook", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock.mockResolvedValueOnce(new Response("Bad credentials", { status: 401 }));
+  github.reply(new Response("Bad credentials", { status: 401 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   expect(String(failure)).toContain("401");
   expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   const retry = await bindRepo(API, deps());
   expect(retry.webhook).toBe("created");
 });
@@ -530,9 +523,7 @@ test("the webhook token comes from the factory's .env when the shell has none", 
   vi.stubEnv("GITHUB_TOKEN", "");
   makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(bearerOf(0)).toBe("Bearer from_dotenv");
 });
@@ -541,9 +532,7 @@ test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(bearerOf(0)).toBe("Bearer gh_test_token");
 });
@@ -551,9 +540,7 @@ test("an exported GITHUB_TOKEN wins over the factory's .env", async () => {
 test("a rate-limited 403 does not send the operator after a new token", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock.mockResolvedValueOnce(
-    new Response("You have exceeded a secondary rate limit", { status: 403 }),
-  );
+  github.reply(new Response("You have exceeded a secondary rate limit", { status: 403 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
   expect(hint).not.toContain("GITHUB_TOKEN");
@@ -563,7 +550,7 @@ test("a rate-limited 403 does not send the operator after a new token", async ()
 test("a 403 on the token's scopes asks for a token that carries them", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock.mockResolvedValueOnce(
+  github.reply(
     new Response("Resource not accessible by personal access token", {
       status: 403,
     }),
@@ -575,7 +562,7 @@ test("a 403 on the token's scopes asks for a token that carries them", async () 
 test("a 404 sends the operator to the remote, not to a new token", async () => {
   stubWebhookEnv();
   makeWebhookFactory();
-  fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+  github.reply(new Response("Not Found", { status: 404 }));
   const failure = await bindRepo(API, deps()).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
   expect(hint).not.toContain("admin:repo_hook");
@@ -587,9 +574,7 @@ test("a token this shell alone has is noted, since the service reads .env", asyn
   stubWebhookEnv();
   makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=\n");
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(
     lines.some((l) => l.includes("this shell's") && l.includes(path.join(factory, ".env"))),
@@ -600,9 +585,7 @@ test("a token the factory's .env carries is not flagged as this shell's", async 
   stubWebhookEnv();
   makeWebhookFactory();
   writeFileSync(path.join(factory, ".env"), "GITHUB_TOKEN=from_dotenv\n");
-  fetchMock
-    .mockResolvedValueOnce(new Response("[]"))
-    .mockResolvedValueOnce(new Response(JSON.stringify({ id: 9 })));
+  github.reply(new Response("[]")).reply(new Response(JSON.stringify({ id: 9 })));
   await bindRepo(API, deps());
   expect(lines.some((l) => l.includes("this shell's"))).toBe(false);
 });
@@ -613,17 +596,16 @@ test("bind with a non-github remote skips the webhook leg", async () => {
   const result = await bindRepo("git@gitlab.com:acme/api.git", deps());
   expect(result.webhook).toBe("skipped");
   expect(lines.some((l) => l.includes("not a github.com remote"))).toBe(true);
-  expect(fetchMock).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("unsupported bindings fail before modifying files or registering webhooks", async () => {
   const text = `const bindings = {}; export default { service: { dashboardPort: 9090 }, webhooks: { url: "https://example.com", github: { enabled: true } }, bindings };`;
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
-  const fetch = vi.fn();
-  vi.stubGlobal("fetch", fetch);
+  github = fakeGithub();
   await expect(bindRepo(API, deps())).rejects.toThrow("Cannot edit bindings in jigs.config.ts");
   expect(jigsConfig()).toBe(text);
-  expect(fetch).not.toHaveBeenCalled();
+  expect(github.calls).toHaveLength(0);
 });
 
 test("bind refuses an uncovered account before editing config or provisioning furniture", async () => {

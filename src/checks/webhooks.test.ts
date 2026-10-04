@@ -1,25 +1,25 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { configureGithub } from "../providers/github-http.ts";
+import { type FakeGithub, fakeGithub } from "../providers/github-test-support.ts";
 import { WEBHOOK_EVENTS } from "../providers/github-webhook.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { webhookChecks } from "./webhooks.ts";
 
-const fetchMock = vi.fn();
+let github: FakeGithub;
 let tmp: string;
 let factory: string;
 
 beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
-  vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("GITHUB_API_URL", "http://mock.test/github");
   vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
-  fetchMock.mockReset();
+  github = fakeGithub();
 });
 
 afterEach(() => {
-  vi.unstubAllGlobals();
+  configureGithub();
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
@@ -55,18 +55,16 @@ const delivery = (status_code: number, delivered_at: string) => ({
   delivered_at,
 });
 const respond = (hooks: unknown[], deliveries: unknown[] = []) =>
-  fetchMock
-    .mockResolvedValueOnce(new Response(JSON.stringify(hooks)))
-    .mockResolvedValueOnce(new Response(JSON.stringify(deliveries)));
+  github.reply(new Response(JSON.stringify(hooks))).reply(new Response(JSON.stringify(deliveries)));
 
 test("an active exact-url hook with current events and no deliveries passes", async () => {
   configure();
   respond([hook()]);
   expect(checks().map((check) => check.label)).toEqual(["GitHub webhook secret", "webhook api"]);
   expect(await check().run()).toEqual({ ok: true });
-  const [deliveriesUrl] = fetchMock.mock.calls[1] as [string];
+  const deliveriesUrl = github.calls[1]?.url.href;
   expect(deliveriesUrl).toBe(
-    "http://mock.test/github/repos/acme/api/hooks/9/deliveries?per_page=10",
+    "https://api.github.com/repos/acme/api/hooks/9/deliveries?per_page=10",
   );
 });
 
@@ -136,13 +134,13 @@ test("a valid exact-url hook passes after a stale duplicate", async () => {
   configure();
   respond([hook({ id: 8, active: false }), hook({ id: 9, active: true })]);
   expect(await check().run()).toEqual({ ok: true });
-  const [deliveriesUrl] = fetchMock.mock.calls[1] as [string];
+  const deliveriesUrl = github.calls[1]?.url.href;
   expect(deliveriesUrl).toContain("/hooks/9/deliveries");
 });
 
 test("a missing hook fails with the exact bind repair", async () => {
   configure();
-  fetchMock.mockResolvedValueOnce(new Response("[]"));
+  github.reply(new Response("[]"));
   expect(await check().run()).toEqual({
     ok: false,
     reason: "the repo has no active webhook at this factory's webhooks.url with the current events",
@@ -155,13 +153,13 @@ test.each([
   ["wrong events", { events: ["pull_request"] }],
 ])("a hook with %s fails", async (_label, overrides) => {
   configure();
-  fetchMock.mockResolvedValueOnce(new Response(JSON.stringify([hook(overrides)])));
+  github.reply(new Response(JSON.stringify([hook(overrides)])));
   expect(await check().run()).toMatchObject({ ok: false });
 });
 
 test("a refused hooks API names the required token scope", async () => {
   configure();
-  fetchMock.mockResolvedValueOnce(new Response("Forbidden", { status: 403 }));
+  github.reply(new Response("Forbidden", { status: 403 }));
   const result = await check().run();
   expect(result).toMatchObject({ ok: false });
   expect(result.ok === false && result.repair).toContain("admin:repo_hook");
@@ -169,7 +167,7 @@ test("a refused hooks API names the required token scope", async () => {
 
 test("an App that cannot read a repo's hooks names installation access", async () => {
   configure();
-  fetchMock.mockResolvedValueOnce(new Response("Not Found", { status: 404 }));
+  github.reply(new Response("Not Found", { status: 404 }));
   const [, appCheck] = webhookChecks({
     factoryRoot: () => factory,
     identity: () => ({
@@ -188,7 +186,7 @@ test("an App that cannot read a repo's hooks names installation access", async (
 
 test("an installed App missing hook permission gets the permission repair", async () => {
   configure();
-  fetchMock.mockResolvedValueOnce(new Response("Forbidden", { status: 403 }));
+  github.reply(new Response("Forbidden", { status: 403 }));
   const [, appCheck] = webhookChecks({
     factoryRoot: () => factory,
     identity: () => ({
