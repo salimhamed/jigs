@@ -7,6 +7,8 @@ export default [
   route("new-organization", "routes/new-organization.tsx"),
   layout("routes/organization.tsx", [
     index("routes/home.tsx"),
+    route("factories", "routes/factories.tsx"),
+    route("factories/:id", "routes/factory.tsx"),
     route("members", "routes/members.tsx"),
     route("invites", "routes/invites.tsx"),
     route("settings", "routes/settings.tsx"),

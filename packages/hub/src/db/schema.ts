@@ -3,7 +3,19 @@
 
 // Better Auth's tables, with the organization plugin's: what `npx auth generate`
 // writes for the options in ../auth.ts.
-import { boolean, index, pgTable, text, timestamp } from "drizzle-orm/pg-core";
+import type { MessageKind, Provider } from "@jigs-ai/hub-protocol";
+import { sql } from "drizzle-orm";
+import {
+  bigint,
+  boolean,
+  index,
+  jsonb,
+  pgTable,
+  text,
+  timestamp,
+  unique,
+  uuid,
+} from "drizzle-orm/pg-core";
 
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
@@ -125,5 +137,55 @@ export const invitation = pgTable(
   (table) => [
     index("invitation_organizationId_idx").on(table.organizationId),
     index("invitation_email_idx").on(table.email),
+  ],
+);
+
+/** A factory of an Organization, which reads its messages with its token. */
+export const factories = pgTable(
+  "factories",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    tokenHash: text("token_hash").notNull().unique(),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    lastSeenVersion: text("last_seen_version"),
+    /** The position of the last message the factory confirmed. */
+    cursor: bigint("cursor", { mode: "bigint" }).default(sql`0`).notNull(),
+  },
+  (table) => [unique("factories_organization_name").on(table.organizationId, table.name)],
+);
+
+/** One provider event as received, stored once however many factories get it. */
+export const providerEvents = pgTable("provider_events", {
+  id: uuid("id").primaryKey().defaultRandom(),
+  organizationId: text("organization_id")
+    .notNull()
+    .references(() => organization.id, { onDelete: "cascade" }),
+  provider: text("provider").$type<Provider>().notNull(),
+  name: text("name").notNull(),
+  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+  payload: jsonb("payload").notNull(),
+});
+
+/** Every factory's messages, ordered by one sequence across all factories. */
+export const factoryMessages = pgTable(
+  "factory_messages",
+  {
+    position: bigint("position", { mode: "bigint" }).primaryKey().generatedAlwaysAsIdentity(),
+    factoryId: uuid("factory_id")
+      .notNull()
+      .references(() => factories.id, { onDelete: "cascade" }),
+    kind: text("kind").$type<MessageKind>().notNull(),
+    providerEventId: uuid("provider_event_id").references(() => providerEvents.id),
+    createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+  },
+  (table) => [
+    index("factory_messages_factory_position_idx").on(table.factoryId, table.position),
+    index("factory_messages_provider_event_idx").on(table.providerEventId),
+    index("factory_messages_created_at_idx").on(table.createdAt),
   ],
 );

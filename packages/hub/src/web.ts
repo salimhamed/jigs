@@ -5,6 +5,7 @@ import type { ServerBuild } from "react-router";
 import type { HubAuth } from "./auth.ts";
 import type { HubConfig } from "./config.ts";
 import type { HubDatabase } from "./db/database.ts";
+import type { MessageWaiters } from "./messages.ts";
 import { packageRoot as root } from "./package-root.ts";
 
 declare module "react-router" {
@@ -12,6 +13,7 @@ declare module "react-router" {
     config: HubConfig;
     db: HubDatabase;
     auth: HubAuth;
+    waiters: MessageWaiters;
   }
 }
 
@@ -23,7 +25,7 @@ export interface WebApp {
 
 /** The built app from `build/`, or with `dev` the app served from source through Vite. */
 export async function createWebApp(
-  context: { config: HubConfig; db: HubDatabase; auth: HubAuth },
+  context: { config: HubConfig; db: HubDatabase; auth: HubAuth; waiters: MessageWaiters },
   dev: boolean,
 ): Promise<WebApp> {
   const getLoadContext = () => context;

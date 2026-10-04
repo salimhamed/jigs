@@ -40,6 +40,7 @@
     "db:generate": "drizzle-kit generate"
   },
   "devDependencies": {
+    "@jigs-ai/hub-protocol": "workspace:*",
     "@react-router/dev": "^7.18.4",
     "@tailwindcss/vite": "^4.3.3",
     "@types/express": "^5.0.6",

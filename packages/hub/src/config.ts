@@ -12,6 +12,8 @@ export interface HubConfig {
   githubClientSecret: string;
   /** Whoever signs in with this GitHub email first creates the Organization. */
   adminEmail: string;
+  /** How many days the hub keeps a factory's messages, confirmed or not. */
+  retentionDays: number;
 }
 
 /** Read the hub's config, throwing one error that names every bad value. */
@@ -47,6 +49,13 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
   const githubClientSecret = required("HUB_GITHUB_CLIENT_SECRET");
   const adminEmail = required("HUB_ADMIN_EMAIL");
 
+  const retentionDays = Number(env.HUB_RETENTION_DAYS ?? 7);
+  if (!Number.isInteger(retentionDays) || retentionDays < 1) {
+    problems.push(
+      `HUB_RETENTION_DAYS must be a whole number of days, not ${env.HUB_RETENTION_DAYS}`,
+    );
+  }
+
   if (problems.length > 0) {
     throw new Error(`The hub cannot start:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
   }
@@ -59,5 +68,6 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
     githubClientId,
     githubClientSecret,
     adminEmail,
+    retentionDays,
   };
 }
