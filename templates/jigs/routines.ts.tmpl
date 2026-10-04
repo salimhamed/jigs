@@ -37,7 +37,6 @@ import {
   registerResource,
   replyToPullRequestReviewThread,
   resolveLinearIssue,
-  restoreWorktree,
 } from "./steps.ts";
 
 const agents = bindAgentSteps({ executeAgent, executeJev, executeModel });
@@ -201,7 +200,6 @@ export const postPullRequestNote = pullRequests.postPullRequestNote;
 const delivery = bindDeliverySteps({
   readBranchState,
   readWorktreeDiff,
-  restoreWorktree,
   pushApprovedChange,
   createPullRequest,
   registerResource,
@@ -212,16 +210,14 @@ const delivery = bindDeliverySteps({
 /**
  * Build and review a delivery's change until the reviewer raises no blocking finding.
  * Returns the approved commit, or `{ stopped }` when the rounds run out or there is nothing to review.
- * The worktree is reset to the reviewed commit after each review.
  *
  * @group Pull request delivery
  */
 export const buildAndReview = delivery.buildAndReview;
 
 /**
- * Have the writer, or the builder, write the pull request's title and body from the diff, then
- * reset the worktree to `commit`. An optional `check` returns problems; the writer is sent back
- * once with them.
+ * Have the writer, or the builder, write the pull request's title and body from the diff.
+ * An optional `check` returns problems; the writer is sent back once with them.
  *
  * @group Pull request delivery
  */

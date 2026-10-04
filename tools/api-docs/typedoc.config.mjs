@@ -30,7 +30,6 @@ export const sharedOptions = {
     "Workspaces and resources",
     "Inspect changes",
     "Publish changes",
-    "Restore changes",
     "Resolve and read",
     "Create and update",
     "Human interaction primitives",

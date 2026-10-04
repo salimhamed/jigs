@@ -312,16 +312,6 @@ export async function readWorktreeDiff(worktree: Worktree, baseSha?: string) {
 }
 
 /**
- * Reset the worktree to a commit and remove untracked files, keeping ignored ones.
- *
- * @group Git changes
- */
-export async function restoreWorktree(worktree: Worktree, sha: string) {
-  "use step";
-  return gitOperations.restoreWorktree(worktree, sha);
-}
-
-/**
  * Read committed file changes and subjects up to HEAD, defaulting to the worktree's base.
  *
  * @group Git changes

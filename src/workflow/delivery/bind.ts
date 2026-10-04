@@ -18,7 +18,7 @@ export function bindDeliverySteps(steps: DeliverySteps) {
   return {
     buildAndReview: <W>(delivery: BuildDelivery<W>, options: BuildAndReviewOptions) =>
       buildAndReview(delivery, options, steps),
-    describePullRequest: <W>(delivery: DescribeDelivery<W>, options: DescribeOptions) =>
+    describePullRequest: <W>(delivery: DescribeDelivery<W>, options: DescribeOptions = {}) =>
       describePullRequest(delivery, options, steps),
     publishPullRequest: (delivery: PublishDelivery, options: PublishOptions) =>
       publishPullRequest(delivery, options, steps),
