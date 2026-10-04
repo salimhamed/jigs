@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.92.0](https://github.com/salimhamed/jigs/compare/jigs-v0.91.2...jigs-v0.92.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* return an outcome object from every routine that can end short ([#533](https://github.com/salimhamed/jigs/issues/533))
+
+### Features
+
+* return an outcome object from every routine that can end short ([#533](https://github.com/salimhamed/jigs/issues/533)) ([6a4a5a0](https://github.com/salimhamed/jigs/commit/6a4a5a0395d6a054f7f94c2a358ac3151748723e))
+
 ## [0.91.2](https://github.com/salimhamed/jigs/compare/jigs-v0.91.1...jigs-v0.91.2) (2026-10-04)
 
 
