@@ -38,11 +38,11 @@ const agents = {
 };
 const agentName = z.enum(["builder", "reviewer"]);
 
-// Who merges a pull request once it is approved and CI is green:
-// "jigs" merges it, "human" leaves the merge to you. For a rule of your own,
-// such as merging only with a label, pass a check on the snapshot as
-// `mergeWhen` below.
-const mergedBy: "jigs" | "human" = "human";
+// Who merges a pull request once it is approved and CI is green: "jigs"
+// merges it, "human" leaves the merge to you. jigs never merges in a repository
+// with no CI. For a rule of your own, such as merging only with a label, pass a
+// check on the snapshot as `mergeWhen` below.
+const mergedBy: "jigs" | "human" = "jigs";
 
 // "any-commit" lets a person's approving review also cover later pushes.
 const approvalCovers: ApprovalCoverage = "latest-commit";
@@ -106,7 +106,19 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     return stop(stoppedNote(key, worktree, built, pushed));
   }
 
-  const described = await describePullRequest(delivery);
+  // A title the writer gets wrong twice stops the run before anything is pushed.
+  const rejected: string[] = [];
+  const described = await describePullRequest(delivery, {
+    check: ({ title }) => {
+      const problems = titleProblems(title);
+      if (problems.length > 0) rejected.push(title);
+      return problems;
+    },
+  }).catch((error: unknown) =>
+    rejected.length === 2
+      ? stop(unconventionalNote(key, worktree, rejected))
+      : Promise.reject(error),
+  );
   const pr = await publishPullRequest(delivery, {
     commit: built.reviewedCommit,
     title: described.title,
@@ -156,6 +168,19 @@ const withReviewerNotes = (description: string, notes: string[]) =>
     ? description
     : `${description}\n\n## Reviewer notes\n\n${notes.map((note) => `- ${note}`).join("\n")}`;
 
+// Pull request titles are conventional commit subjects, because release tooling
+// and title lint read the squashed title. To allow any title, delete the
+// `check` passed to `describePullRequest` and the title rule in `prompts.ts`.
+const CONVENTIONAL_SUBJECT =
+  /^(feat|fix|chore|docs|style|refactor|perf|test|build|ci|revert)(\([^)]+\))?!?: .+/;
+
+const titleProblems = (title: string) =>
+  CONVENTIONAL_SUBJECT.test(title)
+    ? []
+    : [
+        `The title "${title}" is not a conventional commit subject: write \`<type>: <subject>\` or \`<type>(<scope>): <subject>\`, with type one of feat, fix, chore, docs, style, refactor, perf, test, build, ci or revert.`,
+      ];
+
 // Notes name the branch, never the local worktree path: they are posted where
 // anyone on the ticket can read them, and `jigs status` shows the path.
 const workLocation = (worktree: Worktree) =>
@@ -190,6 +215,13 @@ function stoppedNote(
       "Nothing is waiting on a reply here. Another run starts over on a new branch; to keep this work, take the branch over by hand.",
   };
 }
+
+const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): TicketNote => ({
+  headline: `jigs stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
+  notes: [`Proposed titles: ${titles.join(", then ")}`, workLocation(worktree)],
+  closing:
+    "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
+});
 
 // Nothing is pushed on the way out: unpublished local work stays for the person taking over.
 const closedNote = (key: string, worktree: Worktree, url: string): TicketNote => ({

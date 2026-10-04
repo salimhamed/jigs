@@ -87,8 +87,10 @@ const maintain = join([
   "Ask for a person if `gh` or pushing to GitHub does not work; do not claim completion.",
 ]);
 
-const describe =
-  "Write a concise pull request title and body explaining the change and its validation. Include the task link when available. Follow the repository's pull request conventions. Do not modify files.";
+const describe = join([
+  "Write a concise pull request title and body explaining the change and its validation. Include the task link when available. Follow the repository's pull request conventions. Do not modify files.",
+  "The title must be a conventional commit subject, because it becomes the squashed commit that release tooling reads: `<type>: <subject>` or `<type>(<scope>): <subject>`, with type one of feat, fix, chore, docs, style, refactor, perf, test, build, ci or revert, and `!` after the type or scope for a breaking change. Pick the type from what the change does: a new capability is `feat`, a repaired defect is `fix`. The subject is lowercase and imperative, with no trailing period.",
+]);
 
 export const prompts: DeliveryPrompts<Ticket> = {
   build: {
