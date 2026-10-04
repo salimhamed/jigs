@@ -77,10 +77,10 @@ export interface GithubSend {
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
   /**
-   * A rate-limit wait ends when the calling run is cancelled; `null` keeps it going, for work shared
-   * between runs such as a token mint.
+   * Keeps a rate-limit wait going when the calling run is cancelled, for work shared between runs
+   * such as a token mint.
    */
-  signal?: null;
+  outlivesRun?: true;
 }
 
 export interface GithubClientDeps {
@@ -95,7 +95,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
     apiPath,
     json,
     refuse,
-    signal,
+    outlivesRun,
   }: GithubSend): Promise<T> {
     let reauthorized = false;
     let waits = 0;
@@ -116,7 +116,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         reauthorized = true;
         continue;
       }
-      const watch = signal === null ? null : runSignal;
+      const watch = outlivesRun ? null : runSignal;
       if (
         isRateLimited(res) &&
         (await rateLimitWait("github", rateLimitSeconds(res), waits++, watch, deps.sleep))

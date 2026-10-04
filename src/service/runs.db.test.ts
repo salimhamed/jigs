@@ -15,6 +15,7 @@ import {
   dropDatabaseOnceIdle,
   postgresAdminUrl,
 } from "../db-test-fixtures.ts";
+import { inTestFactory } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { prepareRun } from "./launch.ts";
 import {
@@ -69,6 +70,7 @@ afterAll(async () => {
   await dropDatabaseOnceIdle(admin, database);
   await admin.end();
 });
+inTestFactory();
 
 const workflowName = "workflow//./workflows/respond//respond";
 const factory = {

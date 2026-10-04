@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { expect, onTestFinished, test } from "vitest";
+import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { type FactoryContext, resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
@@ -15,8 +15,13 @@ function factoryWithEnv(dotEnv: string): FactoryContext {
   return resolveFactoryContext(root);
 }
 
-async function outcomes(requires: WorkflowRequires, env: Record<string, string>, dotEnv = "") {
-  const report = await runChecks(secretChecks(requires, { context: factoryWithEnv(dotEnv), env }));
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
+
+async function outcomes(requires: WorkflowRequires, shell: Record<string, string>, dotEnv = "") {
+  for (const [name, value] of Object.entries(shell)) vi.stubEnv(name, value);
+  const report = await runChecks(secretChecks(requires, { context: factoryWithEnv(dotEnv) }));
   return report.checks;
 }
 
@@ -117,7 +122,7 @@ test("doctor checks each name once and names every workflow that needs it", asyn
         sync: { requires: { secrets: ["SNOWFLAKE_TOKEN"] } },
         report: { requires: { secrets: ["SNOWFLAKE_TOKEN", "bad name"] } },
       },
-      { context: factoryWithEnv(""), env: {} },
+      { context: factoryWithEnv("") },
     ),
   );
   expect(report.checks).toEqual([
@@ -135,13 +140,11 @@ test("doctor checks each name once and names every workflow that needs it", asyn
 });
 
 test("without a factory .env a set secret still passes", async () => {
+  vi.stubEnv("SNOWFLAKE_TOKEN", "x");
   const [check] = await runChecks(
     secretChecks(
       { secrets: ["SNOWFLAKE_TOKEN"] },
-      {
-        context: resolveFactoryContext(path.join(makeTmpDir(), "no-factory")),
-        env: { SNOWFLAKE_TOKEN: "x" },
-      },
+      { context: resolveFactoryContext(path.join(makeTmpDir(), "no-factory")) },
     ),
   ).then((report) => report.checks);
   expect(check).toMatchObject({ ok: true });
@@ -160,7 +163,7 @@ test("doctor leaves MCP credentials to the MCP server checks", () => {
   });
   const checks = doctorSecretChecks(
     { analysis: { requires: { agents: { analyst } } } },
-    { context: factoryWithEnv(""), env: {} },
+    { context: factoryWithEnv("") },
   );
   expect(checks).toEqual([]);
 });

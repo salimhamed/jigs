@@ -463,8 +463,8 @@ export async function startWorld() {
   // and ends the pool, and the process leaves once that is done. Tell the
   // Postgres World not to install Graphile's competing signal handlers before
   // the SDK resolves and caches it. Other World implementations ignore this.
-  const env = (await import("../config/factory-context.ts")).processEnv();
-  env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
+  // biome-ignore lint/style/noProcessEnv: sets the SDK's own switch, not a factory setting
+  process.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN ??= "1";
   setBootPhase("world");
   const started = await gateOnWorldStart({
     getWorld: async () => {
@@ -474,7 +474,9 @@ export async function startWorld() {
     own: (world) => onShutdown(() => world.close?.()),
   });
   if (!started) return;
-  console.log(`[service] world started: ${env.WORKFLOW_TARGET_WORLD ?? "local (default)"}`);
+  // biome-ignore lint/style/noProcessEnv: the SDK's own World choice, not a factory setting
+  const world = process.env.WORKFLOW_TARGET_WORLD ?? "local (default)";
+  console.log(`[service] world started: ${world}`);
 
   setBootPhase(READY_PHASE);
 

@@ -24,8 +24,7 @@ import {
   type RunState,
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { parseHookToken } from "../workflow/hook-tokens.ts";
-import { ticketToken } from "../workflow/linear/ticket-token.ts";
+import { parseHookToken, wakeToken } from "../workflow/hook-tokens.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
 import { occurrencesByAttribute } from "./event-triggers/store.ts";
@@ -201,12 +200,7 @@ export async function enrichSuspensions(
   return await Promise.all(
     suspensions.map(async (bare) => {
       const parsed = parseHookToken(bare.token);
-      // A halt is woken through its ticket claim, never through the marker.
-      const woken =
-        parsed?.kind === "needs-human" && parsed.halt !== null
-          ? ticketToken(parsed.halt.issueId)
-          : bare.token;
-      const wake = lastWake(woken, runId);
+      const wake = lastWake(wakeToken(bare.token), runId);
       const suspension = wake === undefined ? bare : { ...bare, lastWake: wake };
       if (parsed?.kind === "pull-request" && parsed.pr !== null) {
         return await withPrState(suspension, parsed.pr);

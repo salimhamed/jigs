@@ -51,7 +51,7 @@ test("a shared mint's wait is not tied to the calling run", async () => {
   const github = createGithubClient({ fetch: rateLimited, sleep });
   world.status = "cancelled";
   await expect(
-    github.send({ auth: { bearer: async () => "t" }, apiPath: "/app", signal: null }),
+    github.send({ auth: { bearer: async () => "t" }, apiPath: "/app", outlivesRun: true }),
   ).rejects.toThrow("GitHub API 429");
   expect(sleep).toHaveBeenCalledTimes(3);
   expect(world.reads).toBe(0);

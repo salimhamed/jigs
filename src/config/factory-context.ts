@@ -1,8 +1,6 @@
-// Which factory a process answers for, and what it is configured with. Each
-// entry point resolves one and hands it down: the service at boot, a CLI verb
-// for the factory it was typed in, and step code through
-// `currentFactoryContext()`. This is the one module that reads the process
-// environment.
+// Which factory a process answers for, and what it is configured with. There
+// is one ambient lookup, `currentFactoryContext()`, called wherever it is
+// needed. This is the one module that reads the process environment.
 
 import { homedir } from "node:os";
 import path from "node:path";
@@ -64,8 +62,8 @@ export function currentFactoryContext(): FactoryContext {
 }
 
 /**
- * This process's own environment: what a child process inherits, and the variables the operating
- * system defines. A factory setting is read through {@link FactoryContext.env} instead.
+ * This process's own environment, only for what a child process inherits and the variables the
+ * operating system defines. A factory setting is read through {@link FactoryContext.env}.
  */
 export function processEnv(): NodeJS.ProcessEnv {
   return process.env;

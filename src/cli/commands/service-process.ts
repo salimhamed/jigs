@@ -314,7 +314,7 @@ async function healthProbe(url: string): Promise<ServiceHealth | null> {
     };
     return {
       ready: body.ready === true,
-      phase: String(body.phase),
+      phase: typeof body.phase === "string" ? body.phase : "unknown",
       pid: typeof body.pid === "number" ? body.pid : undefined,
     };
   } catch {

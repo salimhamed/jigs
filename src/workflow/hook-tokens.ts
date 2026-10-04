@@ -98,6 +98,14 @@ export function parseHookToken(token: string): HookToken | null {
   return null;
 }
 
+/** The token whose wake ends a wait on `token`: a halt is woken through its ticket claim, never its marker. */
+export function wakeToken(token: string): string {
+  const parsed = parseHookToken(token);
+  return parsed?.kind === "needs-human" && parsed.halt !== null
+    ? `${TICKET_TOKEN_PREFIX}${parsed.halt.issueId}`
+    : token;
+}
+
 /**
  * What a hook token names and what a run holding it waits for. `ticket` is the
  * identifier the run was launched with, so a claim or a halt names the ticket
