@@ -74,3 +74,44 @@ export const cursorPath = "/api/factory/cursor";
 export interface CursorRequest {
   position: string;
 }
+
+/**
+ * `GET` returns {@link FactoryStatus}: who the factory is on the hub and the
+ * apps assigned to it.
+ */
+export const factoryStatusPath = "/api/factory/status";
+
+/** The body of a {@link factoryStatusPath} response. Lists only the apps assigned to the factory. */
+export interface FactoryStatus {
+  factory: { name: string };
+  organization: { name: string };
+  apps: {
+    provider: Provider;
+    name: string;
+    /** The accounts or workspaces the app is installed on. */
+    installations: { account: string }[];
+  }[];
+}
+
+/**
+ * `POST` a {@link GitHubTokenRequest} for a {@link GitHubTokenResponse}: an
+ * installation token of the GitHub App assigned to the factory that is
+ * installed on the owner. The hub answers 404 when no assigned App is
+ * installed there, and 409 when more than one is.
+ */
+export const githubTokenPath = "/api/factory/tokens/github";
+
+/** The body of a {@link githubTokenPath} request. */
+export interface GitHubTokenRequest {
+  /** The login of the repository owner, a user or an organization. */
+  owner: string;
+}
+
+/** The body of a {@link githubTokenPath} response. */
+export interface GitHubTokenResponse {
+  token: string;
+  /** When the token stops working, as an ISO 8601 timestamp. */
+  expiresAt: string;
+  /** The App the token acts as; it commits as `<slug>[bot]` with the bot's user id. */
+  app: { slug: string; botUserId: number };
+}

@@ -3,7 +3,7 @@ import { createAuth } from "./auth.ts";
 import { readConfig } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { createGitHubRoutes } from "./github.ts";
+import { createGitHubRoutes, GitHubTokens } from "./github.ts";
 import { MessageWaiters } from "./messages.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
@@ -29,7 +29,11 @@ const web = await createWebApp(
 );
 
 const routers = [
-  createFactoryApi(db, waiters),
+  createFactoryApi({
+    db,
+    waiters,
+    githubTokens: new GitHubTokens({ db, encryptionKey: config.encryptionKey }),
+  }),
   createGitHubRoutes({ db, waiters, encryptionKey: config.encryptionKey }),
 ];
 const server = createHubApp(auth, routers, web).listen(config.port, config.host, () => {

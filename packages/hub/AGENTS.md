@@ -53,7 +53,8 @@ not here, so jigs can share them.
 
 ## Factory messages
 
-`src/factory-api.ts` serves the factory's long poll and cursor. Every message
+`src/factory-api.ts` serves the factory's long poll and cursor, its status
+(the apps assigned to it) and its provider tokens. Every message
 for every factory takes its position from one sequence, so any transaction
 that appends messages calls `lockAppends` first (see `src/messages.ts`).
 `fanOutProviderEvent` stores a provider event and wakes the factories it was
@@ -68,4 +69,7 @@ an admin enters an App made by hand; each App's setup URL confirms an
 installation with the App's JWT before recording it; `/webhooks/github` finds
 the app by `X-GitHub-Hook-Installation-Target-ID`, checks its signature, and
 re-lists the App's installations from GitHub before dropping an event from one
-it does not know. Tests pass `apiUrl` to stand in for GitHub's API.
+it does not know. `GitHubTokens` mints installation tokens for factories with
+the App's JWT and keeps them in memory only, never in the database; the bot
+user's id is looked up once and kept in the app's settings. Tests pass
+`apiUrl` to stand in for GitHub's API.
