@@ -12,7 +12,13 @@ import {
   runHeading,
   tone,
 } from "../output.ts";
-import { age, type RunListRun, type RunListSuspension, suspensionLine } from "./run-list.ts";
+import {
+  age,
+  type RunListRun,
+  type RunListSuspension,
+  sourceLine,
+  suspensionLine,
+} from "./run-list.ts";
 import { runNotFound, type ServiceDeps, serviceFetch } from "./service-client.ts";
 
 // jigs contributes the two things the dashboard cannot — resolving a ticket id
@@ -76,6 +82,7 @@ export async function showRunStatus(
   const now = options.now ?? new Date();
   const facts: string[][] = [
     ["trigger", result.trigger],
+    ...(result.source === null ? [] : [["source", sourceLine(result.source)]]),
     ...(result.ticket === null ? [] : [["ticket", result.ticket]]),
     ["last activity", `${age(result.lastActivityAt, now)} ago ${detail(result.lastActivityAt)}`],
     ...(result.error === undefined ? [] : [["error", singleLine(result.error)]]),

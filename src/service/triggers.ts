@@ -17,6 +17,7 @@ import {
   eventTriggerId,
   findRunsByAttribute,
   liveRunsByAttribute,
+  OCCURRENCE_ATTRIBUTE,
   runStatuses,
 } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
@@ -85,10 +86,6 @@ interface Armed {
   marker?: TriggerMarker;
 }
 
-// A plaintext run attribute, because a World that encrypts inputs hides the
-// triggerId inside them. Hashed with the factory slug: fixed length whatever
-// the occurrence key, and never equal to another factory's.
-const OCCURRENCE_ATTRIBUTE = "jigs.occurrence";
 // The SDK mints the run ID from this process's clock just after the attempt
 // is recorded; the margin covers the clock stepping back in between.
 const LOOKUP_MARGIN_MS = 60_000;

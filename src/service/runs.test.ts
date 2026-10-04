@@ -26,7 +26,9 @@ import {
   type StepView,
   scheduleTriggerId,
   type WorldRun,
+  worldRunFacts,
 } from "./runs.ts";
+import * as triggerStore from "./trigger-store.ts";
 import { clearWakes, recordWake } from "./wake-note.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -405,6 +407,46 @@ test("an event trigger's run names its trigger, without the occurrence", async (
   world({ runs: [worldRun({ input: storedArgs(triggerId) })] });
   const rows = await listRuns(factory);
   expect(rows[0]?.trigger).toBe("trigger:pages");
+});
+
+// The row the trigger engine recorded for an occurrence, with the reference its source handed the run.
+const occurrenceRow = (attribute: string, inputs: Record<string, unknown>) =>
+  ({ trigger: "pages", occurrence: attribute, inputs, attribute }) as triggerStore.Occurrence;
+
+test("a trigger's run names the message or incident it was started for before it waits", async () => {
+  const lookup = vi
+    .spyOn(triggerStore, "occurrencesByAttribute")
+    .mockResolvedValue([
+      occurrenceRow("attr-msg", { channel: "C0123ABCD", ts: "1790723244.335019" }),
+      occurrenceRow("attr-inc", { incident: "Q1ABCDEF" }),
+    ]);
+  world({
+    runs: [
+      worldRun({ attributes: { "jigs.occurrence": "attr-msg" } }),
+      worldRun({ runId: RUN_B, attributes: { "jigs.occurrence": "attr-inc" } }),
+    ],
+  });
+  const rows = await listRuns(factory);
+  expect(lookup).toHaveBeenCalledWith(expect.anything(), "factory-test", ["attr-msg", "attr-inc"]);
+  expect(Object.fromEntries(rows.map((row) => [row.runId, row.source]))).toEqual({
+    [RUN_A]: { kind: "slack", channel: "C0123ABCD", ts: "1790723244.335019" },
+    [RUN_B]: { kind: "pagerduty", incident: "Q1ABCDEF" },
+  });
+  expect((await worldRunFacts(RUN_A, true)).source).toEqual({
+    kind: "slack",
+    channel: "C0123ABCD",
+    ts: "1790723244.335019",
+  });
+  // Automatic release reads a run without its detail, and never pays for the lookup.
+  lookup.mockClear();
+  expect((await worldRunFacts(RUN_A)).source).toBeUndefined();
+  expect(lookup).not.toHaveBeenCalled();
+});
+
+test("a run started by hand has no source", async () => {
+  world({ runs: [worldRun({ input: storedArgs("manual") })] });
+  expect((await listRuns(factory))[0]?.source).toBeNull();
+  expect((await worldRunFacts(RUN_A, true)).source).toBeUndefined();
 });
 
 test("run statuses are read by ID, and a run the World lacks is absent", async () => {

@@ -1,5 +1,6 @@
 import { JigsError } from "../../errors.ts";
 import type { RunSuspension } from "../../run-suspension.ts";
+import type { RunSource } from "../../steps/runtime/run-state.ts";
 import { type ResourceRecord, unreleased } from "../../workflow/runtime/resources.ts";
 import { displayPath, formatTable, hintLines, indent, tone } from "../output.ts";
 import { type ServiceDeps, serviceFetch } from "./service-client.ts";
@@ -11,6 +12,8 @@ export interface RunListRun {
   workflow: string;
   status: string;
   trigger: string;
+  /** What an event trigger started the run for, or null for any other run. */
+  source: RunSource | null;
   ticket: string | null;
   createdAt: string;
   lastActivityAt: string;
@@ -83,13 +86,14 @@ export async function showRuns(
     deps.out("no runs");
   } else {
     for (const line of formatTable(
-      ["RUN", "WORKFLOW", "TICKET", "STATUS", "TRIGGER", "AGE", "ACTIVITY", "WAITING"],
+      ["RUN", "WORKFLOW", "TICKET", "STATUS", "TRIGGER", "SOURCE", "AGE", "ACTIVITY", "WAITING"],
       result.runs.map((run) => [
         run.runId,
         run.workflow,
         run.ticket ?? "-",
         tone(run.status),
         run.trigger,
+        run.source === null ? "-" : sourceLine(run.source),
         age(run.createdAt, now),
         age(run.lastActivityAt, now),
         waitingCell(run),
@@ -171,6 +175,9 @@ function triggerFailureLines(triggers: readonly RunListTrigger[]): string[] {
 export function waitingCell(run: RunListRun): string {
   return run.suspensions.map(suspensionLine).join("; ") || "-";
 }
+
+export const sourceLine = (source: RunSource): string =>
+  source.kind === "slack" ? `slack ${source.channel} ${source.ts}` : `pagerduty ${source.incident}`;
 
 export const suspensionLine = (suspension: RunListSuspension): string =>
   suspension.url === undefined ? suspension.reason : `${suspension.reason} → ${suspension.url}`;

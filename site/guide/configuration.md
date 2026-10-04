@@ -210,7 +210,9 @@ export default defineFactory({
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`. `jigs doctor` checks that provider for every trigger
 that uses it. `jigs status` lists each trigger with its waiting, active and
-failed occurrences. Its runs show `trigger:<name>` as the trigger.
+failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
+the moment they start, the occurrence under SOURCE, such as
+`slack C0123ABCD 1790723244.335019` or `pagerduty Q1ABCDEF`.
 
 ## `release` {#release}
 
