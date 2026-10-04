@@ -234,7 +234,8 @@ export function installationFor(
   );
 }
 
-const factoryConfigSchema = z.looseObject({
+// Strict so a misspelled section fails instead of falling back to defaults.
+const factoryConfigSchema = z.strictObject({
   bindings: z.record(z.string(), bindingSchema).default({}),
   // Where provider webhooks reach this factory's service (the tunnel URL), and
   // which providers send them. Absent, the service only polls.
@@ -255,6 +256,11 @@ const factoryConfigSchema = z.looseObject({
   release: releaseSchema.optional(),
   // Service variables every agent harness receives beyond jigs' base set.
   agents: z.preprocess((section) => section ?? {}, agentsSchema),
+  // The service loads these from the module itself; they are listed only so
+  // the strict root accepts them.
+  workflows: z.unknown().optional(),
+  schedules: z.unknown().optional(),
+  triggers: z.unknown().optional(),
 });
 
 export type BindingEntry = z.output<typeof bindingSchema>;

@@ -67,6 +67,23 @@ test("defineFactory accepts a binding merge method", () => {
   expect(definition.bindings.api.mergeMethod).toBe("rebase");
 });
 
+test("an unknown top-level section is rejected by name", () => {
+  expect(() => withSettings({ lienar: { identity: { mode: "app" } } })).toThrow(
+    /\(root\): Unrecognized key: "lienar"/,
+  );
+});
+
+test("defineFactory rejects an unknown top-level section at compile time", () => {
+  expect(() =>
+    defineFactory({
+      service: { dashboardPort: 9090 },
+      workflows: {},
+      // @ts-expect-error lienar is not a factory section
+      lienar: {},
+    }),
+  ).not.toThrow();
+});
+
 test.each([
   [{ service: {} }, "dashboardPort"],
   [{ service: { dashboardPort: 0 } }, "dashboardPort"],
