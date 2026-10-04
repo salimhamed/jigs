@@ -506,7 +506,10 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
           }
         }
         // The cursor stays put, so the next poll reads the lost occurrence
-        // again; what this poll did record is deduplicated then.
+        // again; what this poll did record is deduplicated then. The whole
+        // trigger holds, not just the lost occurrence's channel: a failed
+        // write is the store failing, which every occurrence shares, and a
+        // held channel delays nothing it already recorded, only re-reads it.
         if (lost === 0) {
           await store().advance(name, polled.cursor);
           entry.marker = { ...marker, cursor: polled.cursor };

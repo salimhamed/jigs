@@ -2,6 +2,7 @@ import { type LanguageModel, wrapLanguageModel } from "ai";
 import { formatFailures, runChecks } from "../../checks/catalog.ts";
 import { JigsError } from "../../errors.ts";
 import { abortable } from "../../providers/http.ts";
+import { watchRunCancellation } from "../../run-cancellation.ts";
 import { JitCheckError } from "../../workflow/agents/agent.ts";
 import type { Harness } from "../../workflow/agents/harness-config.ts";
 import { type AgentSessionRef, extractAgentSession } from "../../workflow/agents/result.ts";
@@ -9,7 +10,6 @@ import type { RunMetadata } from "../runtime/run-context.ts";
 import type { Driver, HarnessTarget } from "./drivers/index.ts";
 import { agentStepEnv } from "./harnesses/env.ts";
 import { acquireFileLock, FileLockTimeoutError, lockPathFor } from "./lock.ts";
-import { watchRunCancellation } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";
 

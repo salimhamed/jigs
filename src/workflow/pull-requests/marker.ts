@@ -1,5 +1,5 @@
 /** The work recorded by a hidden marker in a pull request comment. */
-export type MarkerKind = "reply" | "completion" | "status";
+export type MarkerKind = "reply" | "status";
 
 /**
  * Label a status note as a merge refusal, CI failure or temporary merge refusal.
@@ -10,7 +10,7 @@ export type MarkerKind = "reply" | "completion" | "status";
  */
 export type StatusReason = "merge" | "ci" | "merge-retry";
 
-const KINDS = new Set<string>(["reply", "completion", "status"]);
+const KINDS = new Set<string>(["reply", "status"]);
 const REASONS = new Set<string>(["merge", "ci", "merge-retry"]);
 
 /**
@@ -27,8 +27,8 @@ export interface PullRequestMarker {
   /** The run that wrote it. Provenance for a reader; never matched on. */
   run: string;
   /**
-   * `reply` answers the thing named by `source`, `completion` records work
-   * finished for it, and `status` is a note about a commit, such as a stand-down
+   * `reply` answers the thing named by `source`, and `status` is a note about a
+   * commit, such as a stand-down
    * after a refused merge, a CI failure jigs could not repair, or a merge
    * refused for a state that will pass.
    */
@@ -144,26 +144,14 @@ export function parseMarkers(body: string): PullRequestMarker[] {
   return markers;
 }
 
-/**
- * Whether jigs wrote this comment, whatever scope wrote it. This is the whole
- * self guard: the author login cannot serve, because a factory running on its
- * operator's token posts as the operator.
- */
-export function carriesMarker(body: string): boolean {
-  return parseMarkers(body).length > 0;
-}
-
 /** What a scope has already done on this pull request, read off the comments. */
 export interface MarkerLedger {
-  /** Sources this scope answered or completed: a comment version, or a commit. */
-  answered: ReadonlySet<string>;
   /** Commits this scope wrote a status note about, kept apart by why. */
   settled: Readonly<Record<StatusReason, ReadonlySet<string>>>;
 }
 
-/** Read the completed work and settled commits recorded for one continuation scope. */
+/** Read the settled commits recorded for one continuation scope. */
 export function readLedger(bodies: Iterable<string>, scope: string): MarkerLedger {
-  const answered = new Set<string>();
   const settled = {
     merge: new Set<string>(),
     ci: new Set<string>(),
@@ -172,20 +160,11 @@ export function readLedger(bodies: Iterable<string>, scope: string): MarkerLedge
   for (const body of bodies) {
     for (const marker of parseMarkers(body)) {
       if (marker.scope !== scope || marker.source === undefined) continue;
-      if (marker.kind !== "status") answered.add(marker.source);
-      else if (marker.reason !== undefined) settled[marker.reason].add(marker.source);
+      if (marker.kind === "status" && marker.reason !== undefined)
+        settled[marker.reason].add(marker.source);
     }
   }
-  return { answered, settled };
-}
-
-/**
- * What a comment is, as a marker names it. The edit time is part of it: a
- * reviewer who edits a comment has said something new, and an answer to the
- * old text no longer answers it.
- */
-export function commentSource(comment: { id: number; updatedAt: string }): string {
-  return `${comment.id}@${comment.updatedAt}`;
+  return { settled };
 }
 
 /** The default continuation identity: the workflow, and what it is working on. */

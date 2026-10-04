@@ -4,7 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { type CodexAppServerProvider, createCodexAppServer } from "ai-sdk-provider-codex-cli";
 import semver from "semver";
-import type { RunStatusReader } from "../run-cancellation.ts";
+import type { RunStatusReader } from "../../../run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "../seams.ts";
 import { MIN_PI_VERSION, resolvePiExecutable } from "./executables.ts";
 

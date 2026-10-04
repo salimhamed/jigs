@@ -65,7 +65,7 @@ function fakeSource(now: () => Date = () => T0) {
       const page = (event as { page?: unknown }).page;
       return typeof page === "string" ? { inputs: { page }, at: minutes(1) } : null;
     },
-    describe: (inputs) => ({ kind: "github", label: `page ${String(inputs.page)}` }),
+    describe: (inputs) => `page ${String(inputs.page)}`,
   };
   return { source, queued, polls };
 }

@@ -75,6 +75,8 @@ export interface GithubSend {
   json?: unknown;
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
+  /** Ends a rate-limit wait early; `null` keeps it going even when the calling run is cancelled. */
+  signal?: AbortSignal | null;
 }
 
 export interface GithubClientDeps {
@@ -83,7 +85,14 @@ export interface GithubClientDeps {
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
-  function send<T>({ auth, method = "GET", apiPath, json, refuse }: GithubSend): Promise<T> {
+  function send<T>({
+    auth,
+    method = "GET",
+    apiPath,
+    json,
+    refuse,
+    signal,
+  }: GithubSend): Promise<T> {
     return providerRequest<T>({
       provider: "github",
       auth,
@@ -101,6 +110,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
       },
       fetch: deps.fetch,
       sleep: deps.sleep,
+      signal,
     });
   }
   return { send };

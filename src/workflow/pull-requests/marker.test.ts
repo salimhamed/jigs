@@ -1,8 +1,6 @@
 import { expect, test } from "vitest";
 import {
   assertUsableScope,
-  carriesMarker,
-  commentSource,
   markBody,
   type PullRequestMarker,
   parseMarkers,
@@ -10,6 +8,8 @@ import {
   readLedger,
   renderMarker,
 } from "./marker.ts";
+
+const marked = (body: string) => parseMarkers(body).length > 0;
 
 const marker: PullRequestMarker = {
   scope: "ship/AGE-123",
@@ -48,18 +48,18 @@ test("a quoted marker is a quotation, not jigs' own words", () => {
     "What about the caller?",
   ].join("\n");
   expect(parseMarkers(quoted)).toEqual([]);
-  expect(carriesMarker(quoted)).toBe(false);
+  expect(marked(quoted)).toBe(false);
   // Indented quoting, as GitHub emits inside a list, reads the same way.
-  expect(carriesMarker(`  > ${renderMarker(marker)}`)).toBe(false);
+  expect(marked(`  > ${renderMarker(marker)}`)).toBe(false);
   // And the marker still counts where it is not quoted.
-  expect(carriesMarker(`${quoted}\n\n${renderMarker(marker)}`)).toBe(true);
+  expect(marked(`${quoted}\n\n${renderMarker(marker)}`)).toBe(true);
 });
 
 test("round-trips a value carrying quotes, angle brackets and newlines", () => {
   const awkward: PullRequestMarker = {
     scope: 'review "outstanding" 100% <b>\nnow',
     run: "wrun_1",
-    kind: "completion",
+    kind: "reply",
     source: "a--b",
   };
   const rendered = renderMarker(awkward);
@@ -94,25 +94,24 @@ test("reads several markers out of one body and ignores the prose around them", 
 });
 
 test("a body with no marker, or a malformed one, is nobody's work", () => {
-  expect(carriesMarker("Please rename this")).toBe(false);
+  expect(marked("Please rename this")).toBe(false);
   // Not JSON at all, and JSON that is not an object.
-  expect(carriesMarker("<!-- jigs:v1 scope=s kind=reply -->")).toBe(false);
-  expect(carriesMarker('<!-- jigs:v1 "reply" -->')).toBe(false);
+  expect(marked("<!-- jigs:v1 scope=s kind=reply -->")).toBe(false);
+  expect(marked('<!-- jigs:v1 "reply" -->')).toBe(false);
   // Missing or unknown where it matters.
-  expect(carriesMarker('<!-- jigs:v1 {"kind":"reply"} -->')).toBe(false);
-  expect(carriesMarker('<!-- jigs:v1 {"scope":"s","kind":"shout"} -->')).toBe(false);
-  expect(carriesMarker('<!-- jigs:v1 {"scope":"s","kind":"status","source":"x"} -->')).toBe(false);
-  expect(carriesMarker('<!-- jigs:v1 {"scope":"s","kind":"reply"} -->')).toBe(true);
+  expect(marked('<!-- jigs:v1 {"kind":"reply"} -->')).toBe(false);
+  expect(marked('<!-- jigs:v1 {"scope":"s","kind":"shout"} -->')).toBe(false);
+  expect(marked('<!-- jigs:v1 {"scope":"s","kind":"status","source":"x"} -->')).toBe(false);
+  expect(marked('<!-- jigs:v1 {"scope":"s","kind":"reply"} -->')).toBe(true);
   // A field this version does not know is left alone rather than refused.
   expect(parseMarkers('<!-- jigs:v1 {"scope":"s","kind":"reply","future":1} -->')).toEqual([
     { scope: "s", run: "", kind: "reply" },
   ]);
 });
 
-test("the ledger holds only this scope's work, split by what the kind proves", () => {
+test("the ledger holds only this scope's status notes, split by why", () => {
   const bodies = [
     markBody("answered", [{ scope: "ship/A", run: "r", kind: "reply", source: "1@t" }]),
-    markBody("committed", [{ scope: "ship/A", run: "r", kind: "completion", source: "sha1" }]),
     markBody("no merge", [
       { scope: "ship/A", run: "r", kind: "status", reason: "merge", source: "sha2" },
     ]),
@@ -125,22 +124,12 @@ test("the ledger holds only this scope's work, split by what the kind proves", (
     markBody("another workflow", [{ scope: "review/A", run: "r", kind: "reply", source: "2@t" }]),
   ];
   const ledger = readLedger(bodies, "ship/A");
-  expect([...ledger.answered]).toEqual(["1@t", "sha1"]);
   // A merge jigs could not make says nothing about that commit's checks.
   expect([...ledger.settled.merge]).toEqual(["sha2"]);
   expect([...ledger.settled.ci]).toEqual(["sha3"]);
   // A merge jigs will try again is not a merge it stood down on.
   expect([...ledger.settled["merge-retry"]]).toEqual(["sha4"]);
-  expect(readLedger(bodies, "review/A").answered.has("1@t")).toBe(false);
-});
-
-test("a comment's source changes when it is edited", () => {
-  expect(commentSource({ id: 7, updatedAt: "2026-09-14T01:00:00Z" })).toBe(
-    "7@2026-09-14T01:00:00Z",
-  );
-  expect(commentSource({ id: 7, updatedAt: "2026-09-14T02:00:00Z" })).not.toBe(
-    commentSource({ id: 7, updatedAt: "2026-09-14T01:00:00Z" }),
-  );
+  expect(readLedger(bodies, "review/A").settled.merge.size).toBe(0);
 });
 
 test("the default scope names the workflow and its subject", () => {

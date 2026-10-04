@@ -113,6 +113,7 @@ export async function mintInstallationToken(
     auth: appJwtAuth(identity, privateKey, deps.now ?? Date.now),
     method: "POST",
     apiPath: `/app/installations/${identity.installationId}/access_tokens`,
+    signal: null,
     refuse: (res) =>
       new JigsError(
         `GitHub refused an installation token for App ${identity.appId} installation ${identity.installationId} (HTTP ${res.status})`,

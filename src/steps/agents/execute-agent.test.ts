@@ -7,6 +7,7 @@ import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-prov
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
 import { z } from "zod";
+import { RunCancelledError } from "../../run-cancellation.ts";
 import { unwrapAgentStep } from "../../workflow/agents/agent.ts";
 import { bindAgentSession, type RunAgentFn } from "../../workflow/agents/agent-session.ts";
 import { type CodexHarness, harnesses, models } from "../../workflow/agents/harness-config.ts";
@@ -30,7 +31,6 @@ import {
   removeTmpDir,
   runningRunStatus,
 } from "./harnesses/test-fixtures.ts";
-import { RunCancelledError } from "./run-cancellation.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import type { AgentStreamPart, StepStream } from "./step-stream.ts";
 

@@ -21,8 +21,8 @@ vi.mock("../env.ts", async (importOriginal) => ({
   factoryAgentEnv: () => [],
 }));
 // Outside a run there is no World status to watch; the run stays running.
-vi.mock("../../run-cancellation.ts", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("../../run-cancellation.ts")>()),
+vi.mock("../../../../run-cancellation.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../../../run-cancellation.ts")>()),
   worldRunStatus: {
     read: async () => "running",
     waitForTerminal: (_runId: string, timeoutMs: number) =>

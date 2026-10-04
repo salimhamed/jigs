@@ -1,6 +1,7 @@
 import { jsonSchema, Output, type OutputInterface } from "ai";
 import { formatFailures, runChecks } from "../../checks/index.ts";
 import { JigsError } from "../../errors.ts";
+import { withRunCancellation } from "../../run-cancellation.ts";
 import { type ExecuteAgentStep, JitCheckError } from "../../workflow/agents/agent.ts";
 import { type AgentRequest, assertAskableHarness } from "../../workflow/agents/plan.ts";
 import {
@@ -11,7 +12,6 @@ import {
 import type { RunMetadata } from "../runtime/run-context.ts";
 import type { ExecutorGeneration, RunRequest } from "./drivers/index.ts";
 import { agentStepEnv } from "./harnesses/env.ts";
-import { withRunCancellation } from "./run-cancellation.ts";
 import { openAgentRunner, prepareAgentRun } from "./runner.ts";
 import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import { AgentSessionError } from "./session-error.ts";

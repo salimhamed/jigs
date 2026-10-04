@@ -155,18 +155,12 @@ test("factory references expose caller signatures and concrete bound options", a
   for (const name of ["runAgent", "haltForHuman", "watchPullRequest", "committedWork"]) {
     expect(routines).toContain(`### ${name}()`);
   }
-  for (const field of ["scope", "since", "body", "threads", "answers"]) {
+  for (const field of ["scope", "since", "body"]) {
     expect(routines).toContain(`###### ${field}`);
   }
-  for (const internal of [
-    "HaltForHumanFn",
-    "BoundReviewTicketOptions",
-    "StepFields",
-    "ExecuteAgentStep",
-  ]) {
+  for (const internal of ["HaltForHumanFn", "StepFields", "ExecuteAgentStep"]) {
     expect(routines).not.toContain(internal);
   }
-  expect(routines).toContain("### postReviewAnswers()");
   expect(routines).toContain("### postPullRequestNote()");
   expect(routines).not.toContain("pullRequestGate");
   expect(steps).not.toContain("branchContains");

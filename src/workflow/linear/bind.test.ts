@@ -16,11 +16,9 @@ const unused = async (): Promise<never> => {
   throw new Error("unexpected step");
 };
 const defaults: LinearSteps = {
-  runAgent: unused,
   postTicketHumanInputRequest: unused,
   postTicketNote: unused,
   checkForTicketHumanReply: unused,
-  fetchTicketSnapshot: unused,
 };
 
 test("custom comment steps receive only serializable halt data and no step-object receiver", async () => {

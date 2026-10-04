@@ -174,10 +174,7 @@ test("a pushed incident.triggered is the same occurrence the poll finds", async 
 
   expect(pushed).toEqual({ inputs: { incident: "Q1" }, at: minutes(1) });
   expect((await source.poll({}, undefined, T0)).occurrences).toEqual([pushed]);
-  expect(source.describe(pushed?.inputs ?? {})).toEqual({
-    kind: "pagerduty",
-    label: "pagerduty Q1",
-  });
+  expect(source.describe(pushed?.inputs ?? {})).toBe("pagerduty Q1");
 });
 
 test("any other webhook event is not an occurrence", async () => {
