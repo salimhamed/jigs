@@ -208,6 +208,7 @@ test("a run's state is its records plus the hooks the World holds", async () => 
     status: "running",
     workflowName: "workflow//./workflows/ship//ship",
     trigger: "manual",
+    source: null,
     ticket: "AGE-12",
     createdAt: "2026-09-26T00:00:00.000Z",
     lastActivityAt: "2026-09-26T00:00:00.000Z",
