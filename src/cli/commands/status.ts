@@ -82,7 +82,7 @@ export async function showRunStatus(
   const now = options.now ?? new Date();
   const facts: string[][] = [
     ["trigger", result.trigger],
-    ...(result.source === null ? [] : [["source", sourceLine(result.source)]]),
+    ...(result.source ? [["source", sourceLine(result.source)]] : []),
     ...(result.ticket === null ? [] : [["ticket", result.ticket]]),
     ["last activity", `${age(result.lastActivityAt, now)} ago ${detail(result.lastActivityAt)}`],
     ...(result.error === undefined ? [] : [["error", singleLine(result.error)]]),
