@@ -1,5 +1,6 @@
 import { z } from "zod";
 import { JigsError } from "../errors.ts";
+import { AGENT_ACCESS_PROVIDERS } from "./agent-access.ts";
 import type { AskableHarness, AskableModelSource, Harness } from "./harness-config.ts";
 import { dropNullOptionals, type OutputJsonSchema, toOutputJsonSchema } from "./output-schema.ts";
 import type { AgentSessionRef } from "./result.ts";
@@ -92,7 +93,7 @@ export function assertAskableHarness(harness: Harness): asserts harness is Askab
     throw new JigsError(
       "askAgent() has no MCP universe — mcpServers on the harness descriptor is only honored by runAgent()",
     );
-  for (const access of ["github", "linear", "pagerduty"] as const)
+  for (const access of AGENT_ACCESS_PROVIDERS)
     if (harness[access] !== undefined)
       throw new JigsError(
         `askAgent() runs without tools — ${access} on the harness descriptor is only honored by runAgent()`,

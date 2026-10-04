@@ -35,11 +35,18 @@ function mcpServers(
   return Object.fromEntries(
     Object.entries(servers).map(([name, server]) => {
       const resolved = resolveMcpServer(server, env);
-      if ("command" in resolved) return [name, { transport: "stdio", ...resolved }];
+      const disabled =
+        server.disabledTools === undefined ? {} : { disabledTools: server.disabledTools };
+      if ("command" in resolved) return [name, { transport: "stdio", ...resolved, ...disabled }];
       const { headers, ...rest } = resolved;
       return [
         name,
-        { transport: "http", ...rest, ...(headers === undefined ? {} : { httpHeaders: headers }) },
+        {
+          transport: "http",
+          ...rest,
+          ...(headers === undefined ? {} : { httpHeaders: headers }),
+          ...disabled,
+        },
       ];
     }),
   );

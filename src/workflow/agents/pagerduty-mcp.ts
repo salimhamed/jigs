@@ -1,29 +1,19 @@
 import { AGENT_TOKEN_ENV } from "./agent-access.ts";
 import type { McpHttpServerConfig, PiMcpHttpServerConfig } from "./harness-config.ts";
 
-const URLS = {
-  us: "https://mcp.pagerduty.com/mcp",
-  eu: "https://mcp.eu.pagerduty.com/mcp",
-} as const;
+const SERVER_URL = "https://mcp.pagerduty.com/mcp";
 
 const PROBE = { tool: "list_incidents", arguments: { limit: 1 } };
 
-/**
- * Options for {@link pagerdutyMcp}.
- *
- * @group Harnesses and models
- */
-export type PagerdutyMcpOptions = {
-  /** The service region of the factory's PagerDuty account, as in its identity. Defaults to `us`. */
-  region?: "us" | "eu";
-};
+// It answers for the token's user, and the factory's token belongs to an app.
+const USER_TOOLS = ["get_user_data"];
 
 /**
  * Options for {@link pagerdutyMcp} on a Pi harness.
  *
  * @group Harnesses and models
  */
-export type PiPagerdutyMcpOptions = PagerdutyMcpOptions & {
+export type PagerdutyMcpOptions = {
   /** Raw MCP tool names the model may call. jigs adds the probe tool, `list_incidents`. */
   tools: string[];
 };
@@ -35,9 +25,10 @@ export type PiPagerdutyMcpOptions = PagerdutyMcpOptions & {
  * It reaches PagerDuty's hosted server with the token of an agent whose harness sets
  * `pagerduty`; a harness without `pagerduty` cannot use it. The token carries the scopes jigs
  * itself uses, so the agent can read and update incidents and read users; other tools fail for
- * lack of a scope. The token belongs to an app, not a user, so tools about the current user,
- * such as `get_user_data`, fail too: the hosted server cannot hide them. Pi needs the list of
- * tools the model may call.
+ * lack of a scope. The token belongs to an app, not a user, so `get_user_data` is disabled and
+ * `list_incidents` cannot filter by the `assigned` or `teams` request scope. Pi needs the list of
+ * tools the model may call; leave `get_user_data` out of it. The result is plain data: for an
+ * account in the EU service region, spread it with `url: "https://mcp.eu.pagerduty.com/mcp"`.
  *
  * @example
  * ```ts
@@ -46,23 +37,19 @@ export type PiPagerdutyMcpOptions = PagerdutyMcpOptions & {
  * const triager = harnesses.claude({
  *   model: "opus",
  *   pagerduty: true,
- *   mcpServers: { pagerduty: pagerdutyMcp({ region: "eu" }) },
+ *   mcpServers: { pagerduty: pagerdutyMcp() },
  * });
  * ```
  *
  * @group Harnesses and models
  */
-export function pagerdutyMcp(options?: PagerdutyMcpOptions): McpHttpServerConfig;
-export function pagerdutyMcp(options: PiPagerdutyMcpOptions): PiMcpHttpServerConfig;
+export function pagerdutyMcp(): McpHttpServerConfig;
+export function pagerdutyMcp(options: PagerdutyMcpOptions): PiMcpHttpServerConfig;
 export function pagerdutyMcp(
-  options: PagerdutyMcpOptions & { tools?: string[] } = {},
+  options?: PagerdutyMcpOptions,
 ): McpHttpServerConfig | PiMcpHttpServerConfig {
-  const server = {
-    url: URLS[options.region ?? "us"],
-    bearerTokenEnv: AGENT_TOKEN_ENV.pagerduty,
-    probe: PROBE,
-  };
-  return options.tools === undefined
-    ? server
+  const server = { url: SERVER_URL, bearerTokenEnv: AGENT_TOKEN_ENV.pagerduty, probe: PROBE };
+  return options === undefined
+    ? { ...server, disabledTools: USER_TOOLS }
     : { ...server, tools: [...new Set([PROBE.tool, ...options.tools])] };
 }

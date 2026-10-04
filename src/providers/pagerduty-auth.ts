@@ -54,6 +54,7 @@ export function pagerDutyScope(identity: PagerDutyIdentity): string {
 interface MintedToken {
   token: string;
   expiresAt: number;
+  lifetimeMs: number;
 }
 
 // The token endpoint's body is never quoted whole: only its error code and
@@ -104,7 +105,8 @@ async function mintPagerDutyToken(
     throw new JigsError("PagerDuty's token response carried no access_token");
   }
   const lifetimeSeconds = typeof body.expires_in === "number" ? body.expires_in : 86400;
-  return { token: body.access_token, expiresAt: now() + lifetimeSeconds * 1000 };
+  const lifetimeMs = lifetimeSeconds * 1000;
+  return { token: body.access_token, expiresAt: now() + lifetimeMs, lifetimeMs };
 }
 
 export interface PagerDutyAuth {
@@ -144,7 +146,9 @@ export function createPagerDutyAuth(
   return {
     identity,
     async bearer(minLifetimeMs = 0): Promise<string> {
-      if (cached !== null && cached.expiresAt > now() + minLifetimeMs) return cached.token;
+      // Capped at half a token's life, so a short-lived token cannot force a mint on every call.
+      const margin = Math.min(minLifetimeMs, (cached?.lifetimeMs ?? 0) / 2);
+      if (cached !== null && cached.expiresAt > now() + margin) return cached.token;
       if (minting === null) {
         minting = mintPagerDutyToken(
           identity,

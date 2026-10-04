@@ -53,6 +53,33 @@ test("doctor checks a hosted server reading an agent token is reachable, not pro
   );
 });
 
+test("doctor still requires a server's other credentials beside the agent token", async () => {
+  const factory = makeTmpDir();
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+    removeTmpDir(factory);
+  });
+  writeFileSync(
+    path.join(factory, "jigs.config.ts"),
+    "export default { service: { dashboardPort: 9090 } }",
+  );
+  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  const triager = harnesses.claude({
+    model: "m",
+    linear: true,
+    mcpServers: {
+      linear: { ...linearMcp(), headers: { "X-Org": "JIGS_TEST_UNSET_ORG" } },
+    },
+  });
+  const check = doctorChecks({ triage: { requires: { agents: { triager } } } }).find(
+    (candidate) => candidate.id === "mcp.linear",
+  );
+  expect(await check?.run()).toMatchObject({
+    ok: false,
+    reason: expect.stringContaining("needs JIGS_TEST_UNSET_ORG"),
+  });
+});
+
 test("a server that answers with any status is reachable", async () => {
   const doFetch = vi.fn(async () => new Response("", { status: 401 }));
   const report = await runChecks([

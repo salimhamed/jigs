@@ -34,17 +34,16 @@ test("linearMcp reaches Linear's hosted server with the agent's Linear token", (
   ]);
 });
 
-test("pagerdutyMcp reaches the hosted server of the account's region with the agent's token", () => {
+test("pagerdutyMcp reaches the hosted server with the agent's token, without the user tool", () => {
   expect(pagerdutyMcp()).toEqual({
     url: "https://mcp.pagerduty.com/mcp",
     bearerTokenEnv: "JIGS_PAGERDUTY_TOKEN",
+    disabledTools: ["get_user_data"],
     probe: { tool: "list_incidents", arguments: { limit: 1 } },
   });
-  expect(pagerdutyMcp({ region: "eu" }).url).toBe("https://mcp.eu.pagerduty.com/mcp");
-  expect(pagerdutyMcp({ tools: ["get_incident"] }).tools).toEqual([
-    "list_incidents",
-    "get_incident",
-  ]);
+  const pi = pagerdutyMcp({ tools: ["get_incident"] });
+  expect(pi.tools).toEqual(["list_incidents", "get_incident"]);
+  expect(pi).not.toHaveProperty("disabledTools");
 });
 
 test("each helper is only valid on a harness that opts in to its provider", () => {

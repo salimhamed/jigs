@@ -36,13 +36,10 @@ checkout. The agent then acts as the App's bot:
   when it has opted in.
 
 The same opt-in extends to every provider whose credential jigs holds:
-`linear: true` and `pagerduty: true` put the factory's own token (the Linear
-identity's credential, a PagerDuty token with jigs' scopes) in the agent's
-environment, and `linearMcp()` and `pagerdutyMcp()` reach each vendor's hosted
-server with it. Hosted servers cannot drop tools, so tools the token cannot use
-fail when called instead of being hidden. Slack has no helper: its official
-server takes only user tokens and jigs holds a bot token. Services jigs holds no
-credential for stay hand-written in the factory.
+`linear: true` and `pagerduty: true` hand the agent the factory's own token, and
+`linearMcp()` and `pagerdutyMcp()` reach each vendor's official server with it.
+Slack has none, because its official server takes only user tokens and jigs
+holds a bot token.
 
 ## Consequences
 

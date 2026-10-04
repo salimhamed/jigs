@@ -423,20 +423,30 @@ harnesses.claude({
   model: "opus",
   linear: true,
   pagerduty: true,
-  mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp({ region: "eu" }) },
+  mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp() },
 });
 ```
 
-Pass `pagerdutyMcp` the `region` of your PagerDuty identity; it defaults to
-`us`. For Pi, pass the tools the model may call, as with `githubMcp`. Each
-result is plain data, so spread it to change a field: Linear's
-`https://mcp.linear.app/mcp/readonly` offers read tools only.
+For Pi, pass the tools the model may call, as with `githubMcp`. Each result is
+plain data, so spread it to change a field. A PagerDuty account in the EU
+service region uses PagerDuty's EU server:
 
-The hosted servers cannot hide tools, so tools the factory's token cannot use
-still appear and fail when called. On PagerDuty those are tools about the
-current user, such as `get_user_data`, and tools outside jigs' scopes, such as
-schedules and services. `jigs doctor` checks that each server answers; the
-agent's step probes it with the token before the agent starts.
+```ts
+import { harnesses, pagerdutyMcp } from "@jigs-ai/jigs";
 
-Slack has no helper: its official MCP server accepts only user tokens, and jigs
-holds a bot token.
+harnesses.codex({
+  model: "gpt-5.6-sol",
+  pagerduty: true,
+  mcpServers: { pagerduty: { ...pagerdutyMcp(), url: "https://mcp.eu.pagerduty.com/mcp" } },
+});
+```
+
+Linear's `https://mcp.linear.app/mcp/readonly` offers read tools only.
+
+A server's `disabledTools` lists tools the model may not call; Pi uses its
+`tools` list instead. `pagerdutyMcp()` disables `get_user_data`, which needs a
+user, while the factory's token belongs to an app. For the same reason
+`list_incidents` cannot filter by the `assigned` or `teams` request scope, and
+tools outside jigs' scopes, such as schedules and services, fail when called.
+`jigs doctor` checks that each server answers; the agent's step probes it with
+the token before the agent starts.

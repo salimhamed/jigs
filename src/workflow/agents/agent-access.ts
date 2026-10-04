@@ -11,11 +11,7 @@ export const AGENT_TOKEN_ENV = {
 /** A provider a harness can opt in to acting on as the factory. */
 export type AgentAccessProvider = keyof typeof AGENT_TOKEN_ENV;
 
-const OPT_IN: Record<AgentAccessProvider, string> = {
-  github: "set `github: true` on the harness, or `github: { owner }` for an agent with no worktree",
-  linear: "set `linear: true` on the harness",
-  pagerduty: "set `pagerduty: true` on the harness",
-};
+export const AGENT_ACCESS_PROVIDERS = Object.keys(AGENT_TOKEN_ENV) as AgentAccessProvider[];
 
 /** The providers whose agent token a server is handed. */
 export function agentTokensReadBy(
@@ -25,9 +21,7 @@ export function agentTokensReadBy(
     "command" in server
       ? Object.values(server.env ?? {})
       : [...Object.values(server.headers ?? {}), server.bearerTokenEnv];
-  return (Object.keys(AGENT_TOKEN_ENV) as AgentAccessProvider[]).filter((provider) =>
-    sources.includes(AGENT_TOKEN_ENV[provider]),
-  );
+  return AGENT_ACCESS_PROVIDERS.filter((provider) => sources.includes(AGENT_TOKEN_ENV[provider]));
 }
 
 /** Reject an MCP server that reads an agent token its harness has not opted in to. */
@@ -41,7 +35,7 @@ export function assertAgentAccess(
     if (provider !== undefined)
       throw new JigsError(
         `MCP server '${name}' reads ${AGENT_TOKEN_ENV[provider]}, the token jigs gives only to an agent whose harness sets ${provider}`,
-        OPT_IN[provider],
+        `set \`${provider}: true\` on the harness${provider === "github" ? ", or `github: { owner }` for an agent with no worktree" : ""}`,
       );
   }
 }

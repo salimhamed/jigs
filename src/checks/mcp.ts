@@ -111,7 +111,7 @@ type ServerChecks = {
   inherit: boolean;
 };
 
-function credentialFailure(
+export function mcpCredentialFailure(
   name: string,
   server: McpServerConfig,
   env: Record<string, string>,
@@ -136,7 +136,7 @@ async function checkMcpServer(
   env: Record<string, string>,
   options: ServerChecks,
 ): Promise<CheckResult> {
-  const credentials = credentialFailure(name, server, env);
+  const credentials = mcpCredentialFailure(name, server, env);
   if (credentials !== undefined) return credentials;
   // Pi's pinned adapter owns OAuth refresh and secure-store access. A raw MCP
   // client cannot reproduce that flow without adding a second integration,
@@ -238,7 +238,11 @@ export function mcpReachableCheck(
     label,
     run: async (): Promise<CheckResult> => {
       try {
-        await doFetch(url, { method: "POST", signal: AbortSignal.timeout(PROBE_TIMEOUT_MS) });
+        const response = await doFetch(url, {
+          method: "POST",
+          signal: AbortSignal.timeout(PROBE_TIMEOUT_MS),
+        });
+        await response.body?.cancel();
         return { ok: true };
       } catch (err) {
         return {

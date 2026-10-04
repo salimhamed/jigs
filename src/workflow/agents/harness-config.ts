@@ -44,6 +44,8 @@ export type McpStdioServerConfig = {
   args?: string[];
   /** Maps the server's variable names to the names of the service variables holding their values. */
   env?: Record<string, string>;
+  /** Raw MCP tool names the model may not call. Pi takes its `tools` allowlist instead. */
+  disabledTools?: string[];
   probe: McpToolProbe;
 };
 /**
@@ -62,6 +64,8 @@ export type McpHttpServerConfig = {
   headers?: Record<string, string>;
   /** Names the service variable holding a token sent as `Authorization: Bearer <token>`. */
   bearerTokenEnv?: string;
+  /** Raw MCP tool names the model may not call. Pi takes its `tools` allowlist instead. */
+  disabledTools?: string[];
   probe: McpToolProbe;
 };
 /**
@@ -76,7 +80,7 @@ export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
  *
  * @group Harnesses and models
  */
-export type PiMcpStdioServerConfig = McpStdioServerConfig & {
+export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "disabledTools"> & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 };
@@ -85,7 +89,10 @@ export type PiMcpStdioServerConfig = McpStdioServerConfig & {
  *
  * @group Harnesses and models
  */
-export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "bearerTokenEnv"> & {
+export type PiMcpHttpServerConfig = Omit<
+  McpHttpServerConfig,
+  "bearerTokenEnv" | "disabledTools"
+> & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 } & (
@@ -223,19 +230,6 @@ export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
 export type AgentGithub = true | { owner: string };
 
 /**
- * The opt-ins that let an agent act as the factory on Linear and PagerDuty.
- *
- * @remarks
- * `linear: true` puts the factory's Linear token in `JIGS_LINEAR_TOKEN`: the app's token in app
- * mode, the API key in key mode. `pagerduty: true` puts a PagerDuty token for the factory's OAuth
- * app in `JIGS_PAGERDUTY_TOKEN`, with the scopes jigs itself uses. {@link linearMcp} and
- * {@link pagerdutyMcp} read them. A run fails its checks when the factory has no such identity.
- *
- * @group Harnesses and models
- */
-export type AgentProviderAccess = { linear?: true; pagerduty?: true };
-
-/**
  * Skill folders an agent loads, each holding a `SKILL.md` and any files it refers to.
  *
  * @remarks
@@ -262,7 +256,11 @@ export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> 
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
     github?: AgentGithub;
-  } & AgentProviderAccess;
+    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+    linear?: true;
+    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+    pagerduty?: true;
+  };
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
  * {@link CodexPolicyKey}, plus the model, jigs' MCP server shape and {@link HarnessSkills}.
@@ -275,14 +273,22 @@ export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
     github?: AgentGithub;
-  } & AgentProviderAccess;
+    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+    linear?: true;
+    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+    pagerduty?: true;
+  };
 type SharedPiHarness = HarnessSkills & {
   kind: "pi";
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
   mcpServers?: Record<string, PiMcpServerConfig>;
   github?: AgentGithub;
-} & AgentProviderAccess;
+  /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+  linear?: true;
+  /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+  pagerduty?: true;
+};
 
 /**
  * An OpenRouter API model source.

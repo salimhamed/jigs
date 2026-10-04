@@ -51,6 +51,10 @@ function piMcpServers(servers: Record<string, PiMcpServerConfig>): Record<string
         server.probe.tool === ""
       )
         throw new Error(`Pi MCP server '${name}' must declare a probe tool`);
+      if ("disabledTools" in server)
+        throw new Error(
+          `Pi MCP server '${name}' sets disabledTools; Pi exposes only its tools list, so leave the tools out of that instead`,
+        );
       if (!server.tools.includes(server.probe.tool))
         throw new Error(`Pi MCP server '${name}' must allow its probe tool '${server.probe.tool}'`);
       if ("command" in server) {

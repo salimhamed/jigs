@@ -365,6 +365,44 @@ test("codex resolves MCP credentials from the step environment by name", async (
   expect(JSON.stringify(wire)).not.toContain("secret");
 });
 
+test("a server's disabled tools reach Claude as disallowed MCP tools and Codex per server", async () => {
+  const servers = {
+    pd: { command: "node", disabledTools: ["get_user_data"], probe: { tool: "p" } },
+    other: { command: "node", probe: { tool: "p" } },
+  };
+  const claude = makeDeps();
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.claude({
+        model: "sonnet",
+        disallowedTools: ["WebFetch"],
+        mcpServers: servers,
+      }),
+      cwd: worktree,
+      prompt: "p",
+    }),
+    { workflowRunId: "run-disabled-claude" },
+    claude.deps,
+  );
+  expect(claudeSettingsOf().disallowedTools).toEqual(["WebFetch", "mcp__pd__get_user_data"]);
+  expect(claudeSettingsOf().mcpServers?.pd).not.toHaveProperty("disabledTools");
+
+  const codex = makeDeps();
+  await agentStep(
+    buildAgentRequest({
+      harness: harnesses.codex({ model: "gpt-5.5", mcpServers: servers }),
+      cwd: worktree,
+      prompt: "p",
+    }),
+    { workflowRunId: "run-disabled-codex" },
+    codex.deps,
+  );
+  expect(codex.captured.codexSettings?.mcpServers).toEqual({
+    pd: { transport: "stdio", command: "node", disabledTools: ["get_user_data"] },
+    other: { transport: "stdio", command: "node" },
+  });
+});
+
 test("a Codex descriptor that smuggles sandbox or config policy loses to jigs' policy", async () => {
   // A descriptor that skipped its constructor, as a hand-built wire could.
   const harness = {

@@ -60,6 +60,23 @@ test("an app identity's bare token is the minted one, shared with authorization"
   expect(doFetch).toHaveBeenCalledTimes(1);
 });
 
+test("a caller that needs a token to outlive its turn gets one minted within 30 days", async () => {
+  let minted = 0;
+  let now = 0;
+  const doFetch = vi.fn(async () => tokenResponse(`app-token-${++minted}`));
+  const auth = createLinearAuth(
+    { mode: "app" },
+    { env: lookup(APP_ENV), fetch: doFetch, now: () => now },
+  );
+  const fiveHours = 5 * 60 * 60 * 1000;
+  expect(await auth.token(fiveHours)).toBe("app-token-1");
+  now = 30 * 24 * 60 * 60 * 1000 - fiveHours - 1;
+  expect(await auth.token(fiveHours)).toBe("app-token-1");
+  now += 1;
+  expect(await auth.token(fiveHours)).toBe("app-token-2");
+  expect(await auth.authorization()).toBe("Bearer app-token-2");
+});
+
 test("an app identity mints a client-credentials token once and sends it as a bearer", async () => {
   const doFetch = vi.fn(async () => tokenResponse("app-token"));
   const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });

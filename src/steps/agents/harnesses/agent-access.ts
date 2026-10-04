@@ -4,11 +4,11 @@ import { AGENT_TOKEN_ENV, assertAgentAccess } from "../../../workflow/agents/age
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentGithubEnv } from "./github-access.ts";
 
-// PagerDuty's tokens last a day; this covers the longest agent turn.
-export const PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS = 5 * 60 * 60 * 1000;
+// Margin for a long agent turn, since its token is not refreshed during one.
+export const PROVIDER_AGENT_TOKEN_MIN_LIFETIME_MS = 5 * 60 * 60 * 1000;
 
 export interface AgentAccessDeps {
-  githubEnv(
+  github(
     target: { harness: Harness; cwd: string },
     env: Record<string, string>,
   ): Promise<Record<string, string>>;
@@ -17,9 +17,9 @@ export interface AgentAccessDeps {
 }
 
 const defaultDeps: AgentAccessDeps = {
-  githubEnv: (target, env) => agentGithubEnv(target, env),
-  linearToken: () => linearAuthFor().token(),
-  pagerdutyToken: () => pagerDutyAuthFor().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
+  github: (target, env) => agentGithubEnv(target, env),
+  linearToken: () => linearAuthFor().token(PROVIDER_AGENT_TOKEN_MIN_LIFETIME_MS),
+  pagerdutyToken: () => pagerDutyAuthFor().bearer(PROVIDER_AGENT_TOKEN_MIN_LIFETIME_MS),
 };
 
 /**
@@ -35,7 +35,7 @@ export async function agentAccessEnv(
   const { harness } = target;
   assertAgentAccess(harness);
   return {
-    ...(await deps.githubEnv(target, env)),
+    ...(await deps.github(target, env)),
     ...(harness.linear === undefined ? {} : { [AGENT_TOKEN_ENV.linear]: await deps.linearToken() }),
     ...(harness.pagerduty === undefined
       ? {}

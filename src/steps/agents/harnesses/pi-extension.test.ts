@@ -150,6 +150,16 @@ test("MCP extension rejects unsupported transports before writing the extension"
   expect(() =>
     writePiMcpExtension(tmp as string, {
       invalid: {
+        url: "https://mcp.example",
+        disabledTools: ["get_user_data"],
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("sets disabledTools; Pi exposes only its tools list");
+  expect(() =>
+    writePiMcpExtension(tmp as string, {
+      invalid: {
         command: "node",
         headers: { authorization: "TOKEN" },
         tools: ["ping"],

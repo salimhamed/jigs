@@ -6,7 +6,7 @@ import { type AgentAccessDeps, agentAccessEnv } from "./agent-access.ts";
 
 function deps() {
   const fake = {
-    githubEnv: vi.fn(
+    github: vi.fn(
       async ({ harness }: { harness: Harness }): Promise<Record<string, string>> =>
         harness.github === undefined ? {} : { GH_TOKEN: "ghs" },
     ),
