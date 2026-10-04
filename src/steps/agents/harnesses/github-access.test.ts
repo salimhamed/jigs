@@ -3,7 +3,6 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
 import type { GithubAuth } from "../../../providers/github-auth.ts";
 import { git, makeTmpDir, removeTmpDir } from "../../../test-fixtures.ts";
-import { githubMcp } from "../../../workflow/agents/github-mcp.ts";
 import { type Harness, harnesses } from "../../../workflow/agents/harness-config.ts";
 import {
   AGENT_TOKEN_MIN_LIFETIME_MS,
@@ -166,9 +165,4 @@ test("a failure after the token is minted never names it", async () => {
   }).catch((err: unknown) => err);
   expect(String(failure)).toContain("502");
   expect(String(failure)).not.toContain(TOKEN);
-});
-
-test("a server reading the agent's token on a harness without github fails the step", async () => {
-  const harness = { kind: "claude", model: "m", mcpServers: { github: githubMcp() } } as const;
-  await expect(envFor(harness, deps().fake)).rejects.toThrow("MCP server 'github' reads GH_TOKEN");
 });

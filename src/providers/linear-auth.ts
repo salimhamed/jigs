@@ -77,6 +77,11 @@ export interface LinearAuth {
   identity: LinearIdentity;
   /** The `authorization` header value for a GraphQL call, minted as needed. */
   authorization(): Promise<string>;
+  /**
+   * The bare credential: the API key, or the app's token, minted as needed so it has
+   * `minLifetimeMs` left.
+   */
+  token(minLifetimeMs?: number): Promise<string>;
   /** Forget a minted token, so the next call mints a fresh one. */
   invalidate(): void;
 }
@@ -84,7 +89,12 @@ export interface LinearAuth {
 export interface LinearAuthDeps {
   fetch?: FetchLike;
   env?: EnvLookup;
+  now?: () => number;
 }
+
+// What Linear documents for a client-credentials token. Its expires_in is not
+// trusted, and a 401 is what retires a token early.
+const APP_TOKEN_LIFETIME_MS = 30 * 24 * 60 * 60 * 1000;
 
 export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps = {}): LinearAuth {
   const env = deps.env ?? linearEnvValue;
@@ -98,28 +108,34 @@ export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps 
     }
     return value;
   };
-  // The token Linear issues lasts 30 days; its expires_in is not trusted, and
-  // a 401 is what retires it.
-  let cached: string | null = null;
+  const now = deps.now ?? Date.now;
+  let cached: { token: string; mintedAt: number } | null = null;
   // The mint in flight, so concurrent calls share one token.
   let minting: Promise<string> | null = null;
+  const token = async (minLifetimeMs = 0): Promise<string> => {
+    if (identity.mode === "key") return required("LINEAR_API_KEY");
+    if (cached !== null && cached.mintedAt + APP_TOKEN_LIFETIME_MS - now() > minLifetimeMs)
+      return cached.token;
+    if (minting === null) {
+      minting = mintLinearAppToken(
+        required("LINEAR_CLIENT_ID"),
+        required("LINEAR_CLIENT_SECRET"),
+        deps.fetch,
+      ).finally(() => {
+        minting = null;
+      });
+    }
+    const mintedAt = now();
+    const pending = minting;
+    cached = { token: await pending, mintedAt };
+    return cached.token;
+  };
   return {
     identity,
+    token,
     async authorization(): Promise<string> {
-      if (identity.mode === "key") return required("LINEAR_API_KEY");
-      if (cached !== null) return `Bearer ${cached}`;
-      if (minting === null) {
-        minting = mintLinearAppToken(
-          required("LINEAR_CLIENT_ID"),
-          required("LINEAR_CLIENT_SECRET"),
-          deps.fetch,
-        ).finally(() => {
-          minting = null;
-        });
-      }
-      const pending = minting;
-      cached = await pending;
-      return `Bearer ${cached}`;
+      const credential = await token();
+      return identity.mode === "key" ? credential : `Bearer ${credential}`;
     },
     invalidate(): void {
       cached = null;

@@ -41,6 +41,15 @@ function mcpServers(
   );
 }
 
+// Each server's disabled tools join the descriptor's own, under Claude Code's MCP tool names.
+function disallowedTools(harness: ClaudeHarness): string[] | undefined {
+  const disabled = Object.entries(harness.mcpServers ?? {}).flatMap(([name, server]) =>
+    (server.disabledTools ?? []).map((tool) => `mcp__${name}__${tool}`),
+  );
+  if (disabled.length === 0) return harness.disallowedTools;
+  return [...(harness.disallowedTools ?? []), ...disabled];
+}
+
 function owner(run: RunMetadata): string {
   return `Claude Code for run ${run.workflowRunId}`;
 }
@@ -88,8 +97,10 @@ export function createClaudeDriver(
           ? undefined
           : await deps.prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills);
       try {
+        const disallowed = disallowedTools(harness);
         const settings = claudeStepSettings({
           ...descriptorSettings(harness, claudePolicyKeys),
+          ...(disallowed === undefined ? {} : { disallowedTools: disallowed }),
           cwd,
           env: context.env,
           signal: context.signal,

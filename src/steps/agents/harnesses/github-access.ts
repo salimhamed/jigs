@@ -7,7 +7,7 @@ import {
   githubAuthFor,
 } from "../../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../../providers/github-webhook.ts";
-import { AGENT_GITHUB_TOKEN_ENV, assertGithubMcp } from "../../../workflow/agents/github-mcp.ts";
+import { AGENT_TOKEN_ENV } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { JigsError } from "../../../workflow/errors.ts";
 
@@ -60,7 +60,6 @@ export async function agentGithubEnv(
   deps: AgentGithubDeps = defaultDeps,
 ): Promise<Record<string, string>> {
   const { harness, cwd } = target;
-  assertGithubMcp(harness);
   if (harness.github === undefined) return {};
   const owner = harness.github === true ? await checkoutOwner(cwd, deps) : harness.github.owner;
   const auth = deps.auth(owner);
@@ -72,7 +71,7 @@ export async function agentGithubEnv(
   // the token cannot reach anyone else's, such as an SSH dependency.
   const https = `url.https://github.com/${owner}/.insteadOf`;
   return {
-    [AGENT_GITHUB_TOKEN_ENV]: token,
+    [AGENT_TOKEN_ENV.github]: token,
     ...gitConfigEnv(
       [
         [https, `git@github.com:${owner}/`],

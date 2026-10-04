@@ -3,7 +3,7 @@
 import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { JigsError } from "../errors.ts";
-import { assertGithubMcp } from "./github-mcp.ts";
+import { assertAgentAccess } from "./agent-access.ts";
 
 /**
  * A harmless MCP tool call used to prove that a configured server is available.
@@ -44,6 +44,8 @@ export type McpStdioServerConfig = {
   args?: string[];
   /** Maps the server's variable names to the names of the service variables holding their values. */
   env?: Record<string, string>;
+  /** Raw MCP tool names the model may not call. Pi takes its `tools` allowlist instead. */
+  disabledTools?: string[];
   probe: McpToolProbe;
 };
 /**
@@ -62,6 +64,8 @@ export type McpHttpServerConfig = {
   headers?: Record<string, string>;
   /** Names the service variable holding a token sent as `Authorization: Bearer <token>`. */
   bearerTokenEnv?: string;
+  /** Raw MCP tool names the model may not call. Pi takes its `tools` allowlist instead. */
+  disabledTools?: string[];
   probe: McpToolProbe;
 };
 /**
@@ -76,7 +80,7 @@ export type McpServerConfig = McpStdioServerConfig | McpHttpServerConfig;
  *
  * @group Harnesses and models
  */
-export type PiMcpStdioServerConfig = McpStdioServerConfig & {
+export type PiMcpStdioServerConfig = Omit<McpStdioServerConfig, "disabledTools"> & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 };
@@ -85,7 +89,10 @@ export type PiMcpStdioServerConfig = McpStdioServerConfig & {
  *
  * @group Harnesses and models
  */
-export type PiMcpHttpServerConfig = Omit<McpHttpServerConfig, "bearerTokenEnv"> & {
+export type PiMcpHttpServerConfig = Omit<
+  McpHttpServerConfig,
+  "bearerTokenEnv" | "disabledTools"
+> & {
   /** Raw MCP tool names the model may call. This must include the probe tool. */
   tools: string[];
 } & (
@@ -249,6 +256,10 @@ export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> 
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
     github?: AgentGithub;
+    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+    linear?: true;
+    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+    pagerduty?: true;
   };
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
@@ -262,6 +273,10 @@ export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
     github?: AgentGithub;
+    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+    linear?: true;
+    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+    pagerduty?: true;
   };
 type SharedPiHarness = HarnessSkills & {
   kind: "pi";
@@ -269,6 +284,10 @@ type SharedPiHarness = HarnessSkills & {
   tools?: string[];
   mcpServers?: Record<string, PiMcpServerConfig>;
   github?: AgentGithub;
+  /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
+  linear?: true;
+  /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
+  pagerduty?: true;
 };
 
 /**
@@ -354,14 +373,20 @@ export type PiHarness = PiOpenaiCompatibleHarness | PiOtherHarness;
  */
 export type Harness = ClaudeHarness | CodexHarness | PiHarness;
 /**
- * Marks a descriptor that names no tools, MCP servers or GitHub access.
+ * Marks a descriptor that names no tools, MCP servers or provider access.
  *
  * @group Harnesses and models
  */
-export type ToolFree = { tools?: never; mcpServers?: never; github?: never };
+export type ToolFree = {
+  tools?: never;
+  mcpServers?: never;
+  github?: never;
+  linear?: never;
+  pagerduty?: never;
+};
 /**
  * A harness `askAgent` can run with no tools: Claude Code or Pi, without MCP
- * servers, GitHub access or a Pi tool allowlist. Codex has no mode without tools.
+ * servers, provider access or a Pi tool allowlist. Codex has no mode without tools.
  *
  * @group Harnesses and models
  */
@@ -412,7 +437,7 @@ export const models = {
  */
 export type PiHarnessOptions = Pick<
   PiHarness,
-  "thinking" | "tools" | "mcpServers" | "github" | "skills"
+  "thinking" | "tools" | "mcpServers" | "github" | "linear" | "pagerduty" | "skills"
 > & {
   compat?: Partial<PiOpenaiCompatibleOptions>;
 };
@@ -433,7 +458,7 @@ type Exactly<T, O> = O & { [K in Exclude<keyof O, keyof T>]: never };
 /**
  * The descriptor a harness constructor returns for its options. It is also
  * {@link ToolFree}, so `askAgent` accepts it, when the options name no tools,
- * MCP servers or GitHub access.
+ * MCP servers or provider access.
  *
  * @group Harnesses and models
  */
@@ -463,7 +488,7 @@ function piHarness<
 >(model: M, options?: O): HarnessForOptions<PiHarness, O>;
 function piHarness(model: ModelSource, options: PiHarnessOptions = {}): PiHarness {
   const { compat, ...harnessOptions } = options;
-  assertGithubMcp(harnessOptions);
+  assertAgentAccess(harnessOptions);
   if (model.kind === "openai-compatible") {
     return {
       kind: "pi",
@@ -504,7 +529,7 @@ function claudeHarness<O extends ClaudeHarnessSettings>(
   settings: Exactly<ClaudeHarnessSettings, O>,
 ): HarnessForOptions<ClaudeHarness, O>;
 function claudeHarness(settings: ClaudeHarnessSettings): ClaudeHarness {
-  assertGithubMcp(settings);
+  assertAgentAccess(settings);
   return { kind: "claude", ...settings };
 }
 
@@ -523,7 +548,7 @@ function codexHarness<O extends CodexHarnessSettings>(
   settings: Exactly<CodexHarnessSettings, O>,
 ): CodexHarness;
 function codexHarness(settings: CodexHarnessSettings): CodexHarness {
-  assertGithubMcp(settings);
+  assertAgentAccess(settings);
   return { kind: "codex", ...settings };
 }
 

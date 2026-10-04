@@ -29,9 +29,11 @@ const NOT_IN_ENV_EXAMPLE = new Set([
   "CODEX_API_KEY",
   // Read by the CLI from the operator's shell.
   "JIGS_SERVICE_URL",
-  // Set by jigs in the environment of an agent that acts as the GitHub App.
+  // Set by jigs in the environment of an agent that acts as the factory.
   "GH_TOKEN",
   "GIT_CONFIG_COUNT",
+  "JIGS_LINEAR_TOKEN",
+  "JIGS_PAGERDUTY_TOKEN",
 ]);
 
 function sourceFiles(dir: string): string[] {

@@ -396,3 +396,57 @@ It runs the local
 install yourself; `jigs doctor` checks for it. Tools that need a user, such as
 `get_me`, are left out, since an App cannot answer them. For Pi, pass the tools
 the model may call: `githubMcp({ tools: ["pull_request_read", "add_issue_comment"] })`.
+
+## Linear and PagerDuty access for agents {#provider-access}
+
+An agent can also act as the factory on Linear and PagerDuty: set `linear: true`
+or `pagerduty: true` on its harness. When it starts, jigs puts the factory's own
+token in its environment:
+
+- **`JIGS_LINEAR_TOKEN`** holds the [Linear identity](/guide/configuration#linear-identity)'s
+  credential: the app's token in `app` mode, so the agent acts as the factory's
+  Linear app, or the API key in `key` mode.
+- **`JIGS_PAGERDUTY_TOKEN`** holds a token for the factory's
+  [PagerDuty](/guide/configuration#pagerduty) OAuth app, with the scopes jigs
+  itself uses: the agent can read and update incidents and read users.
+
+A run whose workflow declares such an agent checks that identity in preflight,
+as it would for a workflow that requires the provider.
+
+`linearMcp()` and `pagerdutyMcp()` add each service's own hosted MCP server
+with that token. Only a harness that opts in can use them:
+
+```ts
+import { harnesses, linearMcp, pagerdutyMcp } from "@jigs-ai/jigs";
+
+harnesses.claude({
+  model: "opus",
+  linear: true,
+  pagerduty: true,
+  mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp() },
+});
+```
+
+For Pi, pass the tools the model may call, as with `githubMcp`. Each result is
+plain data, so spread it to change a field. A PagerDuty account in the EU
+service region uses PagerDuty's EU server:
+
+```ts
+import { harnesses, pagerdutyMcp } from "@jigs-ai/jigs";
+
+harnesses.codex({
+  model: "gpt-5.6-sol",
+  pagerduty: true,
+  mcpServers: { pagerduty: { ...pagerdutyMcp(), url: "https://mcp.eu.pagerduty.com/mcp" } },
+});
+```
+
+Linear's `https://mcp.linear.app/mcp/readonly` offers read tools only.
+
+A server's `disabledTools` lists tools the model may not call; Pi uses its
+`tools` list instead. `pagerdutyMcp()` disables `get_user_data`, which needs a
+user, while the factory's token belongs to an app. For the same reason
+`list_incidents` cannot filter by the `assigned` or `teams` request scope, and
+tools outside jigs' scopes, such as schedules and services, fail when called.
+`jigs doctor` checks that each server answers; the agent's step probes it with
+the token before the agent starts.

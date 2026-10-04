@@ -19,8 +19,18 @@ import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerdu
 import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
-import { readsAgentGithubToken } from "../workflow/agents/github-mcp.ts";
-import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
+import {
+  AGENT_ACCESS_PROVIDERS,
+  AGENT_TOKEN_ENV,
+  agentTokensReadBy,
+  assertAgentAccess,
+} from "../workflow/agents/agent-access.ts";
+import type {
+  AskableModelSource,
+  Harness,
+  McpServerConfig,
+  PiMcpServerConfig,
+} from "../workflow/agents/harness-config.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -53,7 +63,7 @@ import {
   linearOperatorChecks,
 } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
-import { mcpServerChecks } from "./mcp.ts";
+import { mcpCredentialFailure, mcpReachableCheck, mcpServerChecks } from "./mcp.ts";
 import {
   type PagerDutyIdentityProbes,
   pagerDutyFromChecks,
@@ -262,11 +272,21 @@ function pagerDutyFromDoctorChecks(): Check[] {
   });
 }
 
+// An agent that acts as the factory on a provider needs that provider's
+// identity, as a step that calls it does.
+function integrationsOf(requires: WorkflowRequires): Integration[] {
+  const agents = Object.values(requires.agents ?? {});
+  const opted = AGENT_ACCESS_PROVIDERS.filter((provider) =>
+    agents.some((agent) => agent[provider] !== undefined),
+  );
+  return [...new Set([...(requires.integrations ?? []), ...opted])];
+}
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
 ): Check[] {
-  const integrations = requires.integrations ?? [];
+  const integrations = integrationsOf(requires);
   // A binding selected by this run is more specific than the workflow's
   // static requirements. Workflows without a binding input retain the fixed
   // binding list declared in their manifest.
@@ -375,26 +395,38 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
       const driver = driverFor(harness.kind);
       if (driver === undefined) continue;
       for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
-        const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
+        const tokens = agentTokensReadBy(server);
+        const optedIn = tokens.filter((provider) => harness[provider] !== undefined);
+        const key = JSON.stringify([harness.kind, name, server, optedIn]);
         const entry = servers.get(key) ?? {
           checks: serverChecks(name, () => {
-            // The agent's GitHub token exists only inside its step, so doctor
-            // checks the server is installed; the step's own check probes it.
-            if (readsAgentGithubToken(server) && "command" in server)
+            // A descriptor written as a literal skips the constructors' check.
+            assertAgentAccess({ ...harness, mcpServers: { [name]: server } });
+            const env = agentStepEnv(driver, { harness, cwd: root }, agentEnv);
+            // An agent token exists only inside its step, so doctor checks the
+            // server is installed or reachable; the step's own check probes it.
+            if (tokens.length > 0) {
+              const id = `mcp.${name}`;
+              const label = `MCP server ${name}`;
+              const available =
+                "command" in server
+                  ? agentCommandCheck(
+                      id,
+                      label,
+                      server.command,
+                      `install ${server.command} on the PATH the service starts agents with`,
+                    )
+                  : mcpReachableCheck(id, label, server.url);
               return [
-                agentCommandCheck(
-                  `mcp.${name}`,
-                  `MCP server ${name}`,
-                  server.command,
-                  `install ${server.command} on the PATH the service starts agents with`,
-                ),
+                {
+                  id,
+                  label,
+                  run: async () =>
+                    mcpCredentialFailure(name, withoutAgentTokens(server), env) ?? available.run(),
+                },
               ];
-            return agentMcpServerChecks(
-              harness.kind,
-              { [name]: server },
-              root,
-              agentStepEnv(driver, { harness, cwd: root }, agentEnv),
-            );
+            }
+            return agentMcpServerChecks(harness.kind, { [name]: server }, root, env);
           }),
           workflows: [],
         };
@@ -404,6 +436,25 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
     }
   }
   return [...servers.values()].flatMap(({ checks, workflows }) => neededByUsers(checks, workflows));
+}
+
+// The server's other credentials, which doctor can still find in the factory's environment.
+function withoutAgentTokens(server: McpServerConfig | PiMcpServerConfig): McpServerConfig {
+  const agent: string[] = Object.values(AGENT_TOKEN_ENV);
+  const keep = (entries: Record<string, string> | undefined) =>
+    Object.fromEntries(
+      Object.entries(entries ?? {}).filter(([, source]) => !agent.includes(source)),
+    );
+  if ("command" in server)
+    return { command: server.command, env: keep(server.env), probe: server.probe };
+  return {
+    url: server.url,
+    headers: keep(server.headers),
+    ...(server.bearerTokenEnv === undefined || agent.includes(server.bearerTokenEnv)
+      ? {}
+      : { bearerTokenEnv: server.bearerTokenEnv }),
+    probe: server.probe,
+  };
 }
 
 // A descriptor whose environment cannot be planned fails the way the step
@@ -457,7 +508,7 @@ export function doctorChecks(
   triggers: Record<string, Integration> = {},
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
-    ...(requires.integrations ?? []),
+    ...integrationsOf(requires),
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders();

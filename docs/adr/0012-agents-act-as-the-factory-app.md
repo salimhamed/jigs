@@ -35,6 +35,12 @@ checkout. The agent then acts as the App's bot:
   user, which an installation token cannot satisfy. A harness can use it only
   when it has opted in.
 
+The same opt-in extends to every provider whose credential jigs holds:
+`linear: true` and `pagerduty: true` hand the agent the factory's own token, and
+`linearMcp()` and `pagerdutyMcp()` reach each vendor's official server with it.
+Slack has none, because its official server takes only user tokens and jigs
+holds a bot token.
+
 ## Consequences
 
 - Under `any-commit`, approvals from the operator count again. jigs ignores only

@@ -68,6 +68,11 @@ export {
   type YesNoQuestion,
   yesNo,
 } from "./workflow/agents/jev.ts";
+export { type LinearMcpOptions, linearMcp } from "./workflow/agents/linear-mcp.ts";
+export {
+  type PagerdutyMcpOptions,
+  pagerdutyMcp,
+} from "./workflow/agents/pagerduty-mcp.ts";
 export type {
   AgentRequest,
   AskAgentOptions,
