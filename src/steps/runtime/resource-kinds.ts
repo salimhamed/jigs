@@ -101,15 +101,31 @@ const harnessHome =
     return removeDirectory(directory)(row, run);
   };
 
+interface KindRules {
+  decide: ResourceKind;
+  /** Whether a keep policy leaves it in place for a person to inspect. */
+  inspectable: boolean;
+}
+
 // Release visits kinds in RELEASABLE_KINDS order, so a worktree's outcome is
 // known before the harness homes that depend on it.
-const KINDS: Record<ReleasableKind, ResourceKind> = {
-  worktree,
-  "run-directory": removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
-  "codex-home": harnessHome((runId) => codexRunStatePath(runId)),
-  "pi-home": harnessHome((runId) => piRunStatePath(runId)),
-  "claude-plugins": removeDirectory((runId) => claudePluginsPath(runId)),
+const KINDS: Record<ReleasableKind, KindRules> = {
+  worktree: { decide: worktree, inspectable: true },
+  "run-directory": {
+    decide: removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
+    inspectable: true,
+  },
+  "codex-home": { decide: harnessHome((runId) => codexRunStatePath(runId)), inspectable: true },
+  "pi-home": { decide: harnessHome((runId) => piRunStatePath(runId)), inspectable: true },
+  // Copies of factory files, with nothing to inspect after the run.
+  "claude-plugins": {
+    decide: removeDirectory((runId) => claudePluginsPath(runId)),
+    inspectable: false,
+  },
 };
+
+/** Whether a keep policy keeps this kind; one with nothing to inspect is always released. */
+export const keptByPolicy = (kind: string): boolean => !releasable(kind) || KINDS[kind].inspectable;
 
 /** The releasable rows, in the order release must visit them; recorded-only kinds are left out. */
 export const releaseOrder = (rows: readonly ResourceRow[]): ResourceRow[] => {
@@ -123,5 +139,5 @@ export async function decideRelease(
   run: readonly RunResourceState[],
 ): Promise<ReleaseDecision> {
   if (!releasable(row.kind)) throw new Error(`jigs does not release ${row.kind} resources`);
-  return KINDS[row.kind](row, run);
+  return KINDS[row.kind].decide(row, run);
 }

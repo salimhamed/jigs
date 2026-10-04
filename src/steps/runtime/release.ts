@@ -17,7 +17,12 @@ import {
   withRunResourceLock,
 } from "./registry.ts";
 import { resolveReleasePolicy } from "./release-policy.ts";
-import { decideRelease, type ReleaseDecision, releaseOrder } from "./resource-kinds.ts";
+import {
+  decideRelease,
+  keptByPolicy,
+  type ReleaseDecision,
+  releaseOrder,
+} from "./resource-kinds.ts";
 import type { NamedRunMetadata } from "./run-context.ts";
 
 /** Failed attempts after which a resource is kept with its last error instead of retried. */
@@ -82,8 +87,7 @@ export async function releaseRun(
   const rows = await listResources(db, { factory, runId });
   const kept = { state: "kept" as const, reason: keepReason(outcome) };
   for (const row of releaseOrder(rows)) {
-    // Skills plugins are copies of factory files, with nothing to inspect after the run.
-    const keep = action === "keep" && row.kind !== "claude-plugins";
+    const keep = action === "keep" && keptByPolicy(row.kind);
     if (releaseDue(row)) await releaseOne(db, row, rows, keep ? kept : undefined);
   }
   return rows.map(toRecord);
