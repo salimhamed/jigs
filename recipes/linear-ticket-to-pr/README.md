@@ -42,8 +42,10 @@ following the pull request, runs in four jigs routines the workflow calls.
   merging only with a label, check the snapshot `mergeWhen` receives instead.
   `approvalCovers`, next to it, is `"latest-commit"`,
   so a push needs a new approving review; `"any-commit"` lets a person's
-  approval cover later pushes too. How you approve, and the merge method, are
-  set in [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
+  approval cover later pushes too. How you approve is set in
+  [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
+  The merge method is the first one the repository allows on GitHub: squash,
+  then merge commit, then rebase.
 
 [Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
 optional.
