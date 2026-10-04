@@ -1,7 +1,7 @@
 # @jigs-ai/hub — agent guide
 
 The repo root's `AGENTS.md` covers commands, releases, docs and the issue
-tracker. The hub stays private until it ships.
+tracker. The hub publishes only as a preview, from the `hub` branch.
 
 ## Layout
 
@@ -36,10 +36,12 @@ are optional. `dev` runs the
 server from source, serves the web app through Vite and reads
 `packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
 (Node will not strip types under `node_modules`) and the web app into `build/`;
-`start` runs `dist/main.js` in production mode. Paths to `migrations/` and
-`build/` resolve from `src/package-root.ts`, so they hold from `src/` and
-`dist/` alike. Tests ending in `.db.test.ts` need Postgres and run under
-`pnpm test:db`, which builds first.
+`start` runs `dist/main.js` in production mode, as does the published
+`jigs-hub` bin. The package ships `bin/`, `dist/`, `build/` and `migrations/`;
+anything the built hub imports must be a dependency, not a devDependency.
+Paths to `migrations/` and `build/` resolve from `src/package-root.ts`, so
+they hold from `src/` and `dist/` alike. Tests ending in `.db.test.ts` need
+Postgres and run under `pnpm test:db`, which builds first.
 
 Keep `main.db.test.ts` passing: the built hub must exit 0 on SIGTERM once open
 connections close, so its process manager can stop it.
