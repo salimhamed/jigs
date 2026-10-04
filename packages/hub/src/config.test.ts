@@ -7,6 +7,9 @@ const env = {
   HUB_PUBLIC_URL: "https://hub.example.com",
   HUB_DATABASE_URL: "postgres://hub@localhost/hub",
   HUB_ENCRYPTION_KEY: key,
+  HUB_GITHUB_CLIENT_ID: "Iv1.abc",
+  HUB_GITHUB_CLIENT_SECRET: "github secret",
+  HUB_ADMIN_EMAIL: "admin@example.com",
 };
 
 test("reads the hub's environment", () => {
@@ -16,6 +19,9 @@ test("reads the hub's environment", () => {
     publicUrl: new URL("https://hub.example.com"),
     databaseUrl: "postgres://hub@localhost/hub",
     encryptionKey: Buffer.from(key, "base64"),
+    githubClientId: "Iv1.abc",
+    githubClientSecret: "github secret",
+    adminEmail: "admin@example.com",
   });
   expect(readConfig(env)).toMatchObject({ host: "127.0.0.1", port: 3000 });
 });
@@ -27,6 +33,9 @@ test("names every missing or malformed value at once", () => {
       "  - HUB_PUBLIC_URL is not set",
       "  - HUB_DATABASE_URL is not set",
       "  - HUB_ENCRYPTION_KEY is not set",
+      "  - HUB_GITHUB_CLIENT_ID is not set",
+      "  - HUB_GITHUB_CLIENT_SECRET is not set",
+      "  - HUB_ADMIN_EMAIL is not set",
     ].join("\n"),
   );
   expect(() =>

@@ -1,6 +1,8 @@
+import { LogOut } from "lucide-react";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import {
+  Form,
   isRouteErrorResponse,
   Links,
   Meta,
@@ -8,11 +10,14 @@ import {
   Outlet,
   Scripts,
   ScrollRestoration,
+  useRouteLoaderData,
 } from "react-router";
 import { Toaster } from "sonner";
 import type { Route } from "./+types/root.ts";
 import stylesheet from "./app.css?url";
 import { ThemeToggle } from "./components/theme-toggle.tsx";
+import { quietButton } from "./components/ui.ts";
+import type { loader as organizationLoader } from "./routes/organization.tsx";
 
 export const links: Route.LinksFunction = () => [{ rel: "stylesheet", href: stylesheet }];
 
@@ -42,16 +47,38 @@ const navLink = ({ isActive }: { isActive: boolean }) =>
   isActive ? "font-medium" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100";
 
 export default function App() {
+  const member = useRouteLoaderData<typeof organizationLoader>("routes/organization");
   return (
     <>
       <header className="border-b border-zinc-200 dark:border-zinc-800">
         <div className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
-          <span className="font-semibold">jigs hub</span>
+          <span className="font-semibold">{member?.organization ?? "jigs hub"}</span>
           <nav className="flex flex-1 gap-4 text-sm">
-            <NavLink to="/" end className={navLink}>
-              Home
-            </NavLink>
+            {member && (
+              <>
+                <NavLink to="/" end className={navLink}>
+                  Home
+                </NavLink>
+                <NavLink to="/members" className={navLink}>
+                  Members
+                </NavLink>
+                <NavLink to="/invites" className={navLink}>
+                  Invites
+                </NavLink>
+                <NavLink to="/settings" className={navLink}>
+                  Settings
+                </NavLink>
+              </>
+            )}
           </nav>
+          {member && (
+            <Form method="post" action="/sign-out" className="flex items-center gap-2 text-sm">
+              <span className="text-zinc-500">{member.user.email}</span>
+              <button type="submit" aria-label="Sign out" className={quietButton}>
+                <LogOut className="size-4" />
+              </button>
+            </Form>
+          )}
           <ThemeToggle />
         </div>
       </header>

@@ -2,12 +2,16 @@ import { fileURLToPath } from "node:url";
 import { createRequestHandler } from "@react-router/express";
 import express, { type RequestHandler } from "express";
 import type { ServerBuild } from "react-router";
+import type { HubAuth } from "./auth.ts";
 import type { HubConfig } from "./config.ts";
+import type { HubDatabase } from "./db/database.ts";
 import { packageRoot as root } from "./package-root.ts";
 
 declare module "react-router" {
   interface AppLoadContext {
     config: HubConfig;
+    db: HubDatabase;
+    auth: HubAuth;
   }
 }
 
@@ -18,8 +22,11 @@ export interface WebApp {
 }
 
 /** The built app from `build/`, or with `dev` the app served from source through Vite. */
-export async function createWebApp(config: HubConfig, dev: boolean): Promise<WebApp> {
-  const getLoadContext = () => ({ config });
+export async function createWebApp(
+  context: { config: HubConfig; db: HubDatabase; auth: HubAuth },
+  dev: boolean,
+): Promise<WebApp> {
+  const getLoadContext = () => context;
   if (dev) {
     const vite = await import("vite");
     const server = await vite.createServer({

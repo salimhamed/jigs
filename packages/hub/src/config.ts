@@ -7,6 +7,11 @@ export interface HubConfig {
   databaseUrl: string;
   /** The AES-256 key every stored secret is encrypted with. */
   encryptionKey: Buffer;
+  /** The GitHub OAuth app people sign in with. */
+  githubClientId: string;
+  githubClientSecret: string;
+  /** Whoever signs in with this GitHub email first creates the Organization. */
+  adminEmail: string;
 }
 
 /** Read the hub's config, throwing one error that names every bad value. */
@@ -36,6 +41,10 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
     problems.push("HUB_ENCRYPTION_KEY must be 32 bytes in base64 (openssl rand -base64 32)");
   }
 
+  const githubClientId = required("HUB_GITHUB_CLIENT_ID");
+  const githubClientSecret = required("HUB_GITHUB_CLIENT_SECRET");
+  const adminEmail = required("HUB_ADMIN_EMAIL");
+
   if (problems.length > 0) {
     throw new Error(`The hub cannot start:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
   }
@@ -45,5 +54,8 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
     publicUrl: publicUrl as URL,
     databaseUrl,
     encryptionKey,
+    githubClientId,
+    githubClientSecret,
+    adminEmail,
   };
 }
