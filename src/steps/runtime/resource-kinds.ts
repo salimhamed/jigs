@@ -9,6 +9,7 @@ import {
 } from "../../workflow/runtime/resources.ts";
 import { codexRunStatePath } from "../agents/harnesses/codex-home.ts";
 import { piRunStatePath } from "../agents/harnesses/pi-home.ts";
+import { claudePluginsPath } from "../agents/harnesses/skills.ts";
 import { fetchOriginDefault } from "../workspaces/create.ts";
 import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import type { ResourceRow } from "./registry.ts";
@@ -107,6 +108,7 @@ const KINDS: Record<ReleasableKind, ResourceKind> = {
   "run-directory": removeDirectory((runId) => runDirectory({ workflowRunId: runId })),
   "codex-home": harnessHome((runId) => codexRunStatePath(runId)),
   "pi-home": harnessHome((runId) => piRunStatePath(runId)),
+  "claude-plugins": removeDirectory((runId) => claudePluginsPath(runId)),
 };
 
 /** The releasable rows, in the order release must visit them; recorded-only kinds are left out. */

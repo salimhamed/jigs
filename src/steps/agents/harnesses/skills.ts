@@ -90,6 +90,11 @@ export interface SkillsPluginOptions {
   root?: () => string;
 }
 
+/** Return the per-run folder that holds a run's Claude skills plugins. */
+export function claudePluginsPath(runId: string, options: SkillsPluginOptions = {}): string {
+  return path.join(options.baseDir ?? path.join(jigsDataDir(), "claude-plugins"), runId);
+}
+
 /**
  * Build a private Claude Code plugin holding copies of the declared skills, for one agent call.
  * Claude Code lists them as `jigs-skills:<name>`.
@@ -99,9 +104,9 @@ export function prepareClaudeSkillsPlugin(
   skills: readonly string[],
   options: SkillsPluginOptions = {},
 ): SkillsPlugin {
-  const base = options.baseDir ?? path.join(jigsDataDir(), "claude-plugins");
-  mkdirSync(base, { recursive: true });
-  const dir = mkdtempSync(path.join(base, `${runId}-`));
+  const runDir = claudePluginsPath(runId, options);
+  mkdirSync(runDir, { recursive: true });
+  const dir = mkdtempSync(path.join(runDir, "plugin-"));
   const cleanup = () => rmSync(dir, { recursive: true, force: true });
   try {
     mkdirSync(path.join(dir, ".claude-plugin"));

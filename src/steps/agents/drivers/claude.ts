@@ -10,10 +10,15 @@ import {
   claudePolicyKeys,
   type McpServerConfig,
 } from "../../../workflow/agents/harness-config.ts";
+import { recordRunDirectory } from "../../runtime/registry.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
 import { resolveClaudeExecutable } from "../harnesses/executables.ts";
 import { mcpCredentialVariables, resolveMcpServer } from "../harnesses/mcp-credentials.ts";
-import { prepareClaudeSkillsPlugin, type SkillsPlugin } from "../harnesses/skills.ts";
+import {
+  claudePluginsPath,
+  prepareClaudeSkillsPlugin,
+  type SkillsPlugin,
+} from "../harnesses/skills.ts";
 import { AgentSessionError } from "../session-error.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
@@ -47,7 +52,7 @@ function descriptor(request: DriverRequest): ClaudeHarness {
 
 export interface ClaudeDriverDependencies {
   sessionMessages(sessionId: string, cwd: string): Promise<readonly unknown[]>;
-  prepareSkillsPlugin(runId: string, skills: readonly string[]): SkillsPlugin;
+  prepareSkillsPlugin(runId: string, skills: readonly string[]): Promise<SkillsPlugin>;
 }
 
 const defaultDependencies: ClaudeDriverDependencies = {
@@ -57,7 +62,10 @@ const defaultDependencies: ClaudeDriverDependencies = {
       limit: 1,
       includeSystemMessages: true,
     }),
-  prepareSkillsPlugin: prepareClaudeSkillsPlugin,
+  prepareSkillsPlugin: async (runId, skills) => {
+    await recordRunDirectory("claude-plugins", runId, claudePluginsPath(runId));
+    return prepareClaudeSkillsPlugin(runId, skills);
+  },
 };
 
 export function createClaudeDriver(
@@ -76,7 +84,7 @@ export function createClaudeDriver(
       const plugin =
         harness.skills === undefined || harness.skills.length === 0
           ? undefined
-          : deps.prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills);
+          : await deps.prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills);
       try {
         const settings = claudeStepSettings({
           ...descriptorSettings(harness, claudePolicyKeys),
