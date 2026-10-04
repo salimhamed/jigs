@@ -10,11 +10,19 @@ vi.mock("./executables.ts", async (importOriginal) => ({
 }));
 
 function lifecycle(
-  options: { sessionFound?: boolean; providerThrows?: boolean; abortWhilePreparing?: boolean } = {},
+  options: {
+    sessionFound?: boolean;
+    providerThrows?: boolean;
+    abortWhilePreparing?: boolean;
+    cleanupThrows?: boolean;
+  } = {},
 ) {
   const run = new AbortController();
   const close = vi.fn(async () => {});
-  const cleanup = vi.fn();
+  const cleanup = vi.fn(() => {
+    if (options.cleanupThrows === true)
+      throw Object.assign(new Error("ENOTEMPTY, Directory not empty"), { code: "ENOTEMPTY" });
+  });
   const provider = Object.assign(
     () => {
       if (options.providerThrows === true) throw new Error("bad settings");
@@ -83,4 +91,18 @@ test("a cancellation closes the app server at once, and close still removes the 
   expect(cleanup).not.toHaveBeenCalled();
   await opened?.close();
   expect(cleanup).toHaveBeenCalledTimes(1);
+});
+
+test("a home that Codex is still writing into while it exits does not fail the close", async () => {
+  const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
+  try {
+    const { open, close, cleanup } = lifecycle({ cleanupThrows: true });
+    const opened = await open();
+    await expect(opened?.close()).resolves.toBeUndefined();
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(cleanup).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining("ENOTEMPTY"));
+  } finally {
+    warn.mockRestore();
+  }
 });
