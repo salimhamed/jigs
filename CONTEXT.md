@@ -215,3 +215,30 @@ failure becomes a needs-human halt.
 
 **Check catalog**: The one set of checks and repair hints used by preflight,
 JIT checks and doctor.
+
+## Hub
+
+**Hub**: The separate service that receives every provider event and holds
+every app's credentials for the factories of its Organizations.
+_Avoid_: relay, gateway, server
+
+**Organization**: The group a hub serves as one: its members, apps, factories
+and their provider events. Usually one company.
+_Avoid_: team, workspace, tenant
+
+**Provider**: An outside service jigs works with: GitHub, Linear, Slack or
+PagerDuty.
+_Avoid_: integration, vendor
+
+**App**: An Organization's own identity on a provider, such as a GitHub App, a
+Linear OAuth app, a Slack bot or a PagerDuty connection. A provider can have
+several.
+_Avoid_: integration, connection, bot (for the general term)
+
+**Assignment**: An app allowed to a factory. A factory receives provider events
+from, and gets tokens for, only its assigned apps.
+_Avoid_: subscription, grant
+
+**Provider event**: One notification a provider sent through an app, kept as
+received. In a factory it becomes a wake, an occurrence, or nothing.
+_Avoid_: webhook (for the general term), delivery, message
