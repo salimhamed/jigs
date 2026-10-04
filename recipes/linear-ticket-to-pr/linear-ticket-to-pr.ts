@@ -107,7 +107,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     return stop(stoppedNote(key, worktree, built.stopped, pushed));
   }
 
-  const described = await describePullRequest(delivery, { commit: built.reviewedCommit });
+  const described = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, {
     commit: built.reviewedCommit,
     title: described.title,

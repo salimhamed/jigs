@@ -307,7 +307,6 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "pushBranch",
     "readBranchState",
     "readWorktreeDiff",
-    "restoreWorktree",
   ],
 };
 

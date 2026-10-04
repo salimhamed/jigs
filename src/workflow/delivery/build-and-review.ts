@@ -71,43 +71,30 @@ export interface BuildStopped {
  * committed. A round is approved when no finding is blocking. Each agent resumes its session from
  * round to round. Nothing is pushed, on approval or on a stop.
  *
- * A builder that leaves uncommitted changes, such as caches its checks created, is sent back once
- * in the same round with a blocking finding saying so; the round stops as `uncommitted` only if
- * the changes are still there after that turn. The reviewer must not change the worktree: after
- * each review the worktree is reset to the reviewed commit and its untracked files are removed,
- * while ignored files are kept.
- *
  * @group Pull request delivery
  */
 export async function buildAndReview<W>(
   delivery: BuildDelivery<W>,
   { rounds }: BuildAndReviewOptions,
-  steps: Pick<DeliverySteps, "readBranchState" | "readWorktreeDiff" | "restoreWorktree">,
+  steps: Pick<DeliverySteps, "readBranchState" | "readWorktreeDiff">,
 ): Promise<Built | { stopped: BuildStopped }> {
   const { work, worktree, prompts } = delivery;
   const diff = () => steps.readWorktreeDiff(worktree);
   const ledger: ReviewRound[] = [];
   let findings: ReviewFinding[] = [];
 
-  const build = (resumeWith: ReviewFinding[], freshWith: ReviewFinding[]) =>
-    delivery.builder.run({
+  for (let round = 1; round <= rounds; round++) {
+    const report = await delivery.builder.run({
       output: implementationReport,
-      resume: withFormat(prompts.build.resume({ findings: resumeWith }), formats.build),
+      resume: withFormat(prompts.build.resume({ findings }), formats.build),
       fresh: async () =>
         withFormat(
-          prompts.build.fresh({ work, worktree, findings: freshWith, diff: await diff() }),
+          prompts.build.fresh({ work, worktree, findings, diff: await diff() }),
           formats.build,
         ),
     });
 
-  for (let round = 1; round <= rounds; round++) {
-    const report = await build(findings, findings);
-
-    let state = await steps.readBranchState(worktree, worktree.baseSha);
-    if (state.dirty) {
-      await build([uncommittedFinding], [...findings, uncommittedFinding]);
-      state = await steps.readBranchState(worktree, worktree.baseSha);
-    }
+    const state = await steps.readBranchState(worktree, worktree.baseSha);
     if (state.dirty) return stop(worktree, "uncommitted", [], round);
     if (state.commits === 0) return stop(worktree, "no-commits", [], round);
 
@@ -127,7 +114,6 @@ export async function buildAndReview<W>(
         formats.review,
       ),
     });
-    await steps.restoreWorktree(worktree, state.headSha);
 
     findings = verdict.findings;
     const blocking = findings.some((finding) => finding.blocking);
@@ -146,12 +132,6 @@ export async function buildAndReview<W>(
   const open = findings.filter((finding) => finding.blocking).map((finding) => finding.summary);
   return stop(worktree, "rounds-exhausted", open, rounds);
 }
-
-const uncommittedFinding: ReviewFinding = {
-  summary:
-    "The worktree has uncommitted changes. Commit what belongs to the change, and delete anything else, such as caches or build output your checks created.",
-  blocking: true,
-};
 
 const stop = (
   worktree: Worktree,
