@@ -29,8 +29,8 @@ export interface SlackQuestion {
 }
 
 /**
- * How `waitForSlackReply` ended: with the new human replies, oldest first and never empty, at
- * `until`, or because the thread's top-level message was deleted.
+ * How `waitForSlackReply` ended: `replied` with the new human replies (oldest first, never
+ * empty), `timed-out` at `until`, or `gone` when the thread's top-level message was deleted.
  *
  * @group Slack messages
  */

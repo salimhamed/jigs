@@ -99,10 +99,10 @@ export type {
 } from "./workflow/delivery/answers.ts";
 export type {
   BuildAndReviewOptions,
+  BuildApproved,
   BuildDelivery,
   BuildResult,
   BuildStopped,
-  Built,
 } from "./workflow/delivery/build-and-review.ts";
 export type {
   BuildFacts,

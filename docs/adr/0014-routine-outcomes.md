@@ -10,12 +10,8 @@ and `waitForSlackReply` with string literals, `buildAndReview` with a
 anything else, and each shape needed its own test in the caller.
 
 Every such routine now returns one object per ending, discriminated by an
-`outcome` field, with that ending's facts beside it:
-
-- `buildAndReview`: `approved` with the reviewed commit, notes and ledger, or
-  `stopped` with the reason, open findings and round.
-- `followPullRequestToOutcome`: `merged` or `closed`.
-- `waitForSlackReply`: `replied` with the replies, `timed-out` or `gone`.
+`outcome` field, with that ending's facts beside it: today `buildAndReview`,
+`followPullRequestToOutcome` and `waitForSlackReply`.
 
 The rule covers any routine, not only delivery, so it lives here rather than
 in [0013](./0013-delivery-routines.md). It applies to routines only. A step's
@@ -29,6 +25,5 @@ plain value.
 
 - A new fact for an ending, such as when a wait timed out, is a field on that
   variant; callers that switch on `outcome` keep compiling.
-- Callers write `result.outcome === "closed"` instead of `result === "closed"`.
 - The change is workflow-side only: no step, step order or durable ID moves,
   so parked runs replay across the upgrade.

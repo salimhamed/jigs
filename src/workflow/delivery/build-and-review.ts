@@ -38,7 +38,7 @@ export interface BuildAndReviewOptions {
  *
  * @group Pull request delivery
  */
-export interface Built {
+export interface BuildApproved {
   outcome: "approved";
   /** The commit the reviewer approved. Publish exactly this one. */
   reviewedCommit: string;
@@ -70,7 +70,7 @@ export interface BuildStopped {
  *
  * @group Pull request delivery
  */
-export type BuildResult = Built | BuildStopped;
+export type BuildResult = BuildApproved | BuildStopped;
 
 /**
  * Build and review until the reviewer raises no blocking finding, or the rounds run out.

@@ -14,11 +14,11 @@ import type {
   AskAgentOptions,
   AskModelOptions,
   BuildAndReviewOptions,
+  BuildApproved,
   BuildDelivery,
   BuildFacts,
   BuildResult,
   BuildStopped,
-  Built,
   ChangePatch,
   ChangeStatus,
   ChangeSummary,
@@ -117,9 +117,9 @@ type RootTypeSurface = {
   askModelOptions: AskModelOptions;
   buildAndReviewOptions: BuildAndReviewOptions;
   buildFacts: BuildFacts<unknown>;
+  buildApproved: BuildApproved;
   buildResult: BuildResult;
   buildStopped: BuildStopped;
-  built: Built;
   changePatch: ChangePatch;
   changeStatus: ChangeStatus;
   changeSummary: ChangeSummary;

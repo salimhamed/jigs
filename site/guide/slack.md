@@ -219,9 +219,9 @@ risk posting twice.
 ## Wait for a reply
 
 `waitForSlackReply({ channel, threadTs, lastRead })` parks the run until someone
-replies in the thread under `threadTs`, and returns every reply posted after
-`lastRead`, oldest first, as outcome `replied`. `threadTs` must be the thread's top-level message,
-never a reply.
+replies in the thread under `threadTs`, and ends `replied` with every reply
+posted after `lastRead`, oldest first. `threadTs` must be the thread's top-level
+message, never a reply.
 
 `lastRead` is the ts of the newest post the workflow has read: usually the
 last reply in its latest `fetchSlackMessage`, or `threadTs` when the thread had
