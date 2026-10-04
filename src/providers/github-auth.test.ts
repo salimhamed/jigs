@@ -11,7 +11,7 @@ import {
   readAppPrivateKey,
   resetGithubAuth,
 } from "./github-auth.ts";
-import { configureGithub } from "./github-http.ts";
+import { useGithubClient } from "./test-fixtures.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 const { privateKey } = generateKeyPairSync("rsa", {
@@ -36,7 +36,7 @@ beforeEach(() => {
   tmp = makeTmpDir();
 });
 afterEach(() => {
-  configureGithub();
+  vi.restoreAllMocks();
   removeTmpDir(tmp);
 });
 
@@ -50,7 +50,7 @@ function github(...replies: Response[]) {
     if (reply === undefined) throw new Error("no reply left");
     return reply;
   });
-  configureGithub({ fetch: fake.fetch });
+  useGithubClient({ fetch: fake.fetch });
   return fake;
 }
 
@@ -226,7 +226,7 @@ test("accounts select independent cached installation tokens across Apps", async
   const { fetch: doFetch, calls } = fakeFetch(() =>
     tokenResponse(`token-${calls.length}`, Date.now() + 3_600_000),
   );
-  configureGithub({ fetch: doFetch });
+  useGithubClient({ fetch: doFetch });
   useFactoryRoot(tmp);
   try {
     expect(await githubAuthFor("FIRST").bearer()).toBe("token-1");

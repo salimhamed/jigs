@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { configureSlack, SlackApiError } from "../../providers/slack.ts";
+import { SlackApiError } from "../../providers/slack.ts";
+import { useSlackClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { callSlack } from "./call.ts";
 
@@ -20,11 +21,10 @@ beforeEach(() => {
     return new Response(JSON.stringify(route(new URLSearchParams(call.body))));
   });
   calls = fake.calls;
-  configureSlack({ fetch: fake.fetch, env: () => "xoxb-test" });
+  useSlackClient({ fetch: fake.fetch, env: () => "xoxb-test" });
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  configureSlack({});
 });
 
 test("any method is called as the bot, with non-string params JSON-encoded", async () => {

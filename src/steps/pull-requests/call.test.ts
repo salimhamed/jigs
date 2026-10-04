@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resetGithubAuth } from "../../providers/github-auth.ts";
-import { configureGithub, GitHubApiError } from "../../providers/github-http.ts";
+import { GitHubApiError } from "../../providers/github-http.ts";
+import { useGithubClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { callGitHub } from "./call.ts";
 
@@ -12,11 +13,10 @@ beforeEach(() => {
   vi.spyOn(console, "log").mockImplementation(() => {});
   const fake = fakeFetch(() => reply());
   calls = fake.calls;
-  configureGithub({ fetch: fake.fetch });
+  useGithubClient({ fetch: fake.fetch });
 });
 afterEach(() => {
   resetGithubAuth();
-  configureGithub();
   vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });

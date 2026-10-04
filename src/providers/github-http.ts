@@ -47,18 +47,6 @@ function messageOf(body: string): string {
   return body;
 }
 
-export interface GithubDeps {
-  fetch?: typeof fetch;
-  sleep?: (ms: number) => Promise<void>;
-}
-
-let deps: GithubDeps = {};
-
-/** Send this process's GitHub calls through `next`; with nothing, the real network. */
-export function configureGithub(next: GithubDeps = {}): void {
-  deps = next;
-}
-
 // A primary limit is a 429, or a 403 with no requests left; a secondary one is
 // a 403 that names its wait.
 function isRateLimited(res: Response): boolean {
@@ -89,29 +77,40 @@ export interface GithubSend {
   refuse?: (res: Response, text: string) => Error;
 }
 
-export function githubSend<T>({
-  auth,
-  method = "GET",
-  apiPath,
-  json,
-  refuse,
-}: GithubSend): Promise<T> {
-  return providerRequest<T>({
-    provider: "github",
-    auth,
-    url: `${GITHUB_API_URL}${apiPath}`,
-    method,
-    request: apiPath,
-    headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
-    json,
-    isRateLimited,
-    retryAfter: rateLimitWait,
-    decode: (res, text) => {
-      if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
-      // 204 on a POST that adds nothing to say — assignees and labels do this.
-      return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
-    },
-    fetch: deps.fetch,
-    sleep: deps.sleep,
-  });
+export interface GithubClientDeps {
+  fetch?: typeof fetch;
+  sleep?: (ms: number) => Promise<void>;
+}
+
+export function createGithubClient(deps: GithubClientDeps = {}) {
+  function send<T>({ auth, method = "GET", apiPath, json, refuse }: GithubSend): Promise<T> {
+    return providerRequest<T>({
+      provider: "github",
+      auth,
+      url: `${GITHUB_API_URL}${apiPath}`,
+      method,
+      request: apiPath,
+      headers: { accept: "application/vnd.github+json", "x-github-api-version": "2022-11-28" },
+      json,
+      isRateLimited,
+      retryAfter: rateLimitWait,
+      decode: (res, text) => {
+        if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+        // 204 on a POST that adds nothing to say — assignees and labels do this.
+        return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
+      },
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+    });
+  }
+  return { send };
+}
+
+export type GithubClient = ReturnType<typeof createGithubClient>;
+
+/** The process's GitHub client. `githubSend` calls it, so a test can spy on `send`. */
+export const githubClient: GithubClient = createGithubClient();
+
+export function githubSend<T>(spec: GithubSend): Promise<T> {
+  return githubClient.send<T>(spec);
 }

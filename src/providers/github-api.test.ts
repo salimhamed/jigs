@@ -1,11 +1,10 @@
 import { writeFileSync } from "node:fs";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { useFactoryRoot } from "./credentials.ts";
 import { githubRequest } from "./github-api.ts";
 import { resetGithubAuth } from "./github-auth.ts";
-import { configureGithub } from "./github-http.ts";
-import { fakeGithub } from "./github-test-support.ts";
+import { fakeGithub } from "./test-fixtures.ts";
 
 test("repository and GraphQL calls require an account before authentication", async () => {
   for (const apiPath of ["/repos//repo/issues", "/repos/owner", "/graphql"]) {
@@ -30,7 +29,7 @@ test("repository paths and GraphQL select their target accounts", async () => {
     expect(github.calls).toHaveLength(0);
   } finally {
     resetGithubAuth();
-    configureGithub();
+    vi.restoreAllMocks();
     removeTmpDir(dir);
   }
 });

@@ -12,8 +12,8 @@ import {
   postPullRequestReview,
   replyToReviewThread,
 } from "./github.ts";
-import { configureGithub, GitHubApiError } from "./github-http.ts";
-import { type FakeGithub, fakeGithub } from "./github-test-support.ts";
+import { GitHubApiError } from "./github-http.ts";
+import { type FakeGithub, fakeGithub } from "./test-fixtures.ts";
 import { type FetchCall, fakeSleep } from "./test-support.ts";
 
 let github: FakeGithub;
@@ -23,7 +23,7 @@ beforeEach(() => {
   github = fakeGithub();
 });
 afterEach(() => {
-  configureGithub();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 

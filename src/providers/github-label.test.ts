@@ -1,7 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { configureGithub } from "./github-http.ts";
 import { ensureRepoLabel } from "./github-label.ts";
-import { type FakeGithub, fakeGithub } from "./github-test-support.ts";
+import { type FakeGithub, fakeGithub } from "./test-fixtures.ts";
 
 const label = (name: string) => ({ name, color: "1d76db", description: "Managed by jigs" });
 
@@ -13,7 +12,7 @@ beforeEach(() => {
 });
 
 afterEach(() => {
-  configureGithub();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 

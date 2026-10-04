@@ -68,73 +68,10 @@ export interface SlackReply {
   response_metadata?: { next_cursor?: string };
 }
 
-export interface SlackDeps {
+export interface SlackClientDeps {
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   env?: EnvLookup;
-}
-
-let deps: SlackDeps = {};
-
-/** Replace how this process's Slack calls reach the network and read tokens. For tests. */
-export function configureSlack(next: SlackDeps): void {
-  deps = next;
-}
-
-// Form-encoded, because every Web API method accepts it and not every read
-// method accepts JSON.
-export function slackCall<T extends SlackReply>(
-  method: string,
-  params: SlackParams = {},
-  token: SlackToken = "SLACK_BOT_TOKEN",
-): Promise<{ body: T; headers: Headers }> {
-  const form = new URLSearchParams();
-  for (const [key, value] of Object.entries(params)) {
-    if (value !== undefined)
-      form.set(key, typeof value === "string" ? value : JSON.stringify(value));
-  }
-  return providerRequest({
-    provider: "slack",
-    auth: { bearer: async () => requireCredential(token, undefined, deps.env) },
-    url: `${SLACK_API_URL}/${method}`,
-    method: "POST",
-    request: method,
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: form.toString(),
-    fetch: deps.fetch,
-    sleep: deps.sleep,
-    decode: (res, text, fail) => {
-      let body: T;
-      try {
-        body = JSON.parse(text) as T;
-      } catch {
-        throw fail({ detail: `answered HTTP ${res.status}` });
-      }
-      if (!body.ok) {
-        throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
-          status: res.status,
-          body: text,
-        });
-      }
-      return { body, headers: res.headers };
-    },
-  });
-}
-
-async function slackPages<T>(method: string, params: SlackParams, key: string): Promise<T[]> {
-  const all: T[] = [];
-  let cursor: string | undefined;
-  for (let page = 0; page < MAX_PAGES; page += 1) {
-    const { body } = await slackCall<SlackReply & Record<string, unknown>>(method, {
-      ...params,
-      limit: "200",
-      cursor,
-    });
-    all.push(...((body[key] as T[] | undefined) ?? []));
-    cursor = body.response_metadata?.next_cursor || undefined;
-    if (cursor === undefined) return all;
-  }
-  throw new JigsError(`Slack ${method} kept returning a next cursor past ${MAX_PAGES} pages`);
 }
 
 /** Who the bot token acts as, and the scopes Slack reports it holds. */
@@ -144,37 +81,6 @@ export interface SlackAuth {
   user: string;
   team: string;
   scopes: string[];
-}
-
-/** Call `auth.test` with the bot token. Uncached, so a check sees a revoked token. */
-export async function slackAuthTest(): Promise<SlackAuth> {
-  const { body, headers } = await slackCall<
-    SlackReply & { user_id: string; bot_id: string; user: string; team: string }
-  >("auth.test");
-  return {
-    userId: body.user_id,
-    botId: body.bot_id,
-    user: body.user,
-    team: body.team,
-    scopes: (headers.get("x-oauth-scopes") ?? "")
-      .split(",")
-      .map((scope) => scope.trim())
-      .filter((scope) => scope !== ""),
-  };
-}
-
-let bot: Promise<SlackAuth> | null = null;
-onProviderReset(() => {
-  bot = null;
-});
-
-/** The factory's own bot, from `auth.test` once per process. */
-export function slackBot(): Promise<SlackAuth> {
-  bot ??= slackAuthTest().catch((err: unknown) => {
-    bot = null;
-    throw err;
-  });
-  return bot;
 }
 
 /** A channel message as Slack returns it. */
@@ -188,39 +94,6 @@ export interface SlackMessage {
   thread_ts?: string;
 }
 
-/** A channel's messages after `oldest` (exclusive), newest first, as Slack returns them. */
-export function slackHistory(channel: string, { oldest }: { oldest: string }) {
-  return slackPages<SlackMessage>("conversations.history", { channel, oldest }, "messages");
-}
-
-/** A thread: its parent message, then every reply in order. */
-export function slackReplies(channel: string, ts: string) {
-  return slackPages<SlackMessage>("conversations.replies", { channel, ts }, "messages");
-}
-
-/** Post plain `mrkdwn` text, as a reply when `threadTs` is given. Returns the new message's ts. */
-export async function slackPostMessage(message: {
-  channel: string;
-  text: string;
-  threadTs?: string;
-}): Promise<string> {
-  const { body } = await slackCall<SlackReply & { ts: string }>("chat.postMessage", {
-    channel: message.channel,
-    text: message.text,
-    thread_ts: message.threadTs,
-  });
-  return body.ts;
-}
-
-/** A link to one message. */
-export async function slackPermalink(channel: string, ts: string): Promise<string> {
-  const { body } = await slackCall<SlackReply & { permalink: string }>("chat.getPermalink", {
-    channel,
-    message_ts: ts,
-  });
-  return body.permalink;
-}
-
 /** A Slack user as jigs names them: display name, else real name, else handle. */
 export interface SlackUser {
   id: string;
@@ -229,32 +102,190 @@ export interface SlackUser {
   bot: boolean;
 }
 
-export async function slackUser(id: string): Promise<SlackUser> {
-  const { body } = await slackCall<
-    SlackReply & {
-      user: {
-        id: string;
-        name: string;
-        is_bot: boolean;
-        profile?: { display_name?: string; real_name?: string; email?: string };
-      };
+export function createSlackClient(deps: SlackClientDeps = {}) {
+  // Form-encoded, because every Web API method accepts it and not every read
+  // method accepts JSON.
+  function slackCall<T extends SlackReply>(
+    method: string,
+    params: SlackParams = {},
+    token: SlackToken = "SLACK_BOT_TOKEN",
+  ): Promise<{ body: T; headers: Headers }> {
+    const form = new URLSearchParams();
+    for (const [key, value] of Object.entries(params)) {
+      if (value !== undefined)
+        form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
-  >("users.info", { user: id });
-  const { user } = body;
+    return providerRequest({
+      provider: "slack",
+      auth: { bearer: async () => requireCredential(token, undefined, deps.env) },
+      url: `${SLACK_API_URL}/${method}`,
+      method: "POST",
+      request: method,
+      headers: { "content-type": "application/x-www-form-urlencoded" },
+      body: form.toString(),
+      fetch: deps.fetch,
+      sleep: deps.sleep,
+      decode: (res, text, fail) => {
+        let body: T;
+        try {
+          body = JSON.parse(text) as T;
+        } catch {
+          throw fail({ detail: `answered HTTP ${res.status}` });
+        }
+        if (!body.ok) {
+          throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
+            status: res.status,
+            body: text,
+          });
+        }
+        return { body, headers: res.headers };
+      },
+    });
+  }
+
+  async function slackPages<T>(method: string, params: SlackParams, key: string): Promise<T[]> {
+    const all: T[] = [];
+    let cursor: string | undefined;
+    for (let page = 0; page < MAX_PAGES; page += 1) {
+      const { body } = await slackCall<SlackReply & Record<string, unknown>>(method, {
+        ...params,
+        limit: "200",
+        cursor,
+      });
+      all.push(...((body[key] as T[] | undefined) ?? []));
+      cursor = body.response_metadata?.next_cursor || undefined;
+      if (cursor === undefined) return all;
+    }
+    throw new JigsError(`Slack ${method} kept returning a next cursor past ${MAX_PAGES} pages`);
+  }
+
+  /** Call `auth.test` with the bot token. Uncached, so a check sees a revoked token. */
+  async function slackAuthTest(): Promise<SlackAuth> {
+    const { body, headers } = await slackCall<
+      SlackReply & { user_id: string; bot_id: string; user: string; team: string }
+    >("auth.test");
+    return {
+      userId: body.user_id,
+      botId: body.bot_id,
+      user: body.user,
+      team: body.team,
+      scopes: (headers.get("x-oauth-scopes") ?? "")
+        .split(",")
+        .map((scope) => scope.trim())
+        .filter((scope) => scope !== ""),
+    };
+  }
+
+  /** A channel's messages after `oldest` (exclusive), newest first, as Slack returns them. */
+  function slackHistory(channel: string, { oldest }: { oldest: string }) {
+    return slackPages<SlackMessage>("conversations.history", { channel, oldest }, "messages");
+  }
+
+  /** A thread: its parent message, then every reply in order. */
+  function slackReplies(channel: string, ts: string) {
+    return slackPages<SlackMessage>("conversations.replies", { channel, ts }, "messages");
+  }
+
+  /** Post plain `mrkdwn` text, as a reply when `threadTs` is given. Returns the new message's ts. */
+  async function slackPostMessage(message: {
+    channel: string;
+    text: string;
+    threadTs?: string;
+  }): Promise<string> {
+    const { body } = await slackCall<SlackReply & { ts: string }>("chat.postMessage", {
+      channel: message.channel,
+      text: message.text,
+      thread_ts: message.threadTs,
+    });
+    return body.ts;
+  }
+
+  /** A link to one message. */
+  async function slackPermalink(channel: string, ts: string): Promise<string> {
+    const { body } = await slackCall<SlackReply & { permalink: string }>("chat.getPermalink", {
+      channel,
+      message_ts: ts,
+    });
+    return body.permalink;
+  }
+
+  async function slackUser(id: string): Promise<SlackUser> {
+    const { body } = await slackCall<
+      SlackReply & {
+        user: {
+          id: string;
+          name: string;
+          is_bot: boolean;
+          profile?: { display_name?: string; real_name?: string; email?: string };
+        };
+      }
+    >("users.info", { user: id });
+    const { user } = body;
+    return {
+      id: user.id,
+      name: user.profile?.display_name || user.profile?.real_name || user.name,
+      ...(user.profile?.email ? { email: user.profile.email } : {}),
+      bot: user.is_bot,
+    };
+  }
+
+  /** Open a Socket Mode connection with the app-level token. Returns its WebSocket URL. */
+  async function slackOpenConnection(): Promise<string> {
+    const { body } = await slackCall<SlackReply & { url: string }>(
+      "apps.connections.open",
+      {},
+      "SLACK_APP_TOKEN",
+    );
+    return body.url;
+  }
+
   return {
-    id: user.id,
-    name: user.profile?.display_name || user.profile?.real_name || user.name,
-    ...(user.profile?.email ? { email: user.profile.email } : {}),
-    bot: user.is_bot,
+    slackCall,
+    slackAuthTest,
+    slackHistory,
+    slackReplies,
+    slackPostMessage,
+    slackPermalink,
+    slackUser,
+    slackOpenConnection,
   };
 }
 
-/** Open a Socket Mode connection with the app-level token. Returns its WebSocket URL. */
-export async function slackOpenConnection(): Promise<string> {
-  const { body } = await slackCall<SlackReply & { url: string }>(
-    "apps.connections.open",
-    {},
-    "SLACK_APP_TOKEN",
-  );
-  return body.url;
+export type SlackClient = ReturnType<typeof createSlackClient>;
+
+/** The process's Slack client. The functions below call it, so a test can spy on its methods. */
+export const slackClient: SlackClient = createSlackClient();
+
+export function slackCall<T extends SlackReply>(
+  method: string,
+  params?: SlackParams,
+  token?: SlackToken,
+): Promise<{ body: T; headers: Headers }> {
+  return slackClient.slackCall<T>(method, params, token);
+}
+export const slackAuthTest: SlackClient["slackAuthTest"] = () => slackClient.slackAuthTest();
+export const slackHistory: SlackClient["slackHistory"] = (...args) =>
+  slackClient.slackHistory(...args);
+export const slackReplies: SlackClient["slackReplies"] = (...args) =>
+  slackClient.slackReplies(...args);
+export const slackPostMessage: SlackClient["slackPostMessage"] = (...args) =>
+  slackClient.slackPostMessage(...args);
+export const slackPermalink: SlackClient["slackPermalink"] = (...args) =>
+  slackClient.slackPermalink(...args);
+export const slackUser: SlackClient["slackUser"] = (...args) => slackClient.slackUser(...args);
+export const slackOpenConnection: SlackClient["slackOpenConnection"] = () =>
+  slackClient.slackOpenConnection();
+
+let bot: Promise<SlackAuth> | null = null;
+onProviderReset(() => {
+  bot = null;
+});
+
+/** The factory's own bot, from `auth.test` once per process. */
+export function slackBot(): Promise<SlackAuth> {
+  bot ??= slackAuthTest().catch((err: unknown) => {
+    bot = null;
+    throw err;
+  });
+  return bot;
 }

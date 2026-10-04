@@ -10,8 +10,8 @@ import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { resetProviderContext } from "../providers/credentials.ts";
 import { resetGithubAuth } from "../providers/github-auth.ts";
-import { configureGithub } from "../providers/github-http.ts";
 import * as linear from "../providers/linear.ts";
+import { useGithubClient } from "../providers/test-fixtures.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
@@ -133,7 +133,6 @@ beforeEach(() => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
-  configureGithub();
   // Clears the cached world too, so the next getWorld() opens the local one
   // again from the data dir above.
   setWorld(undefined);
@@ -366,7 +365,7 @@ test("a signed status delivery resolves every matching PR and routes by base rep
       ]),
     ),
   );
-  configureGithub({ fetch: fetchMock });
+  useGithubClient({ fetch: fetchMock });
   resumeHookMock
     .mockResolvedValueOnce({} as never)
     .mockRejectedValueOnce(new HookNotFoundError("unclaimed"));
@@ -386,7 +385,7 @@ test("a signed status delivery resolves every matching PR and routes by base rep
 
 test("pending status is ignored without a sha lookup", async () => {
   const fetchMock = vi.fn();
-  configureGithub({ fetch: fetchMock });
+  useGithubClient({ fetch: fetchMock });
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
 
   const res = await postStatus(statusPayload("pending"));
@@ -398,7 +397,7 @@ test("pending status is ignored without a sha lookup", async () => {
 });
 
 test("status with no open PR is dropped without waking a gate", async () => {
-  configureGithub({ fetch: vi.fn().mockResolvedValue(new Response("[]")) });
+  useGithubClient({ fetch: vi.fn().mockResolvedValue(new Response("[]")) });
   const res = await postStatus(statusPayload("success"));
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual({ delivered: false });
@@ -406,7 +405,7 @@ test("status with no open PR is dropped without waking a gate", async () => {
 });
 
 test("a status lookup failure is acknowledged as unroutable rather than a 500", async () => {
-  configureGithub({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
+  useGithubClient({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
   const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
   const res = await postStatus(statusPayload("failure"));
   expect(res.status).toBe(404);

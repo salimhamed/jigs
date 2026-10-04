@@ -1,18 +1,13 @@
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resetProviderContext } from "./credentials.ts";
 import {
-  configureSlack,
+  createSlackClient,
   SLACK_API_URL,
   SlackApiError,
-  slackAuthTest,
+  type SlackClient,
   slackBot,
-  slackHistory,
-  slackOpenConnection,
-  slackPermalink,
-  slackPostMessage,
-  slackReplies,
-  slackUser,
 } from "./slack.ts";
+import { useSlackClient } from "./test-fixtures.ts";
 import { type FetchCall, fakeFetch, fakeSleep } from "./test-support.ts";
 
 const BOT_TOKEN = "xoxb-test-bot-token";
@@ -42,6 +37,7 @@ let tokens: Record<string, string>;
 let answers: Array<() => Response>;
 let calls: FetchCall[];
 let sleeps: number[];
+let slack: SlackClient;
 
 // Answers each call with the next queued answer, repeating the last.
 function answer(...next: Array<() => Response>) {
@@ -69,16 +65,19 @@ beforeEach(() => {
   const sleep = fakeSleep();
   calls = fake.calls;
   sleeps = sleep.sleeps;
-  configureSlack({ fetch: fake.fetch, sleep: sleep.sleep, env: (name) => tokens[name] });
+  const deps = { fetch: fake.fetch, sleep: sleep.sleep, env: (name: string) => tokens[name] };
+  slack = createSlackClient(deps);
+  // slackBot caches on the process client.
+  useSlackClient(deps);
 });
 afterEach(() => {
-  configureSlack({});
+  vi.restoreAllMocks();
   resetProviderContext();
 });
 
 test("auth.test names the bot and reads its scopes from the response header", async () => {
   answer(() => reply(AUTH_OK, { headers: { "x-oauth-scopes": SCOPES } }));
-  expect(await slackAuthTest()).toEqual({
+  expect(await slack.slackAuthTest()).toEqual({
     userId: "U0C59SU5V29",
     botId: "B0C5JPZUW1J",
     user: "salims_jigs",
@@ -93,12 +92,12 @@ test("auth.test names the bot and reads its scopes from the response header", as
 
 test("a response without the scopes header reports no scopes", async () => {
   answer(() => reply(AUTH_OK));
-  expect((await slackAuthTest()).scopes).toEqual([]);
+  expect((await slack.slackAuthTest()).scopes).toEqual([]);
 });
 
 test("a Slack error carries its code and never the token", async () => {
   answer(() => reply({ ok: false, error: "invalid_auth" }));
-  const error = await slackAuthTest().catch((err: unknown) => err);
+  const error = await slack.slackAuthTest().catch((err: unknown) => err);
   expect(error).toBeInstanceOf(SlackApiError);
   expect(error).toMatchObject({ code: "invalid_auth", message: "Slack auth.test: invalid_auth" });
   expect(String(error)).not.toContain(BOT_TOKEN);
@@ -113,7 +112,7 @@ test("a missing scope names the scope Slack asked for", async () => {
       provided: "channels:history,groups:history,chat:write",
     }),
   );
-  const error = await slackUser("U1").catch((err: unknown) => err);
+  const error = await slack.slackUser("U1").catch((err: unknown) => err);
   expect(error).toMatchObject({
     code: "missing_scope",
     message: "Slack users.info: missing_scope (needs users:read)",
@@ -122,13 +121,13 @@ test("a missing scope names the scope Slack asked for", async () => {
 
 test("an unset bot token names the .env key before any request", async () => {
   tokens.SLACK_BOT_TOKEN = "";
-  await expect(slackAuthTest()).rejects.toThrow("SLACK_BOT_TOKEN is not set");
+  await expect(slack.slackAuthTest()).rejects.toThrow("SLACK_BOT_TOKEN is not set");
   expect(calls).toHaveLength(0);
 });
 
 test("a non-JSON answer reports the HTTP status, not the body", async () => {
   answer(() => new Response("<html>bad gateway</html>", { status: 502 }));
-  const error = await slackAuthTest().catch((err: unknown) => err);
+  const error = await slack.slackAuthTest().catch((err: unknown) => err);
   expect(error).toMatchObject({
     provider: "slack",
     status: 502,
@@ -142,7 +141,7 @@ test("a rate-limited call waits out Retry-After and tries again", async () => {
       reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "7" } }),
     () => reply(AUTH_OK),
   );
-  expect((await slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect((await slack.slackAuthTest()).userId).toBe("U0C59SU5V29");
   expect(sleeps).toEqual([7_000]);
   expect(calls).toHaveLength(2);
 });
@@ -156,7 +155,7 @@ test("an unreadable Retry-After waits one second", async () => {
       ),
     () => reply(AUTH_OK),
   );
-  expect((await slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect((await slack.slackAuthTest()).userId).toBe("U0C59SU5V29");
   expect(sleeps).toEqual([1_000]);
 });
 
@@ -164,7 +163,7 @@ test("a Retry-After over a minute fails as ratelimited instead of waiting", asyn
   answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "61" } }),
   );
-  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited", status: 429 });
+  await expect(slack.slackAuthTest()).rejects.toMatchObject({ code: "ratelimited", status: 429 });
   expect(calls).toHaveLength(1);
   expect(sleeps).toEqual([]);
 });
@@ -173,7 +172,7 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
   answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "1" } }),
   );
-  await expect(slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
+  await expect(slack.slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
   expect(calls).toHaveLength(4);
   expect(sleeps).toEqual([1_000, 1_000, 1_000]);
 });
@@ -223,7 +222,7 @@ test("history follows the cursor across pages, newest first, from oldest", async
         response_metadata: { next_cursor: "" },
       }),
   );
-  const messages = await slackHistory("C0C5EUZ7P9Q", { oldest: "1790723000.000000" });
+  const messages = await slack.slackHistory("C0C5EUZ7P9Q", { oldest: "1790723000.000000" });
   expect(messages.map((m) => m.ts)).toEqual([
     "1790723478.961719",
     "1790723415.832429",
@@ -249,7 +248,7 @@ test("replies return the parent then its thread, in order", async () => {
       has_more: false,
     }),
   );
-  const thread = await slackReplies("C0C5EUZ7P9Q", "1790723478.961719");
+  const thread = await slack.slackReplies("C0C5EUZ7P9Q", "1790723478.961719");
   expect(thread.map((m) => m.ts)).toEqual(["1790723478.961719", "1790723839.836679"]);
   expect(Object.fromEntries(sent(0).params)).toEqual({
     channel: "C0C5EUZ7P9Q",
@@ -261,14 +260,18 @@ test("replies return the parent then its thread, in order", async () => {
 test("posting sends plain text, in the thread when asked, and returns the new ts", async () => {
   answer(() => reply({ ok: true, channel: "C0C5EUZ7P9Q", ts: "1790724000.000200", message: {} }));
   expect(
-    await slackPostMessage({ channel: "C0C5EUZ7P9Q", text: "*hi*", threadTs: "1790723478.961719" }),
+    await slack.slackPostMessage({
+      channel: "C0C5EUZ7P9Q",
+      text: "*hi*",
+      threadTs: "1790723478.961719",
+    }),
   ).toBe("1790724000.000200");
   expect(Object.fromEntries(sent(0).params)).toEqual({
     channel: "C0C5EUZ7P9Q",
     text: "*hi*",
     thread_ts: "1790723478.961719",
   });
-  await slackPostMessage({ channel: "C0C5EUZ7P9Q", text: "top level" });
+  await slack.slackPostMessage({ channel: "C0C5EUZ7P9Q", text: "top level" });
   expect(sent(1).params.has("thread_ts")).toBe(false);
 });
 
@@ -276,7 +279,7 @@ test("a permalink is read for a message", async () => {
   const permalink =
     "https://junglescout.slack.com/archives/C0C5EUZ7P9Q/p1790723478961719?thread_ts=1790723478.961719&cid=C0C5EUZ7P9Q";
   answer(() => reply({ ok: true, permalink, channel: "C0C5EUZ7P9Q" }));
-  expect(await slackPermalink("C0C5EUZ7P9Q", "1790723478.961719")).toBe(permalink);
+  expect(await slack.slackPermalink("C0C5EUZ7P9Q", "1790723478.961719")).toBe(permalink);
   expect(Object.fromEntries(sent(0).params)).toEqual({
     channel: "C0C5EUZ7P9Q",
     message_ts: "1790723478.961719",
@@ -306,13 +309,13 @@ test("a user reads as their display name and email, falling back to the real nam
         },
       }),
   );
-  expect(await slackUser("U01PW925E6N")).toEqual({
+  expect(await slack.slackUser("U01PW925E6N")).toEqual({
     id: "U01PW925E6N",
     name: "Salim",
     email: "salim@example.com",
     bot: false,
   });
-  expect(await slackUser("U0C59SU5V29")).toEqual({
+  expect(await slack.slackUser("U0C59SU5V29")).toEqual({
     id: "U0C59SU5V29",
     name: "Salim's jigs",
     bot: true,
@@ -322,7 +325,7 @@ test("a user reads as their display name and email, falling back to the real nam
 
 test("a Socket Mode connection is opened with the app-level token", async () => {
   answer(() => reply({ ok: true, url: "wss://wss-primary.slack.com/link/?ticket=t" }));
-  expect(await slackOpenConnection()).toBe("wss://wss-primary.slack.com/link/?ticket=t");
+  expect(await slack.slackOpenConnection()).toBe("wss://wss-primary.slack.com/link/?ticket=t");
   expect(sent(0)).toMatchObject({
     url: `${SLACK_API_URL}/apps.connections.open`,
     auth: `Bearer ${APP_TOKEN}`,
@@ -331,7 +334,7 @@ test("a Socket Mode connection is opened with the app-level token", async () => 
 
 test("an unset app token names its .env key", async () => {
   tokens.SLACK_APP_TOKEN = "";
-  await expect(slackOpenConnection()).rejects.toThrow("SLACK_APP_TOKEN is not set");
+  await expect(slack.slackOpenConnection()).rejects.toThrow("SLACK_APP_TOKEN is not set");
 });
 
 test("history stops at a ceiling when every page claims another", async () => {
@@ -342,7 +345,7 @@ test("history stops at a ceiling when every page claims another", async () => {
       response_metadata: { next_cursor: "again" },
     }),
   );
-  await expect(slackHistory("C0C5EUZ7P9Q", { oldest: "0" })).rejects.toThrow(
+  await expect(slack.slackHistory("C0C5EUZ7P9Q", { oldest: "0" })).rejects.toThrow(
     "Slack conversations.history kept returning a next cursor past 50 pages",
   );
   expect(calls).toHaveLength(50);

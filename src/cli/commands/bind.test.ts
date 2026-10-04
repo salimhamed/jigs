@@ -1,9 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { configureGithub, GitHubApiError } from "../../providers/github-http.ts";
+import { GitHubApiError } from "../../providers/github-http.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
-import { type FakeGithub, fakeGithub } from "../../providers/github-test-support.ts";
+import { type FakeGithub, fakeGithub } from "../../providers/test-fixtures.ts";
 import type { FetchCall } from "../../providers/test-support.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
@@ -244,7 +244,7 @@ function stubWebhookEnv() {
   github = fakeGithub();
 }
 afterEach(() => {
-  configureGithub();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
 });
 

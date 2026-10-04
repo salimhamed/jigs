@@ -2,8 +2,7 @@ import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { configureGithub } from "../../providers/github-http.ts";
-import { type FakeGithub, fakeGithub } from "../../providers/github-test-support.ts";
+import { type FakeGithub, fakeGithub } from "../../providers/test-fixtures.ts";
 import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
 import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
@@ -41,7 +40,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllEnvs();
-  configureGithub();
+  vi.restoreAllMocks();
   rmSync(tmp, { recursive: true, force: true });
 });
 

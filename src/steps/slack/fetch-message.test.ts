@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resetProviderContext } from "../../providers/credentials.ts";
-import { configureSlack } from "../../providers/slack.ts";
+import { useSlackClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
@@ -83,11 +83,10 @@ beforeEach(() => {
     return new Response(JSON.stringify(route(new URLSearchParams(call.body))));
   });
   sent = fake.calls;
-  configureSlack({ fetch: fake.fetch, env: () => "xoxb-test" });
+  useSlackClient({ fetch: fake.fetch, env: () => "xoxb-test" });
 });
 afterEach(() => {
   vi.restoreAllMocks();
-  configureSlack({});
   resetProviderContext();
 });
 

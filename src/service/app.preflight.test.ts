@@ -2,7 +2,7 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { configureGithub } from "../providers/github-http.ts";
+import { useGithubClient } from "../providers/test-fixtures.ts";
 import { fakeFetch, jsonResponse } from "../providers/test-support.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../steps/workspaces/layout.ts";
@@ -108,7 +108,7 @@ beforeEach(() => {
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  configureGithub();
+  vi.restoreAllMocks();
 });
 
 function seedThreeFailures(): void {
@@ -250,7 +250,7 @@ test("a green preflight lets the trigger call start()", async () => {
       ? jsonResponse({ login: "dev" })
       : jsonResponse({ message: `unexpected ${call.url.pathname}` }, 500),
   );
-  configureGithub({ fetch: github.fetch });
+  useGithubClient({ fetch: github.fetch });
 
   const res = await trigger();
   expect(res.status).toBe(201);

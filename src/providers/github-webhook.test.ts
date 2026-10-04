@@ -1,13 +1,12 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resetGithubAuth } from "./github-auth.ts";
-import { configureGithub } from "./github-http.ts";
-import { type FakeGithub, fakeGithub } from "./github-test-support.ts";
 import {
   ensureRepoWebhook,
   inspectRepoWebhook,
   parseGithubRemote,
   WEBHOOK_EVENTS,
 } from "./github-webhook.ts";
+import { type FakeGithub, fakeGithub } from "./test-fixtures.ts";
 import type { FetchCall } from "./test-support.ts";
 
 let github: FakeGithub;
@@ -18,7 +17,7 @@ beforeEach(() => {
   github = fakeGithub();
 });
 afterEach(() => {
-  configureGithub();
+  vi.restoreAllMocks();
   vi.unstubAllEnvs();
   resetGithubAuth();
 });
