@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.91.1](https://github.com/salimhamed/jigs/compare/jigs-v0.91.0...jigs-v0.91.1) (2026-10-04)
+
+
+### Features
+
+* show the message that started a triggered run in jigs status ([#526](https://github.com/salimhamed/jigs/issues/526)) ([5189b5c](https://github.com/salimhamed/jigs/commit/5189b5cd55267d9494bdaf0e91028ec70f551f32))
+
+
+### Bug Fixes
+
+* read a Claude structured answer from its accepted attempt ([#530](https://github.com/salimhamed/jigs/issues/530)) ([a2ee97a](https://github.com/salimhamed/jigs/commit/a2ee97acf81af035af9bdd8fa52c78e87a2e65b3))
+
+
+### Reverts
+
+* restore the worktree after review and description, and let the builder tidy up once ([#527](https://github.com/salimhamed/jigs/issues/527)) ([#531](https://github.com/salimhamed/jigs/issues/531)) ([f81f2f5](https://github.com/salimhamed/jigs/commit/f81f2f5e54ae49fcf3bd1ff0fbe34d06c2b80be4))
+
 ## [0.91.0](https://github.com/salimhamed/jigs/compare/jigs-v0.90.0...jigs-v0.91.0) (2026-10-04)
 
 
