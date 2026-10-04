@@ -198,9 +198,9 @@ everything in between:
 
 - `buildAndReview(delivery, { rounds })` has the builder implement and commit,
   then the reviewer review the commit, until the reviewer raises no blocking
-  finding. It returns the reviewed commit, or `{ stopped }` with the reason
-  (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings and
-  the round it stopped in. A stop pushes nothing: push the branch with the
+  finding. It ends `approved` with the reviewed commit, or `stopped` with the
+  reason (`rounds-exhausted`, `uncommitted` or `no-commits`), the open findings
+  and the round it stopped in. A stop pushes nothing: push the branch with the
   `pushBranch` step if whoever takes over should find the work on the remote.
 - `describePullRequest(delivery, { check })` has the writer write the pull
   request's title and body from the diff. The optional `check` returns the
@@ -213,7 +213,11 @@ everything in between:
   can be published. Describe first, so a failed description pushes nothing.
 - `followPullRequestToOutcome(delivery, pr, options)` wakes the builder for
   what it has to act on until the pull request merges or closes, and merges it
-  when you consent. It returns `"merged"` or `"closed"`.
+  when you consent. It ends `merged` or `closed`.
+
+A routine that can end without the result you asked for, such as these two or
+`waitForSlackReply`, returns an object whose `outcome` names how it ended, so
+you switch on `result.outcome` and read the fields that outcome carries.
 
 The routines write nothing a person reads. A stop is a return value. A pull
 request that needs a person, including one GitHub blocks from merging, reaches
@@ -356,10 +360,10 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
     };
 
     const built = await buildAndReview(delivery, { rounds: 2 });
-    if ("stopped" in built) {
+    if (built.outcome === "stopped") {
       throw new JigsError(
-        `${binding}: the upgrade stopped (${built.stopped.reason})`,
-        built.stopped.findings.join("\n"),
+        `${binding}: the upgrade stopped (${built.reason})`,
+        built.findings.join("\n"),
       );
     }
     const { title, body } = await describePullRequest(delivery, {
@@ -369,7 +373,7 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
           : ['Start the title with "chore(deps): ".'],
     });
     const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
-    const outcome = await followPullRequestToOutcome(delivery, pr, {
+    const followed = await followPullRequestToOutcome(delivery, pr, {
       attemptsPerUpdate: 2,
       wake: builderWakeFacts,
       mergeWhen: () => true,
@@ -381,7 +385,9 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
         });
       },
     });
-    if (outcome === "closed") throw new JigsError(`${pr.url} was closed without merging`);
+    if (followed.outcome === "closed") {
+      throw new JigsError(`${pr.url} was closed without merging`);
+    }
     merged.push(pr.url);
   }
   return { merged };

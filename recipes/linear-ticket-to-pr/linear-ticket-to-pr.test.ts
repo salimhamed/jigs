@@ -33,10 +33,15 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
   reviewTicket: vi.fn(async (): Promise<TicketHandoff> => handoff),
   noteOnTicket: vi.fn(async () => {}),
   postPullRequestNote: vi.fn(async () => {}),
-  buildAndReview: vi.fn(async () => ({ reviewedCommit: "h1", notes: [], ledger: [] })),
+  buildAndReview: vi.fn(async () => ({
+    outcome: "approved" as const,
+    reviewedCommit: "h1",
+    notes: [],
+    ledger: [],
+  })),
   describePullRequest: vi.fn(async () => ({ title: "Add a flag", body: "Adds it." })),
   publishPullRequest: vi.fn(async () => pr),
-  followPullRequestToOutcome: vi.fn(async () => "merged" as const),
+  followPullRequestToOutcome: vi.fn(async () => ({ outcome: "merged" as const })),
 }));
 
 const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
@@ -133,6 +138,7 @@ test("a run needs a binding before it claims the ticket", () => {
 
 test("the reviewer's notes are appended to the pull request body", async () => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
+    outcome: "approved",
     reviewedCommit: "h1",
     notes: ["Rename x"],
     ledger: [],
@@ -152,7 +158,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
   vi.mocked(routines.followPullRequestToOutcome).mockImplementationOnce(
     async (_delivery, _pr, options) => {
       await options.onNeedsHuman(facts);
-      return "merged";
+      return { outcome: "merged" };
     },
   );
 
@@ -187,7 +193,7 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
         tries: 1,
       });
       await options.onNeedsHuman({ reason: "merge-refused", detail: "GitHub 502", tries: 10 });
-      return "merged";
+      return { outcome: "merged" };
     },
   );
 
@@ -220,7 +226,7 @@ test("a blocked merge is noted on the pull request with the delivery's scope, no
         headSha: "h1",
         detail: "GitHub blocks the merge.",
       });
-      return "merged";
+      return { outcome: "merged" };
     },
   );
 
@@ -238,7 +244,10 @@ test("a blocked merge is noted on the pull request with the delivery's scope, no
 
 test("a stopped build pushes the branch, posts its note on the ticket, sets Todo, and fails the run", async () => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
-    stopped: { reason: "rounds-exhausted", findings: ["Broken"], round: 3 },
+    outcome: "stopped",
+    reason: "rounds-exhausted",
+    findings: ["Broken"],
+    round: 3,
   });
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
@@ -268,7 +277,10 @@ test.each([
   [2, "jigs stopped work on ABC-123 in round 2, before its review."],
 ])("a stop in round %i before its review says so", async (round, headline) => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
-    stopped: { reason: "uncommitted", findings: [], round },
+    outcome: "stopped",
+    reason: "uncommitted",
+    findings: [],
+    round,
   });
 
   await expect(run()).rejects.toThrow(headline);
@@ -279,7 +291,7 @@ test.each([
 });
 
 test("a pull request closed without merging gets a note on the ticket, sets Todo, and fails the run", async () => {
-  vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce("closed");
+  vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
 
   await expect(run()).rejects.toThrow("jigs stopped pull request maintenance for ABC-123.");
 

@@ -28,6 +28,17 @@ export interface SlackQuestion {
   until?: string;
 }
 
+/**
+ * How `waitForSlackReply` ended: with the new human replies, oldest first and never empty, at
+ * `until`, or because the thread's top-level message was deleted.
+ *
+ * @group Slack messages
+ */
+export type SlackReplyResult =
+  | { outcome: "replied"; replies: SlackPost[] }
+  | { outcome: "timed-out" }
+  | { outcome: "gone" };
+
 // Slack timestamps are seconds and microseconds, too many digits for a
 // double to order exactly.
 function tsValue(ts: string): bigint {
@@ -39,13 +50,13 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
 
 /**
  * Wait for a human to reply in a Slack thread after `lastRead`, and return
- * every such reply, oldest first and never empty. Returns `"timed-out"` once
- * `until` passes, and `"gone"` when the thread's top-level message is deleted.
+ * every such reply. Ends `timed-out` once `until` passes, and `gone` when the
+ * thread's top-level message is deleted.
  *
  * @remarks
  * Without `until`, waits until a reply or `jigs cancel`. With it, the thread is
  * read at least once, so a reply already there wins even when `until` has
- * passed; after that the wait returns `"timed-out"` at `until`, and a later
+ * passed; after that the wait ends `timed-out` at `until`, and a later
  * reply wakes nothing. Socket Mode, the service's poll and `jigs poke` each
  * make it read the thread again. Replies from bots, including the factory's
  * own, never count. `threadTs` must be the thread's top-level message: a
@@ -60,7 +71,7 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
 export async function waitForSlackReply(
   question: SlackQuestion,
   steps: SlackReplySteps,
-): Promise<SlackPost[] | "timed-out" | "gone"> {
+): Promise<SlackReplyResult> {
   const { fetchSlackMessage } = steps;
   const { channel, threadTs, lastRead, until } = question;
   const deadline = until === undefined ? undefined : new Date(until);
@@ -78,20 +89,20 @@ export async function waitForSlackReply(
     const since = tsValue(lastRead);
     while (true) {
       const thread = await fetchSlackMessage({ channel, ts: threadTs });
-      if (thread.gone) return "gone";
+      if (thread.gone) return { outcome: "gone" };
       const replies = thread.replies.filter((post) => !post.author.bot && tsValue(post.ts) > since);
-      if (replies.length > 0) return replies;
+      if (replies.length > 0) return { outcome: "replied", replies };
       if (deadline === undefined) {
         await hook;
         continue;
       }
       // The workflow clock replays deterministically, so this check does too.
-      if (Date.now() >= deadline.getTime()) return "timed-out";
+      if (Date.now() >= deadline.getTime()) return { outcome: "timed-out" };
       // One durable timer per call, created only once the routine has to park.
       // The SDK cannot cancel it, so a run that got its reply wakes once more at `until`.
       expired ??= sleep(deadline).then(() => "timed-out" as const);
       if ((await Promise.race([hook.then(() => "woken" as const), expired])) === "timed-out") {
-        return "timed-out";
+        return { outcome: "timed-out" };
       }
     }
   } finally {
