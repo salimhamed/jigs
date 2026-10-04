@@ -2,7 +2,6 @@ import { execFile } from "node:child_process";
 import { readFileSync } from "node:fs";
 import { promisify } from "node:util";
 import { JigsError } from "../errors.ts";
-import { failedCheck } from "../providers/check.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { CLAUDE_ENV } from "../steps/agents/drivers/claude-support.ts";
 import { driverFor } from "../steps/agents/drivers/index.ts";
@@ -12,13 +11,12 @@ import { resolveClaudeExecutable } from "../steps/agents/harnesses/executables.t
 import { realPiAuthPath } from "../steps/agents/harnesses/pi-home.ts";
 import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import {
-  type Check,
-  type CheckResult,
   neededByUsers,
   PROBE_TIMEOUT_MS,
   requirementUsers,
   type WorkflowManifests,
 } from "./catalog.ts";
+import { type Check, type CheckResult, failedCheck } from "./check.ts";
 import { type HarnessKind, type HarnessRuntimeDeps, harnessRuntime } from "./harness-runtime.ts";
 import type { WorkflowRequires } from "./index.ts";
 

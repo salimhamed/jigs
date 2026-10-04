@@ -1,3 +1,4 @@
+import type { Check, CheckResult } from "../checks/check.ts";
 import {
   type LinearIdentity,
   readFactoryConfig,
@@ -8,7 +9,6 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import type { Check, CheckResult } from "./check.ts";
 import { type LinearWebhook, listWebhooks } from "./linear.ts";
 
 export interface LinearWebhookChecksOptions {

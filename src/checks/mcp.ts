@@ -16,7 +16,8 @@ import type {
   McpToolProbe,
   PiMcpServerConfig,
 } from "../workflow/agents/harness-config.ts";
-import { CHECK_TIMEOUT_MS, type Check, type CheckResult } from "./catalog.ts";
+import { CHECK_TIMEOUT_MS } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 // A step runs these when its agent starts, and doctor runs them for the agents
 // a workflow declares under `requires.agents`. Preflight does not: a step can

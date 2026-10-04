@@ -2,7 +2,6 @@ import path from "node:path";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
-import { type Check, failedCheck } from "../providers/check.ts";
 import { githubChecks } from "../providers/github-checks.ts";
 import { webhookChecks } from "../providers/github-webhook-checks.ts";
 import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
@@ -30,12 +29,12 @@ import {
   runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
+import { type Check, failedCheck } from "./check.ts";
 import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
 
-export { type Check, failedCheck } from "../providers/check.ts";
 export {
   type CheckReport,
   type FailedCheck,
@@ -43,6 +42,7 @@ export {
   formatFailures,
   runChecks,
 } from "./catalog.ts";
+export { type Check, failedCheck } from "./check.ts";
 
 // A workflow's declared requirements — the manifest side of the computed check
 // list. Hand-maintaining the list is the drift trap this exists to avoid.

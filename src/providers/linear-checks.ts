@@ -1,10 +1,10 @@
+import { type Check, failedCheck } from "../checks/check.ts";
 import {
   FACTORY_CONFIG_FILE,
   type LinearIdentity,
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import { type Check, failedCheck } from "./check.ts";
 import {
   credentialValue,
   type EnvLookup,

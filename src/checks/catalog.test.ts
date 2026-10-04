@@ -2,10 +2,10 @@ import { copyFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
-import { type Check, failedCheck } from "../providers/check.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
+import { type Check, failedCheck } from "./check.ts";
 import { doctorChecks, jitChecks, preflightChecks, type WorkflowRequires } from "./index.ts";
 
 const passing = (id: string): Check => ({

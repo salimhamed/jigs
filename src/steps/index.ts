@@ -10,7 +10,7 @@
  * @packageDocumentation
  */
 
-export type { Check, CheckResult } from "../providers/check.ts";
+export type { Check, CheckResult } from "../checks/check.ts";
 export { ProviderApiError } from "../providers/http.ts";
 export type {
   DecisionGeneration,

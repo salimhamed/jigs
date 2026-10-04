@@ -5,7 +5,7 @@ import type {
   LanguageModel,
   OutputInterface,
 } from "ai";
-import type { Check } from "../../../checks/catalog.ts";
+import type { Check } from "../../../checks/check.ts";
 import type {
   Harness,
   HarnessKind,

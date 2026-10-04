@@ -1,10 +1,10 @@
+import type { Check, CheckResult } from "../checks/check.ts";
 import { readFactoryConfig, type WebhooksConfig } from "../config/factory-config.ts";
 import {
   missingWebhookSecret,
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import type { Check, CheckResult } from "./check.ts";
 import { RESTART_SERVICE } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
 import type { PagerDutyWebhookSubscription } from "./pagerduty.ts";

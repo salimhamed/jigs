@@ -35,9 +35,11 @@ module.exports = {
     },
     {
       name: "providers-not-checks-steps-service-or-cli",
+      comment:
+        "Providers may import the Check shape from checks/check.ts, nothing else under checks/.",
       severity: "error",
       from: { path: "^src/providers/" },
-      to: { path: "^src/(checks|steps|service|cli)/" },
+      to: { path: "^src/(checks|steps|service|cli)/", pathNot: "^src/checks/check\\.ts$" },
     },
     {
       name: "config-not-steps-service-or-cli",

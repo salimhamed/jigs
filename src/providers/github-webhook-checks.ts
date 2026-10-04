@@ -1,3 +1,4 @@
+import type { Check, CheckResult } from "../checks/check.ts";
 import type { ResolvedGithubIdentity } from "../config/factory-config.ts";
 import { readFactoryConfig } from "../config/factory-config.ts";
 import {
@@ -5,7 +6,6 @@ import {
   webhookSecret,
   webhookSecretRepair,
 } from "../config/webhook-secret.ts";
-import type { Check, CheckResult } from "./check.ts";
 import { resolveGithubIdentity } from "./github-auth.ts";
 import { GitHubApiError } from "./github-http.ts";
 import { inspectRepoWebhook, parseGithubRemote } from "./github-webhook.ts";

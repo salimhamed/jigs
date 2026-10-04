@@ -1,7 +1,7 @@
+import type { Check } from "../checks/check.ts";
 import { readFactoryConfig, resolveService, type SlackConfig } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
 import { otherSlackAppHolders } from "../config/slack-apps.ts";
-import type { Check } from "./check.ts";
 import {
   credentialValue,
   type EnvLookup,

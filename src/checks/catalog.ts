@@ -3,10 +3,8 @@
 // the same text at launch and mid-run.
 
 import { plainHint } from "../errors.ts";
-import type { Check, CheckResult } from "../providers/check.ts";
+import type { Check, CheckResult } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";
-
-export type { Check, CheckResult };
 
 /** `unanswered` marks a failure the check did not give: it threw, or did not answer in time. */
 export type CheckOutcome = { id: string; label: string; unanswered?: true } & CheckResult;

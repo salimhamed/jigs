@@ -3,6 +3,7 @@
 // token versus an App whose key, installation or permissions are wrong — so
 // each gets its own checks and its own repair.
 
+import type { Check, CheckResult } from "../checks/check.ts";
 import {
   type AppIdentity,
   type GithubIdentity,
@@ -10,7 +11,6 @@ import {
   readFactoryConfig,
 } from "../config/factory-config.ts";
 import { factoryRoot } from "../config/factory-root.ts";
-import type { Check, CheckResult } from "./check.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "./credentials.ts";
 import { getAuthenticatedUser } from "./github.ts";
 import {

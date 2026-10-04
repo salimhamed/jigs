@@ -1,6 +1,6 @@
+import { type Check, failedCheck } from "../checks/check.ts";
 import { FACTORY_CONFIG_FILE, type PagerDutyIdentity } from "../config/factory-config.ts";
 import { JigsError } from "../errors.ts";
-import { type Check, failedCheck } from "./check.ts";
 import {
   credentialValue,
   type EnvLookup,

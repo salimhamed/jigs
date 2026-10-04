@@ -6,7 +6,8 @@ import { resolveGithubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
 import { NEEDS_APP_IDENTITY } from "../steps/agents/harnesses/github-access.ts";
 import type { Harness } from "../workflow/agents/harness-config.ts";
-import { type Check, type CheckResult, PROBE_TIMEOUT_MS } from "./catalog.ts";
+import { PROBE_TIMEOUT_MS } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 const execFileAsync = promisify(execFile);
 

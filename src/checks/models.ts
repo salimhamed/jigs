@@ -1,7 +1,7 @@
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import type { OpenaiCompatibleSource } from "../workflow/agents/harness-config.ts";
-import type { Check, CheckResult } from "./catalog.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 /** Check that a model API credential is present without spending a request. */
 export function modelApiKeyCheck(variable: string, env: NodeJS.ProcessEnv = process.env): Check {

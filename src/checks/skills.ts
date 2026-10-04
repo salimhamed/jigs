@@ -3,7 +3,7 @@ import path from "node:path";
 import { factoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { skillFolder, skillName } from "../steps/agents/harnesses/skills.ts";
-import type { Check, CheckResult } from "./catalog.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 const DESCRIPTOR = "the agent's harness descriptor";
 
