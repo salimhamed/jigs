@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.100.1](https://github.com/salimhamed/jigs/compare/jigs-v0.100.0...jigs-v0.100.1) (2026-10-04)
+
+
+### Bug Fixes
+
+* refuse a service start that another process answers for ([#566](https://github.com/salimhamed/jigs/issues/566)) ([695d864](https://github.com/salimhamed/jigs/commit/695d864844b03f977ec6466b86e0aeecb3bb93e6))
+
 ## [0.100.0](https://github.com/salimhamed/jigs/compare/jigs-v0.99.0...jigs-v0.100.0) (2026-10-04)
 
 
