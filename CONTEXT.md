@@ -233,7 +233,7 @@ _Avoid_: integration, vendor
 **App**: An Organization's own identity on a provider, such as a GitHub App, a
 Linear OAuth app, a Slack bot or a PagerDuty connection. A provider can have
 several.
-_Avoid_: integration, connection, bot (for the general term)
+_Avoid_: integration, connection or bot (for the general term)
 
 **Assignment**: An app allowed to a factory. A factory receives provider events
 from, and gets tokens for, only its assigned apps.
