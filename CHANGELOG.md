@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.100.0](https://github.com/salimhamed/jigs/compare/jigs-v0.99.0...jigs-v0.100.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* **recipe:** jigs merges approved pull requests and requires conventional-commit titles ([#564](https://github.com/salimhamed/jigs/issues/564))
+
+### Features
+
+* **recipe:** jigs merges approved pull requests and requires conventional-commit titles ([#564](https://github.com/salimhamed/jigs/issues/564)) ([b04ee14](https://github.com/salimhamed/jigs/commit/b04ee144c13327b83775c5ebc72fdc3ac6239005))
+
 ## [0.99.0](https://github.com/salimhamed/jigs/compare/jigs-v0.98.0...jigs-v0.99.0) (2026-10-04)
 
 
