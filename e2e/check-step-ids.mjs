@@ -39,6 +39,7 @@ import {
   statSync,
   writeFileSync,
 } from "node:fs";
+import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -398,8 +399,17 @@ function withFakeVersion(packJigs) {
 // with code 0, inside the time `jigs service stop` gives it before SIGKILL.
 // What this proves: imports, both listeners, readiness, the clean exit. What
 // it does not: the graphile path, which the shutdown db test covers.
-const BOOT_PORT = 18990;
-const BOOT_DASHBOARD_PORT = 18991;
+// Ports the kernel hands out, not fixed ones: an e2e run beside another on
+// the same machine would otherwise find its ports taken, and a service that
+// cannot listen leaves the other run's service answering every request.
+const [
+  BOOT_PORT,
+  BOOT_DASHBOARD_PORT,
+  RUNTIME_PORT,
+  RUNTIME_DASHBOARD_PORT,
+  CANCEL_PORT,
+  CANCEL_DASHBOARD_PORT,
+] = await freePorts(6);
 const BOOT_TIMEOUT_MS = 90_000;
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 const READY_POLL_MS = 100;
@@ -413,8 +423,6 @@ const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 // the message is what identifies it either way.
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
-const RUNTIME_PORT = 18992;
-const RUNTIME_DASHBOARD_PORT = 18993;
 const RUNTIME_TIMEOUT_MS = 90_000;
 const LONG_STEP_MS = Number(process.env.JIGS_E2E_LONG_STEP_MS ?? "25");
 
@@ -1183,20 +1191,38 @@ if (postgresUrl === undefined || postgresUrl === "") {
   factory = factories.get("bare");
   if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
   installCompiledCancellationFixture(factory, {
-    service: RUNTIME_PORT + 2,
-    dashboard: RUNTIME_DASHBOARD_PORT + 2,
+    service: CANCEL_PORT,
+    dashboard: CANCEL_DASHBOARD_PORT,
   });
   build();
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,
     factory,
-    ports: { service: RUNTIME_PORT + 2, dashboard: RUNTIME_DASHBOARD_PORT + 2 },
+    ports: { service: CANCEL_PORT, dashboard: CANCEL_DASHBOARD_PORT },
     scratch,
   });
 }
 
 cleanup();
+
+// Every socket stays open until all are bound, so the ports are distinct.
+async function freePorts(count) {
+  const servers = await Promise.all(
+    Array.from(
+      { length: count },
+      () =>
+        new Promise((resolve, reject) => {
+          const server = createServer();
+          server.once("error", reject);
+          server.listen(0, "127.0.0.1", () => resolve(server));
+        }),
+    ),
+  );
+  const ports = servers.map((server) => server.address().port);
+  await Promise.all(servers.map((server) => new Promise((resolve) => server.close(resolve))));
+  return ports;
+}
 
 function cleanup() {
   if (scratch !== undefined) rmSync(scratch, { recursive: true, force: true });

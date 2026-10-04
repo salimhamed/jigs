@@ -81,7 +81,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // preflight's job. Nitro serves this route before the plugins have run, so
   // `ready` — not the 200 — is what `jigs service start` waits on. With a
   // service per factory repo, `factoryRoot` is the only thing that says which
-  // factory answers here.
+  // factory answers here, and `pid` which process.
   app.get("/health", (c) =>
     c.json({
       ok: true,
@@ -89,6 +89,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
       phase: bootPhase(),
       world: process.env.WORKFLOW_TARGET_WORLD ?? "local (default)",
       factoryRoot: factoryRootOrNull(context),
+      pid: process.pid,
       workflows: Object.keys(factory.workflows),
       uptimeSeconds: Math.round(process.uptime()),
     }),

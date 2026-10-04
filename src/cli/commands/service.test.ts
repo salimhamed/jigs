@@ -70,8 +70,8 @@ interface Fake {
   startTimes: Map<number, string>;
 }
 
-const READY: ServiceHealth = { ready: true, phase: "ready" };
-const booting = (phase: string): ServiceHealth => ({ ready: false, phase });
+const READY: ServiceHealth = { ready: true, phase: "ready", pid: 4242 };
+const booting = (phase: string): ServiceHealth => ({ ready: false, phase, pid: 4242 });
 
 // `health` is what /health answers to each probe in turn — null for no answer
 // at all; the last entry repeats, so the default is a service up at once.
@@ -455,6 +455,20 @@ test("a start that outlives its timeout fails, names the log and the phase, and 
   expect(err?.hint).toContain("jigs service stop");
   expect(recorded(root)).toMatchObject({ processGroup: 4242 });
   expect(recorded(root)?.exited).toBeUndefined();
+});
+
+test("a ready answer from another process on the port fails the start and stops the new one", async () => {
+  const root = builtFactory();
+  const io = fake([{ ...READY, pid: 777 }]);
+  exitsOnTerm(io);
+
+  const err = await failure(startService(deps(root, io)));
+
+  expect(err?.message).toContain("already served by another process (pid 777)");
+  expect(err?.hint).toContain("service.port");
+  expect(io.alive.has(4242)).toBe(false);
+  expect(io.signals).not.toContainEqual(expect.objectContaining({ pid: 777 }));
+  expect(recorded(root)).toBeUndefined();
 });
 
 // `jigs up` names the spawn and the wait as two steps.

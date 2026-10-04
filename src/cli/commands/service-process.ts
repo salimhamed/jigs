@@ -61,10 +61,11 @@ export interface ServiceProcesses extends ProcessControl {
 }
 
 // What the service's /health says about its boot; null when it does not
-// answer at all.
+// answer at all. `pid` is null for a service built before /health named it.
 export interface ServiceHealth {
   ready: boolean;
   phase: string;
+  pid: number | null;
 }
 
 export interface ServiceLifecycleDeps {
@@ -259,6 +260,16 @@ export async function awaitReady(
   let phase: string | undefined;
   for (;;) {
     const health = await probe(`${serviceUrl}/health`);
+    // The new process never gets the port while another holds it, and nitro
+    // keeps it running without a listener; trusting the other process's
+    // answer would send every request for this factory to it.
+    if (health !== null && health.pid !== null && health.pid !== pid) {
+      await stopRecorded(deps, slug, { processGroup: pid });
+      throw new JigsError(
+        `${serviceUrl} is already served by another process (pid ${health.pid}), so the ${slug} service could not listen there and was stopped`,
+        "stop that process, or give this factory another `service.port` in jigs.config.ts",
+      );
+    }
     if (health?.ready) return;
     if (health !== null && health.phase !== phase) {
       phase = health.phase;
@@ -298,10 +309,11 @@ async function healthProbe(url: string): Promise<ServiceHealth | null> {
     const body = (await res.json().catch(() => ({}))) as {
       ready?: boolean;
       phase?: string;
+      pid?: number;
     };
     // A service built before /health reported readiness answers with neither
     // field; answering at all was its whole readiness.
-    return { ready: body.ready ?? true, phase: body.phase ?? "up" };
+    return { ready: body.ready ?? true, phase: body.phase ?? "up", pid: body.pid ?? null };
   } catch {
     return null;
   }
