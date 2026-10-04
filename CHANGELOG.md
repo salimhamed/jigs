@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.102.0](https://github.com/salimhamed/jigs/compare/jigs-v0.101.0...jigs-v0.102.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* validate the config when it loads and read service settings from the built factory ([#570](https://github.com/salimhamed/jigs/issues/570))
+
+### Code Refactoring
+
+* validate the config when it loads and read service settings from the built factory ([#570](https://github.com/salimhamed/jigs/issues/570)) ([a54938e](https://github.com/salimhamed/jigs/commit/a54938e2e682b48097dd5c3e585527941c013f5f))
+
 ## [0.101.0](https://github.com/salimhamed/jigs/compare/jigs-v0.100.1...jigs-v0.101.0) (2026-10-04)
 
 
