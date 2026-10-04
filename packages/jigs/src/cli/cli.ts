@@ -125,7 +125,7 @@ Options:
 `;
 
 const program = new Command("jigs")
-  .version(JIGS_VERSION, "-V, --version", "print the installed jigs version")
+  .version(JIGS_VERSION, "-V, --version")
   .showHelpAfterError("(add --help for additional information)");
 
 // Root help is a user journey rather than Commander's registration order.
