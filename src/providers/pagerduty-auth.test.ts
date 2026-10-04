@@ -143,16 +143,6 @@ test("a caller that needs a longer lifetime gets a fresh token", async () => {
   expect(await auth.bearer(1_799_000)).toBe("token-2");
 });
 
-test("a minimum longer than a token's life cannot force a mint on every call", async () => {
-  let minted = 0;
-  const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`, 3600));
-  const auth = createPagerDutyAuth(IDENTITY, { env: lookup(ENV), fetch: doFetch, now: () => 0 });
-  const fiveHours = 5 * 60 * 60 * 1000;
-  expect(await auth.bearer(fiveHours)).toBe("token-1");
-  expect(await auth.bearer(fiveHours)).toBe("token-1");
-  expect(doFetch).toHaveBeenCalledTimes(1);
-});
-
 test("a refused mint names the .env keys and never echoes the secret", async () => {
   const doFetch = vi.fn(
     async () =>

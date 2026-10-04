@@ -448,5 +448,5 @@ A server's `disabledTools` lists tools the model may not call; Pi uses its
 user, while the factory's token belongs to an app. For the same reason
 `list_incidents` cannot filter by the `assigned` or `teams` request scope, and
 tools outside jigs' scopes, such as schedules and services, fail when called.
-`jigs doctor` checks that each server answers; the agent's step probes it with
-the token before the agent starts.
+`jigs doctor` does not check these servers, since it has no agent token; the
+agent's step probes each one with the token before the agent starts.

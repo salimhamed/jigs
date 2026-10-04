@@ -19,18 +19,8 @@ import { pagerDutyAuthFor, resolvePagerDutyIdentity } from "../providers/pagerdu
 import { slackAuthTest, slackEnvValue, slackOpenConnection } from "../providers/slack.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/drivers/index.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/harnesses/env.ts";
-import {
-  AGENT_ACCESS_PROVIDERS,
-  AGENT_TOKEN_ENV,
-  agentTokensReadBy,
-  assertAgentAccess,
-} from "../workflow/agents/agent-access.ts";
-import type {
-  AskableModelSource,
-  Harness,
-  McpServerConfig,
-  PiMcpServerConfig,
-} from "../workflow/agents/harness-config.ts";
+import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
+import type { AskableModelSource, Harness } from "../workflow/agents/harness-config.ts";
 import { agentCommandCheck, agentGithubChecks } from "./agent-github.ts";
 import { awsCredentialsCheck } from "./aws.ts";
 import { bindingChecks } from "./bindings.ts";
@@ -63,7 +53,7 @@ import {
   linearOperatorChecks,
 } from "./linear-identity.ts";
 import { linearWebhookChecks } from "./linear-webhook.ts";
-import { mcpCredentialFailure, mcpReachableCheck, mcpServerChecks } from "./mcp.ts";
+import { mcpServerChecks } from "./mcp.ts";
 import {
   type PagerDutyIdentityProbes,
   pagerDutyFromChecks,
@@ -395,38 +385,28 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
       const driver = driverFor(harness.kind);
       if (driver === undefined) continue;
       for (const [name, server] of Object.entries(harness.mcpServers ?? {})) {
-        const tokens = agentTokensReadBy(server);
-        const optedIn = tokens.filter((provider) => harness[provider] !== undefined);
-        const key = JSON.stringify([harness.kind, name, server, optedIn]);
+        const key = JSON.stringify([harness.kind, name, server, harness.github !== undefined]);
         const entry = servers.get(key) ?? {
           checks: serverChecks(name, () => {
-            // A descriptor written as a literal skips the constructors' check.
-            assertAgentAccess({ ...harness, mcpServers: { [name]: server } });
-            const env = agentStepEnv(driver, { harness, cwd: root }, agentEnv);
-            // An agent token exists only inside its step, so doctor checks the
-            // server is installed or reachable; the step's own check probes it.
-            if (tokens.length > 0) {
-              const id = `mcp.${name}`;
-              const label = `MCP server ${name}`;
-              const available =
-                "command" in server
-                  ? agentCommandCheck(
-                      id,
-                      label,
+            // An agent token exists only inside its step, so doctor checks a
+            // local server is installed; the step's own check probes it.
+            if (agentTokensReadBy(server).length > 0)
+              return "command" in server
+                ? [
+                    agentCommandCheck(
+                      `mcp.${name}`,
+                      `MCP server ${name}`,
                       server.command,
                       `install ${server.command} on the PATH the service starts agents with`,
-                    )
-                  : mcpReachableCheck(id, label, server.url);
-              return [
-                {
-                  id,
-                  label,
-                  run: async () =>
-                    mcpCredentialFailure(name, withoutAgentTokens(server), env) ?? available.run(),
-                },
-              ];
-            }
-            return agentMcpServerChecks(harness.kind, { [name]: server }, root, env);
+                    ),
+                  ]
+                : [];
+            return agentMcpServerChecks(
+              harness.kind,
+              { [name]: server },
+              root,
+              agentStepEnv(driver, { harness, cwd: root }, agentEnv),
+            );
           }),
           workflows: [],
         };
@@ -436,25 +416,6 @@ function requiredMcpServerChecks(workflows: WorkflowManifests): Check[] {
     }
   }
   return [...servers.values()].flatMap(({ checks, workflows }) => neededByUsers(checks, workflows));
-}
-
-// The server's other credentials, which doctor can still find in the factory's environment.
-function withoutAgentTokens(server: McpServerConfig | PiMcpServerConfig): McpServerConfig {
-  const agent: string[] = Object.values(AGENT_TOKEN_ENV);
-  const keep = (entries: Record<string, string> | undefined) =>
-    Object.fromEntries(
-      Object.entries(entries ?? {}).filter(([, source]) => !agent.includes(source)),
-    );
-  if ("command" in server)
-    return { command: server.command, env: keep(server.env), probe: server.probe };
-  return {
-    url: server.url,
-    headers: keep(server.headers),
-    ...(server.bearerTokenEnv === undefined || agent.includes(server.bearerTokenEnv)
-      ? {}
-      : { bearerTokenEnv: server.bearerTokenEnv }),
-    probe: server.probe,
-  };
 }
 
 // A descriptor whose environment cannot be planned fails the way the step
