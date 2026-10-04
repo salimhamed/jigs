@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.91.2](https://github.com/salimhamed/jigs/compare/jigs-v0.91.1...jigs-v0.91.2) (2026-10-04)
+
+
+### Features
+
+* let agents act as the factory on Linear and PagerDuty, with linearMcp and pagerdutyMcp ([#536](https://github.com/salimhamed/jigs/issues/536)) ([b28ff4e](https://github.com/salimhamed/jigs/commit/b28ff4e5935eb05f5e1d9c4e9190bc2b78429bee))
+
 ## [0.91.1](https://github.com/salimhamed/jigs/compare/jigs-v0.91.0...jigs-v0.91.1) (2026-10-04)
 
 
