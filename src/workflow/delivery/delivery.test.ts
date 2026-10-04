@@ -1,7 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import { createHook, sleep } from "workflow";
 import { z } from "zod";
-import { bindAgentSession } from "../agents/agent-session.ts";
+import { bindAgentSession, resumeFailed } from "../agents/agent-session.ts";
 import { type Harness, harnesses } from "../agents/harness-config.ts";
 import { describeHarness } from "../agents/result.ts";
 import { JigsError } from "../errors.ts";
@@ -35,6 +35,7 @@ vi.mock("../pull-requests/watch.ts", () => ({ watchPullRequest: vi.fn() }));
 const steps = {
   readBranchState: vi.fn(),
   readWorktreeDiff: vi.fn(async () => "diff --git a/x b/x"),
+  restoreWorktree: vi.fn(),
   pushApprovedChange: vi.fn(),
   createPullRequest: vi.fn(),
   registerResource: vi.fn(),
@@ -187,7 +188,7 @@ test("every prompt ends with the answer format the engine parses", async () => {
   watch(commented, closed);
 
   await build();
-  await describePullRequest(delivery);
+  await describePullRequest(delivery, { commit: "h1" });
   await follow();
 
   const [built, reviewed, described, maintained] = calls.map((call) => call.prompt);
@@ -214,14 +215,86 @@ test("exhausted rounds stop with the open findings and the last round, and push 
   expect(steps.pushApprovedChange).not.toHaveBeenCalled();
 });
 
-test("uncommitted work stops the delivery before any review", async () => {
-  answer(implementationReport, { responses: [] });
+test("a builder that leaves uncommitted work is sent back once in the same round to tidy up", async () => {
+  answer(implementationReport, { responses: [] }, () => {
+    at("h2");
+    return { responses: [] };
+  });
+  answer(reviewVerdict, { findings: [] });
+  at("h1", true);
+
+  const built = await build();
+
+  expect(built).toMatchObject({ reviewedCommit: "h2" });
+  if ("stopped" in built) return expect.unreachable();
+  expect(built.ledger).toEqual([{ round: 1, responses: [], verdict: "approved", findings: [] }]);
+  const [, tidy, review] = calls;
+  expect(tidy?.resumed).toBe(true);
+  expect(tidy?.prompt).toMatch(/^BUILD AGAIN .*uncommitted changes.*"blocking":true/);
+  expect(review?.harness).toBe(reviewerHarness);
+});
+
+test("uncommitted work still there after the tidy-up turn stops the delivery before any review", async () => {
+  answer(implementationReport, { responses: [] }, { responses: [] });
   at("h1", true);
 
   await expect(build()).resolves.toEqual({
     stopped: { reason: "uncommitted", findings: [], round: 1 },
   });
-  expect(calls).toHaveLength(1);
+  expect(calls).toHaveLength(2);
+  expect(calls[1]?.prompt).toContain("uncommitted changes");
+  expect(steps.restoreWorktree).not.toHaveBeenCalled();
+});
+
+test("a builder sent back to tidy up without its session is given the open findings too", async () => {
+  answer(implementationReport, { responses: [] }, { responses: [] }, { responses: [] });
+  answer(reviewVerdict, { findings: [{ summary: "Missing test", blocking: true }] });
+  const run = runAgent.getMockImplementation();
+  runAgent.mockImplementation(async (request) => {
+    if (calls.length === 3 && request.resume !== undefined) resumeFailed("session gone");
+    const result = await run?.(request);
+    if (calls.length === 3) at("h2", true);
+    return result;
+  });
+
+  await build();
+
+  const tidy = calls[3];
+  expect(tidy?.resumed).toBe(false);
+  expect(tidy?.prompt).toContain("THE TASK BRIEF");
+  expect(tidy?.prompt).toContain("Missing test");
+  expect(tidy?.prompt).toContain("uncommitted changes");
+});
+
+test("after every review the worktree is restored to the reviewed commit", async () => {
+  answer(
+    implementationReport,
+    () => {
+      at("h1");
+      return { responses: [] };
+    },
+    () => {
+      at("h2");
+      return { responses: [] };
+    },
+  );
+  answer(
+    reviewVerdict,
+    { findings: [{ summary: "Missing test", blocking: true }] },
+    { findings: [] },
+  );
+
+  await build();
+
+  expect(steps.restoreWorktree.mock.calls).toEqual([
+    [worktree, "h1"],
+    [worktree, "h2"],
+  ]);
+  const [, firstReview, secondBuild, secondReview] = runAgent.mock.invocationCallOrder;
+  const [firstRestore, secondRestore] = steps.restoreWorktree.mock.invocationCallOrder;
+  expect(firstRestore).toBeGreaterThan(firstReview ?? Infinity);
+  expect(firstRestore).toBeLessThan(secondBuild ?? -Infinity);
+  expect(secondRestore).toBeGreaterThan(secondReview ?? Infinity);
 });
 
 test("a build round that commits nothing stops the delivery before any review", async () => {
@@ -264,7 +337,7 @@ test("a stopped delivery never puts the local worktree path in its findings", as
 test("the builder describes the diff when there is no writer", async () => {
   answer(pullRequestDescription, { title: "Add a flag", body: "Adds it." });
 
-  await expect(describePullRequest(delivery)).resolves.toEqual({
+  await expect(describePullRequest(delivery, { commit: "h1" })).resolves.toEqual({
     title: "Add a flag",
     body: "Adds it.",
   });
@@ -278,7 +351,7 @@ test("a writer session describes the change when there is one", async () => {
   const writerHarness = harnesses.claude({ model: "sonnet" });
   const writer = agentSession({ name: "writer", harness: writerHarness, cwd: worktree.path });
 
-  await describePullRequest({ ...delivery, writer });
+  await describePullRequest({ ...delivery, writer }, { commit: "h1" });
 
   expect(calls.map((call) => call.harness)).toEqual([writerHarness]);
 });
@@ -293,7 +366,9 @@ test("a check's problems send the writer back once, with the problems listed", a
     { title: "feat: add a flag", body: "Adds it." },
   );
 
-  await expect(describePullRequest(delivery, { check: conventional })).resolves.toEqual({
+  await expect(
+    describePullRequest(delivery, { commit: "h1", check: conventional }),
+  ).resolves.toEqual({
     title: "feat: add a flag",
     body: "Adds it.",
   });
@@ -313,7 +388,7 @@ test("a fresh writer sent back is shown the rejected title and body with the pro
   });
   const writer = { harness: builderHarness, run } as unknown as Delivery<Work>["builder"];
 
-  await describePullRequest({ ...delivery, writer }, { check: conventional });
+  await describePullRequest({ ...delivery, writer }, { commit: "h1", check: conventional });
 
   expect(fresh[1]).toContain("DESCRIBE THE TASK BRIEF");
   expect(fresh[1]).toContain("Title: Add a flag");
@@ -324,11 +399,31 @@ test("a second answer that still fails the check throws, naming the problems", a
   const plain = { title: "Add a flag", body: "Adds it." };
   answer(pullRequestDescription, plain, plain);
 
-  const described = describePullRequest(delivery, { check: conventional });
+  const described = describePullRequest(delivery, { commit: "h1", check: conventional });
 
   await expect(described).rejects.toBeInstanceOf(JigsError);
   await expect(described).rejects.toThrow("The title must be a conventional commit.");
   expect(calls).toHaveLength(2);
+});
+
+test("the worktree is restored to the described commit after each writer turn", async () => {
+  answer(
+    pullRequestDescription,
+    { title: "Add a flag", body: "Adds it." },
+    { title: "feat: add a flag", body: "Adds it." },
+  );
+
+  await describePullRequest(delivery, { commit: "h1", check: conventional });
+
+  expect(steps.restoreWorktree.mock.calls).toEqual([
+    [worktree, "h1"],
+    [worktree, "h1"],
+  ]);
+  const [firstWriter, secondWriter] = runAgent.mock.invocationCallOrder;
+  const [firstRestore, secondRestore] = steps.restoreWorktree.mock.invocationCallOrder;
+  expect(firstRestore).toBeGreaterThan(firstWriter ?? Infinity);
+  expect(firstRestore).toBeLessThan(secondWriter ?? -Infinity);
+  expect(secondRestore).toBeGreaterThan(secondWriter ?? Infinity);
 });
 
 test("publish pushes exactly the given commit and opens the pull request with the given title and body, running no agent", async () => {
@@ -390,7 +485,7 @@ test("the description schema accepts a body line that only starts with Descripti
 test("a description the schema rejects throws from describePullRequest", async () => {
   answer(pullRequestDescription, { title: "Title: Add a flag", body: "Adds it." });
 
-  await expect(describePullRequest(delivery)).rejects.toBeInstanceOf(z.ZodError);
+  await expect(describePullRequest(delivery, { commit: "h1" })).rejects.toBeInstanceOf(z.ZodError);
 });
 
 const snapshot: PullRequestSnapshot = {
@@ -1277,7 +1372,7 @@ test("two deliveries in one run, with their own keys, each go from build to merg
   for (const each of [api, web]) {
     const built = await buildAndReview(each, { rounds: 1 });
     if ("stopped" in built) return expect.unreachable();
-    const described = await describePullRequest(each);
+    const described = await describePullRequest(each, { commit: built.reviewedCommit });
     const opened = await publishPullRequest(each, { commit: built.reviewedCommit, ...described });
     outcomes.push(await followPullRequestToOutcome(each, opened, options));
   }

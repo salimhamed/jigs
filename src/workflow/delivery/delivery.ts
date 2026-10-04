@@ -1,4 +1,8 @@
-import type { pushApprovedChange, readWorktreeDiff } from "../../steps/git/branch.ts";
+import type {
+  pushApprovedChange,
+  readWorktreeDiff,
+  restoreWorktree,
+} from "../../steps/git/branch.ts";
 import type { createPullRequest, mergePullRequest } from "../../steps/pull-requests/pr.ts";
 import type { registerResource } from "../../steps/runtime/resources.ts";
 import type { AgentSession } from "../agents/agent-session.ts";
@@ -121,6 +125,7 @@ export interface UnpublishedWork {
 export interface DeliverySteps {
   readBranchState: ReadBranchState;
   readWorktreeDiff: typeof readWorktreeDiff;
+  restoreWorktree: typeof restoreWorktree;
   pushApprovedChange: typeof pushApprovedChange;
   createPullRequest: typeof createPullRequest;
   registerResource: typeof registerResource;

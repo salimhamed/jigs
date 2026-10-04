@@ -130,6 +130,21 @@ export async function pushApprovedChange(
 }
 
 /**
+ * Put the worktree back at `sha`: tracked files are reset and untracked files removed. Ignored
+ * files, such as installed dependencies, are kept.
+ *
+ * @remarks
+ * Use it after an agent that must not change the worktree, such as a reviewer whose checks leave
+ * caches behind. Uncommitted work and commits after `sha` are discarded.
+ *
+ * @group Restore changes
+ */
+export async function restoreWorktree(worktree: Worktree, sha: string): Promise<void> {
+  await git(["reset", "--hard", "--quiet", sha], worktree.path);
+  await git(["clean", "-fd", "--quiet"], worktree.path);
+}
+
+/**
  * Read a raw patch from the merge base of `baseSha` and HEAD, truncating after 200,000 characters.
  * Defaults to the worktree's base commit.
  *

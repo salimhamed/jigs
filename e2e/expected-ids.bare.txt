@@ -33,6 +33,7 @@ step//./jigs/steps//release
 step//./jigs/steps//removeRunDirectory
 step//./jigs/steps//replyToPullRequestReviewThread
 step//./jigs/steps//resolveLinearIssue
+step//./jigs/steps//restoreWorktree
 step//./jigs/steps//reviewPullRequest
 step//./jigs/steps//setTicketStatus
 workflow//./workflows/hello/hello//hello

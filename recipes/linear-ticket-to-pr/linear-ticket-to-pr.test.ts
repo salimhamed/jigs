@@ -91,7 +91,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(handed()?.work).toMatchObject({ key: "ABC-123", url: snapshot.url });
   expect(handed()?.work.instructions).toContain("## Implementation brief\nUse the flag.");
   expect(routines.buildAndReview).toHaveBeenCalledWith(expect.anything(), { rounds: 3 });
-  expect(routines.describePullRequest).toHaveBeenCalledWith(handed());
+  expect(routines.describePullRequest).toHaveBeenCalledWith(handed(), { commit: "h1" });
   expect(routines.publishPullRequest).toHaveBeenCalledWith(handed(), {
     commit: "h1",
     title: "Add a flag",

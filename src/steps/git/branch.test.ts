@@ -1,10 +1,15 @@
-import { writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test } from "vitest";
 import { pushCommit } from "../../providers/git.ts";
 import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
-import { pushApprovedChange, readBranchState, readWorktreeDiff } from "./branch.ts";
+import {
+  pushApprovedChange,
+  readBranchState,
+  readWorktreeDiff,
+  restoreWorktree,
+} from "./branch.ts";
 
 let tmp: string;
 let checkout: string;
@@ -83,4 +88,25 @@ test("branch state and diff default to the provisioned base and accept another c
   expect(recent).toContain("+second change");
   writeFileSync(path.join(checkout, "uncommitted.txt"), "pending\n");
   expect((await readBranchState(worktree)).dirty).toBe(true);
+});
+
+test("restoring the worktree reverts tracked edits and removes untracked files but keeps ignored ones", async () => {
+  writeFileSync(path.join(checkout, ".gitignore"), "node_modules/\n");
+  writeFileSync(path.join(checkout, "tracked.txt"), "reviewed\n");
+  git(checkout, "add", ".");
+  git(checkout, "commit", "-qm", "reviewed");
+  const reviewed = git(checkout, "rev-parse", "HEAD");
+  writeFileSync(path.join(checkout, "tracked.txt"), "edited\n");
+  mkdirSync(path.join(checkout, "__pycache__"));
+  writeFileSync(path.join(checkout, "__pycache__", "x.pyc"), "cache");
+  mkdirSync(path.join(checkout, "node_modules"));
+  writeFileSync(path.join(checkout, "node_modules", "dep.js"), "dep");
+
+  await restoreWorktree(worktree, reviewed);
+
+  expect(readFileSync(path.join(checkout, "tracked.txt"), "utf8")).toBe("reviewed\n");
+  expect(existsSync(path.join(checkout, "__pycache__"))).toBe(false);
+  expect(existsSync(path.join(checkout, "node_modules", "dep.js"))).toBe(true);
+  expect(await readBranchState(worktree)).toMatchObject({ headSha: reviewed, dirty: false });
+  await expect(pushApprovedChange(worktree, reviewed)).resolves.toEqual({ headSha: reviewed });
 });
