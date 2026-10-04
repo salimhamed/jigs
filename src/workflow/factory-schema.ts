@@ -46,26 +46,11 @@ export const agentsSchema = z.strictObject({
   env: z.array(envName).default([]),
 });
 
-const mergeMethodSchema = z.enum(["squash", "merge", "rebase"]) as z.ZodEnum<{
-  /** Combine the branch into one commit. */
-  squash: "squash";
-  /** Create a merge commit that preserves the branch history. */
-  merge: "merge";
-  /** Replay the branch commits onto the base branch. */
-  rebase: "rebase";
-}>;
-
-/** The GitHub merge method: squash, merge commit or rebase. */
-export type MergeMethod = z.output<typeof mergeMethodSchema>;
-
-// A binding is a name, a remote URL, how jigs merges there, and how a
-// worktree cut from that remote is provisioned — the single place that story
-// is told. Where the clone lives is jigs' business, and every other fact is
-// derived from git at each activation.
+// A binding is a name, a remote URL, and how a worktree cut from that remote
+// is provisioned — the single place that story is told. Where the clone lives
+// is jigs' business, and every other fact is derived from git at each activation.
 export const bindingSchema = z.strictObject({
   remote: z.string().min(1),
-  /** The GitHub merge method jigs uses on this repository. Defaults to `squash`. */
-  mergeMethod: mergeMethodSchema.default("squash"),
   // Paths, or globs, relative to this binding's own `bindings/<name>/`
   // directory in the factory repo; each lands at that same relative path in
   // the worktree. For what git does not carry.

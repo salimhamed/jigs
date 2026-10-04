@@ -469,7 +469,7 @@ test("the implementation builder resumes to judge the PR and merges only after G
   expect(calls[2]?.harness).toBe(builderHarness);
   expect(calls[2]?.resumed).toBe(true);
   expect(calls[2]?.prompt).not.toContain("THE TASK BRIEF");
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", latestCommit);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h1", latestCommit);
 });
 
 test("an unavailable session gets the task, local diff and PR facts in a fresh prompt", async () => {
@@ -522,7 +522,7 @@ test("an approval arriving after CI goes green merges without a builder turn", a
   await follow();
   expect(calls).toHaveLength(0);
   expect(steps.mergePullRequest).toHaveBeenCalledOnce();
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", latestCommit);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h1", latestCommit);
 });
 
 test("a newly failed check wakes the builder once; the same failure on the same head does not", async () => {
@@ -883,7 +883,7 @@ test("a person pushing past local work that is on the PR does not hold back a me
   watch(unapproved, pushed);
   await follow();
   expect(calls).toHaveLength(0);
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h3", latestCommit);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h3", latestCommit);
 });
 
 test("local commits that never reached the PR still hold back a merge after a person pushes", async () => {
@@ -1004,7 +1004,7 @@ test("once the retained work is published, a ready PR merges again", async () =>
     yield published;
   });
   await follow({ attemptsPerUpdate: 1 });
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h2", latestCommit);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h2", latestCommit);
 });
 
 test("reordered GitHub collections do not prevent a ready merge", async () => {
@@ -1244,7 +1244,7 @@ test("every pull request read and the merge count approvals as the workflow chos
   const covers = { approvalCovers: "any-commit" };
   expect(watchPullRequest).toHaveBeenCalledWith(pr, steps.fetchPullRequestState, covers);
   expect(steps.fetchPullRequestState).toHaveBeenCalledWith(pr, covers);
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h1", covers);
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h1", covers);
 });
 
 test("under any-commit, a builder push after an approval merges without asking anyone", async () => {
@@ -1261,7 +1261,7 @@ test("under any-commit, a builder push after an approval merges without asking a
   await follow({ approvalCovers: "any-commit" });
   expect(notes()).toHaveLength(0);
   expect(steps.mergePullRequest).toHaveBeenCalledOnce();
-  expect(steps.mergePullRequest).toHaveBeenCalledWith(worktree, pr, "h2", {
+  expect(steps.mergePullRequest).toHaveBeenCalledWith(pr, "h2", {
     approvalCovers: "any-commit",
   });
 });
@@ -1294,12 +1294,7 @@ test("two deliveries in one run, with their own keys, each go from build to merg
   }
 
   expect(outcomes).toEqual([{ outcome: "merged" }, { outcome: "merged" }]);
-  expect(
-    steps.mergePullRequest.mock.calls.map(([tree, merged]) => [tree.path, merged.repo]),
-  ).toEqual([
-    ["/tmp/api", "api"],
-    ["/tmp/web", "web"],
-  ]);
+  expect(steps.mergePullRequest.mock.calls.map(([merged]) => merged.repo)).toEqual(["api", "web"]);
 });
 
 test("two deliveries with the same key in different worktrees both run", async () => {

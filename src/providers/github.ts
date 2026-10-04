@@ -4,7 +4,6 @@
 // factory configured.
 
 import type { FactoryContext } from "../config/factory-context.ts";
-import type { MergeMethod } from "../workflow/factory-schema.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
@@ -427,6 +426,26 @@ export async function fetchPrTitle(pr: PullRequestRef): Promise<string> {
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
   );
   return pull.title;
+}
+
+/** The GitHub merge method: squash, merge commit or rebase. */
+export type MergeMethod = "squash" | "merge" | "rebase";
+
+// GitHub omits the `allow_*` fields for a token without push access, which
+// reads here as no method allowed.
+export async function fetchAllowedMergeMethods(
+  repository: Pick<PullRequestRef, "owner" | "repo">,
+): Promise<Set<MergeMethod>> {
+  const settings = await githubGet<{
+    allow_squash_merge?: boolean;
+    allow_merge_commit?: boolean;
+    allow_rebase_merge?: boolean;
+  }>(`/repos/${repository.owner}/${repository.repo}`);
+  const allowed = new Set<MergeMethod>();
+  if (settings.allow_squash_merge === true) allowed.add("squash");
+  if (settings.allow_merge_commit === true) allowed.add("merge");
+  if (settings.allow_rebase_merge === true) allowed.add("rebase");
+  return allowed;
 }
 
 export interface MergeRequest {

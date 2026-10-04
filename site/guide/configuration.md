@@ -67,7 +67,6 @@ bindings: {
     copy: [".env"],
     postCreate: ["pnpm install"],
     hookTimeoutMinutes: 20,
-    mergeMethod: "rebase",
   },
 },
 ```
@@ -78,7 +77,6 @@ bindings: {
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
 | `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
-| `mergeMethod` | `"squash"` | How jigs [merges](#merging) a pull request here: `"squash"`, `"merge"` or `"rebase"`. |
 
 Each `copy` entry is a path, or a glob, inside `bindings/<name>/` in the
 factory, and lands at the same path in the worktree. `bindings/app/.env`
@@ -326,7 +324,7 @@ These are three independent decisions:
 | --- | --- |
 | What counts as operator approval | `github.mergeApproval` |
 | Which commits an approving review covers | Workflow code (`approvalCovers`) |
-| How GitHub creates the merge | `bindings.<name>.mergeMethod` |
+| How GitHub creates the merge | The repository's merge settings on GitHub |
 | Whether and when to attempt a merge | Workflow code |
 
 - **`github.mergeApproval`**: what counts as your consent. `"review"` is an
@@ -344,10 +342,12 @@ These are three independent decisions:
   a later review requests changes or the approval is dismissed. Approvals by
   bots never count under `"any-commit"`, so an agent acting as the App's bot
   cannot approve its own work. Changes requested by a bot still block.
-- **`bindings.<name>.mergeMethod`**: `"squash"`, `"merge"` or `"rebase"`, as on
-  GitHub. Default `"squash"`. With `squash` and `merge`, the pull request title
-  becomes the commit title. With `rebase`, each commit is rewritten and loses
-  its signature.
+- **The merge method** is the first one the repository allows on GitHub, read
+  at each merge: squash, then merge commit, then rebase. To get a different
+  method, turn off the ones ahead of it in the repository's settings. With
+  squash and merge commits, the pull request title becomes the commit title.
+  With rebase, each commit is rewritten and loses its signature. A repository
+  that allows none fails the merge with a message naming it.
 
 `jigs bind` creates the `jigs:approved` label on each GitHub repository it
 binds, whichever approval you use.

@@ -408,16 +408,16 @@ export async function markPullRequestReady(pullRequest: PullRequestRef) {
 }
 
 /**
- * Merge the pull request with its binding's merge method, pinned to the approved head.
+ * Merge the pull request with the first method its repository allows of squash, merge commit
+ * and rebase, pinned to the approved head.
  *
  * @group Pull requests
  */
 export async function mergePullRequest(
-  worktree: Worktree,
   pullRequest: PullRequestRef,
   expectedHeadSha: string,
   options?: PullRequestReadOptions,
 ) {
   "use step";
-  return pullRequestsOperations.mergePullRequest(worktree, pullRequest, expectedHeadSha, options);
+  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, options);
 }
