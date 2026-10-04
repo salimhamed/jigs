@@ -2,7 +2,9 @@ import { readdir, readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
-import { apiEntries, rootDir } from "./docs.mjs";
+import { apiEntries, packageDir, rootDir } from "./docs.mjs";
+
+const packagePath = path.relative(rootDir, packageDir);
 
 /** Read the code readers see, preserving its original line numbers. */
 export function examplesIn(source, file) {
@@ -42,9 +44,11 @@ export async function documentationExamples() {
       .map((file) => path.join("site", file)),
     ...(await filesUnder("site/guide")).filter((file) => file.endsWith(".md")),
     ...(await filesUnder("skills")).filter((file) => file.endsWith(".md")),
-    ...(await filesUnder("recipes")).filter((file) => file.endsWith(".md")),
-    ...(await filesUnder("src")).filter((file) => file.endsWith(".ts")),
-    ...(await filesUnder("templates")).filter((file) => file.endsWith(".tmpl")),
+    ...(await filesUnder(path.join(packagePath, "recipes"))).filter((file) => file.endsWith(".md")),
+    ...(await filesUnder(path.join(packagePath, "src"))).filter((file) => file.endsWith(".ts")),
+    ...(await filesUnder(path.join(packagePath, "templates"))).filter((file) =>
+      file.endsWith(".tmpl"),
+    ),
   ];
   return (
     await Promise.all(
@@ -55,18 +59,18 @@ export async function documentationExamples() {
 
 /** Type-check isolated examples against the same modules a factory imports. */
 export async function checkExamples(examples) {
-  const virtualRoot = path.join(rootDir, ".docs-examples");
+  const virtualRoot = path.join(packageDir, ".docs-examples");
   const virtual = new Map();
   const locations = new Map();
-  const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
-  const { default: build } = await import(path.join(rootDir, "tsdown.config.ts"));
+  const manifest = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
+  const { default: build } = await import(path.join(packageDir, "tsdown.config.ts"));
   const entries = apiEntries(manifest, build.entry);
   const factoryConfig = JSON.parse(
-    await readFile(path.join(rootDir, "templates/tsconfig.json.tmpl"), "utf8"),
+    await readFile(path.join(packageDir, "templates/tsconfig.json.tmpl"), "utf8"),
   );
   const { options, errors } = ts.convertCompilerOptionsFromJson(
     factoryConfig.compilerOptions,
-    rootDir,
+    packageDir,
   );
   if (errors.length)
     throw new Error(ts.formatDiagnosticsWithColorAndContext(errors, diagnosticHost));
@@ -74,14 +78,14 @@ export async function checkExamples(examples) {
   options.paths = Object.fromEntries(
     entries.map((entry) => [
       entry.subpath === "." ? "@jigs-ai/jigs" : `@jigs-ai/jigs/${entry.subpath.slice(2)}`,
-      [path.join(rootDir, entry.source)],
+      [path.join(packageDir, entry.source)],
     ]),
   );
   options.paths["#jigs/*"] = [path.join(virtualRoot, "factory/jigs/*.ts")];
   for (const name of ["steps", "routines"]) {
     virtual.set(
       path.join(virtualRoot, `factory/jigs/${name}.ts`),
-      await readFile(path.join(rootDir, `templates/jigs/${name}.ts.tmpl`), "utf8"),
+      await readFile(path.join(packageDir, `templates/jigs/${name}.ts.tmpl`), "utf8"),
     );
   }
 
@@ -91,7 +95,7 @@ export async function checkExamples(examples) {
   const configuration = guides.find((example) => example.file === "site/guide/configuration.md");
   virtual.set(path.join(virtualRoot, "factory/jigs.config.ts"), configuration.code);
   const hello = await readFile(
-    path.join(rootDir, "templates/workflows/hello/hello.ts.tmpl"),
+    path.join(packageDir, "templates/workflows/hello/hello.ts.tmpl"),
     "utf8",
   );
   virtual.set(path.join(virtualRoot, "factory/workflows/hello/hello.ts"), hello);
@@ -105,7 +109,7 @@ export async function checkExamples(examples) {
     }
     virtual.set(path.join(directory, "workflows/hello/hello.ts"), hello);
     if (triage) virtual.set(path.join(directory, triage.filename), triage.code);
-    if (example.file.startsWith("recipes/")) {
+    if (example.file.startsWith(path.join(packagePath, "recipes/"))) {
       const recipeDirectory = path.dirname(example.file);
       for (const file of (await filesUnder(recipeDirectory)).filter((file) =>
         file.endsWith(".ts"),
@@ -131,6 +135,8 @@ export async function checkExamples(examples) {
   }
 
   const host = ts.createCompilerHost(options);
+  // Type roots resolve from here, where the package's own @types live.
+  host.getCurrentDirectory = () => packageDir;
   const read = host.readFile;
   const exists = host.fileExists;
   const directoryExists = host.directoryExists;

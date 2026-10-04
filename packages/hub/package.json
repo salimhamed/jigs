@@ -1,0 +1,21 @@
+{
+  "name": "@jigs-ai/hub",
+  "version": "0.102.0",
+  "private": true,
+  "description": "Receives provider events and holds credentials for jigs factories",
+  "type": "module",
+  "license": "BUSL-1.1",
+  "engines": {
+    "node": ">=24"
+  },
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@types/node": "^26.2.0",
+    "typescript": "^7.0.2",
+    "vitest": "^4.1.10"
+  }
+}

@@ -1,182 +1,31 @@
 {
-  "name": "@jigs-ai/jigs",
+  "name": "jigs-workspace",
   "version": "0.102.0",
-  "description": "Guides coding agents through repeatable workflows",
+  "private": true,
   "type": "module",
   "license": "BUSL-1.1",
-  "author": "Salim Hamed",
-  "homepage": "https://salimhamed.github.io/jigs/",
-  "bugs": {
-    "url": "https://github.com/salimhamed/jigs/issues"
-  },
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/salimhamed/jigs.git"
-  },
-  "keywords": [
-    "ai",
-    "agents",
-    "coding-agents",
-    "workflow",
-    "durable",
-    "automation",
-    "software-factory"
-  ],
   "engines": {
     "node": ">=24"
   },
-  "bin": {
-    "jigs": "dist/cli.js"
-  },
-  "exports": {
-    ".": {
-      "types": "./dist/index.d.ts",
-      "default": "./dist/index.js"
-    },
-    "./nitro": {
-      "types": "./dist/nitro.d.ts",
-      "default": "./dist/nitro.js"
-    },
-    "./build": {
-      "types": "./dist/build.d.ts",
-      "default": "./dist/build.js"
-    },
-    "./service": {
-      "types": "./dist/service.d.ts",
-      "default": "./dist/service.js"
-    },
-    "./routines": {
-      "types": "./dist/routines.d.ts",
-      "default": "./dist/routines.js"
-    },
-    "./steps": {
-      "types": "./dist/steps/index.d.ts",
-      "default": "./dist/steps/index.js"
-    },
-    "./steps/agents": {
-      "types": "./dist/steps/agents/index.d.ts",
-      "default": "./dist/steps/agents/index.js"
-    },
-    "./steps/human": {
-      "types": "./dist/steps/human/index.d.ts",
-      "default": "./dist/steps/human/index.js"
-    },
-    "./steps/linear": {
-      "types": "./dist/steps/linear/index.d.ts",
-      "default": "./dist/steps/linear/index.js"
-    },
-    "./steps/pagerduty": {
-      "types": "./dist/steps/pagerduty/index.d.ts",
-      "default": "./dist/steps/pagerduty/index.js"
-    },
-    "./steps/pull-requests": {
-      "types": "./dist/steps/pull-requests/index.d.ts",
-      "default": "./dist/steps/pull-requests/index.js"
-    },
-    "./steps/slack": {
-      "types": "./dist/steps/slack/index.d.ts",
-      "default": "./dist/steps/slack/index.js"
-    },
-    "./steps/workspaces": {
-      "types": "./dist/steps/workspaces/index.d.ts",
-      "default": "./dist/steps/workspaces/index.js"
-    },
-    "./steps/git": {
-      "types": "./dist/steps/git/index.d.ts",
-      "default": "./dist/steps/git/index.js"
-    },
-    "./steps/runtime": {
-      "types": "./dist/steps/runtime/index.d.ts",
-      "default": "./dist/steps/runtime/index.js"
-    }
-  },
-  "files": [
-    "dist",
-    "docs/api",
-    "templates",
-    "recipes",
-    "migrations"
-  ],
-  "publishConfig": {
-    "access": "public",
-    "provenance": true
-  },
   "scripts": {
-    "dev": "node src/cli/cli.ts",
-    "build": "tsdown",
-    "test": "vitest run --project unit",
-    "test:db": "vitest run --project db",
-    "test:watch": "vitest --project unit",
-    "test:live": "vitest run --project live",
-    "typecheck": "tsc --noEmit",
-    "lint": "biome check . && pnpm depcruise",
-    "depcruise": "depcruise src --config .dependency-cruiser.cjs",
+    "dev": "node packages/jigs/src/cli/cli.ts",
+    "build": "pnpm -r --if-present build",
+    "test": "pnpm -r --if-present test",
+    "test:db": "pnpm --filter @jigs-ai/jigs test:db",
+    "test:live": "pnpm --filter @jigs-ai/jigs test:live",
+    "typecheck": "pnpm -r --if-present typecheck",
+    "lint": "biome check . && pnpm -r --if-present depcruise",
     "lint:fix": "biome check --write .",
     "docs": "node tools/api-docs/docs.mjs",
     "docs:site": "node tools/api-docs/docs.mjs --site",
     "docs:preview": "pnpm --filter @jigs/api-docs exec vitepress preview ../../site",
     "docs:check": "node tools/api-docs/docs.mjs --check",
     "docs:examples": "node tools/api-docs/examples.mjs",
-    "e2e": "node --env-file-if-exists=.env.e2e.local e2e/check-step-ids.mjs",
+    "e2e": "pnpm --filter @jigs-ai/jigs e2e",
     "check": "pnpm lint && pnpm typecheck && pnpm test && pnpm build && pnpm docs:check"
   },
-  "dependencies": {
-    "@ai-sdk/openai-compatible": "3.0.53",
-    "@modelcontextprotocol/sdk": "^1.30.0",
-    "@openrouter/ai-sdk-provider": "3.1.0",
-    "ai": "^7.0.103",
-    "ai-sdk-provider-claude-code": "4.3.1",
-    "ai-sdk-provider-codex-cli": "2.2.1",
-    "commander": "^15.0.0",
-    "croner": "10.0.1",
-    "drizzle-orm": "0.45.2",
-    "hono": "^4.13.4",
-    "pg": "8.20.0",
-    "pi-mcp-adapter": "2.36.0",
-    "semver": "^7.8.5",
-    "smol-toml": "^1.8.0",
-    "tinyglobby": "^0.2.17",
-    "ts-morph": "^28.0.0",
-    "ulid": "3.0.2",
-    "yaml": "^2.9.0"
-  },
-  "peerDependencies": {
-    "@workflow/web": "5.0.0-beta.57",
-    "@workflow/world-postgres": "5.0.0-beta.47",
-    "nitro": "3.0.260610-beta",
-    "workflow": "5.0.0-beta.57",
-    "zod": "4.5.4"
-  },
-  "peerDependenciesMeta": {
-    "@workflow/web": {
-      "optional": true
-    },
-    "@workflow/world-postgres": {
-      "optional": true
-    },
-    "nitro": {
-      "optional": true
-    },
-    "workflow": {
-      "optional": true
-    }
-  },
   "devDependencies": {
-    "@biomejs/biome": "^2.5.9",
-    "@swc/core": "1.15.3",
-    "@types/node": "^26.2.0",
-    "@types/pg": "8.23.1",
-    "@types/semver": "^7.8.0",
-    "@workflow/web": "5.0.0-beta.57",
-    "@workflow/world": "5.0.0-beta.39",
-    "@workflow/world-postgres": "5.0.0-beta.47",
-    "dependency-cruiser": "^18.5.0",
-    "nitro": "3.0.260610-beta",
-    "tsdown": "^0.22.14",
-    "typescript": "^7.0.2",
-    "vitest": "^4.1.10",
-    "workflow": "5.0.0-beta.57",
-    "zod": "4.5.4"
+    "@biomejs/biome": "^2.5.9"
   },
   "packageManager": "pnpm@11.21.0"
 }

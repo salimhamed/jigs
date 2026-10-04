@@ -61,7 +61,7 @@ jobs:
           REQUESTED_REVISION: ${{ inputs.revision }}
         run: |
           commit="$(git rev-parse HEAD)"
-          sdk_versions="$(node -e 'for (const name of ["workflow", "@workflow/world-postgres", "@workflow/web"]) console.log(`${name}@${require(`./node_modules/${name}/package.json`).version}`)')"
+          sdk_versions="$(node -e 'for (const name of ["workflow", "@workflow/world-postgres", "@workflow/web"]) console.log(`${name}@${require(`./packages/jigs/node_modules/${name}/package.json`).version}`)')"
           printf 'checked-out commit: %s\n%s\n' "$commit" "$sdk_versions"
           {
             echo '## Long step regression provenance'
@@ -84,4 +84,4 @@ jobs:
         run: |
           git status --short
           git log -1 --oneline --decorate
-          pnpm list --depth 0 --json
+          pnpm --filter @jigs-ai/jigs list --depth 0 --json

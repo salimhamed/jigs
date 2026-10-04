@@ -96,7 +96,10 @@ jobs:
             npm install -g npm@11
           fi
           npm -v
+      # The workspace root shares the version but never publishes; packages/jigs is
+      # the package npm trusts this workflow to publish.
       - name: Publish to npm
+        working-directory: packages/jigs
         env:
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |

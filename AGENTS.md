@@ -1,63 +1,26 @@
 # jigs — agent guide
 
-`docs/contributing.md` has the dev commands and the source layout. Run
-`pnpm check` and `pnpm e2e` before you finish. `pnpm check` compiles no workflow
-directive: library code has none, and recipes compile inside factories. `pnpm e2e`
-builds a bare `jigs init` factory and one with
-`jigs recipe add linear-ticket-to-pr`, and diffs their durable IDs against
-`e2e/expected-ids.bare.txt` and `e2e/expected-ids.linear-ticket-to-pr.txt`. With
-`WORKFLOW_POSTGRES_URL` set it also boots the linear-ticket-to-pr factory's
-service and requires a clean exit on SIGTERM. CI provides
-Postgres; without the URL the boot is skipped, so say so when you report.
+A pnpm workspace. Each package has its own `AGENTS.md`; read the one for the
+package you change:
+
+- `packages/jigs`: `@jigs-ai/jigs`, the published library, CLI and service.
+  Its layering and Workflow SDK rules live in `packages/jigs/AGENTS.md`.
+- `packages/hub`: `@jigs-ai/hub`, the hub server (private for now).
+- `packages/hub-protocol`: messages between the hub and a factory, bundled
+  into `@jigs-ai/jigs` (private).
+- `tools/api-docs`: TypeDoc and VitePress tooling for `site/`.
+
+`docs/contributing.md` has the dev commands and the layout. Run every command
+from the repo root. Run `pnpm check` and `pnpm e2e` before you finish. `pnpm
+e2e` builds factories from a packed `@jigs-ai/jigs` and diffs their durable
+IDs. With `WORKFLOW_POSTGRES_URL` set it also boots the linear-ticket-to-pr
+factory's service and requires a clean exit on SIGTERM. CI provides Postgres;
+without the URL the boot is skipped, so say so when you report.
 
 PR titles are conventional commits, enforced by CI: the squashed title is what
 release-please reads to cut a release (see Releases in `docs/contributing.md`).
-
-## Where code goes
-
-`src` is split by what the Workflow SDK does with the code. The rules a change
-has to keep:
-
-- `workflow/` is code that runs inside the workflow bundle. It may import
-  other `workflow/` files, zod, the `workflow` SDK, and `import type` from
-  anywhere. It may not import a *value* from a node built-in, read
-  `process.env`, reach the network, or import a value from `steps/`,
-  `service/`, `cli/`, `checks/`, `config/` or `providers/`.
-- `steps/` is code that runs in steps. It may import `providers/`,
-  `config/`, `checks/`, `errors.ts`, and `workflow/`. A step may call a
-  `workflow/` function as a value because `workflow/` is pure by
-  construction; the snapshot and step-result normalizers are called that way.
-- `service/` is the long-running process. It may import `steps/`,
-  `providers/`, `config/`, `checks/` and `workflow/`; the webhook ingress
-  parses hook tokens that `workflow/` defines. It may not import `cli/`.
-- `steps/` may not import `service/` or `cli/`.
-- `providers/` holds the provider clients with their identity and webhook
-  checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
-  the `Check` shape in `checks/check.ts`.
-- `config/` may not import `steps/`, `service/` or `cli/`.
-- `checks/` may not import `service/` or `cli/`.
-- `build/` is the template and generated-integration writer, used by the CLI
-  and the service build. It may not import `service/` or `cli/`.
-- No value-import cycles.
-- A type used by one module stays in that module. A type used on both sides of
-  the workflow/steps line lives in `workflow/`, under the same topic. There is
-  no shared types folder.
-- A factory imports the library from the root `@jigs-ai/jigs`. Routines that
-  take steps as arguments go in `src/workflow/routines.ts`, which only the
-  generated `jigs/routines.ts` imports; never add them to the root.
-- Extract a shipped routine only when a recipe and at least one other concrete
-  workflow use the same mechanism; single-caller composition stays in the recipe.
-
-`pnpm lint` runs dependency-cruiser with these rules, and biome forbids
-`process.env` everywhere but `src/config/factory-context.ts` and tests: read a
-setting through `currentFactoryContext().env`, and an environment for a child
-process through `processEnv()`. `processEnv()` is never a factory setting: a
-token, key or anything the factory's `.env` can hold goes through `ctx.env`.
-
-No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
-live in factory code, including the copied recipes
-([ADR 0006](docs/adr/0006-factory-owned-steps.md)). `pnpm e2e` proves it, and
-also scans the built workflow bundle for `node:` specifiers and `process.env`.
+Every package shares the one version release-please cuts as `jigs-vX`; only
+`packages/jigs` publishes.
 
 ## Compatibility
 
@@ -66,24 +29,13 @@ remove and reshape types, exports, config and durable addresses without shims,
 deprecation paths, fallbacks for old callers or dual code paths. A breaking
 change is a `!` in the PR title and one footer line in the commit, nothing more.
 Factories adopt a release by upgrading and fixing what breaks.
-`@jigs-ai/jigs/steps` exports only what a custom agent step uses:
-`createAgentRunner`, `AgentRunner`, `AgentRunnerOptions`, `RunMetadata`,
-`AgentSessionError` and `ProviderApiError`. Their shapes are a published
-contract pinned by `src/steps/contract.test.ts`, and `src/package.test.ts`
-pins the list; changing either is a breaking release. Drivers stay internal.
-
-The delivery routines (`buildAndReview`, `publishPullRequest`,
-`followPullRequestToOutcome`) run steps inside a factory's runs, and a parked
-run replays them on the new release. A change to the steps they run, or to
-their order, is a breaking release whose notes tell factories to let parked
-runs finish before upgrading.
 
 ## Docs
 
 The website (`site/`) is the only user documentation; `docs/` holds maintainer
 notes and ADRs. Anything public (site pages, README, skills, templates, doc
 comments) cites no ADR, Linear ticket, `CONTEXT.md` or `docs/` path.
-`CONTEXT.md` is the maintainer vocabulary for `src/`; use its terms.
+`CONTEXT.md` is the maintainer vocabulary for `packages/jigs/src/`; use its terms.
 
 Write `/** */` comments for users with limited context, in plain language and as
 briefly as clarity allows. Use summary prose, `@remarks` for longer rationale and

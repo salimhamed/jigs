@@ -50,7 +50,7 @@ test("the harness kinds workflow code names are exactly the registered harness d
 
 test("every registered driver declares its operational contract and documentation", () => {
   const guide = readFileSync(
-    new URL("../../../../site/guide/models-and-harnesses.md", import.meta.url),
+    new URL("../../../../../../site/guide/models-and-harnesses.md", import.meta.url),
     "utf8",
   );
   for (const [kind, driver] of Object.entries(drivers)) {

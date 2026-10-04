@@ -22,6 +22,9 @@ export default defineConfig({
     nitro: "src/service/nitro.ts",
     service: "src/service/service.ts",
   },
+  // Workspace packages stay private, so the published package carries their code.
+  // Their types cannot appear in jigs' declarations: tsgo emits only files under this folder.
+  deps: { alwaysBundle: [/^@jigs-ai\/hub-protocol(\/|$)/] },
   dts: { tsconfig: "tsconfig.build.json" },
   fixedExtension: false,
 });

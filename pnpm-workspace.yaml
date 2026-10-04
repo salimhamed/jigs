@@ -1,4 +1,5 @@
 packages:
+  - packages/*
   - tools/api-docs
 
 allowBuilds:
@@ -12,3 +13,7 @@ ignoredOptionalDependencies:
 
 overrides:
   'vite@5>esbuild': 0.25.12
+# Workspace packages hoisted into the virtual store resolve from any directory
+# on a test's NODE_PATH, so a scratch factory would find @jigs-ai/jigs without
+# installing it.
+hoistWorkspacePackages: false

@@ -2,11 +2,12 @@ import { existsSync, readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import { configDefaults, defineConfig } from "vitest/config";
 
-// Values from .env.e2e.local reach the db and live projects only, and shell or
-// CI values win over the file.
-const localEnv = existsSync(".env.e2e.local")
+// Values from the repo root's .env.e2e.local reach the db and live projects
+// only, and shell or CI values win over the file.
+const localEnvFile = new URL("../../.env.e2e.local", import.meta.url);
+const localEnv = existsSync(localEnvFile)
   ? Object.fromEntries(
-      Object.entries(parseEnv(readFileSync(".env.e2e.local", "utf8"))).filter(
+      Object.entries(parseEnv(readFileSync(localEnvFile, "utf8"))).filter(
         ([name]) => process.env[name] === undefined,
       ),
     )
@@ -31,13 +32,13 @@ export default defineConfig({
         test: {
           name: "unit",
           // Explicit roots keep agent worktrees under .claude/ out of the run.
-          include: ["{src,tools,e2e}/**/*.test.{ts,mjs}"],
+          include: ["{src,e2e}/**/*.test.{ts,mjs}"],
           exclude: [...configDefaults.exclude, "**/*.db.test.ts", "**/*.live.test.ts"],
         },
       },
       {
-        // Postgres only: WORKFLOW_POSTGRES_URL, or the container in
-        // test/docker-compose.yml. Each suite creates and drops its own databases.
+        // Postgres only: WORKFLOW_POSTGRES_URL, or the container in the repo
+        // root's compose.yaml. Each suite creates and drops its own databases.
         test: { name: "db", include: ["src/**/*.db.test.ts"], ...outside },
       },
       {

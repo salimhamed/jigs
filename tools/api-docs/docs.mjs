@@ -7,6 +7,7 @@ import { siteOptions, typedocOptions } from "./typedoc.config.mjs";
 
 const toolDir = path.dirname(fileURLToPath(import.meta.url));
 export const rootDir = path.resolve(toolDir, "../..");
+export const packageDir = path.join(rootDir, "packages/jigs");
 
 export function apiEntries(manifest, buildEntries) {
   return Object.entries(manifest.exports).map(([subpath, conditions]) => {
@@ -44,14 +45,17 @@ export function isPublicEntry(entry) {
 /** Render the real generated factory APIs against current source, without package export changes. */
 export async function withFactoryEntries(action) {
   const { entries } = await repositoryConfig();
-  const directory = await mkdtemp(path.join(rootDir, ".api-docs-"));
+  const directory = await mkdtemp(path.join(packageDir, ".api-docs-"));
   try {
     const integration = path.join(directory, "jigs");
     await mkdir(integration);
     const factoryEntries = [];
     for (const name of ["routines", "steps"]) {
       const source = path.join(integration, `${name}.ts`);
-      const template = await readFile(path.join(rootDir, `templates/jigs/${name}.ts.tmpl`), "utf8");
+      const template = await readFile(
+        path.join(packageDir, `templates/jigs/${name}.ts.tmpl`),
+        "utf8",
+      );
       // These types are inferred from bound routines, not package exports. Inline
       // their real structure so the factory reference does not show opaque names.
       const inlineTypes = [
@@ -76,16 +80,16 @@ export async function withFactoryEntries(action) {
       tsconfig,
       JSON.stringify(
         {
-          extends: path.join(rootDir, "tsconfig.json"),
+          extends: path.join(packageDir, "tsconfig.json"),
           compilerOptions: {
             paths: Object.fromEntries(
               entries.map((entry) => [
                 entry.subpath === "." ? "@jigs-ai/jigs" : `@jigs-ai/jigs/${entry.subpath.slice(2)}`,
-                [path.resolve(rootDir, entry.source)],
+                [path.resolve(packageDir, entry.source)],
               ]),
             ),
           },
-          include: [path.join(rootDir, "src")],
+          include: [path.join(packageDir, "src")],
           files: factoryEntries.map((entry) => entry.source),
         },
         null,
@@ -184,8 +188,8 @@ export function assertDirectExportSummaries(project) {
 }
 
 async function repositoryConfig() {
-  const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
-  const { default: buildConfig } = await import(path.join(rootDir, "tsdown.config.ts"));
+  const manifest = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
+  const { default: buildConfig } = await import(path.join(packageDir, "tsdown.config.ts"));
   return {
     manifest,
     entries: apiEntries(manifest, buildConfig.entry),
@@ -195,14 +199,14 @@ async function repositoryConfig() {
 async function checkRepositoryRules(entries) {
   const failures = [];
   for (const entry of entries) {
-    const source = await readFile(path.resolve(rootDir, entry.source), "utf8");
+    const source = await readFile(path.resolve(packageDir, entry.source), "utf8");
     if (!hasPackageDocumentation(source)) {
       failures.push(`${entry.source}: missing a leading @packageDocumentation comment`);
     }
   }
   for (const directory of ["src", "recipes/linear-ticket-to-pr"]) {
-    for (const file of await walkTypeScriptFiles(path.join(rootDir, directory))) {
-      const relative = path.relative(rootDir, file);
+    for (const file of await walkTypeScriptFiles(path.join(packageDir, directory))) {
+      const relative = path.relative(packageDir, file);
       failures.push(...internalReferences(await readFile(file, "utf8"), relative));
     }
   }
@@ -258,7 +262,7 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
       format === "vitepress"
         ? ["typedoc-plugin-markdown", "typedoc-vitepress-theme"]
         : ["typedoc-plugin-markdown"],
-    tsconfig: path.join(rootDir, "tsconfig.json"),
+    tsconfig: path.join(packageDir, "tsconfig.json"),
     ...options,
   });
   hideExternalInheritedMembers(app.converter);
@@ -271,7 +275,7 @@ export async function convert(entryPoints, { format = "markdown", ...options } =
 async function validate(entries) {
   await checkRepositoryRules(entries);
   const { app, project } = await convert(
-    entries.map((entry) => path.resolve(rootDir, entry.source)),
+    entries.map((entry) => path.resolve(packageDir, entry.source)),
   );
   app.validate(project);
   assertDirectExportSummaries(project);
@@ -283,7 +287,7 @@ async function validate(entries) {
 export async function renderEntry(entry, destination, options = {}) {
   const temporary = await mkdtemp(path.join(os.tmpdir(), "jigs-api-docs-"));
   try {
-    const { app, project } = await convert([path.resolve(rootDir, entry.source)], {
+    const { app, project } = await convert([path.resolve(packageDir, entry.source)], {
       validation: typedocOptions.validation,
       ...options,
     });
@@ -305,7 +309,7 @@ export async function renderEntry(entry, destination, options = {}) {
   }
 }
 
-export async function run({ write = false, destination = path.join(rootDir, "docs/api") } = {}) {
+export async function run({ write = false, destination = path.join(packageDir, "docs/api") } = {}) {
   const { entries } = await repositoryConfig();
   await validate(entries);
   if (!write) return;
@@ -323,7 +327,7 @@ export async function renderSite(destination = path.join(rootDir, "docs-site")) 
     const { app, project } = await convert(
       [...entries.filter(isPublicEntry), ...factoryEntries]
         .sort((a, b) => a.subpath.localeCompare(b.subpath))
-        .map((entry) => path.resolve(rootDir, entry.source)),
+        .map((entry) => path.resolve(packageDir, entry.source)),
       {
         ...siteOptions,
         tsconfig,

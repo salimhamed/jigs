@@ -13,6 +13,7 @@ import {
   hasPackageDocumentation,
   internalReferences,
   isPublicEntry,
+  packageDir,
   publicSidebar,
   renderEntry,
   rootDir,
@@ -115,7 +116,7 @@ test("the real renderer writes stable subpath pages with the package version", a
   expect(await readdir(first, { recursive: true })).toEqual(["steps", "steps/human.md"]);
   const firstPage = await readFile(path.join(first, entry.output), "utf8");
   const secondPage = await readFile(path.join(second, entry.output), "utf8");
-  const { version } = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
+  const { version } = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
   expect(firstPage).toContain(`@jigs-ai/jigs v${version}`);
   expect(firstPage).toContain('Wrap steps in a factory-owned `"use step"` file.');
   expect(firstPage).not.toContain("Defined in:");
@@ -211,7 +212,7 @@ test("the website covers the public entries, llms.txt and the favicon inside the
     ],
     { cwd: rootDir, stdio: "pipe" },
   );
-  const manifest = JSON.parse(await readFile(path.join(rootDir, "package.json"), "utf8"));
+  const manifest = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
   const generated = await readdir(destination, { recursive: true });
   const files = new Set(generated);
   expect(files.has("index.html")).toBe(true);

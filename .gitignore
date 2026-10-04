@@ -1,6 +1,6 @@
 node_modules/
 dist/
-docs/api/
+packages/jigs/docs/api/
 docs-site/
 site/api/
 site/.vitepress/cache/
@@ -16,3 +16,6 @@ site/.vitepress/cache/
 .pi/
 .worktreerc.yml
 .claude/
+# Copied in by the package's prepack so the tarball ships the root copies.
+/packages/jigs/README.md
+/packages/jigs/LICENSE

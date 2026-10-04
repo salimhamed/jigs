@@ -4,15 +4,19 @@
   "type": "module",
   "scripts": {
     "check": "node docs.mjs --check",
-    "docs": "node docs.mjs"
+    "docs": "node docs.mjs",
+    "test": "vitest run"
   },
   "devDependencies": {
+    "@types/node": "^26.2.0",
     "react": "18.3.1",
     "typedoc": "0.28.20",
     "typedoc-plugin-markdown": "4.9.0",
     "typedoc-vitepress-theme": "1.1.0",
     "typescript": "5.9.3",
     "vitepress": "1.6.4",
-    "vitepress-plugin-llms": "1.14.0"
+    "vitepress-plugin-llms": "1.14.0",
+    "vitest": "^4.1.10",
+    "yaml": "^2.9.0"
   }
 }
