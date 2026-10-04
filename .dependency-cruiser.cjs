@@ -54,6 +54,12 @@ module.exports = {
       to: { path: "^src/(service|cli)/" },
     },
     {
+      name: "build-not-service-or-cli",
+      severity: "error",
+      from: { path: "^src/build/" },
+      to: { path: "^src/(service|cli)/" },
+    },
+    {
       name: "no-cycles",
       severity: "error",
       from: {},

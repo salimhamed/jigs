@@ -29,7 +29,17 @@ has to keep:
   construction; the snapshot and step-result normalizers are called that way.
 - `service/` is the long-running process. It may import `steps/`,
   `providers/`, `config/`, `checks/` and `workflow/`; the webhook ingress
-  parses hook tokens that `workflow/` defines.
+  parses hook tokens that `workflow/` defines. It may not import `cli/`.
+- `steps/` may not import `service/` or `cli/`.
+- `providers/` holds the provider clients with their identity and webhook
+  checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
+  the `Check` shape in `checks/check.ts`.
+- `config/` may not import `steps/`, `service/` or `cli/`.
+- `checks/` may not import `service/` or `cli/`.
+- `build/` is the template and generated-integration writer, used by the CLI
+  and the service build. It may not import `service/` or `cli/`.
+- No value-import cycles. The one exemption is the cycle through
+  `checks/harnesses.ts` and the drivers, which is temporary.
 - A type used by one module stays in that module. A type used on both sides of
   the workflow/steps line lives in `workflow/`, under the same topic. There is
   no shared types folder.
@@ -38,6 +48,9 @@ has to keep:
   generated `jigs/routines.ts` imports; never add them to the root.
 - Extract a shipped routine only when a recipe and at least one other concrete
   workflow use the same mechanism; single-caller composition stays in the recipe.
+
+`pnpm lint` runs dependency-cruiser with these rules, and biome forbids
+`process.env` under `workflow/`.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
 live in factory code, including the copied recipes
