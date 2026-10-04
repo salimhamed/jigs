@@ -5,7 +5,6 @@ import {
   createCodexAppServer,
   DEFAULT_MIN_CODEX_VERSION,
 } from "ai-sdk-provider-codex-cli";
-import { codexAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { codexWorktreeConfigCheck } from "../../../checks/mcp.ts";
 import { JigsError } from "../../../errors.ts";
 import {
@@ -20,11 +19,15 @@ import {
   type PreparedCodexHome,
   prepareCodexInvocationHome,
 } from "../harnesses/codex-home.ts";
+import { codexProcessGroup } from "../harnesses/codex-process.ts";
 import { resolveCodexExecutable } from "../harnesses/executables.ts";
 import { mcpCredentialVariables, resolveMcpServer } from "../harnesses/mcp-credentials.ts";
+import { trackPendingProcessGroup } from "../harnesses/process-group.ts";
 import { AgentSessionError } from "../session-error.ts";
+import { codexAuthCheck } from "./codex-checks.ts";
 import { codexAppServerStepSettings } from "./codex-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
+import { type HarnessCli, harnessRuntimeCheck } from "./harness-runtime.ts";
 import type { Driver, DriverRequest, HarnessTarget, OpenContext, OpenedModel } from "./types.ts";
 
 type CodexMcpServerConfig = NonNullable<CodexAppServerSettings["mcpServers"]>[string];
@@ -72,19 +75,30 @@ const defaultDependencies: CodexDriverDependencies = {
   createAppServer: () => createCodexAppServer(),
 };
 
+const cli: HarnessCli<"codex"> = {
+  kind: "codex",
+  displayName: "Codex",
+  resolveExecutable: resolveCodexExecutable,
+  minimumVersion: DEFAULT_MIN_CODEX_VERSION,
+};
+
 export function createCodexDriver(
   deps: CodexDriverDependencies = defaultDependencies,
 ): Driver<"codex"> {
   // Each step gets its own app server and private home; closing the model
   // stops the one and removes the other. The launcher's supervisor stops the
   // app server's process group, MCP servers included, once the provider's
-  // close signals it, so cancellation closes the provider at once.
+  // close signals it, so cancellation closes the provider at once. Service
+  // shutdown stops that group directly, as it does every harness's.
   async function open(target: HarnessTarget, context: OpenContext): Promise<OpenedModel> {
     const harness = descriptor(target);
     const { resume } = target;
     context.signal.throwIfAborted();
     const runId = context.metadata.workflowRunId;
     const prepared = await deps.prepareCodexHome(runId, harness.skills ?? []);
+    const untrack = trackPendingProcessGroup(`Codex for run ${runId}`, () =>
+      codexProcessGroup(prepared.home),
+    );
     let provider: CodexAppServerProvider | undefined;
     const onAbort = () => void provider?.close().catch(() => {});
     context.signal.addEventListener("abort", onAbort, { once: true });
@@ -104,6 +118,7 @@ export function createCodexDriver(
       try {
         await provider?.close();
       } finally {
+        untrack();
         removeHome();
       }
     };
@@ -152,10 +167,9 @@ export function createCodexDriver(
   }
 
   return {
-    kind: "codex",
     family: "harness",
     open,
-    installationChecks: () => [harnessRuntimeCheck("codex"), codexAuthCheck()],
+    installationChecks: () => [harnessRuntimeCheck(cli), codexAuthCheck()],
     descriptorChecks: () => [],
     jitChecks: (target) => [codexWorktreeConfigCheck(target.cwd)],
     envAllowlist: (request) =>
@@ -164,9 +178,8 @@ export function createCodexDriver(
         : [],
     sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
     setsEnv: ["CODEX_HOME"],
-    displayName: "Codex",
-    resolveExecutable: resolveCodexExecutable,
-    minimumVersion: DEFAULT_MIN_CODEX_VERSION,
+    mcpInheritsEnv: true,
+    ...cli,
   } satisfies Driver<"codex">;
 }
 

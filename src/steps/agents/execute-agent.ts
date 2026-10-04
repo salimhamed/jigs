@@ -67,16 +67,16 @@ async function runAgent(
   metadata: RunMetadata,
   seams: ExecutionSeams,
 ): Promise<AgentResult> {
-  // Pi has no provider model: its driver runs the whole call itself and builds
-  // its own result tool from the schema.
-  if (wire.harness.kind === "pi") {
+  // A driver with no provider model runs the whole call itself and builds its
+  // own result tool from the schema.
+  const { open, run } = seams.resolveDriver(wire.harness.kind);
+  if (open === undefined) {
+    if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
     return withRunCancellation(
       metadata.workflowRunId,
       async (signal) => {
         const prepared = await prepareAgentRun(wire, seams, signal);
         try {
-          const run = prepared.driver.run;
-          if (run === undefined) throw new JigsError(`the ${wire.harness.kind} driver cannot run`);
           const generation = await run(wire, { metadata, deps: seams, env: prepared.env, signal });
           const session = extractAgentSession(
             wire.harness,
@@ -128,7 +128,6 @@ async function askAgent(
   seams: ExecutionSeams,
 ): Promise<AgentResult> {
   const driver = seams.resolveDriver(wire.harness.kind);
-  if (driver === undefined) throw new JigsError(`no driver is registered for ${wire.harness.kind}`);
   if (driver.family !== "harness")
     throw new JigsError(`${wire.harness.kind} is a model source, not an agent harness`);
   const env = agentStepEnv(driver, wire, seams.factoryEnv());
@@ -144,8 +143,8 @@ async function askAgent(
         metadata,
         deps: seams,
         env,
-        // Pi reads the schema from the request for its result tool.
-        output: wire.harness.kind === "pi" ? undefined : outputSpec(wire.outputSchema),
+        // A driver with no provider model reads the schema from the request for its result tool.
+        output: driver.open === undefined ? undefined : outputSpec(wire.outputSchema),
         signal,
       }),
     seams.runStatus,

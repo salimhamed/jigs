@@ -1241,26 +1241,7 @@ test("pi preserves explicit built-in tools while adding MCP and result tools", a
   expect(args[args.indexOf("--tools") + 1]).toBe("read,allowed_ping,submit_result");
 });
 
-test("pi rejects unsupported MCP and ask configurations before probes or model checks", async () => {
-  const invalidRun = buildAgentRequest({
-    harness: {
-      ...harnesses.pi(models.openrouter("openai/gpt-oss")),
-      mcpServers: {
-        invalid: { command: "node", tools: ["other"], probe: { tool: "ping" } },
-      },
-    },
-    cwd: worktree,
-    prompt: "never reached",
-  });
-  const run = makeDeps({}, { piDescriptorChecks: true });
-  run.deps.jitFailures = vi.fn(async () => undefined);
-
-  await expect(
-    executeAgentWith(invalidRun, { workflowRunId: "invalid-run" }, run.deps),
-  ).rejects.toThrow("must allow its probe tool 'ping'");
-  expect(run.deps.jitFailures).not.toHaveBeenCalled();
-  expect(run.captured.piHome).toBeUndefined();
-
+test("pi rejects an ask with MCP servers before probes or model checks", async () => {
   const invalidAsk = {
     harness: {
       ...harnesses.pi(models.openrouter("openai/gpt-oss")),

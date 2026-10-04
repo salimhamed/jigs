@@ -7,6 +7,7 @@ import {
   type Signaller,
   stopProcessGroup,
   stopProcessGroups,
+  trackPendingProcessGroup,
   trackProcessGroup,
 } from "./process-group.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
@@ -171,4 +172,26 @@ test("a tracked group that ends without a stop is retired, so its id is never si
   await new Promise((resolve) => leader.once("exit", resolve));
 
   await expect.poll(() => isTrackedProcessGroup(pgid), { timeout: 3_000 }).toBe(false);
+});
+
+test("a group learned only later is stopped by shutdown once it exists", async () => {
+  let known: number | undefined;
+  const untrack = trackPendingProcessGroup("late harness", () => known);
+  expect(await stopProcessGroups()).toEqual([]);
+
+  const { leader, child } = await group({ ignoreTerm: true });
+  known = leader;
+
+  expect(await stopProcessGroups()).toEqual([{ kind: "stopped", pgid: leader }]);
+  expect(alive(leader) || alive(child)).toBe(false);
+  untrack();
+  expect(isTrackedProcessGroup(leader)).toBe(false);
+});
+
+test("ending the wait tracks a group that exists by then", async () => {
+  const { leader } = await group();
+  const untrack = trackPendingProcessGroup("late harness", () => leader);
+  untrack();
+  expect(isTrackedProcessGroup(leader)).toBe(true);
+  await stopProcessGroup(leader);
 });

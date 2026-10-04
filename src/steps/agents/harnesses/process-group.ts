@@ -24,8 +24,10 @@ const TIMINGS: StopTimings = { graceMs: 1_000, postKillMs: 1_000, pollMs: 50 };
 const SWEEP_MS = 1_000;
 
 type Tracked = { owner: string; stopping: Promise<GroupStopOutcome> | null };
+type Pending = { owner: string; resolve: () => number | undefined };
 type Registry = {
   groups: Map<number, Tracked>;
+  pending: Set<Pending>;
   exitHook: boolean;
   sweep: NodeJS.Timeout | undefined;
 };
@@ -36,7 +38,12 @@ const REGISTRY = Symbol.for("jigs.processGroups");
 
 function registry(): Registry {
   const holder = globalThis as { [REGISTRY]?: Registry };
-  holder[REGISTRY] ??= { groups: new Map(), exitHook: false, sweep: undefined };
+  holder[REGISTRY] ??= {
+    groups: new Map(),
+    pending: new Set(),
+    exitHook: false,
+    sweep: undefined,
+  };
   return holder[REGISTRY];
 }
 
@@ -112,6 +119,7 @@ function report(owner: string, outcome: GroupStopOutcome, timings: StopTimings):
 // on its own, or one whose stop failed. Retire it as soon as it is gone, so a
 // later stop or shutdown never signals a reused id.
 function sweep(state: Registry): void {
+  promote(state);
   for (const [pgid, tracked] of state.groups) {
     if (tracked.stopping !== null) continue;
     try {
@@ -120,7 +128,7 @@ function sweep(state: Registry): void {
       if ((error as NodeJS.ErrnoException).code === "ESRCH") state.groups.delete(pgid);
     }
   }
-  if (state.groups.size > 0) return;
+  if (state.groups.size > 0 || state.pending.size > 0) return;
   clearInterval(state.sweep);
   state.sweep = undefined;
 }
@@ -133,12 +141,46 @@ function sweep(state: Registry): void {
 export function trackProcessGroup(pgid: number, owner: string): void {
   const state = registry();
   state.groups.set(pgid, { owner, stopping: null });
+  watch(state);
+}
+
+/**
+ * Register a process group whose id this process learns only later, such as the one a launcher
+ * starts for Codex. `resolve` returns the id once the group exists; from then on it is tracked
+ * like any other. The returned function ends the wait, tracking the group if it now exists.
+ */
+export function trackPendingProcessGroup(
+  owner: string,
+  resolve: () => number | undefined,
+): () => void {
+  const state = registry();
+  const pending = { owner, resolve };
+  state.pending.add(pending);
+  watch(state);
+  return () => {
+    if (!state.pending.delete(pending)) return;
+    const pgid = resolve();
+    if (pgid !== undefined && !state.groups.has(pgid)) trackProcessGroup(pgid, owner);
+  };
+}
+
+function promote(state: Registry): void {
+  for (const pending of state.pending) {
+    const pgid = pending.resolve();
+    if (pgid === undefined) continue;
+    state.pending.delete(pending);
+    if (!state.groups.has(pgid)) state.groups.set(pgid, { owner: pending.owner, stopping: null });
+  }
+}
+
+function watch(state: Registry): void {
   state.sweep ??= setInterval(() => sweep(state), SWEEP_MS).unref();
   if (state.exitHook) return;
   state.exitHook = true;
   // A signal or crash that ends this process no longer reaches a private
   // group. `exit` handlers cannot wait, so kill outright.
   process.on("exit", () => {
+    promote(state);
     for (const pgid of state.groups.keys()) {
       try {
         process.kill(-pgid, "SIGKILL");
@@ -176,7 +218,9 @@ export function stopProcessGroup(
 
 /** Stop every group this process still tracks, as service shutdown does. */
 export function stopProcessGroups(): Promise<GroupStopOutcome[]> {
-  return Promise.all([...registry().groups.keys()].map((pgid) => stopProcessGroup(pgid)));
+  const state = registry();
+  promote(state);
+  return Promise.all([...state.groups.keys()].map((pgid) => stopProcessGroup(pgid)));
 }
 
 /** Whether a group is still registered. For tests. */

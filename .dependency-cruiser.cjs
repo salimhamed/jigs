@@ -65,12 +65,7 @@ module.exports = {
       from: {},
       to: {
         circular: true,
-        viaOnly: {
-          ...value,
-          // Known cycle: the drivers import their checks from checks/harnesses.ts, which looks
-          // drivers up by kind. Remove this once that cycle is broken.
-          pathNot: "^src/checks/harnesses\\.ts$",
-        },
+        viaOnly: value,
       },
     },
   ],

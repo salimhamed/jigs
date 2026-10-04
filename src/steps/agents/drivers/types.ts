@@ -181,6 +181,11 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   envAllowlist(request: DriverRequest): readonly string[];
   /** Names the driver sets in the harness environment itself, such as a private home. */
   setsEnv: readonly string[];
+  /**
+   * Whether a stdio MCP server the harness starts inherits the step's environment. Without it,
+   * a server sees only the variables its declaration names.
+   */
+  mcpInheritsEnv?: boolean;
   sessionPointer?: { providerKey: string; field: string };
   displayName: string;
   resolveExecutable?(env: NodeJS.ProcessEnv): string;

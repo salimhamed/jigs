@@ -1,4 +1,5 @@
 import { expect, expectTypeOf, test } from "vitest";
+import { JigsError } from "../errors.ts";
 import { models } from "./harness-config.ts";
 import { type AskJevOptions, askJev, choice, score, yesNo } from "./jev.ts";
 
@@ -87,4 +88,14 @@ test("decision state accepts nested JSON objects and arrays", () => {
     questions: { match: yesNo("Match?") },
   };
   expect(request.state).toEqual({ account: ["Acme", 42, true, null, { active: false }] });
+});
+
+test("a malformed question fails when it is built, before any run", () => {
+  expect(() => yesNo(" ")).toThrow(JigsError);
+  expect(() => yesNo("")).toThrow("instructions must not be empty");
+  expect(() => choice("What next?", {})).toThrow("at least one option");
+  expect(() => choice("What next?", { match: "" })).toThrow("each with a description");
+  expect(() => score("Similarity?", ["Same"])).toThrow("at least two levels");
+  expect(() => score("Similarity?", ["Different", " "])).toThrow("each with a description");
+  expect(() => score("", ["Different", "Same"])).toThrow("instructions must not be empty");
 });

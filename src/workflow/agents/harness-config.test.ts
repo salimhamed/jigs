@@ -1,10 +1,12 @@
 import { expect, test } from "vitest";
+import { JigsError } from "../errors.ts";
 import type {
   AskableModelSource,
   ClaudeHarness,
   CodexHarness,
   ModelSource,
   PiHarness,
+  PiMcpServerConfig,
 } from "./harness-config.ts";
 import { claudePolicyKeys, codexPolicyKeys, harnesses, models } from "./harness-config.ts";
 import { type AskJevOptions, yesNo } from "./jev.ts";
@@ -307,4 +309,92 @@ test("a settings object held in a variable is checked too", () => {
   // @ts-expect-error permissionMode is Claude policy
   const harness = () => harnesses.claude(settings);
   expect(harness).toBeTypeOf("function");
+});
+
+test("harnesses.pi rejects an MCP server the adapter cannot represent when it is built", () => {
+  const pi = (mcpServers: Record<string, PiMcpServerConfig>) =>
+    harnesses.pi(models.openrouter("openai/gpt-oss"), { mcpServers });
+  expect(() =>
+    pi({ invalid: { command: "node", tools: ["ping"], probe: { tool: "other" } } }),
+  ).toThrow(JigsError);
+  expect(() =>
+    pi({
+      invalid: {
+        command: "node",
+        url: "https://mcp.example.test",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("must declare exactly one transport");
+  expect(() =>
+    pi({
+      invalid: { url: "not a URL", tools: ["ping"], probe: { tool: "ping" } },
+    }),
+  ).toThrow("must declare an HTTP or HTTPS URL");
+  expect(() =>
+    pi({
+      invalid: { command: "node", tools: ["other"], probe: { tool: "ping" } },
+    }),
+  ).toThrow("must allow its probe tool 'ping'");
+  expect(() =>
+    pi({
+      invalid: {
+        url: "https://mcp.example",
+        disabledTools: ["get_user_data"],
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("sets disabledTools; Pi exposes only its tools list");
+  expect(() =>
+    pi({
+      invalid: {
+        command: "node",
+        headers: { authorization: "TOKEN" },
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("declares unsupported field(s): headers");
+  expect(() =>
+    pi({
+      invalid: {
+        url: "ftp://mcp.example.test",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("must declare an HTTP or HTTPS URL");
+  expect(() =>
+    pi({
+      invalid: {
+        command: "node",
+        env: { TOKEN: "literal-secret" },
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("must name step-side environment variables");
+  expect(() =>
+    pi({
+      invalid: {
+        url: "https://mcp.example.test",
+        bearerTokenEnv: "not-an-env-name",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      },
+    }),
+  ).toThrow("bearerTokenEnv must name a step-side environment variable");
+  expect(() =>
+    pi({
+      invalid: {
+        url: "https://mcp.example.test",
+        auth: "oauth",
+        bearerTokenEnv: "TOKEN",
+        tools: ["ping"],
+        probe: { tool: "ping" },
+      } as never,
+    }),
+  ).toThrow("cannot declare both auth and bearerTokenEnv");
 });

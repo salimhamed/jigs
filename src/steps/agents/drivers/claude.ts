@@ -4,7 +4,6 @@ import {
   claudeCode,
   getSessionMessages,
 } from "ai-sdk-provider-claude-code";
-import { claudeAuthCheck, harnessRuntimeCheck } from "../../../checks/harnesses.ts";
 import { JigsError } from "../../../errors.ts";
 import {
   type ClaudeHarness,
@@ -21,9 +20,11 @@ import {
   type SkillsPlugin,
 } from "../harnesses/skills.ts";
 import { AgentSessionError } from "../session-error.ts";
+import { claudeAuthCheck } from "./claude-checks.ts";
 import { acceptedStructuredAnswer } from "./claude-structured-output.ts";
 import { CLAUDE_ENV, claudeStepSettings } from "./claude-support.ts";
 import { descriptorSettings } from "./descriptor-settings.ts";
+import { type HarnessCli, harnessRuntimeCheck } from "./harness-runtime.ts";
 import type { Driver, DriverRequest, ExecutorGeneration, OpenedModel } from "./types.ts";
 
 function mcpServers(
@@ -79,12 +80,17 @@ const defaultDependencies: ClaudeDriverDependencies = {
   },
 };
 
+const cli: HarnessCli<"claude"> = {
+  kind: "claude",
+  displayName: "Claude Code",
+  resolveExecutable: resolveClaudeExecutable,
+};
+
 export function createClaudeDriver(
   overrides: Partial<ClaudeDriverDependencies> = {},
 ): Driver<"claude"> {
   const deps = { ...defaultDependencies, ...overrides };
   const driver: Driver<"claude"> = {
-    kind: "claude",
     family: "harness",
     open: async (target, context): Promise<OpenedModel> => {
       const harness = descriptor(target);
@@ -161,7 +167,7 @@ export function createClaudeDriver(
         await settings.spawnClaudeCodeProcess.close();
       }
     },
-    installationChecks: () => [harnessRuntimeCheck("claude"), claudeAuthCheck()],
+    installationChecks: () => [harnessRuntimeCheck(cli), claudeAuthCheck()],
     descriptorChecks: () => [],
     envAllowlist: (request) => [
       ...CLAUDE_ENV,
@@ -171,8 +177,8 @@ export function createClaudeDriver(
     ],
     sessionPointer: { providerKey: "claude-code", field: "sessionId" },
     setsEnv: [],
-    displayName: "Claude Code",
-    resolveExecutable: resolveClaudeExecutable,
+    mcpInheritsEnv: true,
+    ...cli,
   };
   return driver;
 }

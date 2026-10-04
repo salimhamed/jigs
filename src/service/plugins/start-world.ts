@@ -6,14 +6,15 @@
 
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import type { HarnessKind, HarnessRuntime } from "../../checks/harness-runtime.ts";
 import type { SlackConfig, WebhooksConfig } from "../../config/factory-config.ts";
 import type { SlackAppHold } from "../../config/slack-apps.ts";
 import { plainHint } from "../../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
+import type { HarnessRuntime } from "../../steps/agents/drivers/harness-runtime.ts";
 import { stopProcessGroups } from "../../steps/agents/harnesses/process-group.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { BindingClone } from "../../steps/workspaces/clone.ts";
+import type { HarnessKind } from "../../workflow/agents/harness-config.ts";
 import type { FactoryDefinition, WorkflowDefinition } from "../../workflow/factory.ts";
 import { PROVIDERS, WEBHOOK_PROVIDERS } from "../../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "../readiness.ts";
@@ -64,7 +65,7 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
     const kinds = [...users.keys()];
     runtimes =
       deps.runtimes === undefined
-        ? await (await import("../../checks/harness-runtime.ts")).harnessRuntimes(kinds)
+        ? await (await import("../../checks/harnesses.ts")).harnessRuntimes(kinds)
         : await deps.runtimes(kinds);
   } catch (err) {
     (deps.error ?? ((line: string) => console.error(line)))(

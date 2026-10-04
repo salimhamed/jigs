@@ -1,16 +1,21 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import semver from "semver";
-import { driverFor } from "../steps/agents/drivers/index.ts";
-import { factoryAgentEnv, harnessEnv } from "../steps/agents/harnesses/env.ts";
-import type { HarnessKind } from "../workflow/agents/harness-config.ts";
-import { PROBE_TIMEOUT_MS } from "./catalog.ts";
+import { PROBE_TIMEOUT_MS } from "../../../checks/catalog.ts";
+import type { Check, CheckResult } from "../../../checks/check.ts";
+import type { HarnessKind } from "../../../workflow/agents/harness-config.ts";
+import { factoryAgentEnv, harnessEnv } from "../harnesses/env.ts";
 
-// Are the harness CLIs installed, and is codex new enough? The service's
-// startup gate and `jigs doctor` share this so they cannot disagree. The
-// minimum comes from the codex provider; claude has none.
+// Are the harness CLIs installed, and new enough? The service's startup gate
+// and `jigs doctor` share this so they cannot disagree.
 
-export type { HarnessKind } from "../workflow/agents/harness-config.ts";
+/** The installed CLI a harness driver runs. */
+export interface HarnessCli<K extends HarnessKind = HarnessKind> {
+  kind: K;
+  displayName: string;
+  resolveExecutable?(env: NodeJS.ProcessEnv): string;
+  minimumVersion?: string;
+}
 
 /** `line` is the one line to show an operator, pass or fail. */
 export type HarnessRuntime =
@@ -33,7 +38,7 @@ export type HarnessRuntime =
     };
 
 export interface HarnessRuntimeDeps {
-  resolve?: (harness: HarnessKind, env: NodeJS.ProcessEnv) => string;
+  resolve?: (env: NodeJS.ProcessEnv) => string;
   exec?: (
     file: string,
     args: string[],
@@ -50,22 +55,15 @@ const execFileAsync = promisify(execFile);
 const PATH_CAVEAT =
   "the service may not have your shell's PATH\nstart it from a shell where each required harness runs";
 
-const resolveDefault = (harness: HarnessKind, env: NodeJS.ProcessEnv): string => {
-  const driver = driverFor(harness);
-  if (driver?.resolveExecutable === undefined)
-    throw new Error(`no runtime resolver for ${harness}`);
-  return driver.resolveExecutable(env);
-};
-
 export async function harnessRuntime(
-  harness: HarnessKind,
+  cli: HarnessCli,
   deps: HarnessRuntimeDeps = {},
 ): Promise<HarnessRuntime> {
-  const resolve = deps.resolve ?? resolveDefault;
+  const harness = cli.kind;
+  const resolve = deps.resolve ?? cli.resolveExecutable;
   const exec = deps.exec ?? execFileAsync;
   const env = deps.env ?? process.env;
-  const driver = driverFor(harness);
-  const minimum = driver?.minimumVersion ?? null;
+  const minimum = cli.minimumVersion ?? null;
   const floor = minimum === null ? "" : ` (minimum ${minimum})`;
   const fail = (path: string | null, version: string | null, line: string): HarnessRuntime => ({
     harness,
@@ -79,7 +77,8 @@ export async function harnessRuntime(
 
   let path: string;
   try {
-    path = resolve(harness, env);
+    if (resolve === undefined) throw new Error(`no runtime resolver for ${harness}`);
+    path = resolve(env);
   } catch {
     return fail(null, null, `${harness} not found on PATH${floor}`);
   }
@@ -119,9 +118,17 @@ export async function harnessRuntime(
   };
 }
 
-export async function harnessRuntimes(
-  kinds: HarnessKind[],
-  deps: HarnessRuntimeDeps = {},
-): Promise<HarnessRuntime[]> {
-  return Promise.all([...new Set(kinds)].map((harness) => harnessRuntime(harness, deps)));
+/** The same check the service gates its boot on, so doctor cannot pass
+ *  something the service would refuse. */
+export function harnessRuntimeCheck(cli: HarnessCli, deps: HarnessRuntimeDeps = {}): Check {
+  return {
+    id: `harness.${cli.kind}-cli`,
+    label: `${cli.displayName} CLI`,
+    run: async (): Promise<CheckResult> => {
+      const runtime = await harnessRuntime(cli, deps);
+      return runtime.ok
+        ? { ok: true, detail: runtime.line }
+        : { ok: false, reason: runtime.line, repair: runtime.repair };
+    },
+  };
 }

@@ -13,6 +13,7 @@ import { RunCancelledError } from "../run-cancellation.ts";
 import { forFactoryStep, openAgentRunner } from "../runner.ts";
 import { executionSeams } from "../seams.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "./codex-home.ts";
+import { isTrackedProcessGroup, stopProcessGroups } from "./process-group.ts";
 import { cancellableRun, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 let tmp: string;
@@ -137,6 +138,26 @@ test("cancelling the run stops the Codex launcher, app server and MCP child", as
     expect(Date.now() - cancelledAt).toBeLessThan(10_000);
   } finally {
     run.cancel();
+  }
+}, 30_000);
+
+test("service shutdown stops the Codex app server's whole group, MCP child included", async () => {
+  installFakeCodex(undefined);
+  const run = cancellableRun();
+  const { step, started } = startStep(run);
+  const settled = expect(step).rejects.toThrow();
+  try {
+    const pids = await started();
+
+    const outcomes = await stopProcessGroups();
+
+    expect(outcomes).toContainEqual({ kind: "stopped", pgid: pids.server });
+    await expect.poll(() => Object.values(pids).some(pidIsRunning), { timeout: 5_000 }).toBe(false);
+    expect(isTrackedProcessGroup(pids.server)).toBe(false);
+  } finally {
+    // The provider leaves a turn whose app server died open; the service exits regardless.
+    run.cancel();
+    await settled;
   }
 }, 30_000);
 
