@@ -11,8 +11,8 @@ import {
   type App,
   type Installed,
   recordInstallation,
+  recordInstallations,
   removeInstallation,
-  syncInstallations,
 } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
@@ -95,7 +95,7 @@ export async function addGitHubApp(
       .onConflictDoNothing()
       .returning();
     if (!app) return { error: `GitHub App ${input.appId} is already on this hub.` };
-    await syncInstallations(tx, app.id, installed.installations);
+    await recordInstallations(tx, app.id, installed.installations);
     return { app };
   });
 }
@@ -211,7 +211,7 @@ export function createGitHubRoutes(options: {
     if ("status" in installed) {
       throw new Error(`GitHub answered ${installed.status} listing ${app.name}'s installations`);
     }
-    await syncInstallations(db, app.id, installed.installations);
+    await recordInstallations(db, app.id, installed.installations);
     return installed.installations.some((row) => row.externalId === String(installationId));
   };
 

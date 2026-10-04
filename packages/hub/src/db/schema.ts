@@ -172,7 +172,7 @@ export const apps = pgTable(
     name: text("name").notNull(),
     /** The provider's id for the app, which its provider events carry, such as a GitHub App ID. */
     externalId: text("external_id").notNull(),
-    /** What the provider's own settings show, such as a GitHub App's slug and client ID. */
+    /** What the provider's own settings show, such as a GitHub App's client ID. */
     settings: jsonb("settings").notNull(),
     /** The app's secrets as JSON, encrypted with `encryptSecret`. */
     secrets: text("secrets").notNull(),

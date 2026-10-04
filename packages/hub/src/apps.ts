@@ -1,4 +1,4 @@
-import { and, eq, inArray, notInArray, sql } from "drizzle-orm";
+import { and, eq, inArray, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 
@@ -76,21 +76,16 @@ export interface Installed {
   account: string;
 }
 
-/** Make an app's installations exactly what the provider lists. */
-export async function syncInstallations(
+/**
+ * Record every installation the provider lists. Installations it no longer
+ * lists stay: only an uninstall event removes one, since a list read before
+ * an install can arrive after it.
+ */
+export async function recordInstallations(
   db: HubDatabase | Transaction,
   appId: string,
   installed: readonly Installed[],
 ): Promise<void> {
-  const current = installed.map((row) => row.externalId);
-  await db
-    .delete(installations)
-    .where(
-      and(
-        eq(installations.appId, appId),
-        current.length > 0 ? notInArray(installations.externalId, current) : undefined,
-      ),
-    );
   if (installed.length === 0) return;
   await db
     .insert(installations)
