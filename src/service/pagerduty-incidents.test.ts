@@ -72,7 +72,7 @@ function recordedApi() {
   return { replies, urls, client: createPagerDutyClient(identity, { auth, fetch }) };
 }
 
-test("a poll lists incidents of every status with the source's own filters, from just behind the watermark", async () => {
+test("a poll lists incidents of every status with the source's own filters, from just behind its cursor", async () => {
   const api = recordedApi();
   api.replies.push([incident("Q1", minutes(-2)), incident("Q2", minutes(-1))]);
   const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
@@ -80,12 +80,15 @@ test("a poll lists incidents of every status with the source's own filters, from
     pagerduty.incidents({ service_ids: ["PSVC001", "PSVC002"], urgencies: ["high"] }).params,
   );
 
-  const seen = await source.poll(params, minutes(-5));
+  const seen = await source.poll(params, minutes(-5).toISOString(), minutes(-60));
 
-  expect(seen).toEqual([
-    { inputs: { incident: "Q1" }, at: minutes(-2) },
-    { inputs: { incident: "Q2" }, at: minutes(-1) },
-  ]);
+  expect(seen).toEqual({
+    occurrences: [
+      { inputs: { incident: "Q1" }, at: minutes(-2) },
+      { inputs: { incident: "Q2" }, at: minutes(-1) },
+    ],
+    cursor: T0.toISOString(),
+  });
   const [url] = api.urls;
   expect(url?.pathname).toBe("/incidents");
   expect(url?.searchParams.getAll("service_ids[]")).toEqual(["PSVC001", "PSVC002"]);
@@ -106,7 +109,7 @@ test("a poll pages through every incident, 100 at a time", async () => {
   );
   const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
 
-  expect(await source.poll({}, minutes(-5))).toHaveLength(230);
+  expect((await source.poll({}, undefined, minutes(-5))).occurrences).toHaveLength(230);
   expect(
     api.urls.map((url) => [url.searchParams.get("offset"), url.searchParams.get("limit")]),
   ).toEqual([
@@ -120,13 +123,26 @@ test("after a long downtime the range stays within what PagerDuty accepts", asyn
   const api = recordedApi();
   const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
 
-  await source.poll({}, new Date(T0.getTime() - 400 * 24 * 60 * 60_000));
+  const longAgo = new Date(T0.getTime() - 400 * 24 * 60 * 60_000);
+  await source.poll({}, longAgo.toISOString(), longAgo);
 
   const [url] = api.urls;
   const since = new Date(url?.searchParams.get("since") as string).getTime();
   const until = new Date(url?.searchParams.get("until") as string).getTime();
   expect(until - since).toBeLessThan(180 * 24 * 60 * 60_000);
   expect(until).toBeGreaterThanOrEqual(T0.getTime());
+});
+
+test("a cursor behind the floor reads from the floor", async () => {
+  const api = recordedApi();
+  const source = pagerDutyIncidents({ client: () => api.client, now: () => T0 });
+
+  await source.poll({}, minutes(-600).toISOString(), minutes(-60));
+
+  expect(api.urls[0]?.searchParams.get("since")).toBe(
+    new Date(minutes(-60).getTime() - POLL_OVERLAP_MS).toISOString(),
+  );
+  expect(source.cursor.safeParse("not a time").success).toBe(false);
 });
 
 test("the occurrence is the incident id, and params take PagerDuty's names only", async () => {
@@ -157,7 +173,7 @@ test("a pushed incident.triggered is the same occurrence the poll finds", async 
   const pushed = await source.fromPush({}, triggered());
 
   expect(pushed).toEqual({ inputs: { incident: "Q1" }, at: minutes(1) });
-  expect(await source.poll({}, T0)).toEqual([pushed]);
+  expect((await source.poll({}, undefined, T0)).occurrences).toEqual([pushed]);
 });
 
 test("any other webhook event is not an occurrence", async () => {

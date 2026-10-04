@@ -45,8 +45,8 @@ test.skipIf(!configured)("a posted message arrives over Socket Mode and in histo
 
     const history = await slackHistory(channel, { oldest: (since.getTime() / 1000).toFixed(6) });
     expect(history.map((message) => message.ts)).toContain(event.ts);
-    const polled = await messages.poll(params, since);
-    expect(polled.map((occurrence) => occurrence.inputs.ts)).not.toContain(event.ts);
+    const polled = await messages.poll(params, undefined, since);
+    expect(polled.occurrences.map((occurrence) => occurrence.inputs.ts)).not.toContain(event.ts);
   } finally {
     socket.stop();
   }

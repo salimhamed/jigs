@@ -36,30 +36,41 @@ const occurred = (channel: string, ts: string): SourceOccurrence => ({
   at: new Date(Number(ts) * 1000),
 });
 
-function slackSource(mentionsOnly: boolean): Source<Params> {
+const slackTs = (at: Date) => (at.getTime() / 1000).toFixed(6);
+
+// Each channel's own `oldest`: one channel that cannot be read holds back
+// only itself, so the others' new messages still start runs.
+const cursorSchema = z.record(z.string(), z.string().regex(/^\d+\.\d{6}$/));
+type Cursor = z.output<typeof cursorSchema>;
+
+function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cursor> {
   return {
     provider: "slack",
     params: paramsSchema,
+    cursor: cursorSchema,
     sampleInputs: { channel: "C0123ABCD", ts: "1790723244.335019" },
     occurrence: ({ channel, ts }) => {
       if (typeof channel !== "string" || typeof ts !== "string")
         throw new Error("no channel and ts in the inputs");
       return `${channel}:${ts}`;
     },
-    async poll({ channels }, since) {
+    async poll({ channels }, cursor, floor) {
       const bot = await slackBot();
-      const oldest = (since.getTime() / 1000).toFixed(6);
-      const found: SourceOccurrence[] = [];
-      const failed: string[] = [];
-      let firstWhy = "";
+      const floorTs = slackTs(floor);
+      const occurrences: SourceOccurrence[] = [];
+      const next: Cursor = {};
       for (const channel of channels) {
+        const held = cursor?.[channel];
+        const oldest = held !== undefined && Number(held) > Number(floorTs) ? held : floorTs;
+        // Taken before the read, so a message landing during it is read again
+        // next time; the engine drops the repeat.
+        const through = slackTs(now());
         let messages: SlackMessage[];
         try {
           messages = await slackHistory(channel, { oldest });
         } catch (error) {
+          if (held !== undefined) next[channel] = held;
           const why = error instanceof Error ? error.message : String(error);
-          failed.push(channel);
-          firstWhy ||= why;
           console.log(`[slack] could not poll channel ${channel}: ${why}`);
           console.log(
             plainHint(
@@ -69,14 +80,11 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
           continue;
         }
         for (const message of messages)
-          if (startsRun(message, bot, mentionsOnly)) found.push(occurred(channel, message.ts));
+          if (startsRun(message, bot, mentionsOnly))
+            occurrences.push(occurred(channel, message.ts));
+        next[channel] = through;
       }
-      // Every channel is still read so each failure is logged with its repair,
-      // but the poll fails: the engine then keeps the window where it was and
-      // the next poll reads the failed channel's messages again.
-      if (failed.length > 0)
-        throw new Error(`could not poll Slack channel ${failed.join(", ")}: ${firstWhy}`);
-      return found;
+      return { occurrences, cursor: next };
     },
     async fromPush({ channels }, event) {
       const message = event as SlackMessageEvent;
@@ -89,7 +97,11 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
   };
 }
 
-export const SLACK_SOURCES = {
-  "slack.messages": slackSource(false),
-  "slack.mentions": slackSource(true),
-};
+export function slackSources(now: () => Date = () => new Date()) {
+  return {
+    "slack.messages": slackSource(false, now),
+    "slack.mentions": slackSource(true, now),
+  };
+}
+
+export const SLACK_SOURCES = slackSources();

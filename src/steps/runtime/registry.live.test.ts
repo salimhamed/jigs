@@ -76,7 +76,7 @@ test("a fresh database gets the resource and trigger tables, twice without chang
       "jigs_trigger_markers",
       "jigs_triggers",
     ]);
-    expect(await migrations(fresh.db)).toHaveLength(4);
+    expect(await migrations(fresh.db)).toHaveLength(5);
   } finally {
     await fresh.db.$client.end();
   }
@@ -117,7 +117,7 @@ test("a database with the old worktree table loses it without touching World his
       "jigs_trigger_markers",
       "jigs_triggers",
     ]);
-    expect(await migrations(old.db)).toHaveLength(4);
+    expect(await migrations(old.db)).toHaveLength(5);
     expect(
       (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
     ).toEqual([{ id: 42, hash: "world" }]);
