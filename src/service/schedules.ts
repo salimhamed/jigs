@@ -5,12 +5,7 @@ import { type Check, failedCheck, formatFailures } from "../checks/index.ts";
 import { plainHint } from "../errors.ts";
 import { finished } from "../steps/runtime/run-state.ts";
 import type { Factory, Schedule } from "../workflow/factory.ts";
-import {
-  type ConfigProblem,
-  issues,
-  nameProblem,
-  workflowProblem,
-} from "./event-triggers/validate.ts";
+import { type ConfigProblem, issues } from "./event-triggers/validate.ts";
 import { type StartRunResult, startRun } from "./launch.ts";
 import { listRuns, type RunRow, scheduleTriggerId, scheduleTriggerLabel } from "./runs.ts";
 import { onShutdown } from "./shutdown.ts";
@@ -136,13 +131,6 @@ export function scheduleChecks(factory: Factory): Check[] {
 }
 
 function scheduleProblem(factory: Factory, name: string, schedule: Schedule): ConfigProblem | null {
-  // The tick is appended to the name with a ":", and both the trigger column
-  // and the overlap skip read the name back by splitting on the first one — so
-  // a name carrying its own would answer for another schedule's runs.
-  const problem =
-    nameProblem("schedule", name) ??
-    workflowProblem(factory, `schedules.${name}`, schedule.workflow);
-  if (problem !== null) return problem;
   const entry = factory.workflows[schedule.workflow] as Factory["workflows"][string];
   try {
     new Cron(schedule.cron, { mode: CRON_MODE });

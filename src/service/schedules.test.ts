@@ -68,38 +68,6 @@ async function check(id: string, factory: Factory) {
   return { label: found.label, ...(await found.run()) };
 }
 
-test("a schedule naming a workflow this factory does not have fails its check", async () => {
-  const result = await check(
-    "schedule.nightly",
-    factory({
-      nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} },
-    }),
-  );
-  expect(result.ok).toBe(false);
-  expect(result.ok === false && result.reason).toContain('"swep"');
-  expect(result.ok === false && result.repair).toBe(
-    "set schedules.nightly.workflow in jigs.config.ts to one of: sweep",
-  );
-});
-
-test("a schedule name carrying a colon fails its check — it would answer for another", async () => {
-  const result = await check(
-    "schedule.nightly:sweep",
-    factory({
-      "nightly:sweep": {
-        workflow: "sweep",
-        cron: "0 3 * * *",
-        inputs: { target: "a" },
-      },
-    }),
-  );
-  expect(result.ok).toBe(false);
-  expect(result.ok === false && result.reason).toContain('contains ":"');
-  expect(result.ok === false && result.repair).toContain(
-    'rename the "nightly:sweep" schedule in jigs.config.ts',
-  );
-});
-
 test("a cron croner rejects fails its check", async () => {
   const result = await check(
     "schedule.nightly",

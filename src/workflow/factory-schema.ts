@@ -256,37 +256,127 @@ export function installationFor(
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per workflow
 export type WorkflowImport = () => Promise<{ default: WorkflowDefinition<any> }>;
 
-// Strict so a misspelled section fails instead of falling back to defaults.
-export const factoryConfigSchema = z.strictObject({
-  bindings: z.record(z.string(), bindingSchema).default({}),
-  // Where provider webhooks reach this factory's service (the tunnel URL), and
-  // which providers send them. Absent, the service only polls.
-  webhooks: webhooksSchema.optional(),
-  // One service per factory repo, so the addresses belong to the factory
-  // rather than the machine. Only non-secret operating parameters live here —
-  // the World the service writes is a credential-bearing URL, so it stays in
-  // the factory's own .env. An absent section is read as an empty one, so what
-  // it is missing reports itself by name.
-  service: z.preprocess<unknown, typeof serviceSchema, z.input<typeof serviceSchema>>(
-    (section) => section ?? {},
-    serviceSchema,
-  ),
-  // Which GitHub credential jigs uses, and how the operator approves a merge.
-  github: githubSchema.prefault({}),
-  linear: linearSchema.prefault({}),
-  pagerduty: pagerDutySchema.optional(),
-  // Absent, the factory has no Slack app. Socket Mode is stated outright for
-  // the same reason each webhook provider is.
-  slack: slackSchema.optional(),
-  release: releaseSchema.optional(),
-  // Service variables every agent harness receives beyond jigs' base set.
-  agents: agentsSchema.prefault({}),
-  // Deferred imports and plain data the service reads from the module itself,
-  // after its own checks: their shape is the type's alone.
-  workflows: z.custom<Record<string, WorkflowImport>>().optional(),
-  schedules: z.custom<Record<string, Schedule>>().optional(),
-  triggers: z.custom<Record<string, EventTrigger>>().optional(),
+const inputsSchema = z.record(z.string(), z.unknown());
+
+const scheduleSchema: z.ZodType<Schedule, Schedule> = z.strictObject({
+  workflow: z.string(),
+  cron: z.string(),
+  inputs: inputsSchema,
 });
+
+const eventTriggerSchema: z.ZodType<EventTrigger, EventTrigger> = z.strictObject({
+  workflow: z.string(),
+  source: z.strictObject({ kind: z.string(), params: inputsSchema }),
+  inputs: inputsSchema.optional(),
+  maxActive: z.number().optional(),
+  lookbackMinutes: z.number().optional(),
+});
+
+// Strict so a misspelled section fails instead of falling back to defaults.
+export const factoryConfigSchema = z
+  .strictObject({
+    bindings: z.record(z.string(), bindingSchema).default({}),
+    // Where provider webhooks reach this factory's service (the tunnel URL), and
+    // which providers send them. Absent, the service only polls.
+    webhooks: webhooksSchema.optional(),
+    // One service per factory repo, so the addresses belong to the factory
+    // rather than the machine. Only non-secret operating parameters live here —
+    // the World the service writes is a credential-bearing URL, so it stays in
+    // the factory's own .env. An absent section is read as an empty one, so what
+    // it is missing reports itself by name.
+    service: z.preprocess<unknown, typeof serviceSchema, z.input<typeof serviceSchema>>(
+      (section) => section ?? {},
+      serviceSchema,
+    ),
+    // Which GitHub credential jigs uses, and how the operator approves a merge.
+    github: githubSchema.prefault({}),
+    linear: linearSchema.prefault({}),
+    pagerduty: pagerDutySchema.optional(),
+    // Absent, the factory has no Slack app. Socket Mode is stated outright for
+    // the same reason each webhook provider is.
+    slack: slackSchema.optional(),
+    release: releaseSchema.optional(),
+    // Service variables every agent harness receives beyond jigs' base set.
+    agents: agentsSchema.prefault({}),
+    // Deferred imports: calling one loads the workflow, which only the service does.
+    workflows: z
+      .record(
+        z.string(),
+        z.custom<WorkflowImport>((load) => typeof load === "function", "must be a deferred import"),
+      )
+      .optional(),
+    schedules: z.record(z.string(), scheduleSchema).optional(),
+    triggers: z.record(z.string(), eventTriggerSchema).optional(),
+  })
+  .superRefine(checkStarts);
+
+/** Runs of an event trigger active at once when it does not say. */
+export const DEFAULT_MAX_ACTIVE = 20;
+/** Minutes an event trigger catches up after downtime when it does not say. */
+export const DEFAULT_LOOKBACK_MINUTES = 60;
+
+// What needs neither a loaded workflow nor the service's sources. The service
+// checks the rest: the cron, the source and its params, and the inputs.
+function checkStarts(
+  {
+    workflows = {},
+    schedules = {},
+    triggers = {},
+  }: {
+    workflows?: Record<string, WorkflowImport>;
+    schedules?: Record<string, Schedule>;
+    triggers?: Record<string, EventTrigger>;
+  },
+  ctx: z.RefinementCtx,
+): void {
+  const problem = (path: string[], reason: string, repair: string) =>
+    ctx.addIssue({ code: "custom", path, message: `${reason}\n${repair}` });
+  // A run's trigger id appends the tick or occurrence to the name after a ":",
+  // and the trigger column and a schedule's overlap skip read the name back by
+  // splitting on the first one, so a name carrying its own would answer for
+  // another's runs.
+  const name = (kind: "schedule" | "trigger", key: string) => {
+    if (!key.includes(":")) return;
+    problem(
+      [`${kind}s`, key],
+      `${kind} name "${key}" contains ":"`,
+      `rename the "${key}" ${kind} in jigs.config.ts to a name without ":"\na run's trigger id is read back out of the name`,
+    );
+  };
+  const workflow = (at: string[], chosen: string) => {
+    if (Object.hasOwn(workflows, chosen)) return;
+    problem(
+      [...at, "workflow"],
+      `workflow "${chosen}" is not one of this factory's workflows`,
+      `set ${at.join(".")}.workflow in jigs.config.ts to one of: ${Object.keys(workflows).join(", ")}`,
+    );
+  };
+  for (const [key, schedule] of Object.entries(schedules)) {
+    name("schedule", key);
+    workflow(["schedules", key], schedule.workflow);
+  }
+  for (const [key, trigger] of Object.entries(triggers)) {
+    const at = ["triggers", key];
+    name("trigger", key);
+    workflow(at, trigger.workflow);
+    const { maxActive, lookbackMinutes } = trigger;
+    if (maxActive !== undefined && (!Number.isInteger(maxActive) || maxActive < 1))
+      problem(
+        [...at, "maxActive"],
+        `maxActive ${maxActive} is not a whole number of at least 1`,
+        `set triggers.${key}.maxActive in jigs.config.ts to 1 or more, or remove it for the default of ${DEFAULT_MAX_ACTIVE}`,
+      );
+    if (
+      lookbackMinutes !== undefined &&
+      (!Number.isFinite(lookbackMinutes) || lookbackMinutes <= 0)
+    )
+      problem(
+        [...at, "lookbackMinutes"],
+        `lookbackMinutes ${lookbackMinutes} is not a positive number of minutes`,
+        `set triggers.${key}.lookbackMinutes in jigs.config.ts above 0, or remove it for the default of ${DEFAULT_LOOKBACK_MINUTES}`,
+      );
+  }
+}
 
 export type BindingEntry = z.output<typeof bindingSchema>;
 
@@ -316,7 +406,7 @@ export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);
   if (!result.success) {
     const lines = result.error.issues.map(
-      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message}`,
+      (issue) => `${issue.path.join(".") || "(root)"}: ${issue.message.replaceAll("\n", "\n    ")}`,
     );
     throw new JigsError(`invalid ${FACTORY_CONFIG_FILE}:\n  ${lines.join("\n  ")}`);
   }

@@ -1282,41 +1282,14 @@ test("a workflow that does not accept the source's inputs fails its check", asyn
   );
 });
 
-test("an unknown workflow, a colon, bad params and a bad cap each fail the check", async () => {
-  const reasons = await Promise.all(
-    [
-      ["pages", { ...pagesTrigger, workflow: "respnd" }],
-      ["pages:x", pagesTrigger],
-      ["pages", { ...pagesTrigger, source: { kind: "fake.pages", params: {} } }],
-      ["pages", { ...pagesTrigger, maxActive: 0 }],
-      ["pages", { ...pagesTrigger, lookbackMinutes: -1 }],
-    ].map(async ([name, trigger]) => {
-      const result = await check(name as string, trigger as EventTrigger);
-      return result.ok === false ? result.reason : "ok";
-    }),
-  );
-  expect(reasons).toEqual([
-    'workflow "respnd" is not one of this factory\'s workflows',
-    'trigger name "pages:x" contains ":"',
-    "source params do not satisfy fake.pages: service Invalid input: expected string, received undefined",
-    "maxActive 0 is not a whole number of at least 1",
-    "lookbackMinutes -1 is not a positive number of minutes",
-  ]);
-});
-
-test("N4: a trigger naming an unknown workflow lists no runs rather than all of them", async () => {
-  const memory = memoryStore();
-  let listed = 0;
-  const [view] = await listTriggers(factory({ pages: { ...pagesTrigger, workflow: "nope" } }), {
-    store: memory.store,
-    liveRunsByAttribute: async () => {
-      listed += 1;
-      return new Map();
-    },
-    runStatuses: async () => new Map(),
+test("source params the source rejects fail the check", async () => {
+  const result = await check("pages", {
+    ...pagesTrigger,
+    source: { kind: "fake.pages", params: {} },
   });
-  expect(listed).toBe(0);
-  expect(view?.active).toBe(0);
+  expect(result.ok === false && result.reason).toBe(
+    "source params do not satisfy fake.pages: service Invalid input: expected string, received undefined",
+  );
 });
 
 test("a factory declaring no triggers lists none and starts nothing", async () => {

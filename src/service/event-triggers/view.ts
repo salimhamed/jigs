@@ -53,16 +53,11 @@ export async function listTriggers(
   const now = (deps.now ?? (() => new Date()))();
   return Promise.all(
     declared.map(async ([name, trigger]) => {
-      const entry = factory.workflows[trigger.workflow];
-      // A trigger naming no workflow of this factory has no runs to list; an
-      // unfiltered listing would read every live run in the World.
-      const live =
-        entry === undefined
-          ? new Map()
-          : await liveRuns(
-              (entry.workflow as { workflowId?: string }).workflowId,
-              OCCURRENCE_ATTRIBUTE,
-            );
+      const entry = factory.workflows[trigger.workflow] as Factory["workflows"][string];
+      const live = await liveRuns(
+        (entry.workflow as { workflowId?: string }).workflowId,
+        OCCURRENCE_ATTRIBUTE,
+      );
       const [summary, { active }] = await Promise.all([
         store.summary(name, FAILURES_SHOWN),
         tally(store, name, live, deps.runStatuses ?? runStatuses, now),

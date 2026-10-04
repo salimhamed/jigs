@@ -579,3 +579,88 @@ test("App maps and lists normalize and reject ambiguous account ownership", asyn
   ).toThrow("PAT must be the only identity");
   expect(() => withSettings({ github: { identities: [] } })).toThrow("github.identities");
 });
+
+const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };
+const pages = {
+  workflow: "sweep",
+  source: { kind: "pagerduty.incidents", params: {} },
+};
+const configError = (extra: Record<string, unknown>): string => {
+  try {
+    withSettings({ workflows: sweep, ...extra });
+  } catch (error) {
+    return String(error);
+  }
+  throw new Error("the config loaded");
+};
+
+test("a schedule naming a workflow this factory does not have fails to load", () => {
+  expect(
+    configError({ schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } } }),
+  ).toContain(
+    'schedules.nightly.workflow: workflow "swep" is not one of this factory\'s workflows\n' +
+      "    set schedules.nightly.workflow in jigs.config.ts to one of: sweep",
+  );
+});
+
+test("a schedule or trigger name carrying a colon fails to load — it would answer for another", () => {
+  expect(
+    configError({
+      schedules: { "nightly:sweep": { workflow: "sweep", cron: "0 3 * * *", inputs: {} } },
+    }),
+  ).toContain(
+    'schedules.nightly:sweep: schedule name "nightly:sweep" contains ":"\n' +
+      '    rename the "nightly:sweep" schedule in jigs.config.ts to a name without ":"',
+  );
+  expect(configError({ triggers: { "pages:x": pages } })).toContain(
+    'trigger name "pages:x" contains ":"',
+  );
+});
+
+test("a trigger with an unknown workflow or a bad cap fails to load, naming each", () => {
+  const error = configError({
+    triggers: {
+      wrong: { ...pages, workflow: "respnd" },
+      capped: { ...pages, maxActive: 0 },
+      lookback: { ...pages, lookbackMinutes: -1 },
+    },
+  });
+  expect(error).toContain('workflow "respnd" is not one of this factory\'s workflows');
+  expect(error).toContain(
+    "triggers.capped.maxActive: maxActive 0 is not a whole number of at least 1",
+  );
+  expect(error).toContain(
+    "triggers.lookback.lookbackMinutes: lookbackMinutes -1 is not a positive number of minutes",
+  );
+});
+
+test("workflows, schedules and triggers are checked for shape when the config loads", () => {
+  expect(configError({ workflows: { sweep: "./sweep.ts" } })).toContain(
+    "workflows.sweep: must be a deferred import",
+  );
+  expect(
+    configError({ schedules: { nightly: { workflow: "sweep", cron: "0 3 * * *" } } }),
+  ).toContain("schedules.nightly.inputs");
+  expect(configError({ triggers: { pages: { ...pages, maxActiv: 3 } } })).toContain(
+    'Unrecognized key: "maxActiv"',
+  );
+});
+
+test("defineFactory refuses a schedule naming a workflow it does not declare", () => {
+  expect(() =>
+    defineFactory({
+      service: { dashboardPort: 9090 },
+      workflows: sweep,
+      schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } },
+    }),
+  ).toThrow('workflow "swep" is not one of this factory\'s workflows');
+});
+
+test("valid schedules and triggers load as declared", () => {
+  const config = withSettings({
+    workflows: sweep,
+    schedules: { nightly: { workflow: "sweep", cron: "0 3 * * *", inputs: { target: "a" } } },
+    triggers: { pages: { ...pages, maxActive: 3 } },
+  });
+  expect(config.triggers).toEqual({ pages: { ...pages, maxActive: 3 } });
+});
