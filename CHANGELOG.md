@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.98.0](https://github.com/salimhamed/jigs/compare/jigs-v0.97.0...jigs-v0.98.0) (2026-10-04)
+
+
+### ⚠ BREAKING CHANGES
+
+* read a repository's allowed merge methods instead of configuring one, and group tests by what they need ([#558](https://github.com/salimhamed/jigs/issues/558))
+
+### Code Refactoring
+
+* read a repository's allowed merge methods instead of configuring one, and group tests by what they need ([#558](https://github.com/salimhamed/jigs/issues/558)) ([1ef2f73](https://github.com/salimhamed/jigs/commit/1ef2f7313bd25aaa56f7206cd5ab30b723c1e497))
+
 ## [0.97.0](https://github.com/salimhamed/jigs/compare/jigs-v0.96.0...jigs-v0.97.0) (2026-10-04)
 
 
