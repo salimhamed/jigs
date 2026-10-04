@@ -163,10 +163,15 @@ export function createApp(factory: Factory): Hono {
         resumeHook(token, undefined).then(
           () => {
             recordWake(token, run.runId, "poke");
-            return { token, resumed: true };
+            return { token, outcome: "woken" as const };
           },
           // A hook disposed between list and resume is a report, not an error.
-          () => ({ token, resumed: false }),
+          // Anything else is named, or a World that cannot be reached reads as
+          // a run that already finished.
+          (error: unknown) =>
+            HookNotFoundError.is(error)
+              ? { token, outcome: "gone" as const }
+              : { token, outcome: "failed" as const, error: String(error) },
         ),
       ),
     );

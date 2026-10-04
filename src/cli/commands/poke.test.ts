@@ -27,8 +27,8 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
       JSON.stringify({
         runId: "wr_abc",
         poked: [
-          { token: "github:pr:acme/api#41", resumed: true },
-          { token: "linear:ticket:uuid-1", resumed: false },
+          { token: "github:pr:acme/api#41", outcome: "woken" },
+          { token: "linear:ticket:uuid-1", outcome: "gone" },
         ],
       }),
     ),
@@ -42,6 +42,33 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
     "woke the wait on pull request acme/api#41",
     "already gone: the Linear ticket (uuid-1)",
   ]);
+});
+
+test("a wake the service could not deliver fails the poke instead of reading as already gone", async () => {
+  fetchMock.mockResolvedValueOnce(
+    new Response(
+      JSON.stringify({
+        runId: "wr_abc",
+        poked: [
+          { token: "github:pr:acme/api#41", outcome: "woken" },
+          {
+            token: "linear:ticket:uuid-1",
+            outcome: "failed",
+            error: "Error: database unavailable",
+          },
+        ],
+      }),
+    ),
+  );
+  const failure = await pokeRun("wr_abc", deps()).then(
+    () => null,
+    (err: unknown) => err,
+  );
+  expect(failure).toBeInstanceOf(JigsError);
+  expect((failure as JigsError).message).toBe(
+    "could not wake the Linear ticket (uuid-1): Error: database unavailable",
+  );
+  expect(lines).toEqual(["woke the wait on pull request acme/api#41"]);
 });
 
 test("a 404 becomes a JigsError naming the run", async () => {
