@@ -97,31 +97,35 @@ export function retryAfterSeconds(res: Response, fallback = 1): number {
 }
 
 /**
- * Wait out a rate limit asking for `seconds`, after `waited` earlier waits on the same call, and
- * say whether to send it again: not for a wait over a minute, nor past the third. `watch` ends the
- * wait early with its signal's reason, such as the run's cancellation; `null` waits regardless.
+ * The rate-limit waits of one call. `wait(seconds)` waits out a limit and says whether to send the
+ * call again: not for a wait over a minute, nor past the third. `watch` ends a wait early with its
+ * signal's reason, such as the run's cancellation; `null` waits regardless.
  */
-export async function rateLimitWait(
+export function rateLimitWaits(
   provider: Provider,
-  seconds: number,
-  waited: number,
   watch: WaitSignal | null,
   sleep: Sleep = realSleep,
-): Promise<boolean> {
-  if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS || waited >= RATE_LIMIT_RETRIES) return false;
-  const ms = seconds * 1000;
-  if (watch === null) {
-    await sleep(ms);
-    return true;
-  }
-  const run = await watch(`waiting out ${PROVIDER_NAMES[provider]}'s rate limit`);
-  try {
-    if (run?.signal.aborted) throw abortReason(run.signal);
-    await abortable(sleep(ms, run?.signal), run?.signal);
-  } finally {
-    run?.dispose();
-  }
-  return true;
+): { wait(seconds: number): Promise<boolean> } {
+  let waited = 0;
+  return {
+    async wait(seconds) {
+      if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS || waited >= RATE_LIMIT_RETRIES) return false;
+      waited += 1;
+      const ms = seconds * 1000;
+      if (watch === null) {
+        await sleep(ms);
+        return true;
+      }
+      const run = await watch(`waiting out ${PROVIDER_NAMES[provider]}'s rate limit`);
+      try {
+        if (run?.signal.aborted) throw abortReason(run.signal);
+        await abortable(sleep(ms, run?.signal), run?.signal);
+      } finally {
+        run?.dispose();
+      }
+      return true;
+    },
+  };
 }
 
 /**
@@ -154,7 +158,7 @@ export async function mintClientCredentials(
 ): Promise<{ accessToken: string; expiresIn?: unknown }> {
   const name = PROVIDER_NAMES[grant.provider];
   const doFetch = grant.fetch ?? fetch;
-  let waits = 0;
+  const rateLimit = rateLimitWaits(grant.provider, null);
   for (;;) {
     const res = await doFetch(grant.url, {
       method: "POST",
@@ -168,12 +172,7 @@ export async function mintClientCredentials(
     });
     const text = await res.text();
     // One mint serves every run waiting on it, so no run's cancellation ends its wait.
-    if (
-      res.status === 429 &&
-      (await rateLimitWait(grant.provider, retryAfterSeconds(res), waits++, null))
-    ) {
-      continue;
-    }
+    if (res.status === 429 && (await rateLimit.wait(retryAfterSeconds(res)))) continue;
     if (!res.ok) {
       const detail = grant.quote(text).replaceAll(grant.clientSecret, "[redacted]");
       throw new JigsError(

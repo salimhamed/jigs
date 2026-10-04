@@ -14,7 +14,7 @@ import { perContext } from "./credentials.ts";
 import {
   MAX_RATE_LIMIT_WAIT_SECONDS,
   ProviderApiError,
-  rateLimitWait,
+  rateLimitWaits,
   reauthorize,
 } from "./http.ts";
 import {
@@ -135,7 +135,7 @@ export function createPagerDutyClient(
     const url = `${PAGERDUTY_API_URL}${apiPath}`;
     const callAuth = auth();
     let reauthorized = false;
-    let waits = 0;
+    const rateLimit = rateLimitWaits("pagerduty", runSignal, deps.sleep);
     for (;;) {
       const credential = await callAuth.bearer();
       const res = await (deps.fetch ?? fetch)(url, {
@@ -157,7 +157,7 @@ export function createPagerDutyClient(
       let detail: string | undefined;
       if (res.status === 429) {
         const seconds = rateLimitResetSeconds(res);
-        if (await rateLimitWait("pagerduty", seconds, waits++, runSignal, deps.sleep)) continue;
+        if (await rateLimit.wait(seconds)) continue;
         if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS) detail = `rate limited for ${seconds}s`;
       }
       if (!res.ok) {

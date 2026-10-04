@@ -76,8 +76,8 @@ test("stops the service process, then Postgres without removing its volume", asy
 // Stopping goes by pid, never through the service's API, so an upgraded CLI
 // stops a service built from an older jigs.
 test("a service on an older jigs is stopped all the same", async () => {
-  const root = scaffold(tmp, { port: await fakeService({ version: null }) });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const root = scaffold(tmp, { port: await fakeService(io.procs, { version: null }) });
   running(root, io.procs, 53812);
 
   await down(root, io);

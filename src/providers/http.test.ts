@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { type ProviderAuth, rateLimitWait, reauthorize, retryAfterSeconds } from "./http.ts";
+import { type ProviderAuth, rateLimitWaits, reauthorize, retryAfterSeconds } from "./http.ts";
 import { fakeSleep } from "./test-support.ts";
 
 const watching = (signal: AbortSignal) => {
@@ -9,18 +9,18 @@ const watching = (signal: AbortSignal) => {
 
 test("a rate limit is waited out three times, then given up on", async () => {
   const { sleep, sleeps } = fakeSleep();
+  const rateLimit = rateLimitWaits("slack", null, sleep);
   const results = [];
-  for (let waited = 0; waited < 4; waited += 1) {
-    results.push(await rateLimitWait("slack", 2, waited, null, sleep));
-  }
+  for (let attempt = 0; attempt < 4; attempt += 1) results.push(await rateLimit.wait(2));
   expect(results).toEqual([true, true, true, false]);
   expect(sleeps).toEqual([2000, 2000, 2000]);
 });
 
 test("a wait over a minute is not waited", async () => {
   const { sleep, sleeps } = fakeSleep();
-  expect(await rateLimitWait("pagerduty", 61, 0, null, sleep)).toBe(false);
-  expect(await rateLimitWait("pagerduty", 60, 0, null, sleep)).toBe(true);
+  const rateLimit = rateLimitWaits("pagerduty", null, sleep);
+  expect(await rateLimit.wait(61)).toBe(false);
+  expect(await rateLimit.wait(60)).toBe(true);
   expect(sleeps).toEqual([60_000]);
 });
 
@@ -35,7 +35,7 @@ test("an abort ends a rate-limit wait with the signal's reason", async () => {
   const controller = new AbortController();
   const { watch, dispose } = watching(controller.signal);
   const cancelled = new Error("run cancelled");
-  const wait = rateLimitWait("linear", 30, 0, watch);
+  const wait = rateLimitWaits("linear", watch).wait(30);
   await new Promise((resolve) => setTimeout(resolve, 10));
   controller.abort(cancelled);
   await expect(wait).rejects.toBe(cancelled);
@@ -45,7 +45,7 @@ test("an abort ends a rate-limit wait with the signal's reason", async () => {
 test("an already-aborted watch skips the wait", async () => {
   const { sleep, sleeps } = fakeSleep();
   const { watch } = watching(AbortSignal.abort(new Error("gone")));
-  await expect(rateLimitWait("slack", 1, 0, watch, sleep)).rejects.toThrow("gone");
+  await expect(rateLimitWaits("slack", watch, sleep).wait(1)).rejects.toThrow("gone");
   expect(sleeps).toEqual([]);
 });
 

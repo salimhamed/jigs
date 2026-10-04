@@ -140,10 +140,9 @@ export interface FakeProcesses {
   signals: Array<{ pid: number; sig: NodeJS.Signals | 0 }>;
   alive: Set<number>;
   dieOnSpawn: boolean;
+  /** The pid spawned last, which the fake service answers /health as. */
+  lastPid: number;
 }
-
-// The fake service answers /health as the process the fakes spawned last.
-let lastSpawnedPid = 0;
 
 export function fakeProcesses(): FakeProcesses {
   let nextPid = 4242;
@@ -152,13 +151,14 @@ export function fakeProcesses(): FakeProcesses {
     signals: [],
     alive: new Set(),
     dieOnSpawn: false,
+    lastPid: 0,
     processes: undefined as unknown as ServiceProcesses,
   };
   state.processes = {
     spawn(spec) {
       state.spawns.push(spec);
       const pid = nextPid++;
-      lastSpawnedPid = pid;
+      state.lastPid = pid;
       if (state.dieOnSpawn) {
         mkdirSync(path.dirname(spec.logPath), { recursive: true });
         writeFileSync(spec.logPath, "cloning binding api\nfatal: repo gone\n");
@@ -188,16 +188,19 @@ export interface ServiceRoutes {
   version?: string | null;
 }
 
-// The running service, as far as `up` can tell: /health, /api/runs and
+// The running service the fake processes started, as far as `up` can tell: /health, /api/runs and
 // /api/doctor answer whatever the test declares.
-export async function fakeService(routes: ServiceRoutes = {}): Promise<number> {
+export async function fakeService(
+  procs: FakeProcesses,
+  routes: ServiceRoutes = {},
+): Promise<number> {
   const server = createServer((req, res) => {
     res.setHeader("content-type", "application/json");
     const version = routes.version === undefined ? JIGS_VERSION : routes.version;
     if (version !== null) res.setHeader(VERSION_HEADER, version);
     if (req.url === "/health") {
       res.statusCode = routes.health ?? 200;
-      res.end(JSON.stringify({ ok: true, ready: true, phase: "ready", pid: lastSpawnedPid }));
+      res.end(JSON.stringify({ ok: true, ready: true, phase: "ready", pid: procs.lastPid }));
     } else if (req.url === "/api/runs") {
       const at = new Date().toISOString();
       res.end(
