@@ -92,9 +92,10 @@ npx @jigs-ai/hub@<version>
 It prints `hub listening on http://127.0.0.1:3000`. Open `HUB_PUBLIC_URL`
 to sign in.
 
-For a local trial, `HUB_PUBLIC_URL=http://127.0.0.1:3000` works, but
-providers cannot reach it, so no webhooks arrive until the hub has a public
-address.
+For a local trial, `HUB_PUBLIC_URL=http://127.0.0.1:3000` works for signing
+in and adding factories, but providers cannot reach it: no webhooks arrive, and
+some providers refuse a plain `http` OAuth redirect, until the hub has a public
+`https` address.
 
 ### Tailscale Funnel {#tailscale-funnel}
 
