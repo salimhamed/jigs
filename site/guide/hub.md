@@ -47,7 +47,7 @@ to start with a message naming every missing or bad value.
 | `HUB_ENCRYPTION_KEY` | required | 32 random bytes in base64, from `openssl rand -base64 32`. Every secret the hub stores is encrypted with it, and sign-in sessions are signed with a key made from it. |
 | `HUB_GITHUB_CLIENT_ID` | required | The client ID of the GitHub OAuth app people sign in with. |
 | `HUB_GITHUB_CLIENT_SECRET` | required | That OAuth app's client secret. |
-| `HUB_ADMIN_EMAIL` | required | The email of the person who creates the Organization: the first to sign in with a GitHub account whose verified email is this one. |
+| `HUB_ADMIN_EMAIL` | required | The email of the person who creates the Organization: the first to sign in with a GitHub account whose [sign-in email](#first-sign-in) is this one. |
 | `HUB_RETENTION_DAYS` | `7` | How many days the hub keeps a factory's provider events, confirmed or not. |
 | `HOST` | `127.0.0.1` | The address the hub listens on. Set `0.0.0.0` in a container. |
 | `PORT` | `3000` | The port the hub listens on. |
@@ -145,17 +145,21 @@ organization's Developer settings:
 Generate a client secret, and set the client ID and secret as
 `HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET`.
 
+The hub knows a person by their GitHub account's **sign-in email**: its public
+email, or its primary email when it shows none publicly. That email must be
+verified on GitHub, or the hub refuses the sign-in.
+
 Then open the hub and choose **Sign in with GitHub** with the account whose
-verified email is `HUB_ADMIN_EMAIL`. The hub asks you to name the
+sign-in email is `HUB_ADMIN_EMAIL`. The hub asks you to name the
 Organization and makes you its first admin. Only one Organization is created
 this way; after that, the hub is invite-only.
 
 ## Members {#members}
 
-Under **Invites**, an admin invites a person by the email on their GitHub
-account, as an admin or a member. The hub sends no email: copy the invite
+Under **Invites**, an admin invites a person by their GitHub account's
+[sign-in email](#first-sign-in), as an admin or a member. The hub sends no email: copy the invite
 link it shows and send it yourself. The person opens the link and signs in
-with the GitHub account that has that email.
+with the GitHub account whose sign-in email that is.
 
 Admins add apps and factories, assign them, invite people and change roles
 under **Members**. Members see everything but change nothing.
@@ -203,9 +207,13 @@ For now, a factory works with:
 
 - for each GitHub repository owner it binds, exactly one installation among
   its GitHub Apps;
-- one Linear workspace, among the Linear apps assigned to it;
+- one Linear app, connected to one workspace;
 - one Slack app, installed in one workspace;
-- one PagerDuty app.
+- one PagerDuty app, in one account.
+
+Assigning a factory a second app of one of these providers, or connecting its
+Linear or Slack app to a second workspace, makes the hub refuse the factory's
+tokens for that provider until you remove the extra one.
 
 `pnpm exec jigs doctor`, in the factory, checks that it reaches the hub and
 that the hub assigned it what its configuration uses, and names what to fix

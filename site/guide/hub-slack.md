@@ -58,7 +58,8 @@ Invite the bot to each channel factories should hear, public or private, with
 ## 6. Assign it to factories
 
 Under **Factories** on the app's page, check each factory that should use
-this app, and save. For now, a factory uses one Slack app installed in one
-workspace.
+this app, and save. For now, a factory takes one Slack app installed in one
+workspace. A second assigned Slack app, or a second workspace, makes the hub
+refuse the factory's Slack token.
 
 To use Slack from a factory, see [Slack](/guide/slack).

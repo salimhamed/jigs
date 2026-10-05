@@ -51,8 +51,9 @@ it again to fix it.
 ## 5. Assign it to factories
 
 Under **Factories** on the app's page, check each factory that should act as
-this app, and save. For now, a factory works in one Linear workspace: the
-Linear apps assigned to it should be connected to one workspace only.
+this app, and save. For now, a factory takes one Linear app, connected to one
+workspace. A second assigned Linear app, even on the same workspace, or a
+second workspace makes the hub refuse the factory's Linear tokens.
 
 In the factory, `pnpm exec jigs doctor` checks that the hub hands it a Linear
 token. To start runs from mentions and assignments, see

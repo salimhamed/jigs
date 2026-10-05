@@ -46,7 +46,8 @@ app's webhooks.
 ## 4. Assign it to factories
 
 Under **Factories** on the app's page, check each factory that should use
-this app, and save. A factory uses one PagerDuty app.
+this app, and save. A factory takes one PagerDuty app; with a second assigned, the hub refuses its
+PagerDuty tokens.
 
 A missing scope does not stop the hub from getting a token. It shows up as a
 refused call, and `jigs doctor` names the scope to add. To use PagerDuty from

@@ -465,8 +465,8 @@ teams.
 jigs acts on Linear as the [Linear app](/guide/hub-linear) the hub assigns the
 factory, so its comments and mentions reach you like anyone else's. Connect
 the app to your Linear workspace in the hub and assign it to the factory; the
-hub hands the factory its tokens and refreshes them. For now a factory works
-in one Linear workspace. Nothing about the app goes in
+hub hands the factory its tokens and refreshes them. For now a factory takes
+one Linear app, connected to one workspace. Nothing about the app goes in
 `jigs.config.ts` or `.env`. `jigs doctor` checks that the hub has a Linear
 token for the factory, and says when a workspace must be connected again in
 the hub.
