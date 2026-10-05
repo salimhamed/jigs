@@ -1,8 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { createGithubAuth, githubAuthFor } from "./github-auth.ts";
-import * as hub from "./hub.ts";
-import { useGithubClient } from "./test-fixtures.ts";
+import { answerHubTokens, useGithubClient } from "./test-fixtures.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 const NOW = Date.parse("2026-09-15T12:00:00Z");
@@ -87,7 +86,7 @@ test("a token GitHub rejects is asked for again once, so a revoked token does no
 });
 
 test("each owner has its own token, asked of the factory's hub once per factory", async () => {
-  const spy = vi.spyOn(hub, "fetchGithubToken").mockImplementation(async (owner) => ({
+  const spy = answerHubTokens("github", async ({ owner }) => ({
     token: `token-${owner}`,
     expiresAt: "2999-01-01T00:00:00Z",
     app: APP,
@@ -97,8 +96,8 @@ test("each owner has its own token, asked of the factory's hub once per factory"
   expect(await githubAuthFor("acme", ctx).bearer()).toBe("token-Acme");
   expect(await githubAuthFor("other", ctx).bearer()).toBe("token-other");
   expect(spy.mock.calls).toEqual([
-    ["Acme", ctx],
-    ["other", ctx],
+    [{ owner: "Acme" }, ctx],
+    [{ owner: "other" }, ctx],
   ]);
   // A new context starts with no tokens.
   await githubAuthFor("acme", testFactoryContext()).bearer();

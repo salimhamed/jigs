@@ -1,8 +1,8 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
-import * as hub from "./hub.ts";
 import { createLinearClient } from "./linear.ts";
 import { createLinearAuth, LINEAR_API_URL, linearAuthFor } from "./linear-auth.ts";
+import { answerHubTokens } from "./test-fixtures.ts";
 import { fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
 const NOW = Date.parse("2026-10-04T12:00:00Z");
@@ -60,7 +60,7 @@ test("callers that arrive together share one request", async () => {
 });
 
 test("each workspace has its own token, asked of the factory's hub once per factory", async () => {
-  const spy = vi.spyOn(hub, "fetchLinearToken").mockImplementation(async (organization) => ({
+  const spy = answerHubTokens("linear", async ({ organization }) => ({
     token: `token-${organization ?? "only"}`,
     expiresAt: "2999-01-01T00:00:00Z",
     app: APP,
@@ -70,8 +70,8 @@ test("each workspace has its own token, asked of the factory's hub once per fact
   expect(await linearAuthFor(ctx).bearer()).toBe("token-only");
   expect(await linearAuthFor(ctx, "acme").bearer()).toBe("token-acme");
   expect(spy.mock.calls).toEqual([
-    [undefined, ctx],
-    ["acme", ctx],
+    [{}, ctx],
+    [{ organization: "acme" }, ctx],
   ]);
 });
 

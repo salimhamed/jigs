@@ -2,23 +2,19 @@
 // names, or hand it to the event triggers. Callers have already checked where
 // the event came from; nothing here sees a request, a raw body or a signature.
 
+import type { Provider, ProviderEvent } from "@jigs-ai/hub-protocol";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { GitHubApiError } from "../providers/github-http.ts";
 import { HubResponseError } from "../providers/hub.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
-import type { Provider } from "../workflow/providers.ts";
 import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
+import { slackThreadTokenFromEvent } from "../workflow/slack/thread-token.ts";
 import type { pushEvent } from "./event-triggers/runner.ts";
-import { wakeSlackThread } from "./slack-thread-wake.ts";
 import { wake } from "./wake.ts";
 
-/** One event from a provider: GitHub's `X-GitHub-Event` value or the payload's own type, and its JSON body. */
-export interface ProviderEvent {
-  provider: Provider;
-  name: string;
-  payload: unknown;
-}
+/** What routing reads of an event the hub received. */
+export type RoutedEvent = Pick<ProviderEvent, "provider" | "name" | "payload">;
 
 export interface RouteDeps {
   context: FactoryContext;
@@ -34,7 +30,7 @@ export type RouteResult =
   | { outcome: "triggered"; triggers: string[] };
 
 /** Wake the runs a provider event concerns, or start the ones its triggers take. */
-export function routeProviderEvent(event: ProviderEvent, deps: RouteDeps): Promise<RouteResult> {
+export function routeProviderEvent(event: RoutedEvent, deps: RouteDeps): Promise<RouteResult> {
   switch (event.provider) {
     case "github":
       return routeGithub(event, deps);
@@ -47,7 +43,7 @@ export function routeProviderEvent(event: ProviderEvent, deps: RouteDeps): Promi
   }
 }
 
-async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
+async function routeGithub({ name, payload }: RoutedEvent, deps: RouteDeps) {
   const event = sanitizeForLog(name);
   if (event === "status") {
     const status = githubStatus(payload);
@@ -94,7 +90,7 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
   return wakeAndLog("github", [token], event);
 }
 
-async function routeLinear({ name, payload }: ProviderEvent) {
+async function routeLinear({ name, payload }: RoutedEvent) {
   if (payload === null) {
     console.log("[events] linear ignored reason=unrecognized-shape");
     return { outcome: "ignored" } as const;
@@ -112,7 +108,7 @@ async function routeLinear({ name, payload }: ProviderEvent) {
 
 // PagerDuty events and Linear agent sessions start runs rather than wake them.
 // The push returns once the occurrence is recorded, never waiting on the start.
-async function routePush({ provider, name, payload }: ProviderEvent, deps: RouteDeps) {
+async function routePush({ provider, name, payload }: RoutedEvent, deps: RouteDeps) {
   const event = `event=${sanitizeForLog(name)}`;
   let triggers: string[];
   try {
@@ -130,23 +126,26 @@ async function routePush({ provider, name, payload }: ProviderEvent, deps: Route
 }
 
 // Slack sends the Events API body; its `event` is the message. A message can
-// both start runs and answer a thread a run waits on, and a wake that landed
-// stands even when a trigger could not read the event.
-async function routeSlack({ payload }: ProviderEvent, deps: RouteDeps): Promise<RouteResult> {
+// both start runs and answer a thread a run waits on. A wake that landed stands
+// even when a trigger could not read the event; a wake that failed routes the
+// message again, which starts no run twice.
+async function routeSlack({ name, payload }: RoutedEvent, deps: RouteDeps): Promise<RouteResult> {
   const message = (payload as { event?: unknown } | null)?.event;
+  const token = slackThreadTokenFromEvent(message);
   const [triggers, woke] = await Promise.all([
     deps.push("slack", payload).catch((error: unknown) => {
       const { channel, ts } = (message ?? {}) as { channel?: unknown; ts?: unknown };
       console.log(
-        `[slack] could not start runs for ${String(channel)}:${String(ts)}: ${String(error)}`,
+        `[events] slack dropped reason=push-failed channel=${String(channel)} ts=${String(ts)}: ${String(error)}`,
       );
       return null;
     }),
-    wakeSlackThread(message),
+    token === null ? null : wakeAndLog("slack", [token], sanitizeForLog(name)),
   ]);
+  if (woke?.outcome === "failed" || (triggers === null && woke?.outcome !== "woken"))
+    return { outcome: "failed" };
   if (triggers !== null && triggers.length > 0) return { outcome: "triggered", triggers };
-  if (woke) return { outcome: "woken" };
-  return { outcome: triggers === null ? "failed" : "ignored" };
+  return woke ?? { outcome: "ignored" };
 }
 
 // An answer that routing the event again would only get again: the hub has no
@@ -202,6 +201,8 @@ async function wakeAndLog(
       const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
       const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
       if (outcome === "woken") console.log(`[events] ${provider} accepted ${correlation}`);
+      // Most Slack thread replies are in threads no run waits on.
+      else if (outcome === "gone" && provider === "slack") return outcome;
       else {
         const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
         console.log(`[events] ${provider} dropped reason=${reason} ${correlation}`);

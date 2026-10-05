@@ -1,6 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
-import * as hub from "./hub.ts";
 import {
   createSlackClient,
   SLACK_API_URL,
@@ -35,6 +34,7 @@ let answers: Array<() => Response>;
 let calls: FetchCall[];
 let sleeps: number[];
 let slack: SlackClient;
+let slackTokens: ReturnType<typeof useSlackClient>;
 
 // Answers each call with the next queued answer, repeating the last.
 function answer(...next: Array<() => Response>) {
@@ -66,7 +66,7 @@ beforeEach(() => {
     sleep: sleep.sleep,
     context: testFactoryContext(),
   };
-  useSlackClient(deps);
+  slackTokens = useSlackClient(deps);
   slack = createSlackClient(deps);
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/slack-test-${factories}`);
@@ -102,7 +102,7 @@ test("a Slack error carries its code and never the token", async () => {
 test.each(["invalid_auth", "token_revoked"])(
   "a token Slack answers %s to is asked of the hub again, once",
   async (code) => {
-    vi.mocked(hub.fetchSlackToken)
+    slackTokens
       .mockResolvedValueOnce({ token: "xoxb-old", app: TEST_SLACK_BOT, team: "T0", scopes: [] })
       .mockResolvedValueOnce({ token: "xoxb-new", app: TEST_SLACK_BOT, team: "T0", scopes: [] });
     answer(
@@ -112,7 +112,7 @@ test.each(["invalid_auth", "token_revoked"])(
     expect((await authTest()).user_id).toBe("U0C59SU5V29");
     expect([sent(0).auth, sent(1).auth]).toEqual(["Bearer xoxb-old", "Bearer xoxb-new"]);
     await authTest();
-    expect(hub.fetchSlackToken).toHaveBeenCalledTimes(2);
+    expect(slackTokens).toHaveBeenCalledTimes(2);
   },
 );
 
@@ -200,15 +200,15 @@ test("the bot is read from the hub once per factory context", async () => {
     team: "T0TEST",
     scopes: expect.any(Array),
   });
-  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(1);
+  expect(slackTokens).toHaveBeenCalledTimes(1);
   vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
   await slackBot();
-  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(2);
+  expect(slackTokens).toHaveBeenCalledTimes(2);
   expect(calls).toHaveLength(0);
 });
 
 test("a failed token request is not cached", async () => {
-  vi.mocked(hub.fetchSlackToken).mockRejectedValueOnce(new Error("hub down"));
+  slackTokens.mockRejectedValueOnce(new Error("hub down"));
   await expect(slackBot()).rejects.toThrow("hub down");
   expect((await slackBot()).userId).toBe(TEST_SLACK_BOT.botUserId);
 });

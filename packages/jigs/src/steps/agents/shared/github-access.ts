@@ -1,12 +1,10 @@
+import { AGENT_TOKEN_MIN_LIFETIME_MS } from "../../../providers/credentials.ts";
 import { gitConfigEnv, githubAuthHeader, resolveRemoteUrl } from "../../../providers/git.ts";
 import { type GithubAuth, githubAuthFor } from "../../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../../providers/github-remote.ts";
 import { AGENT_TOKEN_ENV } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { JigsError } from "../../../workflow/errors.ts";
-
-// An agent's turn gets no refresh, so its token starts with close to the full hour.
-export const AGENT_TOKEN_MIN_LIFETIME_MS = 55 * 60 * 1000;
 
 // `fatal` is what the SDK's FatalError.is reads: a retry reads the same configuration.
 export class AgentGithubError extends JigsError {
@@ -47,7 +45,7 @@ export async function agentGithubEnv(
   if (harness.github === undefined) return {};
   const owner = harness.github === true ? await checkoutOwner(cwd, deps) : harness.github.owner;
   const auth = deps.auth(owner);
-  const token = await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS);
+  const token = await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS.github);
   const bot = await auth.bot();
   // An App cannot push over SSH. Only the owner's repositories move to HTTPS:
   // the token cannot reach anyone else's, such as an SSH dependency.

@@ -14,7 +14,7 @@ test("repository and GraphQL calls require an account before authentication", as
 test("repository paths and GraphQL use the token of their target account", async () => {
   const github = fakeGithub();
   try {
-    const owners = vi.mocked(hub.fetchGithubToken).mock.calls;
+    const requests = vi.mocked(hub.hubToken).mock.calls;
     github.reply(jsonResponse({})).reply(jsonResponse({}));
     await githubRequest("GET", "/repos/Acme/repo/issues", undefined, {
       context: testFactoryContext(),
@@ -25,7 +25,7 @@ test("repository paths and GraphQL use the token of their target account", async
       {},
       { account: "Other", context: testFactoryContext() },
     );
-    expect(owners.map(([owner]) => owner)).toEqual(["Acme", "Other"]);
+    expect(requests.map(([, request]) => request)).toEqual([{ owner: "Acme" }, { owner: "Other" }]);
   } finally {
     vi.restoreAllMocks();
   }

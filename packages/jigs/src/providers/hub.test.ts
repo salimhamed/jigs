@@ -1,13 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
-import {
-  fetchFactoryStatus,
-  fetchGithubToken,
-  fetchLinearToken,
-  fetchPagerDutyToken,
-  fetchSlackToken,
-} from "./hub.ts";
+import { fetchFactoryStatus, hubToken } from "./hub.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 afterEach(() => {
@@ -30,7 +24,7 @@ test("a GitHub token is asked for by owner, with the factory token and jigs' ver
     app: { slug: "a", botUserId: 1 },
   };
   const { calls } = hubAnswering(jsonResponse(issued));
-  await expect(fetchGithubToken("acme", ctx())).resolves.toEqual(issued);
+  await expect(hubToken("github", { owner: "acme" }, ctx())).resolves.toEqual(issued);
   expect(calls).toEqual([
     expect.objectContaining({
       method: "POST",
@@ -48,7 +42,7 @@ test("an owner no assigned App is installed on carries the hub's reason and the 
   hubAnswering(
     jsonResponse({ error: "No GitHub App assigned to this factory is installed on acme." }, 404),
   );
-  await expect(fetchGithubToken("acme", ctx())).rejects.toMatchObject({
+  await expect(hubToken("github", { owner: "acme" }, ctx())).rejects.toMatchObject({
     status: 404,
     message: expect.stringContaining(
       "No GitHub App assigned to this factory is installed on acme.",
@@ -72,16 +66,16 @@ test("no request is made without a factory token", async () => {
   expect(calls).toEqual([]);
 });
 
-test("a Linear token names the workspace only when the factory knows it", async () => {
+test("a Linear token request names the workspace only when the factory knows it", async () => {
   const issued = {
     token: "lin_1",
     expiresAt: "2026-10-05T12:00:00Z",
     app: { name: "jigs", userId: "app-user" },
   };
   const { calls } = hubAnswering(jsonResponse(issued));
-  await expect(fetchLinearToken(undefined, ctx())).resolves.toEqual(issued);
+  await expect(hubToken("linear", {}, ctx())).resolves.toEqual(issued);
   const named = hubAnswering(jsonResponse(issued));
-  await fetchLinearToken("acme", ctx());
+  await hubToken("linear", { organization: "acme" }, ctx());
   expect(calls[0]).toMatchObject({
     method: "POST",
     url: new URL("https://hub.example.test/api/factory/tokens/linear"),
@@ -94,7 +88,7 @@ test("a Linear workspace that needs reconnecting says so with the repair", async
   hubAnswering(
     jsonResponse({ error: "Connect acme to jigs again on the hub: invalid_grant" }, 503),
   );
-  await expect(fetchLinearToken(undefined, ctx())).rejects.toMatchObject({
+  await expect(hubToken("linear", {}, ctx())).rejects.toMatchObject({
     status: 503,
     message: expect.stringContaining("Connect acme to jigs again on the hub"),
     hint: expect.stringContaining("connect the Linear workspace again"),
@@ -109,7 +103,7 @@ test("a Slack token is asked for with an empty body", async () => {
     team: "T1",
   };
   const { calls } = hubAnswering(jsonResponse(issued));
-  await expect(fetchSlackToken(ctx())).resolves.toEqual(issued);
+  await expect(hubToken("slack", {}, ctx())).resolves.toEqual(issued);
   expect(calls[0]).toMatchObject({
     method: "POST",
     url: new URL("https://hub.example.test/api/factory/tokens/slack"),
@@ -119,7 +113,7 @@ test("a Slack token is asked for with an empty body", async () => {
 
 test("no Slack installation for the factory says so with the repair", async () => {
   hubAnswering(jsonResponse({ error: "No Slack app assigned to this factory." }, 404));
-  await expect(fetchSlackToken(ctx())).rejects.toMatchObject({
+  await expect(hubToken("slack", {}, ctx())).rejects.toMatchObject({
     status: 404,
     hint: expect.stringContaining("in the hub, install one of this factory's Slack apps"),
   });
@@ -128,7 +122,7 @@ test("no Slack installation for the factory says so with the repair", async () =
 test("a PagerDuty token is asked for with an empty body", async () => {
   const issued = { token: "pd_1", expiresAt: "2026-10-05T12:00:00Z" };
   const { calls } = hubAnswering(jsonResponse(issued));
-  await expect(fetchPagerDutyToken(ctx())).resolves.toEqual(issued);
+  await expect(hubToken("pagerduty", {}, ctx())).resolves.toEqual(issued);
   expect(calls[0]).toMatchObject({
     method: "POST",
     url: new URL("https://hub.example.test/api/factory/tokens/pagerduty"),
@@ -138,7 +132,7 @@ test("a PagerDuty token is asked for with an empty body", async () => {
 
 test("PagerDuty refusing the hub's credentials says so", async () => {
   hubAnswering(jsonResponse({ error: "PagerDuty refused pd's credentials for acme (401)." }, 503));
-  await expect(fetchPagerDutyToken(ctx())).rejects.toMatchObject({
+  await expect(hubToken("pagerduty", {}, ctx())).rejects.toMatchObject({
     status: 503,
     message: expect.stringContaining("PagerDuty refused pd's credentials for acme"),
     hint: expect.stringContaining("PagerDuty refused the hub's credentials"),

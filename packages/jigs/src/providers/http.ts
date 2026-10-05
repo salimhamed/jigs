@@ -1,6 +1,5 @@
-// What every provider's request loop shares: its error, the rate-limit wait and
-// the one re-mint on a rejected credential. Each provider sends and decodes in
-// its own file.
+// What every provider's request loop shares: its error, its credential and the
+// rate-limit wait. Each provider sends and decodes in its own file.
 
 import { JigsError } from "../errors.ts";
 
@@ -23,8 +22,8 @@ const MAX_ERROR_BODY = 1_000;
 /** Where a provider call's credential comes from. */
 export interface ProviderAuth {
   bearer(): Promise<string>;
-  /** Forget `stale` if it is still cached. Without it a rejected credential is not retried. */
-  invalidate?(stale: string): void;
+  /** Forget `stale` if it is still cached, so the next `bearer()` asks the hub for a fresh one. */
+  invalidate(stale: string): void;
 }
 
 export interface ProviderApiErrorInit {
@@ -126,15 +125,4 @@ export function rateLimitWaits(
       return true;
     },
   };
-}
-
-/**
- * Forget a rejected credential so the next `bearer()` mints a fresh one, and say whether to send
- * again. A credential that cannot be re-minted, such as a personal key, is not retried.
- */
-export function reauthorize(auth: ProviderAuth, stale: string): boolean {
-  if (auth.invalidate === undefined) return false;
-  // A long-lived token can be revoked early, by a re-mint with other scopes.
-  auth.invalidate(stale);
-  return true;
 }

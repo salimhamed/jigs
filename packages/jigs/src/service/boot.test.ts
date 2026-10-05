@@ -3,7 +3,7 @@ import { WorkflowRunNotFoundError } from "workflow/errors";
 import { JigsError } from "../errors.ts";
 import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
-import { inTestFactory } from "../test-fixtures.ts";
+import { inTestFactory, testFactoryContext } from "../test-fixtures.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import {
   fenceTerminalWorkflowDeliveries,
@@ -459,15 +459,24 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
 test("without its hub token the service refuses the boot and says how to connect", async () => {
   const exit = vi.fn();
   const error = vi.fn();
-  expect(await gateOnHubToken({ env: async () => () => undefined, exit, error })).toBe(false);
+  expect(await gateOnHubToken({ context: async () => testFactoryContext(), exit, error })).toBe(
+    false,
+  );
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(
-    expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
+    expect.stringMatching(
+      /^\[service\] JIGS_HUB_TOKEN is not set\n.*pnpm exec jigs hub connect <url> <token>.*, then restart the service$/,
+    ),
   );
 });
 
 test("a hub token lets the boot continue", async () => {
   const exit = vi.fn();
-  expect(await gateOnHubToken({ env: async () => () => "token", exit })).toBe(true);
+  expect(
+    await gateOnHubToken({
+      context: async () => testFactoryContext({ env: { JIGS_HUB_TOKEN: "token" } }),
+      exit,
+    }),
+  ).toBe(true);
   expect(exit).not.toHaveBeenCalled();
 });

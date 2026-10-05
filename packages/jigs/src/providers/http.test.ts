@@ -1,5 +1,5 @@
 import { expect, test, vi } from "vitest";
-import { type ProviderAuth, rateLimitWaits, reauthorize, retryAfterSeconds } from "./http.ts";
+import { rateLimitWaits, retryAfterSeconds } from "./http.ts";
 import { fakeSleep } from "./test-support.ts";
 
 const watching = (signal: AbortSignal) => {
@@ -47,15 +47,4 @@ test("an already-aborted watch skips the wait", async () => {
   const { watch } = watching(AbortSignal.abort(new Error("gone")));
   await expect(rateLimitWaits("slack", watch, sleep).wait(1)).rejects.toThrow("gone");
   expect(sleeps).toEqual([]);
-});
-
-test("a rejected credential is forgotten only when it can be minted again", () => {
-  const invalidated: string[] = [];
-  const minted: ProviderAuth = {
-    bearer: async () => "token",
-    invalidate: (stale) => invalidated.push(stale),
-  };
-  expect(reauthorize(minted, "token-1")).toBe(true);
-  expect(invalidated).toEqual(["token-1"]);
-  expect(reauthorize({ bearer: async () => "lin_api_key" }, "lin_api_key")).toBe(false);
 });

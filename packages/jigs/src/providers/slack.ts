@@ -3,7 +3,6 @@
 // the bot token the hub hands out for the workspace. Reaches the hub and Slack,
 // so it is called from a step, a check or the service, never from workflow code.
 
-import type { SlackTokenResponse } from "@jigs-ai/hub-protocol";
 import {
   currentFactoryContext,
   type FactoryContext,
@@ -11,9 +10,9 @@ import {
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { perContext } from "./credentials.ts";
+import { createHubTokens, perContext } from "./credentials.ts";
 import { ProviderApiError, rateLimitWaits, retryAfterSeconds } from "./http.ts";
-import { fetchSlackToken } from "./hub.ts";
+import { hubToken } from "./hub.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
 
@@ -251,32 +250,7 @@ export const slackPermalink: SlackClient["slackPermalink"] = (...args) =>
   slackClient.slackPermalink(...args);
 export const slackUser: SlackClient["slackUser"] = (...args) => slackClient.slackUser(...args);
 
-interface SlackTokens {
-  issued(): Promise<SlackTokenResponse>;
-  /** Forget `stale` if it is still the cached token, so the next call asks the hub again. */
-  invalidate(stale: string): void;
-}
-
-// A bot token does not expire, so it is kept until Slack refuses it.
-function createSlackTokens(issue: () => Promise<SlackTokenResponse>): SlackTokens {
-  let cached: SlackTokenResponse | null = null;
-  let issuing: Promise<SlackTokenResponse> | null = null;
-  return {
-    async issued() {
-      if (cached !== null) return cached;
-      issuing ??= issue().finally(() => {
-        issuing = null;
-      });
-      cached = await issuing;
-      return cached;
-    },
-    invalidate(stale) {
-      if (cached?.token === stale) cached = null;
-    },
-  };
-}
-
-const slackTokens = perContext((ctx) => createSlackTokens(() => fetchSlackToken(ctx)));
+const slackTokens = perContext((ctx) => createHubTokens(() => hubToken("slack", {}, ctx)));
 
 /** The factory's own bot. */
 export async function slackBot(ctx?: FactoryContext): Promise<SlackBot> {

@@ -1,14 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
+import { AGENT_TOKEN_MIN_LIFETIME_MS } from "../../../providers/credentials.ts";
 import type { GithubAuth } from "../../../providers/github-auth.ts";
 import { git, makeTmpDir, removeTmpDir } from "../../../test-fixtures.ts";
 import { type Harness, harnesses } from "../../../workflow/agents/harness-config.ts";
-import {
-  AGENT_TOKEN_MIN_LIFETIME_MS,
-  type AgentGithubDeps,
-  agentGithubEnv,
-} from "./github-access.ts";
+import { type AgentGithubDeps, agentGithubEnv } from "./github-access.ts";
 
 const TOKEN = "ghs_agent_token";
 
@@ -77,8 +74,8 @@ test("the committer, user and signing settings stay the operator's own", async (
 test("the token has close to a full hour left when the step starts", async () => {
   const { fake, bearer } = deps();
   await envFor(optedIn, fake);
-  expect(bearer).toHaveBeenCalledWith(AGENT_TOKEN_MIN_LIFETIME_MS);
-  expect(AGENT_TOKEN_MIN_LIFETIME_MS).toBeGreaterThanOrEqual(55 * 60_000);
+  expect(bearer).toHaveBeenCalledWith(AGENT_TOKEN_MIN_LIFETIME_MS.github);
+  expect(AGENT_TOKEN_MIN_LIFETIME_MS.github).toBeGreaterThanOrEqual(55 * 60_000);
 });
 
 test("git reaches the owner's repositories over HTTPS with the token, from the environment alone", async () => {

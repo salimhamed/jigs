@@ -1,42 +1,44 @@
 import { type Check, failedCheck } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
-import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
 import { ProviderApiError } from "./http.ts";
+import { hubRefused } from "./hub.ts";
 import { type PagerDutyUser, pagerDutyClientFor, pagerDutyTokens } from "./pagerduty.ts";
 
 // A probe is a provider client; the catalog owns the repair text, which is
 // what makes preflight and doctor say the same thing.
 export interface PagerDutyAppProbes {
   /** Ask the hub for, or reuse, the app's token. */
-  token(): Promise<void>;
+  token(ctx: FactoryContext): Promise<void>;
   /** The cheapest read the token should be allowed. */
-  read(): Promise<void>;
+  read(ctx: FactoryContext): Promise<void>;
 }
+
+const PAGERDUTY_APP_PROBES: PagerDutyAppProbes = {
+  token: pagerDutyToken,
+  read: (ctx) => pagerDutyClientFor(ctx).verifyAccess(),
+};
 
 const forbidden = (err: unknown): boolean =>
   err instanceof ProviderApiError && (err.status === 401 || err.status === 403);
 
 /** Whether the hub hands this factory a PagerDuty token, and the token can read incidents. */
-export function pagerDutyAppChecks(probes: PagerDutyAppProbes): Check[] {
+export function pagerDutyAppChecks(
+  ctx: FactoryContext,
+  probes: PagerDutyAppProbes = PAGERDUTY_APP_PROBES,
+): Check[] {
   return [
     {
       id: "pagerduty.app",
       label: "PagerDuty app",
       run: async () => {
         try {
-          await probes.token();
+          await probes.token(ctx);
         } catch (err) {
-          return {
-            ok: false,
-            reason: `the hub has no PagerDuty token for this factory: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused("the hub has no PagerDuty token for this factory", err);
         }
         try {
-          await probes.read();
+          await probes.read(ctx);
         } catch (err) {
           return {
             ok: false,
@@ -127,10 +129,7 @@ export function pagerDutyChecks(ctx: FactoryContext): Check[] {
         `add pagerduty: { from: "<email of a PagerDuty user>" } to ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
       ),
     ];
-  return pagerDutyAppChecks({
-    token: () => pagerDutyToken(ctx),
-    read: () => pagerDutyClientFor(ctx).verifyAccess(),
-  });
+  return pagerDutyAppChecks(ctx);
 }
 
 // A missing section or an unreadable config is the app check's diagnosis.
