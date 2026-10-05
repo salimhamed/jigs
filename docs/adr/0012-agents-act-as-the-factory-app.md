@@ -1,6 +1,10 @@
 # Agents act on GitHub as the factory's App
 
-Status: accepted
+Status: accepted; token source superseded by [0015](./0015-hub.md)
+
+The App is now the one the factory's hub assigns it, and every installation
+token comes from the hub. Identity modes are gone, so the App mode and token
+mode below no longer exist: every factory acts as an App.
 
 A coding agent that maintains a pull request has to read comments, reply and push
 fixes. Factories gave it the operator's own token and SSH key, so its replies,

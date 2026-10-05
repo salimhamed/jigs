@@ -42,6 +42,17 @@ export default {
         ],
       },
       {
+        text: "Run a hub",
+        collapsed: false,
+        items: [
+          { text: "Run a hub", link: "/guide/hub" },
+          { text: "GitHub App", link: "/guide/hub-github" },
+          { text: "Linear app", link: "/guide/hub-linear" },
+          { text: "Slack app", link: "/guide/hub-slack" },
+          { text: "PagerDuty app", link: "/guide/hub-pagerduty" },
+        ],
+      },
+      {
         text: "Using jigs",
         collapsed: false,
         items: [

@@ -11,7 +11,7 @@ The factory service must be running to receive events and continue work.
 
 `haltForHuman` currently uses Linear. It asks a question on a ticket, marks the
 run as waiting, then continues the same run when a person replies there. It
-requires [Linear credentials](/guide/configuration#linear-identity) and a claimed
+requires [Linear credentials](/guide/configuration#linear-app) and a claimed
 ticket. Claiming prevents multiple runs from independently owning the same ticket.
 
 This complete workflow resolves its `ticket` input, claims the ticket, then
@@ -65,7 +65,7 @@ it. The [routine reference](/api/factory/routines#haltforhuman) covers the optio
 **`watchPullRequest` reports facts. It does not decide what the facts mean or
 what the workflow should do next.** This complete workflow watches an existing
 pull request identified by its owner, repository and number. It requires
-[GitHub credentials](/guide/configuration#github-identity). Save it as
+[GitHub credentials](/guide/configuration#github-app). Save it as
 `workflows/watch-pr/watch-pr.ts` and register `watch-pr` in the factory. Rebuild
 with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input owner=acme --input repo=app --input number=42`
 with your pull request's details.

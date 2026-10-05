@@ -1,7 +1,7 @@
 # Install and run a workflow
 
-This guide creates a factory, starts its service and runs `hello`, the workflow
-every new factory includes.
+This guide creates a factory, connects it to its hub, starts its service and
+runs `hello`, the workflow every new factory includes.
 
 ## Set up with a coding agent
 
@@ -25,8 +25,10 @@ The rest of this page shows the same process manually.
 - **Node.js 24 or newer**
 - **pnpm**
 - **Docker**, with Docker running
-- **A jigs hub**, with this factory added to it. The hub shows the factory's
-  URL and token once, when you add it.
+- **A jigs hub**. Every factory hears GitHub, Linear, Slack and PagerDuty
+  through a hub, and gets its tokens for them there. If your team has one, ask
+  an admin to add your factory. Otherwise [run a hub](/guide/hub) first; one
+  person on one machine runs a hub too.
 
 `hello` doesn't use a model or coding agent, so you don't need any model
 credentials or agent CLIs yet.
@@ -55,22 +57,34 @@ The exception applies only to jigs. It does not refresh pnpm's `dlx` cache.
 `workflows/hello/hello.ts` contains your first workflow, and `jigs.config.ts`
 registers it under the name `hello`.
 
-## 3. Start the service
+## 3. Connect the factory to its hub
+
+In the hub, under **Factories**, add a factory named after this one. The hub
+shows a `jigs hub connect` command with the factory's token, once. Run it
+here, through `pnpm exec`:
 
 ```sh
 pnpm install
 cp .env.example .env
 pnpm exec jigs hub connect <hub-url> <token>
+```
+
+`hub connect` writes the hub's URL to `jigs.config.ts` and the token to `.env`.
+`hello` needs no apps, so you can assign them later: see
+[Add apps and assign them](/guide/hub#apps).
+
+## 4. Start the service
+
+```sh
 pnpm exec jigs up
 ```
 
-`hub connect` points the factory at its [hub](/guide/configuration#hub).
-Beyond that, `hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
+Beyond the hub token, `hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
 needs and checks that it is ready. When it finishes, the service and dashboard
 are available. Open the dashboard URL it prints to inspect workflow runs and
 individual steps.
 
-## 4. Run hello
+## 5. Run hello
 
 ```sh
 pnpm exec jigs run hello

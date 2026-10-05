@@ -100,7 +100,7 @@ src/
               CLI and the service build
   checks/     preflight, doctor and just-in-time checks
   providers/  Git and provider clients (GitHub, Linear, Slack, PagerDuty)
-              with their identity checks
+              with their checks
   config/     factory config, root, env and paths
 ```
 
