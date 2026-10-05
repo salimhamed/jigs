@@ -1,6 +1,6 @@
 import { tmpdir } from "node:os";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
-import { SlackApiError, slackHistory } from "../../providers/slack.ts";
+import { SlackApiError, type SlackMessage, slackCall } from "../../providers/slack.ts";
 import { useLiveSlackToken } from "../../providers/test-fixtures.ts";
 import { waitForSlackReply } from "../../workflow/slack/wait-for-reply.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
@@ -92,7 +92,11 @@ test.skipIf(!configured)("a deleted message snapshots as gone", async () => {
 
 test.skipIf(!configured)("a human's message snapshots with their name and email", async (ctx) => {
   const since = (Date.now() / 1000 - 30 * 24 * 3600).toFixed(6);
-  const human = (await slackHistory(channel, { oldest: since })).find(
+  const history = await slackCall<{ ok: true; messages: SlackMessage[] }>("conversations.history", {
+    channel,
+    oldest: since,
+  });
+  const human = history.body.messages.find(
     (message) => message.bot_id === undefined && message.subtype === undefined,
   );
   if (human === undefined) return ctx.skip("no human message in the test channel this month");

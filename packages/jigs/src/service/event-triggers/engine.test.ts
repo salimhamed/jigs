@@ -1022,13 +1022,14 @@ test("a push whose occurrence could not be recorded rejects, and its redelivery 
   expect(memory.state("pages", "P9")?.state).toBe("started");
 });
 
-test("an event the source cannot key rejects the push", async () => {
+test("an event the source cannot key is passed over, not retried", async () => {
   const h = harness();
   await h.engine.arm();
-  await expect(h.engine.push("github", { page: 7 })).rejects.toThrow();
+  expect(await h.engine.push("github", { page: 7 })).toEqual([]);
   expect(h.lines).toContain(
-    "[trigger] pages could not read a pushed event: Error: no page id in the event",
+    "[trigger] pages passed over an event it could not key: Error: no page id in the event",
   );
+  expect(h.memory.rows.size).toBe(0);
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {

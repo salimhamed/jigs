@@ -4,6 +4,8 @@
 
 import type { FactoryContext } from "../config/factory-context.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
+import { HubResponseError } from "../providers/hub.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import type { Provider } from "../workflow/providers.ts";
 import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
@@ -60,7 +62,13 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
     let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
     try {
       prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context);
-    } catch {
+    } catch (error) {
+      if (refusedForGood(error)) {
+        console.error(
+          `[events] github ignored reason=status-lookup-refused event=${event}: ${String(error)}`,
+        );
+        return { outcome: "ignored" } as const;
+      }
       console.log(`[events] github dropped reason=status-lookup-failed event=${event}`);
       return { outcome: "failed" } as const;
     }
@@ -139,6 +147,20 @@ async function routeSlack({ payload }: ProviderEvent, deps: RouteDeps): Promise<
   if (triggers !== null && triggers.length > 0) return { outcome: "triggered", triggers };
   if (woke) return { outcome: "woken" };
   return { outcome: triggers === null ? "failed" : "ignored" };
+}
+
+// An answer that routing the event again would only get again: the hub has no
+// installation, or more than one, for the repository; or GitHub refused the
+// request itself rather than its credential or its rate.
+function refusedForGood(error: unknown): boolean {
+  if (error instanceof HubResponseError) return error.status === 404 || error.status === 409;
+  return (
+    error instanceof GitHubApiError &&
+    error.status >= 400 &&
+    error.status < 500 &&
+    error.status !== 401 &&
+    error.status !== 429
+  );
 }
 
 function sanitizeForLog(value: string): string {

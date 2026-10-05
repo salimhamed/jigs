@@ -175,11 +175,6 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
     throw new JigsError(`Slack ${method} kept returning a next cursor past ${MAX_PAGES} pages`);
   }
 
-  /** A channel's messages after `oldest` (exclusive), newest first, as Slack returns them. */
-  function slackHistory(channel: string, { oldest }: { oldest: string }) {
-    return slackPages<SlackMessage>("conversations.history", { channel, oldest }, "messages");
-  }
-
   /** A thread: its parent message, then every reply in order. */
   function slackReplies(channel: string, ts: string) {
     return slackPages<SlackMessage>("conversations.replies", { channel, ts }, "messages");
@@ -230,7 +225,6 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
 
   return {
     slackCall,
-    slackHistory,
     slackReplies,
     slackPostMessage,
     slackPermalink,
@@ -249,8 +243,6 @@ export function slackCall<T extends SlackReply>(
 ): Promise<{ body: T; headers: Headers }> {
   return slackClient.slackCall<T>(method, params);
 }
-export const slackHistory: SlackClient["slackHistory"] = (...args) =>
-  slackClient.slackHistory(...args);
 export const slackReplies: SlackClient["slackReplies"] = (...args) =>
   slackClient.slackReplies(...args);
 export const slackPostMessage: SlackClient["slackPostMessage"] = (...args) =>

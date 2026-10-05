@@ -23,11 +23,10 @@ has to keep:
   `workflow/` function as a value because `workflow/` is pure by
   construction; the snapshot and step-result normalizers are called that way.
 - `service/` is the long-running process. It may import `steps/`,
-  `providers/`, `config/`, `checks/` and `workflow/`; the webhook ingress
-  parses hook tokens that `workflow/` defines. It may not import `cli/`.
+  `providers/`, `config/`, `checks/` and `workflow/`; routing a provider
+  event parses hook tokens that `workflow/` defines. It may not import `cli/`.
 - `steps/` may not import `service/` or `cli/`.
-- `providers/` holds the provider clients with their identity and webhook
-  checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
+- `providers/` holds the provider clients with their identity checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
   the `Check` shape in `checks/check.ts`.
 - `config/` may not import `steps/`, `service/` or `cli/`.
 - `checks/` may not import `service/` or `cli/`.

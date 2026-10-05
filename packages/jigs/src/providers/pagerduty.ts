@@ -61,17 +61,8 @@ export interface PagerDutyUser {
   email: string;
 }
 
-type QueryValue = string | number | boolean | readonly string[];
-
-/**
- * Query parameters under PagerDuty's own names; an array is sent as `name[]` once per value.
- * Paging is the client's, so `limit` and `offset` are not accepted.
- */
-export type PagerDutyQuery = Record<string, QueryValue> & { limit?: never; offset?: never };
-
 export interface PagerDutyClient {
   getIncident(id: string): Promise<PagerDutyIncident>;
-  listIncidents(query?: PagerDutyQuery): Promise<PagerDutyIncident[]>;
   /** Add a note to an incident, attributed to the factory's `pagerduty.from` user. */
   createNote(incidentId: string, content: string): Promise<PagerDutyNote>;
   findUserByEmail(email: string): Promise<PagerDutyUser | null>;
@@ -95,12 +86,9 @@ export interface PagerDutyClientDeps {
   context?: FactoryContext;
 }
 
-function queryString(query: Record<string, QueryValue>): string {
+function queryString(query: Record<string, string | number>): string {
   const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query)) {
-    if (Array.isArray(value)) for (const entry of value) params.append(`${name}[]`, entry);
-    else params.append(name, String(value));
-  }
+  for (const [name, value] of Object.entries(query)) params.append(name, String(value));
   const text = params.toString();
   return text === "" ? "" : `?${text}`;
 }
@@ -169,7 +157,7 @@ export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDuty
   async function listAll<T>(
     apiPath: string,
     key: string,
-    query: PagerDutyQuery = {},
+    query: Record<string, string> = {},
   ): Promise<T[]> {
     const all: T[] = [];
     for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -185,7 +173,7 @@ export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDuty
     }
     throw new JigsError(
       `PagerDuty kept reporting more ${key} past ${MAX_PAGES * PAGE_LIMIT} records on ${apiPath}`,
-      "narrow the query, for example with a later since or fewer statuses, so it matches fewer records",
+      "narrow the query so it matches fewer records",
     );
   }
 
@@ -197,7 +185,6 @@ export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDuty
       );
       return reply.incident;
     },
-    listIncidents: (query = {}) => listAll<PagerDutyIncident>("/incidents", "incidents", query),
     async createNote(incidentId, content) {
       const reply = await request<{ note: PagerDutyNote }>(
         "POST",

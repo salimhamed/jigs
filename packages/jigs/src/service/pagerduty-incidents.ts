@@ -28,31 +28,37 @@ const eventTypeSchema = z.object({ event: z.object({ event_type: z.string() }) }
 const pagerDutyEventType = (event: unknown): string | undefined =>
   eventTypeSchema.safeParse(event).data?.event.event_type;
 
-export function pagerDutyIncidents(): Source<PagerDutyIncidentsParams> {
-  return {
-    provider: "pagerduty",
-    params: pagerDutyIncidentsParamsSchema,
-    sampleInputs: { incident: "P000000" },
-    occurrence(inputs) {
-      if (typeof inputs.incident !== "string" || inputs.incident === "")
-        throw new Error("no incident id in the occurrence");
-      return inputs.incident;
-    },
-    // The run gets only the incident id, so the event's copy of the incident
-    // is read only to key it and to apply the trigger's filters.
-    async fromPush(params, event) {
-      if (pagerDutyEventType(event) !== "incident.triggered") return null;
-      const { data } = triggeredSchema.parse(event).event;
-      const matches = (values: readonly string[] | undefined, ...found: string[]) =>
-        values === undefined || found.some((value) => values.includes(value));
-      if (
-        !matches(params.service_ids, data.service.id) ||
-        !matches(params.team_ids, ...data.teams.map((team) => team.id)) ||
-        !matches(params.urgencies, data.urgency)
-      )
-        return null;
-      return { inputs: { incident: data.id }, at: new Date(data.created_at) };
-    },
-    describe: ({ incident }) => `pagerduty ${String(incident)}`,
-  };
-}
+export const PAGERDUTY_INCIDENTS: Source<PagerDutyIncidentsParams> = {
+  provider: "pagerduty",
+  params: pagerDutyIncidentsParamsSchema,
+  sampleInputs: { incident: "P000000" },
+  occurrence(inputs) {
+    if (typeof inputs.incident !== "string" || inputs.incident === "")
+      throw new Error("no incident id in the occurrence");
+    return inputs.incident;
+  },
+  // The run gets only the incident id, so the event's copy of the incident
+  // is read only to key it and to apply the trigger's filters.
+  async fromPush(params, event) {
+    if (pagerDutyEventType(event) !== "incident.triggered") return null;
+    // A shape PagerDuty will send the same way every time is no reason to retry.
+    const triggered = triggeredSchema.safeParse(event);
+    if (!triggered.success) {
+      console.error(
+        `[pagerduty] ignored an incident.triggered it could not read: ${triggered.error.message}`,
+      );
+      return null;
+    }
+    const { data } = triggered.data.event;
+    const matches = (values: readonly string[] | undefined, ...found: string[]) =>
+      values === undefined || found.some((value) => values.includes(value));
+    if (
+      !matches(params.service_ids, data.service.id) ||
+      !matches(params.team_ids, ...data.teams.map((team) => team.id)) ||
+      !matches(params.urgencies, data.urgency)
+    )
+      return null;
+    return { inputs: { incident: data.id }, at: new Date(data.created_at) };
+  },
+  describe: ({ incident }) => `pagerduty ${String(incident)}`,
+};

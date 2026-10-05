@@ -525,7 +525,7 @@ test("a workflow requiring PagerDuty in a factory without a pagerduty section fa
   ]);
 });
 
-test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", async () => {
+test("doctor checks PagerDuty for a trigger that reads it, naming the trigger", async () => {
   factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   const checks = doctorChecks({ hello: {} }, { pages: "pagerduty" });
   expect(checks.map((check) => check.id).filter((id) => id.startsWith("pagerduty."))).toEqual([

@@ -67,23 +67,16 @@ test("reads carry the bearer token and the v2 media type, and no From", async ()
   });
 });
 
-test("listing incidents passes the provider's own parameters and follows every page", async () => {
+test("a listing passes its query and follows every page", async () => {
   const pages = [
-    { incidents: [INCIDENT], limit: 1, offset: 0, more: true, total: null },
-    { incidents: [{ ...INCIDENT, id: "Q2" }], limit: 1, offset: 1, more: false, total: null },
+    { users: [{ ...USER, id: "PFIRST", email: "first@example.com" }], more: true },
+    { users: [USER], more: false },
   ];
   const { client, calls } = server(() => json(pages.shift()));
-  const incidents = await client.listIncidents({
-    statuses: ["triggered"],
-    service_ids: ["P48FPG2", "PSECOND"],
-    since: "2026-09-29T19:00:00Z",
-  });
-  expect(incidents.map((incident) => incident.id)).toEqual(["Q1ABCDEF", "Q2"]);
+  expect(await client.findUserByEmail("oncall@example.com")).toMatchObject({ id: "PUSER01" });
   const [first, second] = calls;
-  expect(first?.url.pathname).toBe("/incidents");
-  expect(first?.url.searchParams.getAll("statuses[]")).toEqual(["triggered"]);
-  expect(first?.url.searchParams.getAll("service_ids[]")).toEqual(["P48FPG2", "PSECOND"]);
-  expect(first?.url.searchParams.get("since")).toBe("2026-09-29T19:00:00Z");
+  expect(first?.url.pathname).toBe("/users");
+  expect(first?.url.searchParams.get("query")).toBe("oncall@example.com");
   expect(first?.url.searchParams.get("limit")).toBe("100");
   expect(first?.url.searchParams.get("offset")).toBe("0");
   expect(second?.url.searchParams.get("offset")).toBe("1");
@@ -213,19 +206,11 @@ test("the access probe is one small incident read", async () => {
 
 test("a list that never ends stops at PagerDuty's offset ceiling with a repair", async () => {
   const { client, calls } = server(() =>
-    json({ incidents: Array.from({ length: 100 }, () => INCIDENT), more: true }),
+    json({ users: Array.from({ length: 100 }, () => USER), more: true }),
   );
-  const err = await rejection<Error & { hint?: string }>(client.listIncidents());
+  const err = await rejection<Error & { hint?: string }>(client.findUserByEmail("x@example.com"));
   expect(err.name).toBe("JigsError");
-  expect(err.message).toContain("past 10000 records on /incidents");
+  expect(err.message).toContain("past 10000 records on /users");
   expect(err.hint).toContain("narrow the query");
   expect(calls).toHaveLength(100);
-});
-
-test("paging is the client's: limit and offset are not query parameters a caller passes", () => {
-  const { client } = server(() => json({ incidents: [], more: false }));
-  // @ts-expect-error the client pages itself
-  void client.listIncidents({ limit: 5 }).catch(() => {});
-  // @ts-expect-error the client pages itself
-  void client.listIncidents({ offset: 5 }).catch(() => {});
 });

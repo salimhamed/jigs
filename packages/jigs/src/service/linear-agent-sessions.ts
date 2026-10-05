@@ -71,7 +71,15 @@ export function linearAgentSessions(
     async fromPush(params, event) {
       const head = headSchema.safeParse(event).data;
       if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;
-      const { organizationId: workspace, agentSession } = createdSchema.parse(event);
+      // A shape Linear will send the same way every time is no reason to retry.
+      const created = createdSchema.safeParse(event);
+      if (!created.success) {
+        console.error(
+          `[linear] ignored an agent session event it could not read: ${created.error.message}`,
+        );
+        return null;
+      }
+      const { organizationId: workspace, agentSession } = created.data;
       const { issue } = agentSession;
       if (!issue) return null;
       if (

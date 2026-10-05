@@ -122,14 +122,17 @@ test("routes a batch in order, then confirms its last position", async () => {
 });
 
 test("a message that fails to route is routed again before the batch is confirmed", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   push.mockRejectedValueOnce(new Error("registry unreachable"));
-  const { seen } = await start([[event("3", "bad"), event("4", "good")]], {
-    routeRetryMs: [0, 0, 0],
-  });
-  await vi.waitFor(() => expect(seen.some((r) => r.method === "POST")).toBe(true));
+  const { seen } = await start([[event("3", "bad"), event("4", "good")]]);
+  const confirmed = () => seen.filter((r) => r.method === "POST");
+  await until(() => push.mock.calls.length === 2);
+  expect(confirmed()).toHaveLength(0);
 
+  await vi.advanceTimersByTimeAsync(5_000);
+  await until(() => confirmed().length === 1);
   expect(push.mock.calls.map(([, payload]) => payload)).toEqual(["bad", "good", "bad"]);
-  expect(JSON.parse(seen.find((r) => r.method === "POST")?.body ?? "")).toEqual({ position: "4" });
+  expect(JSON.parse(confirmed()[0]?.body ?? "")).toEqual({ position: "4" });
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining("could not route pagerduty event evt_3"),
   );
@@ -164,19 +167,12 @@ test("a message that keeps failing is retried on the backoff, then given up and 
   );
 });
 
-test("a routing outcome of failed is retried like a throw", async () => {
-  push.mockRejectedValueOnce(new Error("could not read")).mockResolvedValue(["triage"]);
-  const { seen } = await start([[event("8", "flaky")]], { routeRetryMs: [0] });
-  await vi.waitFor(() => expect(seen.some((r) => r.method === "POST")).toBe(true));
-  expect(push).toHaveBeenCalledTimes(2);
-});
-
 test("stopping while a failed message waits to be retried confirms nothing", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   push.mockRejectedValue(new Error("registry unreachable"));
-  const { seen } = await start([[event("3", "bad")]], { routeRetryMs: [60_000] });
-  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
-  await vi.waitFor(() =>
-    expect(errors).toHaveBeenCalledWith(expect.stringContaining("again in 60s")),
+  const { seen } = await start([[event("3", "bad")]]);
+  await until(() =>
+    errors.mock.calls.some((call: unknown[]) => String(call[0]).includes("again in 5s")),
   );
 
   await stop?.();

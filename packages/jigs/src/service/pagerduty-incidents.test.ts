@@ -1,12 +1,12 @@
 import { readFileSync } from "node:fs";
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import type { Factory } from "../workflow/factory.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import { triggerChecks, triggerProviders } from "./event-triggers/view.ts";
 import type { PreparedRun } from "./launch.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
+import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 
@@ -14,7 +14,7 @@ const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
 test("the occurrence is the incident id, and params take PagerDuty's names only", async () => {
-  const source = pagerDutyIncidents();
+  const source = PAGERDUTY_INCIDENTS;
   expect(source.occurrence({ incident: "Q7", team: "infra" })).toBe("Q7");
   expect(() => source.occurrence({})).toThrow("no incident id");
   expect(source.params.safeParse({ team_ids: ["PT1"], urgencies: ["low"] }).success).toBe(true);
@@ -34,7 +34,7 @@ const withEvent = (fields: Record<string, unknown>, data: Record<string, unknown
 };
 
 test("a pushed incident.triggered is the incident, as of when it was created", async () => {
-  const source = pagerDutyIncidents();
+  const source = PAGERDUTY_INCIDENTS;
 
   const pushed = await source.fromPush({}, triggered());
 
@@ -43,7 +43,7 @@ test("a pushed incident.triggered is the incident, as of when it was created", a
 });
 
 test("any other webhook event is not an occurrence", async () => {
-  const source = pagerDutyIncidents();
+  const source = PAGERDUTY_INCIDENTS;
   for (const event_type of ["incident.acknowledged", "incident.resolved", "pagey.ping"])
     expect(await source.fromPush({}, withEvent({ event_type }))).toBeNull();
   expect(await source.fromPush({}, null)).toBeNull();
@@ -51,7 +51,7 @@ test("any other webhook event is not an occurrence", async () => {
 });
 
 test("a pushed incident is filtered by the trigger's parameters", async () => {
-  const source = pagerDutyIncidents();
+  const source = PAGERDUTY_INCIDENTS;
   const push = (params: Parameters<typeof source.fromPush>[0], data = {}) =>
     source.fromPush(params, withEvent({}, data));
   expect(await push({ service_ids: ["PSVC001", "PSVC002"] })).not.toBeNull();
@@ -63,9 +63,13 @@ test("a pushed incident is filtered by the trigger's parameters", async () => {
   expect(await push({ urgencies: ["low"] })).toBeNull();
 });
 
-test("an incident.triggered without an incident is refused rather than taken", async () => {
-  const source = pagerDutyIncidents();
-  await expect(source.fromPush({}, withEvent({}, { id: undefined }))).rejects.toThrow();
+test("an incident.triggered without an incident is ignored loudly, not retried", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  expect(await PAGERDUTY_INCIDENTS.fromPush({}, withEvent({}, { id: undefined }))).toBeNull();
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[pagerduty] ignored an incident.triggered it could not read"),
+  );
+  errors.mockRestore();
 });
 
 const respond: Factory = {
@@ -92,7 +96,7 @@ function engineHarness() {
   const runs: Array<{ runId: string; status: string; attribute: string }> = [];
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
   const sources = {
-    "pagerduty.incidents": pagerDutyIncidents(),
+    "pagerduty.incidents": PAGERDUTY_INCIDENTS,
   };
   const engine = createTriggerEngine(respond, {
     store: memory.store,

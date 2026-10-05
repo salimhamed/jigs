@@ -221,7 +221,7 @@ const message = (ts: string, extra: Record<string, unknown> = {}) => ({
   ...extra,
 });
 
-test("history follows the cursor across pages, newest first, from oldest", async () => {
+test("a listing follows the cursor across pages", async () => {
   answer(
     () =>
       reply({
@@ -238,7 +238,7 @@ test("history follows the cursor across pages, newest first, from oldest", async
         response_metadata: { next_cursor: "" },
       }),
   );
-  const messages = await slack.slackHistory("C0C5EUZ7P9Q", { oldest: "1790723000.000000" });
+  const messages = await slack.slackReplies("C0C5EUZ7P9Q", "1790723000.000000");
   expect(messages.map((m) => m.ts)).toEqual([
     "1790723478.961719",
     "1790723415.832429",
@@ -247,7 +247,7 @@ test("history follows the cursor across pages, newest first, from oldest", async
   expect(messages[2]?.subtype).toBe("channel_join");
   expect(Object.fromEntries(sent(0).params)).toEqual({
     channel: "C0C5EUZ7P9Q",
-    oldest: "1790723000.000000",
+    ts: "1790723000.000000",
     limit: "200",
   });
   expect(sent(1).params.get("cursor")).toBe("bmV4dF90czoxNzkwNzIzNDE1ODMyNDI5");
@@ -339,7 +339,7 @@ test("a user reads as their display name and email, falling back to the real nam
   expect(Object.fromEntries(sent(0).params)).toEqual({ user: "U01PW925E6N" });
 });
 
-test("history stops at a ceiling when every page claims another", async () => {
+test("a listing stops at a ceiling when every page claims another", async () => {
   answer(() =>
     reply({
       ok: true,
@@ -347,8 +347,8 @@ test("history stops at a ceiling when every page claims another", async () => {
       response_metadata: { next_cursor: "again" },
     }),
   );
-  await expect(slack.slackHistory("C0C5EUZ7P9Q", { oldest: "0" })).rejects.toThrow(
-    "Slack conversations.history kept returning a next cursor past 50 pages",
+  await expect(slack.slackReplies("C0C5EUZ7P9Q", "1790723478.961719")).rejects.toThrow(
+    "Slack conversations.replies kept returning a next cursor past 50 pages",
   );
   expect(calls).toHaveLength(50);
 });

@@ -300,7 +300,15 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         try {
           const pushed = await entry.source.fromPush(entry.params, event);
           if (pushed === null) continue;
-          const occurrence = entry.source.occurrence(pushed.inputs);
+          // An event the source cannot key would fail the same way every time,
+          // so it is passed over rather than retried.
+          let occurrence: string;
+          try {
+            occurrence = entry.source.occurrence(pushed.inputs);
+          } catch (error) {
+            log(`[trigger] ${entry.name} passed over an event it could not key: ${String(error)}`);
+            continue;
+          }
           if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
         } catch (error) {
           failures.push(error);

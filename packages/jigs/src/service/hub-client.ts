@@ -28,8 +28,6 @@ export interface HubClientOptions {
   token: string;
   route: RouteDeps;
   waiting?: WakeWaitingDeps;
-  /** Overrides the waits before each re-route of a failed event. */
-  routeRetryMs?: readonly number[];
 }
 
 /** Milliseconds to wait after this many failures in a row: doubling from a second, capped at a minute. */
@@ -117,7 +115,7 @@ async function handleBatch(
       await wakeAllWaitingRuns(options.waiting);
     } else if (!(await route(message, options))) failed.push(message);
   }
-  for (const delay of options.routeRetryMs ?? ROUTE_RETRY_MS) {
+  for (const delay of ROUTE_RETRY_MS) {
     if (failed.length === 0) return true;
     console.error(`[hub] routing ${failed.length} event(s) again in ${delay / 1000}s`);
     await sleep(delay, signal);

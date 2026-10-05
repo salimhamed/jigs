@@ -7,7 +7,7 @@ import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
 import { linearAgentSessions } from "../linear-agent-sessions.ts";
-import { pagerDutyIncidents } from "../pagerduty-incidents.ts";
+import { PAGERDUTY_INCIDENTS } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
 /** One occurrence as a source reports it: the reference the run reads, and when it happened. */
@@ -36,6 +36,6 @@ export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
-  [PAGERDUTY_INCIDENTS_SOURCE]: pagerDutyIncidents(),
+  [PAGERDUTY_INCIDENTS_SOURCE]: PAGERDUTY_INCIDENTS,
   [LINEAR_AGENT_SESSIONS_SOURCE]: linearAgentSessions(),
 };

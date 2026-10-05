@@ -87,9 +87,14 @@ test("only a created session on an issue is an occurrence", async () => {
   expect(await source.fromPush({}, { type: "Issue", action: "create", data: {} })).toBeNull();
 });
 
-test("a created session without an id is refused rather than taken", async () => {
+test("a created session without an id is ignored loudly, not retried", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const source = linearAgentSessions({ issueFiling: unread() });
-  await expect(source.fromPush({}, withSession({}, { id: undefined }))).rejects.toThrow();
+  expect(await source.fromPush({}, withSession({}, { id: undefined }))).toBeNull();
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[linear] ignored an agent session event it could not read"),
+  );
+  errors.mockRestore();
 });
 
 test("teams match the issue's team key or id without reading the issue", async () => {
@@ -185,6 +190,5 @@ test("a filter that cannot read the issue fails the push rather than passing the
   const { engine, starts } = sessionEngine(unread(), { labels: ["agent"] });
   await engine.arm();
   await expect(engine.push("linear", created())).rejects.toThrow("could not read the event");
-  await expect(engine.push("linear", withSession({}, { id: undefined }))).rejects.toThrow();
   expect(starts).toEqual([]);
 });

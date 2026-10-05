@@ -13,14 +13,13 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { databaseUrl, postgresAdminUrl } from "../db-test-fixtures.ts";
-import type { PagerDutyIncident } from "../providers/pagerduty.ts";
-import { livePagerDutyClient } from "../providers/test-fixtures.ts";
+import { waitForLiveIncident } from "../providers/test-fixtures.ts";
 import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import { triggerStore } from "./event-triggers/store.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
+import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
 import { findRunsByAttribute } from "./runs.ts";
 
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
@@ -32,8 +31,6 @@ const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 const SLUG = "pagerduty-live";
 
 describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
-  const client = livePagerDutyClient(token ?? "", from ?? "");
-
   const database = `jigs_pd_trigger_${crypto.randomUUID().replaceAll("-", "")}`;
   const testUrl = databaseUrl(database);
   const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
@@ -122,19 +119,14 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     const store = triggerStore(db as RegistrySql, SLUG);
     const engine = createTriggerEngine(factory, {
       store,
-      sources: { "pagerduty.incidents": pagerDutyIncidents() },
+      sources: { "pagerduty.incidents": PAGERDUTY_INCIDENTS },
       factorySlug: () => SLUG,
       log: () => {},
     });
     await engine.arm();
     expect((await enqueue("trigger")).status).toBe(202);
 
-    let mine: PagerDutyIncident | undefined;
-    for (let attempt = 0; attempt < 30 && mine === undefined; attempt += 1) {
-      [mine] = await client.listIncidents({ incident_key: dedupKey });
-      if (mine === undefined) await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-    if (mine === undefined) throw new Error("the test incident never appeared");
+    const mine = await waitForLiveIncident(token ?? "", dedupKey);
     const id = mine.id;
     const triggered = {
       event: {
