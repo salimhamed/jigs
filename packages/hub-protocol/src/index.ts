@@ -186,12 +186,7 @@ export interface SlackTokenResponse {
 export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
 
 /** The scopes a PagerDuty app grants a factory, besides its account. */
-export const pagerDutyScopes = [
-  "incidents.read",
-  "incidents.write",
-  "webhook_subscriptions.read",
-  "users.read",
-] as const;
+export const pagerDutyScopes = ["incidents.read", "incidents.write", "users.read"] as const;
 
 /** The body of a {@link pagerDutyTokenPath} response. */
 export interface PagerDutyTokenResponse {

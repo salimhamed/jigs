@@ -11,11 +11,10 @@ import {
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
-import { perContext } from "./credentials.ts";
+import { createHubTokens, type HubTokens, perContext } from "./credentials.ts";
 import {
   MAX_RATE_LIMIT_WAIT_SECONDS,
   ProviderApiError,
-  type ProviderAuth,
   rateLimitWaits,
   reauthorize,
 } from "./http.ts";
@@ -28,8 +27,6 @@ const PAGE_LIMIT = 100;
 // needs narrowing, not more pages.
 const MAX_PAGES = 100;
 const DEFAULT_RATE_LIMIT_WAIT_SECONDS = 5;
-// Ask the hub again while there is still time to fail and retry.
-const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 export interface PagerDutyReference {
   id: string;
@@ -83,39 +80,11 @@ export interface PagerDutyClient {
 }
 
 /** The factory's PagerDuty app tokens, as the hub hands them out. */
-export interface PagerDutyTokens extends ProviderAuth {
-  /** A token that lives at least `minLifetimeMs` longer, asked of the hub again when needed. */
-  bearer(minLifetimeMs?: number): Promise<string>;
-  invalidate(stale: string): void;
-}
-
-export function createPagerDutyTokens(
-  issue: () => Promise<{ token: string; expiresAt: string }>,
-  now: () => number = Date.now,
-): PagerDutyTokens {
-  let cached: { token: string; expiresAt: number } | null = null;
-  let issuing: Promise<{ token: string; expiresAt: number }> | null = null;
-  return {
-    async bearer(minLifetimeMs = REFRESH_MARGIN_MS) {
-      if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached.token;
-      issuing ??= issue()
-        .then(({ token, expiresAt }) => ({ token, expiresAt: Date.parse(expiresAt) }))
-        .finally(() => {
-          issuing = null;
-        });
-      cached = await issuing;
-      return cached.token;
-    },
-    // A late 401 on an old token must not discard one issued since.
-    invalidate(stale) {
-      if (cached?.token === stale) cached = null;
-    },
-  };
-}
+export type PagerDutyTokens = Pick<HubTokens<{ token: string }>, "bearer" | "invalidate">;
 
 /** The factory's PagerDuty tokens, cached once per factory context. */
-export const pagerDutyTokens = perContext((ctx) =>
-  createPagerDutyTokens(() => fetchPagerDutyToken(ctx)),
+export const pagerDutyTokens: (ctx?: FactoryContext) => PagerDutyTokens = perContext((ctx) =>
+  createHubTokens(() => fetchPagerDutyToken(ctx)),
 );
 
 export interface PagerDutyClientDeps {

@@ -38,3 +38,41 @@ export function perContext<T>(build: (ctx: FactoryContext) => T): (ctx?: Factory
     return values.get(ctx) as T;
   };
 }
+
+// Ask the hub again while there is still time to fail and retry.
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
+
+/** Expiring tokens the hub hands out, cached until shortly before they expire. */
+export interface HubTokens<T extends { token: string }> {
+  /** The latest answer, asked of the hub again when less than `minLifetimeMs` of it is left. */
+  issued(minLifetimeMs?: number): Promise<T>;
+  bearer(minLifetimeMs?: number): Promise<string>;
+  /** Forget `stale` if it is still the cached token, so the next call asks the hub again. */
+  invalidate(stale: string): void;
+}
+
+export function createHubTokens<T extends { token: string; expiresAt: string }>(
+  issue: () => Promise<T>,
+  now: () => number = Date.now,
+): HubTokens<T> {
+  let cached: { value: T; expiresAt: number } | null = null;
+  let issuing: Promise<{ value: T; expiresAt: number }> | null = null;
+  const issued = async (minLifetimeMs = REFRESH_MARGIN_MS) => {
+    if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached.value;
+    issuing ??= issue()
+      .then((value) => ({ value, expiresAt: Date.parse(value.expiresAt) }))
+      .finally(() => {
+        issuing = null;
+      });
+    cached = await issuing;
+    return cached.value;
+  };
+  return {
+    issued,
+    bearer: async (minLifetimeMs) => (await issued(minLifetimeMs)).token,
+    // A late rejection of an old token must not discard one issued since.
+    invalidate(stale) {
+      if (cached?.value.token === stale) cached = null;
+    },
+  };
+}

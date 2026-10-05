@@ -26,7 +26,7 @@ function probes(overrides: Partial<PagerDutyAppProbes> = {}) {
 
 const outcome = async (p: PagerDutyAppProbes) => {
   const [found] = (await runChecks(pagerDutyAppChecks(p))).checks;
-  if (found?.id !== "pagerduty.identity") throw new Error("no pagerduty.identity check");
+  if (found?.id !== "pagerduty.app") throw new Error("no pagerduty.app check");
   return found;
 };
 
@@ -70,7 +70,7 @@ test("a read the token may not make names the missing scope", async () => {
 test("a token that reads incidents is green", async () => {
   const { probes: p, calls } = probes();
   expect(await outcome(p)).toEqual({
-    id: "pagerduty.identity",
+    id: "pagerduty.app",
     label: "PagerDuty app",
     ok: true,
     detail: "acting as the hub's PagerDuty app",

@@ -1,12 +1,7 @@
 import { expect, test } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { ProviderApiError } from "./http.ts";
-import {
-  createPagerDutyClient,
-  createPagerDutyTokens,
-  PAGERDUTY_API_URL,
-  type PagerDutyTokens,
-} from "./pagerduty.ts";
+import { createPagerDutyClient, PAGERDUTY_API_URL, type PagerDutyTokens } from "./pagerduty.ts";
 import { type FetchCall, fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
 async function rejection<E>(promise: Promise<unknown>): Promise<E> {
@@ -233,41 +228,4 @@ test("paging is the client's: limit and offset are not query parameters a caller
   void client.listIncidents({ limit: 5 }).catch(() => {});
   // @ts-expect-error the client pages itself
   void client.listIncidents({ offset: 5 }).catch(() => {});
-});
-
-test("the hub's token is reused until shortly before it expires", async () => {
-  let now = Date.parse("2026-10-05T00:00:00Z");
-  let issued = 0;
-  const tokens = createPagerDutyTokens(
-    async () => ({ token: `pd-${++issued}`, expiresAt: "2026-10-05T01:00:00Z" }),
-    () => now,
-  );
-  expect(await tokens.bearer()).toBe("pd-1");
-  expect(await tokens.bearer()).toBe("pd-1");
-  now = Date.parse("2026-10-05T00:56:00Z");
-  expect(await tokens.bearer()).toBe("pd-2");
-});
-
-test("concurrent callers share one request to the hub, and a stale token is asked for again", async () => {
-  let issued = 0;
-  const tokens = createPagerDutyTokens(async () => ({
-    token: `pd-${++issued}`,
-    expiresAt: "2999-01-01T00:00:00Z",
-  }));
-  expect(await Promise.all([tokens.bearer(), tokens.bearer()])).toEqual(["pd-1", "pd-1"]);
-  tokens.invalidate("pd-0");
-  expect(await tokens.bearer()).toBe("pd-1");
-  tokens.invalidate("pd-1");
-  expect(await tokens.bearer()).toBe("pd-2");
-});
-
-test("an agent asking for a long-lived token gets a fresh one", async () => {
-  let issued = 0;
-  const now = Date.parse("2026-10-05T00:00:00Z");
-  const tokens = createPagerDutyTokens(
-    async () => ({ token: `pd-${++issued}`, expiresAt: "2026-10-05T02:00:00Z" }),
-    () => now,
-  );
-  expect(await tokens.bearer()).toBe("pd-1");
-  expect(await tokens.bearer(5 * 3600_000)).toBe("pd-2");
 });

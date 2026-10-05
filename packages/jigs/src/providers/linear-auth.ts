@@ -4,25 +4,16 @@
 // the CLI — never from workflow code.
 
 import type { FactoryContext } from "../config/factory-context.ts";
-import { perContext } from "./credentials.ts";
+import { createHubTokens, perContext } from "./credentials.ts";
 import type { ProviderAuth } from "./http.ts";
 import { fetchLinearToken } from "./hub.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
 
-/** Renew a token while there is still time to fail and retry. */
-const REFRESH_MARGIN_MS = 5 * 60 * 1000;
-
 /** The user Linear made for the factory's app in a workspace: who jigs is there. */
 export interface LinearAppUser {
   id: string;
   name: string;
-}
-
-interface IssuedToken {
-  token: string;
-  expiresAt: number;
-  user: LinearAppUser;
 }
 
 export interface LinearAuth extends ProviderAuth {
@@ -47,34 +38,14 @@ export function createLinearAuth(
   organization: string | undefined,
   deps: LinearAuthDeps,
 ): LinearAuth {
-  const now = deps.now ?? Date.now;
-  let cached: IssuedToken | null = null;
-  let issuing: Promise<IssuedToken> | null = null;
-  const fresh = async (minLifetimeMs: number): Promise<IssuedToken> => {
-    if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached;
-    if (issuing === null) {
-      issuing = deps
-        .issue(organization)
-        .then(({ token, expiresAt, app }) => ({
-          token,
-          expiresAt: Date.parse(expiresAt),
-          user: { id: app.userId, name: app.name },
-        }))
-        .finally(() => {
-          issuing = null;
-        });
-    }
-    const pending = issuing;
-    cached = await pending;
-    return cached;
-  };
+  const tokens = createHubTokens(() => deps.issue(organization), deps.now);
   return {
-    bearer: async (minLifetimeMs = REFRESH_MARGIN_MS) => (await fresh(minLifetimeMs)).token,
-    // A late rejection of an old token must not discard one issued since.
-    invalidate(stale: string): void {
-      if (cached?.token === stale) cached = null;
+    bearer: tokens.bearer,
+    invalidate: tokens.invalidate,
+    async user() {
+      const { app } = await tokens.issued();
+      return { id: app.userId, name: app.name };
     },
-    user: async () => (cached ?? (await fresh(REFRESH_MARGIN_MS))).user,
   };
 }
 

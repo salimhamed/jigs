@@ -19,7 +19,6 @@ An account admin or owner registers the app once per PagerDuty account.
    | --- | --- |
    | `incidents.read` | Reading and listing incidents, polling for new ones, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
-   | `webhook_subscriptions.read` | Reading the webhook subscription that sends incident events. |
    | `users.read` | `jigs doctor`'s check of the `from` user. |
 
 3. In the hub, add a PagerDuty connection with the app's client ID and secret,
@@ -43,7 +42,8 @@ pagerduty: { from: "oncall@example.com" },
 `from` is the email of a real user on the account. PagerDuty refuses a change
 that names no user, so every note jigs adds is attributed to this person. Pick
 a user whose name reads well on an incident timeline, such as a shared on-call
-account. A factory that only reads incidents can leave the section out.
+account. A factory that uses PagerDuty needs this section: preflight and
+`jigs doctor` fail without it.
 
 Then run `pnpm exec jigs up`, which rebuilds the factory and restarts the
 service.

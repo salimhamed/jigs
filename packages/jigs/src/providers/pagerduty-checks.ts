@@ -1,4 +1,4 @@
-import type { Check } from "../checks/check.ts";
+import { type Check, failedCheck } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
@@ -21,7 +21,7 @@ const forbidden = (err: unknown): boolean =>
 export function pagerDutyAppChecks(probes: PagerDutyAppProbes): Check[] {
   return [
     {
-      id: "pagerduty.identity",
+      id: "pagerduty.app",
       label: "PagerDuty app",
       run: async () => {
         try {
@@ -102,15 +102,38 @@ async function pagerDutyToken(ctx: FactoryContext): Promise<void> {
   await pagerDutyTokens(ctx).bearer();
 }
 
+// A factory that uses PagerDuty names its from user up front, so a run fails
+// here rather than at its first note.
 export function pagerDutyChecks(ctx: FactoryContext): Check[] {
+  let from: string | undefined;
+  try {
+    from = ctx.config.pagerduty?.from;
+  } catch (err) {
+    return [
+      failedCheck(
+        "pagerduty.app",
+        "PagerDuty app",
+        err instanceof Error ? err.message : String(err),
+        `repair ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
+      ),
+    ];
+  }
+  if (from === undefined)
+    return [
+      failedCheck(
+        "pagerduty.app",
+        "PagerDuty app",
+        `${FACTORY_CONFIG_FILE} has no pagerduty section`,
+        `add pagerduty: { from: "<email of a PagerDuty user>" } to ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
+      ),
+    ];
   return pagerDutyAppChecks({
     token: () => pagerDutyToken(ctx),
     read: () => pagerDutyClientFor(ctx).verifyAccess(),
   });
 }
 
-// Without a pagerduty section there is no from user to check, and an
-// unreadable config is the binding checks' diagnosis.
+// A missing section or an unreadable config is the app check's diagnosis.
 export function pagerDutyFromDoctorChecks(ctx: FactoryContext): Check[] {
   let from: string | undefined;
   try {
