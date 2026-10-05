@@ -1186,12 +1186,18 @@ if (hub === undefined) {
     // restarted under a running factory does. Later checks need no hub.
     const whileConnected = async () => {
       const version = await hub.seen();
-      await hub.stop();
-      return version;
+      // Reported, not failed here, so bootOutcome still stops the factory.
+      const hubStop = await hub.stop().then(
+        () => undefined,
+        (err) => err.message,
+      );
+      return hubStop === undefined ? version : { hubStop };
     };
     const boot = await bootOutcome(postgresUrl, { whileReady: whileConnected }).finally(() =>
       writeFileSync(configFile, builtConfig),
     );
+    if (boot.observed?.hubStop !== undefined)
+      fail(boot.observed.hubStop, "the hub's output above shows what kept it running");
     if (boot.problem === null && boot.observed?.error !== undefined) {
       console.error(boot.output);
       fail(
@@ -1235,7 +1241,7 @@ if (hub === undefined) {
   });
 }
 
-await hub?.stop();
+await hub?.stop().catch((err) => fail(err.message, "see the hub's output above"));
 cleanup();
 
 // A real hub beside the test factories, on its own database, with one factory
@@ -1325,12 +1331,10 @@ async function startHub(adminUrl) {
         new Promise((resolve) => setTimeout(() => resolve([undefined]), SHUTDOWN_TIMEOUT_MS)),
       ]);
       if (code === undefined)
-        fail(
-          `the hub did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM`,
-          "a factory's open long poll must not keep the hub running",
+        throw new Error(
+          `the hub did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM while a factory was connected`,
         );
-      if (code !== 0)
-        fail(`the hub exited with code ${code} on SIGTERM, not 0`, "see its output above");
+      if (code !== 0) throw new Error(`the hub exited with code ${code} on SIGTERM, not 0`);
       await admin.query(`DROP DATABASE "${database}"`);
       await admin.end();
       stopped = true;

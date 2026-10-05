@@ -22,8 +22,6 @@ const UNAUTHORIZED_RETRY_MS = 5 * 60_000;
 const GRACE_MS = 15_000;
 // Waits before each re-route of the events in a batch that failed to route.
 const ROUTE_RETRY_MS = [5_000, 30_000, 120_000];
-// A poll answered empty sooner than this did not wait, as when the hub is stopping: it backs off rather than polling again at once.
-const EARLY_EMPTY_MS = 1000;
 
 export interface HubClientOptions {
   url: string;
@@ -67,17 +65,14 @@ async function run(options: HubClientOptions, signal: AbortSignal): Promise<void
         await confirm(unconfirmed);
         unconfirmed = null;
       }
-      const polled = performance.now();
       const response = await hubRequest(hub, `${messagesPath}?wait=${maxWaitSeconds}`, {
         signal,
         timeoutMs: maxWaitSeconds * 1000 + GRACE_MS,
       });
       const { messages } = (await response.json()) as MessagesResponse;
-      const last = messages.at(-1);
-      if (last === undefined && performance.now() - polled < EARLY_EMPTY_MS)
-        throw new Error("the hub answered without waiting");
       if (failures > 0) console.log("[hub] reconnected");
       failures = 0;
+      const last = messages.at(-1);
       if (last === undefined) continue;
       if (!(await handleBatch(messages, options, signal))) return;
       unconfirmed = last.position;

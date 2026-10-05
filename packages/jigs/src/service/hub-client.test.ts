@@ -241,24 +241,6 @@ test("backs off on a server error, doubling up to a minute", async () => {
   await until(() => push.mock.calls.length === 1);
 });
 
-test("an empty answer that did not wait counts as a failure, so a stopping hub is not polled in a tight loop", async () => {
-  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  const { seen } = await start([[], 503, [], [event("1", "after")]]);
-  const polls = () => seen.filter((r) => r.method === "GET").length;
-  for (const [poll, wait] of [
-    [1, 1000],
-    [2, 2000],
-    [3, 4000],
-  ] as const) {
-    await until(() => polls() === poll && errors.mock.calls.length === poll);
-    expect(errors).toHaveBeenLastCalledWith(expect.stringContaining(`retrying in ${wait / 1000}s`));
-    await vi.advanceTimersByTimeAsync(wait - 1);
-    expect(polls()).toBe(poll);
-    await vi.advanceTimersByTimeAsync(1);
-  }
-  await until(() => push.mock.calls.length === 1);
-});
-
 test("a rejected token is reported and retried slowly", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
   const { seen } = await start([401, [event("1", "after")]]);
