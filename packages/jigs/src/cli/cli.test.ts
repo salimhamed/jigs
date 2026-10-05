@@ -5,6 +5,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { expect, test } from "vitest";
 import { readFactoryConfig } from "../config/factory-config.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
 
 const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
@@ -100,6 +101,20 @@ test("--version prints the installed jigs version", () => {
     }
   } finally {
     rmSync(cwd, { recursive: true, force: true });
+  }
+});
+
+test("hub connect takes a token that starts with a dash", () => {
+  const tmp = makeTmpDir();
+  try {
+    const factory = makeFactoryRepo(tmp);
+    writeFileSync(path.join(factory, ".env"), "JIGS_HUB_TOKEN=\n");
+    const result = run(factory, "hub", "connect", "https://hub.acme.test", "-dash-token");
+    expect(result.stderr).toBe("");
+    expect(result.status).toBe(0);
+    expect(readFileSync(path.join(factory, ".env"), "utf8")).toBe("JIGS_HUB_TOKEN=-dash-token\n");
+  } finally {
+    removeTmpDir(tmp);
   }
 });
 

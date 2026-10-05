@@ -19,8 +19,8 @@ without the URL the boot is skipped, so say so when you report.
 
 PR titles are conventional commits, enforced by CI: the squashed title is what
 release-please reads to cut a release (see Releases in `docs/contributing.md`).
-Every package shares the one version release-please cuts as `jigs-vX`; only
-`packages/jigs` publishes.
+Every package shares the one version release-please cuts as `jigs-vX`;
+`packages/jigs` and `packages/hub` publish.
 
 ## Compatibility
 

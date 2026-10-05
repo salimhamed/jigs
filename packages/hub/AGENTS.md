@@ -1,7 +1,8 @@
 # @jigs-ai/hub — agent guide
 
 The repo root's `AGENTS.md` covers commands, releases, docs and the issue
-tracker. The hub publishes only as a preview, from the `hub` branch.
+tracker. The hub publishes with jigs on every release, and as a preview from
+the `hub` branch.
 
 ## Layout
 
