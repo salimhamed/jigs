@@ -484,40 +484,44 @@ async function requestToken(token: string, owner: unknown) {
   return { status: response.status, body: await response.json() };
 }
 
-dbTest("issues the assigned App's installation token for an owner and reuses it", async () => {
-  const github = await newApp();
-  const { factory, token } = await newFactoryWithToken();
-  await setAssignments(db, organizationId, github.app.id, [factory.id]);
-  const installationId = String(await installed(github.app, "Acme-Corp"));
-  const before = { minted: minted.length, lookups: botLookups };
+dbTest(
+  "issues a fresh installation token of the assigned App for an owner on every request",
+  async () => {
+    const github = await newApp();
+    const { factory, token } = await newFactoryWithToken();
+    await setAssignments(db, organizationId, github.app.id, [factory.id]);
+    const installationId = String(await installed(github.app, "Acme-Corp"));
+    const before = { minted: minted.length, lookups: botLookups };
 
-  const first = await requestToken(token, "acme-corp");
-  expect(first.status).toBe(200);
-  const issued = first.body as GitHubTokenResponse;
-  expect(issued).toEqual({
-    token: minted.at(-1)?.token,
-    expiresAt: expect.any(String),
-    app: { slug: github.app.name, botUserId: githubBots.get(`${github.app.name}[bot]`) },
-  });
-  expect(minted.at(-1)?.installationId).toBe(installationId);
-  expect(await requestToken(token, "ACME-CORP")).toEqual({ status: 200, body: issued });
-  expect(minted.length - before.minted).toBe(1);
+    const first = await requestToken(token, "acme-corp");
+    expect(first.status).toBe(200);
+    const issued = first.body as GitHubTokenResponse;
+    expect(issued).toEqual({
+      token: minted.at(-1)?.token,
+      expiresAt: expect.any(String),
+      app: { slug: github.app.name, botUserId: githubBots.get(`${github.app.name}[bot]`) },
+    });
+    expect(minted.at(-1)?.installationId).toBe(installationId);
+    expect(minted.length - before.minted).toBe(1);
 
-  const stored = await db.query.apps.findFirst({ where: eq(schema.apps.id, github.app.id) });
-  expect(stored?.settings).toEqual({
-    clientId: expect.any(String),
-    botUserId: issued.app.botUserId,
-  } satisfies GitHubAppSettings);
+    const stored = await db.query.apps.findFirst({ where: eq(schema.apps.id, github.app.id) });
+    expect(stored?.settings).toEqual({
+      clientId: expect.any(String),
+      botUserId: issued.app.botUserId,
+    } satisfies GitHubAppSettings);
 
-  // Within five minutes of expiring, a token is replaced; the bot's id is not looked up again.
-  const nearExpiry = Date.parse(issued.expiresAt) - 4 * 60 * 1000;
-  const refreshed = await githubTokens.issue(factory.id, "acme-corp", nearExpiry);
-  expect(refreshed).toEqual({
-    token: { ...issued, token: minted.at(-1)?.token, expiresAt: expect.any(String) },
-  });
-  expect(minted.length - before.minted).toBe(2);
-  expect(botLookups - before.lookups).toBe(1);
-});
+    // The factory asks again for a longer-lived token, or after GitHub rejected one, so every
+    // request mints anew; the bot's id is not looked up again.
+    const again = await requestToken(token, "ACME-CORP");
+    expect(again).toEqual({
+      status: 200,
+      body: { ...issued, token: minted.at(-1)?.token, expiresAt: expect.any(String) },
+    });
+    expect((again.body as GitHubTokenResponse).token).not.toBe(issued.token);
+    expect(minted.length - before.minted).toBe(2);
+    expect(botLookups - before.lookups).toBe(1);
+  },
+);
 
 dbTest(
   "refuses a token for an owner no assigned App, or more than one, is installed on",

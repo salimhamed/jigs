@@ -529,15 +529,13 @@ export async function startWorld() {
 // the service was down comes first. startService started the triggers before
 // this boot reached readiness, and a push waits for them to be enabled.
 async function startHub(ctx: FactoryContext): Promise<void> {
-  const [{ startHubClient }, { pushEvent }, { JIGS_VERSION }] = await Promise.all([
+  const [{ startHubClient }, { pushEvent }] = await Promise.all([
     import("./hub-client.ts"),
     import("./event-triggers/runner.ts"),
-    import("../version.ts"),
   ]);
   const client = startHubClient({
     url: ctx.config.hub.url,
     token: ctx.env("JIGS_HUB_TOKEN") ?? "",
-    version: JIGS_VERSION,
     route: { context: ctx, push: pushEvent },
   });
   onShutdown(() => client.stop(), { phase: "quiesce" });

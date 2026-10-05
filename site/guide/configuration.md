@@ -295,6 +295,7 @@ same bot: see [GitHub access for agents](/guide/models-and-harnesses#github-acce
 
 Every GitHub binding needs one of the factory's Apps installed on its owner, and
 only one. `jigs doctor` checks this against the hub.
+The hub's page for each GitHub App lists the permissions and events to set on it.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts

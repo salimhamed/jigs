@@ -402,6 +402,24 @@ test("doctor checks a set Linear operator even when no workflow requires Linear"
   ]);
 });
 
+test("doctor reads the hub once for both the hub and GitHub checks", async () => {
+  factoryWith(
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
+  );
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  const status = vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
+    factory: { name: "personal" },
+    organization: { name: "Acme" },
+    apps: [{ provider: "github", name: "jigs-dev", installations: [{ account: "o" }] }],
+  });
+  const report = await runChecks(doctorChecks({ hello: {} }));
+  expect(report.checks.filter((check) => check.id !== "binding.api")).toEqual([
+    { id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" },
+    { id: "github.identity", label: "GitHub App", ok: true, detail: "jigs-dev on o" },
+  ]);
+  expect(status).toHaveBeenCalledTimes(1);
+});
+
 test("doctor checks a provider the factory configuration asks for", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(

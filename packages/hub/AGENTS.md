@@ -69,7 +69,8 @@ an admin enters an App made by hand; each App's setup URL confirms an
 installation with the App's JWT before recording it; `/webhooks/github` finds
 the app by `X-GitHub-Hook-Installation-Target-ID`, checks its signature, and
 re-lists the App's installations from GitHub before dropping an event from one
-it does not know. `GitHubTokens` mints installation tokens for factories with
-the App's JWT and keeps them in memory only, never in the database; the bot
+it does not know. `GitHubTokens` mints a fresh installation token for every
+factory request with the App's JWT and keeps none, so a factory asking again
+for a longer-lived or unrevoked token gets one; the bot
 user's id is looked up once and kept in the app's settings. Tests pass
 `apiUrl` to stand in for GitHub's API.

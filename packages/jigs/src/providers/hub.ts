@@ -26,26 +26,35 @@ export class HubResponseError extends JigsError {
   }
 }
 
-async function hubSend<T>(
-  ctx: FactoryContext,
+/** Where the hub is and the factory's token for it. */
+export interface HubConnection {
+  url: string;
+  token: string;
+}
+
+/**
+ * One request to the hub, with the factory's token and jigs' version. Every call the factory makes
+ * to its hub goes through here; an error status throws a {@link HubResponseError}.
+ */
+export async function hubRequest(
+  hub: HubConnection,
   apiPath: string,
-  init: { method?: string; body?: unknown } = {},
-): Promise<T> {
-  const token = ctx.env("JIGS_HUB_TOKEN");
-  if (token === undefined || token === "")
-    throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
-  const url = new URL(apiPath, ctx.config.hub.url);
+  init: { method?: string; body?: unknown; signal?: AbortSignal; timeoutMs?: number } = {},
+): Promise<Response> {
+  const url = new URL(apiPath, hub.url);
+  const method = init.method ?? "GET";
+  const timeout = AbortSignal.timeout(init.timeoutMs ?? HUB_TIMEOUT_MS);
   const response = await fetch(url, {
-    method: init.method ?? "GET",
+    method,
     headers: {
-      authorization: `Bearer ${token}`,
+      authorization: `Bearer ${hub.token}`,
       "user-agent": `jigs/${JIGS_VERSION}`,
       ...(init.body === undefined ? {} : { "content-type": "application/json" }),
     },
     ...(init.body === undefined ? {} : { body: JSON.stringify(init.body) }),
-    signal: AbortSignal.timeout(HUB_TIMEOUT_MS),
+    signal: init.signal === undefined ? timeout : AbortSignal.any([init.signal, timeout]),
   });
-  if (response.ok) return (await response.json()) as T;
+  if (response.ok) return response;
   if (response.status === 401)
     throw new HubResponseError(
       401,
@@ -59,8 +68,20 @@ async function hubSend<T>(
   } catch {}
   throw new HubResponseError(
     response.status,
-    `the hub answered ${response.status} to ${init.method ?? "GET"} ${apiPath}${reason === "" ? "" : `: ${reason}`}`,
+    `the hub answered ${response.status} to ${method} ${apiPath}${reason === "" ? "" : `: ${reason}`}`,
   );
+}
+
+async function hubSend<T>(
+  ctx: FactoryContext,
+  apiPath: string,
+  init: { method?: string; body?: unknown } = {},
+): Promise<T> {
+  const token = ctx.env("JIGS_HUB_TOKEN");
+  if (token === undefined || token === "")
+    throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
+  const response = await hubRequest({ url: ctx.config.hub.url, token }, apiPath, init);
+  return (await response.json()) as T;
 }
 
 /** Who this factory is on its hub, and the apps assigned to it. */

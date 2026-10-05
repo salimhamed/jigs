@@ -76,11 +76,6 @@ export interface GithubSend {
   json?: unknown;
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
-  /**
-   * Keeps a rate-limit wait going when the calling run is cancelled, for work shared between runs
-   * such as a token mint.
-   */
-  outlivesRun?: true;
 }
 
 export interface GithubClientDeps {
@@ -89,16 +84,9 @@ export interface GithubClientDeps {
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
-  async function send<T>({
-    auth,
-    method = "GET",
-    apiPath,
-    json,
-    refuse,
-    outlivesRun,
-  }: GithubSend): Promise<T> {
+  async function send<T>({ auth, method = "GET", apiPath, json, refuse }: GithubSend): Promise<T> {
     let reauthorized = false;
-    const rateLimit = rateLimitWaits("github", outlivesRun ? null : runSignal, deps.sleep);
+    const rateLimit = rateLimitWaits("github", runSignal, deps.sleep);
     for (;;) {
       const credential = await auth.bearer();
       const res = await (deps.fetch ?? fetch)(`${GITHUB_API_URL}${apiPath}`, {

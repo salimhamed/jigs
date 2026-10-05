@@ -1,7 +1,9 @@
 import path from "node:path";
+import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { githubChecks } from "../providers/github-checks.ts";
+import { fetchFactoryStatus } from "../providers/hub.ts";
 import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
 import { linearWebhookChecks } from "../providers/linear-webhook-checks.ts";
 import {
@@ -252,10 +254,16 @@ export function doctorChecks(
       : [];
   };
   const aws = users.get("aws") ?? [];
+  // One read of the hub answers both its own check and GitHub's.
+  let hubStatus: Promise<FactoryStatus> | undefined;
+  const status = () => {
+    hubStatus ??= fetchFactoryStatus(ctx);
+    return hubStatus;
+  };
   return [
-    ...hubChecks(ctx),
+    ...hubChecks(ctx, status),
     ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
-    ...provider("github", () => githubChecks(ctx)),
+    ...provider("github", () => githubChecks(ctx, status)),
     ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
     ...provider("slack", () => slackDoctorChecks(ctx)),
     // Keyed on the config rather than the Linear credential: a Linear webhook
