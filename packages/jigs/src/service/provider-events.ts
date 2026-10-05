@@ -142,10 +142,9 @@ async function routeSlack({ name, payload }: RoutedEvent, deps: RouteDeps): Prom
     }),
     token === null ? null : wakeAndLog("slack", [token], sanitizeForLog(name)),
   ]);
-  if (woke?.outcome === "failed") return woke;
+  if (woke?.outcome === "failed" || (triggers === null && woke?.outcome !== "woken"))
+    return { outcome: "failed" };
   if (triggers !== null && triggers.length > 0) return { outcome: "triggered", triggers };
-  if (woke?.outcome === "woken") return woke;
-  if (triggers === null) return { outcome: "failed" };
   return woke ?? { outcome: "ignored" };
 }
 
@@ -202,6 +201,8 @@ async function wakeAndLog(
       const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
       const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
       if (outcome === "woken") console.log(`[events] ${provider} accepted ${correlation}`);
+      // Most Slack thread replies are in threads no run waits on.
+      else if (outcome === "gone" && provider === "slack") return outcome;
       else {
         const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
         console.log(`[events] ${provider} dropped reason=${reason} ${correlation}`);

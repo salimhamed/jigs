@@ -16,7 +16,7 @@ type TokenAnswer<P extends keyof hub.HubTokenExchange> = (
   ctx?: FactoryContext,
 ) => Promise<hub.HubTokenExchange[P]["response"]>;
 
-const hubTokenAnswers = new WeakMap<object, Map<string, TokenAnswer<never>>>();
+const hubTokenAnswers = new Map<string, TokenAnswer<never>>();
 
 /**
  * Answer the hub's `provider` token requests with the returned mock, keeping the answers this test
@@ -26,19 +26,16 @@ export function answerHubTokens<P extends keyof hub.HubTokenExchange>(
   provider: P,
   answer: TokenAnswer<P>,
 ): Mock<TokenAnswer<P>> {
-  let answers = hubTokenAnswers.get(hub.hubToken);
-  if (answers === undefined) {
-    const table = new Map<string, TokenAnswer<never>>();
+  if (!vi.isMockFunction(hub.hubToken)) {
+    hubTokenAnswers.clear();
     vi.spyOn(hub, "hubToken").mockImplementation((async (asked, request, ctx) => {
-      const answered = table.get(asked);
+      const answered = hubTokenAnswers.get(asked);
       if (answered === undefined) throw new Error(`this test answers no ${asked} token request`);
       return answered(request as never, ctx);
     }) as typeof hub.hubToken);
-    hubTokenAnswers.set(hub.hubToken, table);
-    answers = table;
   }
   const mock = vi.fn(answer);
-  answers.set(provider, mock as unknown as TokenAnswer<never>);
+  hubTokenAnswers.set(provider, mock as unknown as TokenAnswer<never>);
   return mock;
 }
 

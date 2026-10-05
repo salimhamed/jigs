@@ -106,7 +106,7 @@ export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boole
     return true;
   } catch (err) {
     (deps.error ?? ((line: string) => console.error(line)))(
-      `[service] cannot reach the hub: ${describe(err)}`,
+      `[service] ${describe(err)}, then restart the service`,
     );
     (deps.exit ?? process.exit)(1);
     return false;

@@ -411,11 +411,9 @@ test("a Slack message goes to the triggers and wakes the thread it replies in", 
   expect(log).toHaveBeenCalledWith(`[events] slack accepted token=${THREAD} event=message`);
 });
 
-test("a reply in a thread no run waits on is dropped", async () => {
+test("a reply in a thread no run waits on is dropped without a log line", async () => {
   expect(await route(slack())).toEqual({ outcome: "dropped" });
-  expect(log).toHaveBeenCalledWith(
-    `[events] slack dropped reason=no-matching-hook token=${THREAD} event=message`,
-  );
+  expect(log).not.toHaveBeenCalled();
 });
 
 test("a top-level message or a bot's reply wakes nothing", async () => {
