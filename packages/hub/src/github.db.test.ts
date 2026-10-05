@@ -21,6 +21,7 @@ import {
   githubSetupPath,
   githubWebhookPath,
 } from "./github.ts";
+import { LinearTokens } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
 
 const encryptionKey = randomBytes(32);
@@ -135,7 +136,14 @@ beforeAll(async () => {
   hub = await listen(
     express()
       .use(createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github }))
-      .use(createFactoryApi({ db, waiters, githubTokens })),
+      .use(
+        createFactoryApi({
+          db,
+          waiters,
+          githubTokens,
+          linearTokens: new LinearTokens({ db, encryptionKey }),
+        }),
+      ),
   );
 });
 

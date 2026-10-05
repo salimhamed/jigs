@@ -115,3 +115,14 @@ async function firstOrganizationId(db: HubDatabase, userId: string) {
   });
   return member?.organizationId ?? null;
 }
+
+/** The Organization the signed-in user of these headers is an admin of, or `null`. */
+export async function adminOrganization(auth: HubAuth, headers: Headers): Promise<string | null> {
+  try {
+    const member = await auth.api.getActiveMember({ headers });
+    return member?.role === "admin" ? member.organizationId : null;
+  } catch (error) {
+    if (error instanceof APIError) return null;
+    throw error;
+  }
+}

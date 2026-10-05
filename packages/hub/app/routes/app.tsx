@@ -1,4 +1,4 @@
-import { Download, Trash2 } from "lucide-react";
+import { Download, Link2, Trash2 } from "lucide-react";
 import { data, Form, redirect } from "react-router";
 import { removeApp, setAssignments } from "../../src/apps.ts";
 import { readApp } from "../apps.server.ts";
@@ -43,6 +43,75 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
   const { app, isAdmin } = loaderData;
   return (
     <div className="space-y-8">
+      {app.provider === "github" ? (
+        <GitHubApp app={app} isAdmin={isAdmin} />
+      ) : (
+        <LinearApp app={app} isAdmin={isAdmin} />
+      )}
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Factories</h2>
+        <p className="text-sm text-zinc-500">
+          The factories that receive this app's provider events.
+        </p>
+        {app.factories.length === 0 ? (
+          <p className="text-zinc-500">No factories yet.</p>
+        ) : (
+          <Form method="post" className="space-y-3">
+            <div className="space-y-1">
+              {app.factories.map((factory) => (
+                <label key={factory.id} className="flex items-center gap-2 text-sm">
+                  <input
+                    type="checkbox"
+                    name="factoryId"
+                    value={factory.id}
+                    defaultChecked={factory.assigned}
+                    disabled={!isAdmin}
+                  />
+                  {factory.name}
+                </label>
+              ))}
+            </div>
+            {isAdmin && (
+              <button type="submit" name="intent" value="assign" className={button}>
+                Save
+              </button>
+            )}
+          </Form>
+        )}
+      </section>
+
+      {isAdmin && (
+        <Form
+          method="post"
+          onSubmit={(event) => {
+            if (!confirm(`Remove ${app.name}? Its factories stop receiving its provider events.`)) {
+              event.preventDefault();
+            }
+          }}
+        >
+          <input type="hidden" name="intent" value="remove" />
+          <button type="submit" className={quietButton}>
+            <Trash2 className="size-4" />
+            Remove app
+          </button>
+        </Form>
+      )}
+    </div>
+  );
+}
+
+type Loaded = Route.ComponentProps["loaderData"]["app"];
+
+function GitHubApp({
+  app,
+  isAdmin,
+}: {
+  app: Extract<Loaded, { provider: "github" }>;
+  isAdmin: boolean;
+}) {
+  return (
+    <>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">{app.name}</h1>
         <p className="text-sm text-zinc-500">
@@ -113,56 +182,87 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
           </a>
         )}
       </section>
+    </>
+  );
+}
+
+function LinearApp({
+  app,
+  isAdmin,
+}: {
+  app: Extract<Loaded, { provider: "linear" }>;
+  isAdmin: boolean;
+}) {
+  return (
+    <>
+      <div className="space-y-1">
+        <h1 className="text-2xl font-semibold">{app.name}</h1>
+        <p className="text-sm text-zinc-500">Linear app, client ID {app.clientId}</p>
+      </div>
 
       <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Factories</h2>
-        <p className="text-sm text-zinc-500">
-          The factories that receive this app's provider events.
+        <h2 className="text-lg font-semibold">In Linear</h2>
+        <p className="text-sm">In the app's settings in Linear, set:</p>
+        <ul className="space-y-1 text-sm">
+          <Setting label="Callback URL" value={app.callbackUrl} />
+          <Setting label="Webhook URL" value={app.webhookUrl} />
+        </ul>
+        <p className="text-sm">
+          Turn on <strong>Webhooks</strong> and choose <strong>Agent session events</strong> and{" "}
+          <strong>Comments</strong>. Leave the app private to your workspace unless other workspaces
+          should connect to it.
         </p>
-        {app.factories.length === 0 ? (
-          <p className="text-zinc-500">No factories yet.</p>
-        ) : (
-          <Form method="post" className="space-y-3">
-            <div className="space-y-1">
-              {app.factories.map((factory) => (
-                <label key={factory.id} className="flex items-center gap-2 text-sm">
-                  <input
-                    type="checkbox"
-                    name="factoryId"
-                    value={factory.id}
-                    defaultChecked={factory.assigned}
-                    disabled={!isAdmin}
-                  />
-                  {factory.name}
-                </label>
-              ))}
-            </div>
-            {isAdmin && (
-              <button type="submit" name="intent" value="assign" className={button}>
-                Save
-              </button>
-            )}
-          </Form>
-        )}
       </section>
 
-      {isAdmin && (
-        <Form
-          method="post"
-          onSubmit={(event) => {
-            if (!confirm(`Remove ${app.name}? Its factories stop receiving its provider events.`)) {
-              event.preventDefault();
-            }
-          }}
-        >
-          <input type="hidden" name="intent" value="remove" />
-          <button type="submit" className={quietButton}>
-            <Trash2 className="size-4" />
-            Remove app
-          </button>
-        </Form>
-      )}
-    </div>
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Workspaces</h2>
+        {app.workspaces.length === 0 ? (
+          <p className="text-zinc-500">No workspace connected yet.</p>
+        ) : (
+          <table className={table}>
+            <thead className="text-zinc-500">
+              <tr>
+                <th>Workspace</th>
+                <th>URL key</th>
+                <th>Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {app.workspaces.map((workspace) => (
+                <tr
+                  key={workspace.externalId}
+                  className="border-t border-zinc-200 dark:border-zinc-800"
+                >
+                  <td>{workspace.name}</td>
+                  <td>{workspace.urlKey}</td>
+                  <td>
+                    {workspace.failure === null ? (
+                      "Connected"
+                    ) : (
+                      <span className="text-red-600 dark:text-red-400">
+                        Connect again: {workspace.failure}
+                      </span>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+        {isAdmin && (
+          <>
+            <p className="text-sm text-zinc-500">
+              A Linear workspace admin approves the app for their workspace. Connect a workspace
+              again to fix one that stopped working.
+            </p>
+            <a href={app.connectUrl} className={button}>
+              <Link2 className="size-4" />
+              Connect a Linear workspace
+            </a>
+          </>
+        )}
+      </section>
+    </>
   );
 }
 

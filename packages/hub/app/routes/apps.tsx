@@ -1,5 +1,6 @@
 import { Form, Link, redirect } from "react-router";
 import { addGitHubApp } from "../../src/github.ts";
+import { addLinearApp } from "../../src/linear.ts";
 import { listApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -16,25 +17,58 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (role !== "admin") return { error: "Only an admin can add apps." };
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "").trim();
-  const added = await addGitHubApp(context.db, context.config.encryptionKey, organizationId, {
-    appId: field("appId"),
-    slug: field("slug"),
-    clientId: field("clientId"),
-    clientSecret: field("clientSecret"),
-    webhookSecret: field("webhookSecret"),
-    privateKey: field("privateKey"),
-  });
+  const { db, config } = context;
+  const added =
+    form.get("provider") === "linear"
+      ? await addLinearApp(db, config.encryptionKey, organizationId, {
+          name: field("name"),
+          clientId: field("clientId"),
+          clientSecret: field("clientSecret"),
+          webhookSecret: field("webhookSecret"),
+        })
+      : await addGitHubApp(db, config.encryptionKey, organizationId, {
+          appId: field("appId"),
+          slug: field("slug"),
+          clientId: field("clientId"),
+          clientSecret: field("clientSecret"),
+          webhookSecret: field("webhookSecret"),
+          privateKey: field("privateKey"),
+        });
   if ("error" in added) return added;
   return redirect(`/apps/${added.app.id}`);
 }
 
-const fields = [
+type Field = { name: string; label: string; secret?: boolean };
+
+const githubFields: Field[] = [
   { name: "appId", label: "App ID" },
   { name: "slug", label: "Slug, from the App's public page URL" },
   { name: "clientId", label: "Client ID" },
   { name: "clientSecret", label: "Client secret", secret: true },
   { name: "webhookSecret", label: "Webhook secret", secret: true },
 ];
+
+const linearFields: Field[] = [
+  { name: "name", label: "Name, as the app is called in Linear" },
+  { name: "clientId", label: "Client ID" },
+  { name: "clientSecret", label: "Client secret", secret: true },
+  { name: "webhookSecret", label: "Webhook signing secret", secret: true },
+];
+
+function Fields({ fields }: { fields: Field[] }) {
+  return fields.map((field) => (
+    <label key={field.name} className="flex flex-col gap-1 text-sm">
+      {field.label}
+      <input
+        name={field.name}
+        type={field.secret ? "password" : "text"}
+        required
+        autoComplete="off"
+        className={input}
+      />
+    </label>
+  ));
+}
 
 export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
@@ -76,24 +110,27 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
             Create the App on GitHub first, under your organization's Developer settings, then copy
             its details here. Its page on the hub then shows what to set on GitHub.
           </p>
-          {fields.map((field) => (
-            <label key={field.name} className="flex flex-col gap-1 text-sm">
-              {field.label}
-              <input
-                name={field.name}
-                type={field.secret ? "password" : "text"}
-                required
-                autoComplete="off"
-                className={input}
-              />
-            </label>
-          ))}
+          <Fields fields={githubFields} />
           <label className="flex flex-col gap-1 text-sm">
             Private key (the .pem file's contents)
             <textarea name="privateKey" required rows={4} className={`${input} font-mono`} />
           </label>
           <button type="submit" className={button}>
             Add GitHub App
+          </button>
+        </Form>
+      )}
+      {loaderData.isAdmin && (
+        <Form method="post" className="max-w-xl space-y-3">
+          <input type="hidden" name="provider" value="linear" />
+          <h2 className="text-lg font-semibold">Add a Linear app</h2>
+          <p className="text-sm text-zinc-500">
+            Create an OAuth application in Linear first, under Settings, API, then copy its details
+            here. Its page on the hub then shows what to set in Linear and connects workspaces.
+          </p>
+          <Fields fields={linearFields} />
+          <button type="submit" className={button}>
+            Add Linear app
           </button>
         </Form>
       )}
