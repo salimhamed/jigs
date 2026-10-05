@@ -201,11 +201,10 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
           ...extra,
         });
       // The hub refreshes a token before handing it out, so Linear refusing a
-      // second one means the app has lost its access to the workspace.
+      // fresh one means the app has lost its access to the workspace.
       if (rejectedCredential(res, text))
         throw fail({
-          detail:
-            "Linear refused the app's token twice; connect the Linear workspace again in the hub",
+          detail: `Linear refused the app's token${reauthorized ? " again after the hub issued a fresh one" : ""}; connect the Linear workspace again in the hub`,
         });
       return decodeGraphql<T>(res, text, fail);
     }

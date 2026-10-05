@@ -10,8 +10,7 @@ import { fetchLinearToken } from "./hub.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
 
-// The hub refreshes a token with less than five minutes left, so asking again
-// at the same margin gets a fresh one.
+/** Renew a token while there is still time to fail and retry. */
 const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
 /** The user Linear made for the factory's app in a workspace: who jigs is there. */
@@ -27,7 +26,8 @@ interface IssuedToken {
 }
 
 export interface LinearAuth extends ProviderAuth {
-  bearer(): Promise<string>;
+  /** The bearer token, asked of the hub again when less than `minLifetimeMs` of it is left. */
+  bearer(minLifetimeMs?: number): Promise<string>;
   invalidate(stale: string): void;
   /** The app's own user in the workspace. */
   user(): Promise<LinearAppUser>;
@@ -50,8 +50,8 @@ export function createLinearAuth(
   const now = deps.now ?? Date.now;
   let cached: IssuedToken | null = null;
   let issuing: Promise<IssuedToken> | null = null;
-  const fresh = async (): Promise<IssuedToken> => {
-    if (cached !== null && cached.expiresAt - now() > REFRESH_MARGIN_MS) return cached;
+  const fresh = async (minLifetimeMs: number): Promise<IssuedToken> => {
+    if (cached !== null && cached.expiresAt - now() > minLifetimeMs) return cached;
     if (issuing === null) {
       issuing = deps
         .issue(organization)
@@ -69,12 +69,12 @@ export function createLinearAuth(
     return cached;
   };
   return {
-    bearer: async () => (await fresh()).token,
+    bearer: async (minLifetimeMs = REFRESH_MARGIN_MS) => (await fresh(minLifetimeMs)).token,
     // A late rejection of an old token must not discard one issued since.
     invalidate(stale: string): void {
       if (cached?.token === stale) cached = null;
     },
-    user: async () => (cached ?? (await fresh())).user,
+    user: async () => (cached ?? (await fresh(REFRESH_MARGIN_MS))).user,
   };
 }
 

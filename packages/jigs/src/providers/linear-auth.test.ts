@@ -33,6 +33,16 @@ test("a token is reused until five minutes are left, then asked for again", asyn
   expect(issue).toHaveBeenCalledTimes(2);
 });
 
+test("a caller can ask for a token with more time left than jigs' own margin", async () => {
+  const issue = hubIssuing("first", "second");
+  let now = NOW;
+  const auth = createLinearAuth(undefined, { issue, now: () => now });
+  await auth.bearer();
+  now = NOW + 86_400_000 - 3 * 60 * 60_000;
+  expect(await auth.bearer()).toBe("first");
+  expect(await auth.bearer(4 * 60 * 60_000)).toBe("second");
+});
+
 test("the app's own user is the one the hub names", async () => {
   const issue = hubIssuing("t");
   const auth = createLinearAuth(undefined, { issue, now: () => NOW });
@@ -108,7 +118,7 @@ test("a second rejection says to connect the workspace again in the hub", async 
   for (const reply of [401, "auth-error"] as const) {
     const { calls, client, issue } = graphqlServer([reply, reply]);
     await expect(client.findUserByEmail("ada@example.com")).rejects.toThrow(
-      "connect the Linear workspace again in the hub",
+      "Linear refused the app's token again after the hub issued a fresh one; connect the Linear workspace again in the hub",
     );
     expect(calls).toHaveLength(2);
     expect(issue).toHaveBeenCalledTimes(2);
