@@ -10,6 +10,8 @@
 | **Harness** | A program such as Claude Code or Codex that runs an agent. |
 | **Agent** | Settings for a coding assistant, given a name such as `builder` or `reviewer`. They choose the harness and model to use. |
 | **Binding** | A GitHub repository given a name in your factory so workflows can work with it. |
+| **Hub** | The service that receives every GitHub, Linear, Slack and PagerDuty event for your factories and holds their credentials. See [Run a hub](/guide/hub). |
+| **App** | Your own identity on a provider, such as a GitHub App, held by the hub and assigned to the factories that act as it. |
 
 ## Built on the Vercel Workflow SDK
 

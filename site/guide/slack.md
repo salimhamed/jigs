@@ -1,39 +1,19 @@
 # Slack
 
 A factory talks to Slack through a Slack app that its
-[hub](/guide/configuration#hub) holds and assigns to it. The app always posts
+[hub](/guide/hub) holds and assigns to it. The app always posts
 as its own bot. The hub receives the app's events and hands the factory its bot
-token, so the factory's `.env` holds no Slack token. This page sets the app up
-and connects it to the factory.
+token, so the factory's `.env` holds no Slack token. This page connects the
+app to the factory and shows how workflows use it.
 
 ## 1. Set up the app in the hub
 
-In the hub, add a Slack app and follow its page: it lists the Request URL,
-Redirect URL and bot events to set in the app's settings at
-[api.slack.com/apps](https://api.slack.com/apps), with Socket Mode and token
-rotation off. Install the app in your workspace with **Add to Slack**, then
-assign it to the factory.
+Create the Slack app, install it in your workspace, invite its bot to the
+channels the factory should hear, and assign it to the factory: see
+[Slack app](/guide/hub-slack). The bot only sees channels it is a member of,
+and jigs never reads direct messages.
 
-The hub asks the workspace for these bot scopes:
-
-| Bot scope | What jigs uses it for |
-| --- | --- |
-| `channels:history` | Reading messages in public channels the bot is in. |
-| `groups:history` | Reading messages in private channels the bot is in. |
-| `chat:write` | Posting messages and thread replies. |
-| `users:read` | Looking up the names of the people who wrote a message. |
-| `users:read.email` | Looking up their email addresses. |
-
-Some workspaces require an admin to approve new apps. If yours does, Slack asks
-for approval when you install.
-
-## 2. Invite the bot to channels
-
-The bot only sees channels it is a member of. In each channel the factory
-should watch, public or private, type `/invite @<bot name>`. jigs never reads
-direct messages.
-
-## 3. Configure the factory
+## 2. Configure the factory
 
 Add a `slack` section to `jigs.config.ts`:
 
@@ -230,8 +210,8 @@ export async function addReaction(channel: string, timestamp: string, name: stri
 Workflow code calls it like any step: `await addReaction(channel, ts, "eyes")`.
 
 A method may need a bot scope jigs does not use, such as `reactions:write` for
-`reactions.add`. Add it to the app's bot scopes in the hub, install the app
-again, and list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
+`reactions.add`. Add it to the app's [bot scopes](/guide/hub-slack#bot-scopes)
+in the hub, install the app again, and list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -314,7 +294,7 @@ Register it with the `slack.mentions` trigger from
 
 `jigs doctor`, and `jigs up`, check that the hub has assigned the factory a
 Slack app, that it hands out the app's bot token, and that the workspace
-granted every scope above, plus any listed in `slack.scopes`. Each failure
+granted every scope jigs uses, plus any listed in `slack.scopes`. Each failure
 names what to fix in the hub.
 
 Before every run of a workflow that requires `slack`, preflight checks the bot

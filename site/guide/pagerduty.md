@@ -1,34 +1,15 @@
 # PagerDuty
 
 A factory talks to PagerDuty through a PagerDuty app that its
-[hub](/guide/configuration#hub) holds and assigns to it. jigs reads incidents
+[hub](/guide/hub) holds and assigns to it. jigs reads incidents
 and adds notes to them as the app, never with a person's API key. The hub
 receives the app's incident events and hands the factory its tokens, so the
 factory's `.env` holds no PagerDuty secret.
 
 ## 1. Set up the app in the hub
 
-An account admin or owner registers the app once per PagerDuty account.
-
-1. In PagerDuty, go to **Integrations → App Registration** and choose
-   **New App**. Give it a name such as `jigs`, turn on **OAuth 2.0** and
-   choose **Scoped OAuth**. Any redirect URL will do.
-2. Grant these permission scopes:
-
-   | Scope | What jigs uses it for |
-   | --- | --- |
-   | `incidents.read` | Reading incidents, and the preflight check. |
-   | `incidents.write` | Adding notes to incidents. |
-   | `users.read` | `jigs doctor`'s check of the `from` user. |
-
-3. In the hub, add a PagerDuty connection with the app's client ID and secret,
-   and the account's subdomain and region. Its page then shows the webhook
-   subscription to add in PagerDuty and takes the subscription's signing
-   secret.
-4. Assign the connection to the factory.
-
-A missing scope does not stop the hub from getting a token. It shows up as a
-refused call, and `jigs doctor` names the scope to add.
+Register the PagerDuty app, add it to the hub with its webhook subscription,
+and assign it to the factory: see [PagerDuty app](/guide/hub-pagerduty).
 
 ## 2. Configure the `from` user
 

@@ -5,7 +5,7 @@ package you change:
 
 - `packages/jigs`: `@jigs-ai/jigs`, the published library, CLI and service.
   Its layering and Workflow SDK rules live in `packages/jigs/AGENTS.md`.
-- `packages/hub`: `@jigs-ai/hub`, the hub server (private for now).
+- `packages/hub`: `@jigs-ai/hub`, the published hub server.
 - `packages/hub-protocol`: messages between the hub and a factory, bundled
   into `@jigs-ai/jigs` (private).
 - `tools/api-docs`: TypeDoc and VitePress tooling for `site/`.
@@ -19,8 +19,8 @@ without the URL the boot is skipped, so say so when you report.
 
 PR titles are conventional commits, enforced by CI: the squashed title is what
 release-please reads to cut a release (see Releases in `docs/contributing.md`).
-Every package shares the one version release-please cuts as `jigs-vX`; only
-`packages/jigs` publishes.
+Every package shares the one version release-please cuts as `jigs-vX`;
+`packages/jigs` and `packages/hub` publish.
 
 ## Compatibility
 

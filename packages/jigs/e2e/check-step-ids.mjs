@@ -1294,7 +1294,7 @@ async function startHub(adminUrl) {
   if (!listening) fail("the hub exited before it listened", "see its output above");
   child.stdout.resume();
   const db = new Pool({ connectionString: databaseUrl.href, max: 1 });
-  const token = randomBytes(32).toString("base64url");
+  const token = randomBytes(32).toString("hex");
   await db.query(
     "INSERT INTO organization (id, name, slug, created_at) VALUES ('e2e', 'e2e', 'e2e', now())",
   );

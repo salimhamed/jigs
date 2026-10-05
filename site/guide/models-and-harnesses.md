@@ -334,7 +334,7 @@ access the files your user can access.
 
 ## GitHub access for agents {#github-access}
 
-With its [GitHub App](/guide/configuration#github-identity), jigs acts
+With its [GitHub App](/guide/configuration#github-app), jigs acts
 on GitHub as one bot, `<app-slug>[bot]`. An agent can act as the same bot: set
 `github: true` on its harness.
 
@@ -401,7 +401,7 @@ or `pagerduty: true` on its harness. When it starts, jigs puts the factory's own
 token in its environment:
 
 - **`JIGS_LINEAR_TOKEN`** holds a token of the factory's
-  [Linear app](/guide/configuration#linear-identity), from the hub, so the agent
+  [Linear app](/guide/configuration#linear-app), from the hub, so the agent
   acts as that app.
 - **`JIGS_PAGERDUTY_TOKEN`** holds a token of the factory's
   [PagerDuty app](/guide/configuration#pagerduty), from the hub, with the

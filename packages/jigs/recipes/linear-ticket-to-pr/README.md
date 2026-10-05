@@ -18,8 +18,8 @@ following the pull request, runs in four jigs routines the workflow calls.
 ## What it needs
 
 - **A Linear app assigned to the factory, and the factory's GitHub App installed on the repository's owner**. See
-  [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
-  and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
+  [The factory's App](https://salimhamed.github.io/jigs/guide/configuration#github-app)
+  and [The factory's Linear app](https://salimhamed.github.io/jigs/guide/configuration#linear-app).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
   ticket's team. The workflow moves the ticket through them and fails on a
   missing one.

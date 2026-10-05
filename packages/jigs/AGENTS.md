@@ -26,7 +26,7 @@ has to keep:
   `providers/`, `config/`, `checks/` and `workflow/`; routing a provider
   event parses hook tokens that `workflow/` defines. It may not import `cli/`.
 - `steps/` may not import `service/` or `cli/`.
-- `providers/` holds the provider clients with their identity checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
+- `providers/` holds the provider clients with their checks. It may not import `steps/`, `service/`, `cli/` or `checks/`, except
   the `Check` shape in `checks/check.ts`.
 - `config/` may not import `steps/`, `service/` or `cli/`.
 - `checks/` may not import `service/` or `cli/`.
@@ -52,6 +52,11 @@ No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
 live in factory code, including the copied recipes
 ([ADR 0006](../../docs/adr/0006-factory-owned-steps.md)). `pnpm e2e` proves it, and
 also scans the built workflow bundle for `node:` specifiers and `process.env`.
+
+A factory reaches providers only through its hub: provider events arrive in
+`service/hub-client.ts`, and every GitHub, Linear, Slack and PagerDuty token
+comes from `providers/hub.ts`. A new provider feature takes the same two
+paths, and the factory's `.env` holds no provider secret.
 
 `@jigs-ai/hub-protocol` is private, so tsdown bundles it into `dist/`. Add it
 as a devDependency, never a dependency, and keep its types out of the public
