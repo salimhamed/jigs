@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { useSlackClient } from "../../providers/test-fixtures.ts";
+import { TEST_SLACK_BOT, useSlackClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { testFactoryContext } from "../../test-fixtures.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
@@ -85,7 +85,7 @@ beforeEach(() => {
   sent = fake.calls;
   useSlackClient({
     fetch: fake.fetch,
-    context: testFactoryContext({ env: { SLACK_BOT_TOKEN: "xoxb-test" } }),
+    context: testFactoryContext(),
   });
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/fetch-message-test-${factories}`);
@@ -164,6 +164,22 @@ test.each([
     author: { id, name: "Deploy announcer", bot: true, isOwnBot: false },
   });
   expect(calls("users.info")).toBe(0);
+});
+
+test("the factory's own post under a custom username, with no user, is its own bot's", async () => {
+  const own = {
+    type: "message",
+    subtype: "bot_message",
+    bot_id: "B0C5JPZUW1J",
+    app_id: TEST_SLACK_BOT.appId,
+    username: "Deploy bot",
+    ts: "1790723400.000200",
+    text: "posted by the factory under another name",
+  };
+  routes["conversations.replies"] = () => ({ ok: true, messages: [own] });
+  expect(await fetchSlackMessage({ channel: CHANNEL, ts: own.ts })).toMatchObject({
+    author: { id: "B0C5JPZUW1J", bot: true, isOwnBot: true },
+  });
 });
 
 test("an author is looked up again on the next snapshot", async () => {

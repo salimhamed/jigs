@@ -9,7 +9,7 @@ const resumeHookMock = vi.mocked(resumeHook);
 
 const TOKEN = "slack:thread:C0C5EUZ7P9Q:1790723478.961719";
 
-// A Socket Mode `message` event for a reply, as startSlackSocket hands it on.
+// A `message` event for a reply, as the Events API body from the hub carries it.
 const reply = {
   type: "message",
   channel: "C0C5EUZ7P9Q",

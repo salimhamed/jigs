@@ -10,6 +10,9 @@ import {
   type LinearTokenRequest,
   type LinearTokenResponse,
   linearTokenPath,
+  type SlackTokenRequest,
+  type SlackTokenResponse,
+  slackTokenPath,
 } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
@@ -144,3 +147,25 @@ const LINEAR_TOKEN_REPAIRS = {
   409: "in the hub, leave this factory assigned one Linear app, connected to one workspace",
   503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
 };
+
+/** The bot token of the factory's Slack app in the one workspace it is installed in. */
+export async function fetchSlackToken(
+  ctx: FactoryContext = currentFactoryContext(),
+): Promise<SlackTokenResponse> {
+  try {
+    return await hubSend<SlackTokenResponse>(ctx, slackTokenPath, {
+      method: "POST",
+      body: {} satisfies SlackTokenRequest,
+    });
+  } catch (error) {
+    if (error instanceof HubResponseError && (error.status === 404 || error.status === 409))
+      throw new HubResponseError(
+        error.status,
+        error.message,
+        error.status === 404
+          ? "in the hub, install one of this factory's Slack apps in the workspace, or assign the factory a Slack app installed there"
+          : "in the hub, leave this factory assigned one Slack app, installed in one workspace",
+      );
+    throw error;
+  }
+}

@@ -1,6 +1,7 @@
 // Route the process's GitHub or Slack calls to a client built on test fakes,
 // restored by `vi.restoreAllMocks()`.
 
+import { slackBotScopes } from "@jigs-ai/hub-protocol";
 import { vi } from "vitest";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
 import * as hub from "./hub.ts";
@@ -26,7 +27,22 @@ export function useGithubClient(deps: GithubClientDeps): void {
   useHubGithubTokens();
 }
 
+/** The bot token and bot every faked Slack call gets from the hub. */
+export const TEST_SLACK_TOKEN = "xoxb-test";
+export const TEST_SLACK_BOT = { appId: "A0TEST", name: "jigs-test", botUserId: "U0C59SU5V29" };
+
+/** Answer every Slack token request with {@link TEST_SLACK_TOKEN}, as the hub would. */
+export function useHubSlackTokens(scopes: readonly string[] = slackBotScopes) {
+  return vi.spyOn(hub, "fetchSlackToken").mockResolvedValue({
+    token: TEST_SLACK_TOKEN,
+    app: TEST_SLACK_BOT,
+    team: "T0TEST",
+    scopes: [...scopes],
+  });
+}
+
 export function useSlackClient(deps: SlackClientDeps): void {
+  useHubSlackTokens();
   const client = createSlackClient(deps);
   for (const key of Object.keys(client) as Array<keyof typeof client>) {
     vi.spyOn(slackClient, key).mockImplementation(client[key] as never);
@@ -57,4 +73,28 @@ export function fakeGithub(deps: Pick<GithubClientDeps, "sleep"> = {}): FakeGith
     },
   };
   return github;
+}
+
+/**
+ * Hand the live tests' `JIGS_TEST_SLACK_BOT_TOKEN` (a test app's, from the shell) out as the hub would,
+ * with the bot and scopes Slack reports for it.
+ */
+export async function useLiveSlackToken(token: string): Promise<void> {
+  const res = await fetch("https://slack.com/api/auth.test", {
+    method: "POST",
+    headers: { authorization: `Bearer ${token}` },
+  });
+  const auth = (await res.json()) as {
+    user_id: string;
+    user: string;
+    team_id: string;
+    app_id?: string;
+  };
+  const scopes = (res.headers.get("x-oauth-scopes") ?? "").split(",").filter(Boolean);
+  vi.spyOn(hub, "fetchSlackToken").mockResolvedValue({
+    token,
+    app: { appId: auth.app_id ?? "A0LIVE", name: auth.user, botUserId: auth.user_id },
+    team: auth.team_id,
+    scopes,
+  });
 }

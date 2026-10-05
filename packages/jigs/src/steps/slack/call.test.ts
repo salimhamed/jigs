@@ -24,7 +24,7 @@ beforeEach(() => {
   calls = fake.calls;
   useSlackClient({
     fetch: fake.fetch,
-    context: testFactoryContext({ env: { SLACK_BOT_TOKEN: "xoxb-test" } }),
+    context: testFactoryContext(),
   });
 });
 afterEach(() => {

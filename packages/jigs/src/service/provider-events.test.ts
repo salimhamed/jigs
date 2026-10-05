@@ -347,12 +347,23 @@ const reply = {
   ts: "1790723501.000300",
   thread_ts: "1790723478.961719",
 };
-const slack = (payload = reply): ProviderEvent => ({ provider: "slack", name: "message", payload });
+// The Events API body the hub sends on.
+const callback = (event: object) => ({
+  type: "event_callback",
+  api_app_id: "A0C5JPZUW1J",
+  team_id: "T0A7SCMC5",
+  event,
+});
+const slack = (event: object = reply): ProviderEvent => ({
+  provider: "slack",
+  name: "message",
+  payload: callback(event),
+});
 
 test("a Slack message goes to the triggers and wakes the thread it replies in", async () => {
   delivers();
   expect(await route(slack())).toEqual({ outcome: "woken" });
-  expect(push).toHaveBeenCalledExactlyOnceWith("slack", reply);
+  expect(push).toHaveBeenCalledExactlyOnceWith("slack", callback(reply));
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
     "slack:thread:C0C5EUZ7P9Q:1790723478.961719",
     undefined,
@@ -361,18 +372,23 @@ test("a Slack message goes to the triggers and wakes the thread it replies in", 
 
 test("a Slack message a trigger takes reports the trigger", async () => {
   push.mockResolvedValueOnce(["questions"]);
-  expect(await route(slack({ ...reply, thread_ts: undefined } as never))).toEqual({
+  expect(await route(slack({ ...reply, thread_ts: undefined }))).toEqual({
     outcome: "triggered",
     triggers: ["questions"],
   });
 });
 
-test("a Slack push that fails still wakes the thread, and is logged", async () => {
+test("a Slack push that fails still wakes the thread, which is what routing reports", async () => {
   delivers();
   push.mockRejectedValueOnce(new Error("registry unreachable"));
-  expect(await route(slack())).toEqual({ outcome: "failed" });
+  expect(await route(slack())).toEqual({ outcome: "woken" });
   expect(resumeHookMock).toHaveBeenCalledOnce();
   expect(log).toHaveBeenCalledWith(
     "[slack] could not start runs for C0C5EUZ7P9Q:1790723501.000300: Error: registry unreachable",
   );
+});
+
+test("a Slack push that fails with no thread woken fails the routing", async () => {
+  push.mockRejectedValueOnce(new Error("registry unreachable"));
+  expect(await route(slack({ ...reply, thread_ts: undefined }))).toEqual({ outcome: "failed" });
 });

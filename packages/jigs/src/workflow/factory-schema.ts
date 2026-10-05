@@ -141,17 +141,11 @@ export const pagerDutyIdentitySchema = z.strictObject({
 export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchema });
 
 /**
- * A factory's Slack app. The app always acts as itself, so there is no identity
- * mode; `SLACK_BOT_TOKEN` in `.env` is its credential. With `socketMode` on,
- * the service also holds a Socket Mode connection that delivers messages
- * within a second; it refuses to start without `SLACK_APP_TOKEN`, and doctor
- * checks that token opens a connection. Polling on
- * `service.pollIntervalSeconds.slack` runs either way. `scopes` names the bot
- * scopes the factory's own Slack calls need beyond jigs' own; doctor checks the
- * bot holds them.
+ * A factory's Slack app, which the hub assigns it and which always acts as
+ * itself. `scopes` names the bot scopes the factory's own Slack calls need
+ * beyond jigs' own; doctor checks the workspace granted them.
  */
 export const slackSchema = z.strictObject({
-  socketMode: z.boolean(),
   scopes: z.array(z.string().min(1)).default([]),
 });
 
@@ -197,8 +191,7 @@ export const factoryConfigSchema = z
     github: githubSchema.prefault({}),
     linear: linearSchema.prefault({}),
     pagerduty: pagerDutySchema.optional(),
-    // Absent, the factory has no Slack app. Socket Mode is stated outright for
-    // the same reason each webhook provider is.
+    // Absent, the factory uses Slack only if a workflow requires it.
     slack: slackSchema.optional(),
     release: releaseSchema.optional(),
     // Service variables every agent harness receives beyond jigs' base set.

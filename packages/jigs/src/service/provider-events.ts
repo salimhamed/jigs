@@ -121,21 +121,24 @@ async function routePush({ provider, name, payload }: ProviderEvent, deps: Route
   return { outcome: "triggered", triggers } as const;
 }
 
-// A message can both start runs and answer a thread a run waits on.
+// Slack sends the Events API body; its `event` is the message. A message can
+// both start runs and answer a thread a run waits on, and a wake that landed
+// stands even when a trigger could not read the event.
 async function routeSlack({ payload }: ProviderEvent, deps: RouteDeps): Promise<RouteResult> {
+  const message = (payload as { event?: unknown } | null)?.event;
   const [triggers, woke] = await Promise.all([
     deps.push("slack", payload).catch((error: unknown) => {
-      const { channel, ts } = payload as { channel?: unknown; ts?: unknown };
+      const { channel, ts } = (message ?? {}) as { channel?: unknown; ts?: unknown };
       console.log(
         `[slack] could not start runs for ${String(channel)}:${String(ts)}: ${String(error)}`,
       );
       return null;
     }),
-    wakeSlackThread(payload),
+    wakeSlackThread(message),
   ]);
-  if (triggers === null) return { outcome: "failed" };
-  if (triggers.length > 0) return { outcome: "triggered", triggers };
-  return { outcome: woke ? "woken" : "ignored" };
+  if (triggers !== null && triggers.length > 0) return { outcome: "triggered", triggers };
+  if (woke) return { outcome: "woken" };
+  return { outcome: triggers === null ? "failed" : "ignored" };
 }
 
 function sanitizeForLog(value: string): string {

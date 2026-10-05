@@ -254,19 +254,18 @@ export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
  * The factory's Slack app, which posts as its own bot.
  *
  * @remarks
- * The bot token goes in `.env` as `SLACK_BOT_TOKEN`. With `socketMode` on, the
- * service also receives messages over Socket Mode as they are posted, and needs
- * the app-level token in `SLACK_APP_TOKEN`; the service refuses to start
- * without it. Polling runs either way, every `service.pollIntervalSeconds.slack`
- * seconds. `scopes` lists extra bot scopes the factory's own Slack calls need,
- * such as `reactions:write`, so `jigs doctor` checks the bot holds them.
+ * The hub assigns the factory its Slack app, hands it the bot token and sends
+ * it the app's events. Polling also runs, every
+ * `service.pollIntervalSeconds.slack` seconds. `scopes` lists extra bot scopes
+ * the factory's own Slack calls need, such as `reactions:write`, so
+ * `jigs doctor` checks the workspace granted them.
  *
  * @example
  * Use this value for `slack` in `jigs.config.ts`.
  * ```ts
  * import type { SlackDefinition } from "@jigs-ai/jigs";
  *
- * const slack = { socketMode: true } satisfies SlackDefinition;
+ * const slack = { scopes: ["reactions:write"] } satisfies SlackDefinition;
  * ```
  *
  * @group Factory and workflows

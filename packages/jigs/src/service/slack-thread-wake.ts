@@ -1,6 +1,6 @@
-// A thread reply that arrives over Socket Mode wakes the run waiting on that
+// A thread reply that arrives through the hub wakes the run waiting on that
 // thread, if one is. Like every wake it is only a hint: the run reads the
-// thread again, and the Slack poll covers a reply the socket missed.
+// thread again.
 
 import { slackThreadTokenFromEvent } from "../workflow/slack/thread-token.ts";
 import { wake } from "./wake.ts";

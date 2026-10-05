@@ -37,11 +37,11 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 ## `hub` {#hub}
 
-Every factory hears GitHub and Linear through a hub. The hub receives their
-events and holds them until the factory's service collects them, so nothing is
-lost while the service is down. The hub also hands the factory every GitHub and
-Linear token it uses: see [GitHub identity](#github-identity) and
-[Linear identity](#linear-identity).
+Every factory hears GitHub, Linear and Slack through a hub. The hub receives
+their events and holds them until the factory's service collects them, so
+nothing is lost while the service is down. The hub also hands the factory every
+GitHub, Linear and Slack token it uses: see [GitHub identity](#github-identity),
+[Linear identity](#linear-identity) and [Slack](#slack).
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -519,29 +519,28 @@ user its notes are attributed to. See [PagerDuty](/guide/pagerduty) for setup.
 
 ## Slack {#slack}
 
-`slack` connects the factory's own Slack app. Set it up by following
-[Slack](/guide/slack), which has the manifest to paste.
+`slack` says the factory uses the Slack app its [hub](#hub) assigns it. Set
+it up by following [Slack](/guide/slack).
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
-slack: { socketMode: true },
+slack: { scopes: ["reactions:write"] },
 ```
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. Each factory needs its own Slack app; two factories on one app split its events between them. |
-| `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the bot holds them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
+| `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the workspace granted them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
 
-The service polls the channels its Slack triggers watch every
-[`service.pollIntervalSeconds.slack`](#service) seconds, with Socket Mode on or
-off.
+Slack events arrive through the hub. The service also polls the channels its
+Slack triggers watch every [`service.pollIntervalSeconds.slack`](#service)
+seconds.
 
 To start runs from Slack messages, see
 [Start runs from messages](/guide/slack#start-runs-from-messages).
 
 ## Webhooks {#webhooks}
 
-GitHub and Linear events always arrive through the [hub](#hub). PagerDuty
+GitHub, Linear and Slack events always arrive through the [hub](#hub). PagerDuty
 webhooks reach the service directly, and improve latency, not correctness.
 Without them, [event triggers](#triggers) on PagerDuty continue to poll at
 [`pollIntervalSeconds`](#service). A lost webhook delivery only delays the next
@@ -584,10 +583,8 @@ is missing, and lists the credentials still empty.
 | Variable | When you need it |
 | --- | --- |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub and Linear tokens come from the hub. |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear and Slack tokens come from the hub. |
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
-| `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
-| `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |

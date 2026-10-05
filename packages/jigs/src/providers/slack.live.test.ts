@@ -1,31 +1,23 @@
 import { tmpdir } from "node:os";
-import { expect, test, vi } from "vitest";
-import {
-  slackAuthTest,
-  slackBot,
-  slackHistory,
-  slackOpenConnection,
-  slackPermalink,
-  slackReplies,
-} from "./slack.ts";
-import { slackIdentityChecks, slackSocketModeChecks } from "./slack-checks.ts";
+import { beforeAll, expect, test, vi } from "vitest";
+import { testFactoryContext } from "../test-fixtures.ts";
+import { slackBot, slackHistory, slackPermalink, slackReplies } from "./slack.ts";
+import { slackChecks } from "./slack-checks.ts";
+import { useLiveSlackToken } from "./test-fixtures.ts";
 
-// The live half of the Slack client, read-only. Set SLACK_BOT_TOKEN (and
-// SLACK_APP_TOKEN for Socket Mode) to a test app's that is in the test channel.
-const configured = Boolean(process.env.SLACK_BOT_TOKEN);
-const socketMode = Boolean(process.env.SLACK_APP_TOKEN);
+// The live half of the Slack client, read-only. Set JIGS_TEST_SLACK_BOT_TOKEN in the
+// shell to a test app's bot token; the app must be in the test channel.
+const token = process.env.JIGS_TEST_SLACK_BOT_TOKEN;
+const configured = Boolean(token);
 const channel = "C0C5EUZ7P9Q";
-const probes = { authTest: slackAuthTest, openConnection: slackOpenConnection };
-const env = (name: string) => process.env[name] || undefined;
-// The shell's tokens win over any factory's .env, so any root serves.
 vi.stubEnv("JIGS_FACTORY_ROOT", tmpdir());
 
-test.skipIf(!configured)("auth.test names the bot and reports its scopes", async () => {
-  const auth = await slackAuthTest();
-  expect(auth.userId).toMatch(/^U/);
-  expect(auth.botId).toMatch(/^B/);
-  expect(auth.scopes).toEqual(expect.arrayContaining(["channels:history", "chat:write"]));
-  expect(await slackBot()).toEqual(auth);
+beforeAll(async () => {
+  if (token) await useLiveSlackToken(token);
+});
+
+test.skipIf(!configured)("the bot is the token's own user", async () => {
+  expect((await slackBot()).userId).toMatch(/^U/);
 });
 
 test.skipIf(!configured)("history, replies and a permalink read the test channel", async () => {
@@ -40,11 +32,6 @@ test.skipIf(!configured)("history, replies and a permalink read the test channel
 });
 
 test.skipIf(!configured)("the bot token holds every scope jigs needs", async () => {
-  const [identity] = slackIdentityChecks(probes, [], env);
+  const [identity] = slackChecks(testFactoryContext({ env: {} }));
   expect(await identity?.run()).toMatchObject({ ok: true });
-});
-
-test.skipIf(!socketMode)("the app-level token opens a Socket Mode connection", async () => {
-  const [socket] = slackSocketModeChecks({ socketMode: true }, probes, env);
-  expect(await socket?.run()).toEqual({ ok: true });
 });

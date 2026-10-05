@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
-import { fetchFactoryStatus, fetchGithubToken, fetchLinearToken } from "./hub.ts";
+import { fetchFactoryStatus, fetchGithubToken, fetchLinearToken, fetchSlackToken } from "./hub.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 afterEach(() => {
@@ -92,5 +92,29 @@ test("a Linear workspace that needs reconnecting says so with the repair", async
     status: 503,
     message: expect.stringContaining("Connect acme to jigs again on the hub"),
     hint: expect.stringContaining("connect the Linear workspace again"),
+  });
+});
+
+test("a Slack token is asked for with an empty body", async () => {
+  const issued = {
+    token: "xoxb-1",
+    scopes: ["chat:write"],
+    app: { appId: "A1", name: "jigs", botUserId: "U1" },
+    team: "T1",
+  };
+  const { calls } = hubAnswering(jsonResponse(issued));
+  await expect(fetchSlackToken(ctx())).resolves.toEqual(issued);
+  expect(calls[0]).toMatchObject({
+    method: "POST",
+    url: new URL("https://hub.example.test/api/factory/tokens/slack"),
+    json: {},
+  });
+});
+
+test("no Slack installation for the factory says so with the repair", async () => {
+  hubAnswering(jsonResponse({ error: "No Slack app assigned to this factory." }, 404));
+  await expect(fetchSlackToken(ctx())).rejects.toMatchObject({
+    status: 404,
+    hint: expect.stringContaining("in the hub, install one of this factory's Slack apps"),
   });
 });

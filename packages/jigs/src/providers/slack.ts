@@ -1,9 +1,9 @@
 // Every Slack Web API call jigs makes, and the one transport a factory's own
-// `callSlack` goes through. A factory's Slack app always acts as itself: the
-// bot token for the Web API, the app-level token only to open a Socket Mode
-// connection. Reads env and hits the network, so it is reached from a step, a
-// check or the service, never from workflow code.
+// `callSlack` goes through. A factory's Slack app always acts as itself, with
+// the bot token the hub hands out for the workspace. Reaches the hub and Slack,
+// so it is called from a step, a check or the service, never from workflow code.
 
+import type { SlackTokenResponse } from "@jigs-ai/hub-protocol";
 import {
   currentFactoryContext,
   type FactoryContext,
@@ -11,21 +11,15 @@ import {
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { perContext, requireCredential } from "./credentials.ts";
+import { perContext } from "./credentials.ts";
 import { ProviderApiError, rateLimitWaits, retryAfterSeconds } from "./http.ts";
+import { fetchSlackToken } from "./hub.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
 
-/** The bot token scopes jigs needs, in the order setup lists them. */
-export const SLACK_BOT_SCOPES = [
-  "channels:history",
-  "groups:history",
-  "chat:write",
-  "users:read",
-  "users:read.email",
-] as const;
-
-export type SlackToken = "SLACK_BOT_TOKEN" | "SLACK_APP_TOKEN";
+// What Slack answers a bot token it no longer takes, such as one revoked by
+// reinstalling the app: the hub may already hold its successor.
+const STALE_TOKEN = new Set(["invalid_auth", "token_revoked"]);
 
 // A ceiling for a proxy that answers every page with a cursor, not a real
 // channel's size.
@@ -80,11 +74,12 @@ export interface SlackClientDeps {
   context?: FactoryContext;
 }
 
-/** Who the bot token acts as, and the scopes Slack reports it holds. */
-export interface SlackAuth {
+/** The factory's Slack app in one workspace: its bot user, and the scopes the workspace granted. */
+export interface SlackBot {
   userId: string;
-  botId: string;
-  user: string;
+  /** The app's id, which its posts carry as `app_id` even without a user. */
+  appId: string;
+  name: string;
   team: string;
   scopes: string[];
 }
@@ -95,6 +90,7 @@ export interface SlackMessage {
   text?: string;
   user?: string;
   bot_id?: string;
+  app_id?: string;
   bot_profile?: { name?: string };
   subtype?: string;
   thread_ts?: string;
@@ -112,11 +108,9 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
   const ctx = () => deps.context ?? currentFactoryContext();
   // Form-encoded, because every Web API method accepts it and not every read
   // method accepts JSON.
-  // A token is read from .env, not minted, so a rejected one is not retried.
   async function slackCall<T extends SlackReply>(
     method: string,
     params: SlackParams = {},
-    token: SlackToken = "SLACK_BOT_TOKEN",
   ): Promise<{ body: T; headers: Headers }> {
     const form = new URLSearchParams();
     for (const [key, value] of Object.entries(params)) {
@@ -124,12 +118,14 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
     const rateLimit = rateLimitWaits("slack", runSignal, deps.sleep);
+    const tokens = slackTokens(ctx());
+    let reissued = false;
     for (;;) {
-      const credential = requireCredential(token, undefined, ctx().env);
+      const { token } = await tokens.issued();
       const res = await (deps.fetch ?? fetch)(`${SLACK_API_URL}/${method}`, {
         method: "POST",
         headers: {
-          authorization: `Bearer ${credential}`,
+          authorization: `Bearer ${token}`,
           "content-type": "application/x-www-form-urlencoded",
         },
         body: form.toString(),
@@ -149,6 +145,11 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         });
       }
       if (!body.ok) {
+        if (!reissued && STALE_TOKEN.has(body.error ?? "")) {
+          tokens.invalidate(token);
+          reissued = true;
+          continue;
+        }
         throw new SlackApiError(method, body.error ?? `HTTP ${res.status}`, body.needed, {
           status: res.status,
           body: text,
@@ -172,23 +173,6 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
       if (cursor === undefined) return all;
     }
     throw new JigsError(`Slack ${method} kept returning a next cursor past ${MAX_PAGES} pages`);
-  }
-
-  /** Call `auth.test` with the bot token. Uncached, so a check sees a revoked token. */
-  async function slackAuthTest(): Promise<SlackAuth> {
-    const { body, headers } = await slackCall<
-      SlackReply & { user_id: string; bot_id: string; user: string; team: string }
-    >("auth.test");
-    return {
-      userId: body.user_id,
-      botId: body.bot_id,
-      user: body.user,
-      team: body.team,
-      scopes: (headers.get("x-oauth-scopes") ?? "")
-        .split(",")
-        .map((scope) => scope.trim())
-        .filter((scope) => scope !== ""),
-    };
   }
 
   /** A channel's messages after `oldest` (exclusive), newest first, as Slack returns them. */
@@ -244,25 +228,13 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
     };
   }
 
-  /** Open a Socket Mode connection with the app-level token. Returns its WebSocket URL. */
-  async function slackOpenConnection(): Promise<string> {
-    const { body } = await slackCall<SlackReply & { url: string }>(
-      "apps.connections.open",
-      {},
-      "SLACK_APP_TOKEN",
-    );
-    return body.url;
-  }
-
   return {
     slackCall,
-    slackAuthTest,
     slackHistory,
     slackReplies,
     slackPostMessage,
     slackPermalink,
     slackUser,
-    slackOpenConnection,
   };
 }
 
@@ -274,11 +246,9 @@ export const slackClient: SlackClient = createSlackClient();
 export function slackCall<T extends SlackReply>(
   method: string,
   params?: SlackParams,
-  token?: SlackToken,
 ): Promise<{ body: T; headers: Headers }> {
-  return slackClient.slackCall<T>(method, params, token);
+  return slackClient.slackCall<T>(method, params);
 }
-export const slackAuthTest: SlackClient["slackAuthTest"] = () => slackClient.slackAuthTest();
 export const slackHistory: SlackClient["slackHistory"] = (...args) =>
   slackClient.slackHistory(...args);
 export const slackReplies: SlackClient["slackReplies"] = (...args) =>
@@ -288,17 +258,36 @@ export const slackPostMessage: SlackClient["slackPostMessage"] = (...args) =>
 export const slackPermalink: SlackClient["slackPermalink"] = (...args) =>
   slackClient.slackPermalink(...args);
 export const slackUser: SlackClient["slackUser"] = (...args) => slackClient.slackUser(...args);
-export const slackOpenConnection: SlackClient["slackOpenConnection"] = () =>
-  slackClient.slackOpenConnection();
 
-const bots = perContext(() => ({ bot: null as Promise<SlackAuth> | null }));
+interface SlackTokens {
+  issued(): Promise<SlackTokenResponse>;
+  /** Forget `stale` if it is still the cached token, so the next call asks the hub again. */
+  invalidate(stale: string): void;
+}
 
-/** The factory's own bot, from `auth.test` once per factory context. */
-export function slackBot(): Promise<SlackAuth> {
-  const cache = bots();
-  cache.bot ??= slackAuthTest().catch((err: unknown) => {
-    cache.bot = null;
-    throw err;
-  });
-  return cache.bot;
+// A bot token does not expire, so it is kept until Slack refuses it.
+function createSlackTokens(issue: () => Promise<SlackTokenResponse>): SlackTokens {
+  let cached: SlackTokenResponse | null = null;
+  let issuing: Promise<SlackTokenResponse> | null = null;
+  return {
+    async issued() {
+      if (cached !== null) return cached;
+      issuing ??= issue().finally(() => {
+        issuing = null;
+      });
+      cached = await issuing;
+      return cached;
+    },
+    invalidate(stale) {
+      if (cached?.token === stale) cached = null;
+    },
+  };
+}
+
+const slackTokens = perContext((ctx) => createSlackTokens(() => fetchSlackToken(ctx)));
+
+/** The factory's own bot. */
+export async function slackBot(ctx?: FactoryContext): Promise<SlackBot> {
+  const { app, team, scopes } = await slackTokens(ctx).issued();
+  return { userId: app.botUserId, appId: app.appId, name: app.name, team, scopes };
 }

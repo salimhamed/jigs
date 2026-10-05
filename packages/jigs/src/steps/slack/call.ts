@@ -13,8 +13,8 @@ import { type SlackParams, type SlackReply, slackCall } from "../../providers/sl
  * A step can run more than once, so a call that is not safe to repeat has to
  * accept what a repeat gets back, such as `already_reacted` from
  * `reactions.add`, or `message_not_found` once the message is deleted. Add
- * any scope the method needs that jigs does not already use to `slack.scopes`
- * in `jigs.config.ts`.
+ * any scope the method needs that jigs does not already use to the app's bot
+ * scopes in the hub and to `slack.scopes` in `jigs.config.ts`.
  *
  * @example
  * ```ts

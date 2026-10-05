@@ -1,6 +1,6 @@
 import {
   SlackApiError,
-  type SlackAuth,
+  type SlackBot,
   type SlackMessage,
   type SlackUser,
   slackBot,
@@ -31,7 +31,7 @@ class SlackThreadReplyError extends JigsError {
 
 async function authorOf(
   message: SlackMessage,
-  bot: SlackAuth,
+  bot: SlackBot,
   users: Map<string, Promise<SlackUser>>,
 ): Promise<SlackAuthor> {
   // A bot's post names the bot itself, so it needs no users.info lookup.
@@ -41,7 +41,7 @@ async function authorOf(
       id,
       name: message.bot_profile?.name ?? id,
       bot: true,
-      isOwnBot: message.bot_id === bot.botId || message.user === bot.userId,
+      isOwnBot: message.user === bot.userId || message.app_id === bot.appId,
     };
   }
   let user = users.get(message.user);

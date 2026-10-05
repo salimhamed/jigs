@@ -1,12 +1,12 @@
 // The Slack sources: top-level channel messages, polled from
-// `conversations.history` and pushed over Socket Mode. Both deliveries go
-// through the same rule, so a polled and a pushed message never disagree.
+// `conversations.history` and pushed as Events API bodies through the hub.
+// Both deliveries go through the same rule, so a polled and a pushed message
+// never disagree.
 
 import { z } from "zod";
 import { plainHint } from "../errors.ts";
-import { type SlackAuth, type SlackMessage, slackBot, slackHistory } from "../providers/slack.ts";
+import { type SlackBot, type SlackMessage, slackBot, slackHistory } from "../providers/slack.ts";
 import type { Source, SourceOccurrence } from "./event-triggers/sources.ts";
-import type { SlackMessageEvent } from "./slack-socket.ts";
 
 // A direct message's ID starts with D, so the ID alone keeps DMs out of polling.
 const paramsSchema = z.strictObject({
@@ -22,12 +22,26 @@ const CHANNEL_TYPES = new Set(["channel", "group"]);
 // be a new post. `thread_broadcast` is a reply, however it is shown.
 const NEW_POST_SUBTYPES = new Set([undefined, "bot_message", "file_share", "me_message"]);
 
+/** A channel message event as the Events API delivers it: the message, and where it was posted. */
+interface SlackMessageEvent extends SlackMessage {
+  type: "message";
+  channel: string;
+  /** `channel` or `group` for a public or private channel, `im` or `mpim` for a direct message. */
+  channel_type?: string;
+}
+
+const callbackSchema = z.object({
+  type: z.literal("event_callback"),
+  event: z.object({ type: z.literal("message"), channel: z.string(), ts: z.string() }).loose(),
+});
+
 // The bot's own posts are skipped by author, which ADR 0011 allows because
-// the factory's app only ever acts as itself.
-function startsRun(message: SlackMessage, bot: SlackAuth, mentionsOnly: boolean): boolean {
+// the factory's app only ever acts as itself. A post under a custom username
+// carries only the app's id.
+function startsRun(message: SlackMessage, bot: SlackBot, mentionsOnly: boolean): boolean {
   if (!NEW_POST_SUBTYPES.has(message.subtype)) return false;
   if (message.thread_ts !== undefined && message.thread_ts !== message.ts) return false;
-  if (message.user === bot.userId || message.bot_id === bot.botId) return false;
+  if (message.user === bot.userId || message.app_id === bot.appId) return false;
   return !mentionsOnly || (message.text ?? "").includes(`<@${bot.userId}>`);
 }
 
@@ -74,7 +88,7 @@ function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cur
           console.log(`[slack] could not poll channel ${channel}: ${why}`);
           console.log(
             plainHint(
-              `invite @${bot.user} to ${channel} again, or remove ${channel} from the trigger`,
+              `invite @${bot.name} to ${channel} again, or remove ${channel} from the trigger`,
             ),
           );
           continue;
@@ -86,8 +100,10 @@ function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cur
       }
       return { occurrences, cursor: next };
     },
-    async fromPush({ channels }, event) {
-      const message = event as SlackMessageEvent;
+    async fromPush({ channels }, body) {
+      const callback = callbackSchema.safeParse(body).data;
+      if (callback === undefined) return null;
+      const message = callback.event as SlackMessageEvent;
       if (!channels.includes(message.channel)) return null;
       if (!CHANNEL_TYPES.has(message.channel_type ?? "")) return null;
       return startsRun(message, await slackBot(), mentionsOnly)
