@@ -1,26 +1,8 @@
 import { randomBytes } from "node:crypto";
 import type { Provider } from "@jigs-ai/hub-protocol";
-import { and, eq } from "drizzle-orm";
 import type { Request, Response } from "express";
-import type { App } from "./apps.ts";
+import { type App, findApp } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps } from "./db/schema.ts";
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
-/** The provider's app with this id, or `null`; any string may come from a URL. */
-export async function findApp(
-  db: HubDatabase,
-  provider: Provider,
-  appId: string,
-): Promise<App | null> {
-  if (!UUID.test(appId)) return null;
-  return (
-    (await db.query.apps.findFirst({
-      where: and(eq(apps.id, appId), eq(apps.provider, provider)),
-    })) ?? null
-  );
-}
 
 const readCookie = (request: Request, name: string) => {
   for (const part of (request.get("cookie") ?? "").split(";")) {

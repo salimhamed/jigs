@@ -2,12 +2,18 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq, or, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
-import { appOAuth, findApp } from "./app-oauth.ts";
-import type { App } from "./apps.ts";
+import { appOAuth } from "./app-oauth.ts";
+import {
+  type App,
+  findApp,
+  findAssignedInstallation,
+  type Installation,
+  recordInstallation,
+} from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations } from "./db/schema.ts";
+import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { decryptSecret, encryptSecret } from "./secrets.ts";
+import { decryptJson, encryptJson } from "./secrets.ts";
 
 /** Where Linear sends one Linear app's webhooks. Linear's payloads do not name the app, so each has its own. */
 export const linearWebhookPath = (appId: string) => `/webhooks/linear/${appId}`;
@@ -66,13 +72,10 @@ export async function addLinearApp(
       name: input.name,
       externalId: input.clientId,
       settings: {},
-      secrets: encryptSecret(
-        encryptionKey,
-        JSON.stringify({
-          clientSecret: input.clientSecret,
-          webhookSecret: input.webhookSecret,
-        } satisfies LinearAppSecrets),
-      ),
+      secrets: encryptJson<LinearAppSecrets>(encryptionKey, {
+        clientSecret: input.clientSecret,
+        webhookSecret: input.webhookSecret,
+      }),
     })
     .onConflictDoNothing()
     .returning();
@@ -80,9 +83,6 @@ export async function addLinearApp(
     return { error: `The Linear app with client ID ${input.clientId} is already on this hub.` };
   return { app };
 }
-
-const readSecrets = <T>(encryptionKey: Buffer, stored: string): T =>
-  JSON.parse(decryptSecret(encryptionKey, stored));
 
 interface TokenBody {
   access_token: string;
@@ -134,8 +134,6 @@ const verifySignature = (secret: string, body: Buffer, header: string | undefine
 // Linear asks receivers to refuse a webhook sent more than a minute ago, against replays.
 const MAX_WEBHOOK_AGE_MS = 60 * 1000;
 
-type Installation = typeof installations.$inferSelect;
-
 /** Linear's webhooks and the OAuth flow that connects a Linear workspace to an app. */
 export function createLinearRoutes(options: {
   db: HubDatabase;
@@ -170,7 +168,7 @@ export function createLinearRoutes(options: {
       if (
         !app ||
         !verifySignature(
-          readSecrets<LinearAppSecrets>(encryptionKey, app.secrets).webhookSecret,
+          decryptJson<LinearAppSecrets>(encryptionKey, app.secrets).webhookSecret,
           body,
           request.get("linear-signature"),
         )
@@ -270,7 +268,7 @@ export function createLinearRoutes(options: {
   router.get(linearCallbackPath(":appId"), async (request, response) => {
     const app = await oauth.adminsApp(request, response);
     if (!app || !oauth.checkCallback(request, response, app)) return;
-    const { clientSecret } = readSecrets<LinearAppSecrets>(encryptionKey, app.secrets);
+    const { clientSecret } = decryptJson<LinearAppSecrets>(encryptionKey, app.secrets);
     const now = Date.now();
     const exchanged = await requestToken(apiUrl, {
       grant_type: "authorization_code",
@@ -291,16 +289,12 @@ export function createLinearRoutes(options: {
       viewer: { id: string };
       organization: { id: string; name: string; urlKey: string };
     }>(apiUrl, secrets.accessToken, "{ viewer { id } organization { id name urlKey } }");
-    const values = {
+    await recordInstallation(db, app.id, {
+      externalId: organization.id,
       account: organization.urlKey,
       settings: { name: organization.name, userId: viewer.id } satisfies LinearWorkspaceSettings,
-      secrets: encryptSecret(encryptionKey, JSON.stringify(secrets)),
-      failure: null,
-    };
-    await db
-      .insert(installations)
-      .values({ appId: app.id, externalId: organization.id, ...values })
-      .onConflictDoUpdate({ target: [installations.appId, installations.externalId], set: values });
+      secrets: encryptJson(encryptionKey, secrets),
+    });
     response.redirect(303, `/apps/${app.id}`);
   });
 
@@ -343,45 +337,26 @@ export class LinearTokens {
     organization: string | undefined,
     now = Date.now(),
   ): Promise<LinearTokenResult> {
-    const found = await this.#db
-      .select({ app: apps, installation: installations })
-      .from(installations)
-      .innerJoin(apps, eq(apps.id, installations.appId))
-      .innerJoin(assignments, eq(assignments.appId, apps.id))
-      .where(
-        and(
-          eq(assignments.factoryId, factoryId),
-          eq(apps.provider, "linear"),
+    const found = await findAssignedInstallation(
+      this.#db,
+      factoryId,
+      "linear",
+      organization === undefined
+        ? undefined
+        : or(
+            eq(installations.externalId, organization),
+            sql`lower(${installations.account}) = lower(${organization})`,
+          ),
+      {
+        none: `No Linear app assigned to this factory is connected to ${organization ?? "a Linear workspace"}.`,
+        several:
           organization === undefined
-            ? undefined
-            : or(
-                eq(installations.externalId, organization),
-                sql`lower(${installations.account}) = lower(${organization})`,
-              ),
-        ),
-      );
-    const where = organization === undefined ? "a Linear workspace" : organization;
-    const [first] = found;
-    if (!first) {
-      return {
-        status: 404,
-        error: `No Linear app assigned to this factory is connected to ${where}.`,
-      };
-    }
-    if (found.length > 1) {
-      const names = found
-        .map((row) => `${row.app.name} (${row.installation.account})`)
-        .sort()
-        .join(", ");
-      return {
-        status: 409,
-        error:
-          organization === undefined
-            ? `More than one Linear workspace is connected to the Linear apps assigned to this factory, so name one: ${names}.`
-            : `More than one Linear app assigned to this factory is connected to ${organization}: ${names}.`,
-      };
-    }
-    const { app, installation } = first;
+            ? "More than one Linear workspace is connected to the Linear apps assigned to this factory, so name one"
+            : `More than one Linear app assigned to this factory is connected to ${organization}`,
+      },
+    );
+    if ("error" in found) return found;
+    const { app, installation } = found;
     const access = await this.access(app, installation, now);
     if ("failure" in access) {
       return {
@@ -414,7 +389,7 @@ export class LinearTokens {
   #fresh(installation: Installation, now: number) {
     if (installation.failure !== null) return { failure: installation.failure };
     if (installation.secrets === null) return { failure: "The workspace has no tokens." };
-    const secrets = readSecrets<LinearWorkspaceSecrets>(this.#encryptionKey, installation.secrets);
+    const secrets = decryptJson<LinearWorkspaceSecrets>(this.#encryptionKey, installation.secrets);
     return Date.parse(secrets.expiresAt) - now > MIN_TOKEN_LIFE_MS
       ? { token: secrets.accessToken, expiresAt: secrets.expiresAt }
       : null;
@@ -428,11 +403,11 @@ export class LinearTokens {
     if (!installation) return { failure: "The workspace is no longer connected." };
     const fresh = this.#fresh(installation, now);
     if (fresh) return fresh;
-    const { refreshToken } = readSecrets<LinearWorkspaceSecrets>(
+    const { refreshToken } = decryptJson<LinearWorkspaceSecrets>(
       this.#encryptionKey,
       installation.secrets ?? "",
     );
-    const { clientSecret } = readSecrets<LinearAppSecrets>(this.#encryptionKey, app.secrets);
+    const { clientSecret } = decryptJson<LinearAppSecrets>(this.#encryptionKey, app.secrets);
     // A reconnect while the refresh was out replaced these secrets; leave its row alone.
     const unchanged = and(
       eq(installations.id, installationId),
@@ -457,7 +432,7 @@ export class LinearTokens {
     const secrets = toSecrets((await response.json()) as TokenBody, now);
     await this.#db
       .update(installations)
-      .set({ secrets: encryptSecret(this.#encryptionKey, JSON.stringify(secrets)) })
+      .set({ secrets: encryptJson(this.#encryptionKey, secrets) })
       .where(unchanged);
     return { token: secrets.accessToken, expiresAt: secrets.expiresAt };
   }

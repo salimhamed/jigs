@@ -10,15 +10,17 @@ import { and, eq, sql } from "drizzle-orm";
 import express, { type Router } from "express";
 import {
   type App,
+  findApp,
+  findAssignedInstallation,
   type Installed,
   recordInstallation,
   recordInstallations,
   removeInstallation,
 } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations } from "./db/schema.ts";
+import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { decryptSecret, encryptSecret } from "./secrets.ts";
+import { decryptJson, encryptJson } from "./secrets.ts";
 
 /** Where GitHub sends every GitHub App's webhooks. */
 export const githubWebhookPath = "/webhooks/github";
@@ -45,8 +47,6 @@ export interface GitHubAppInput extends GitHubAppSecrets {
   slug: string;
   clientId: string;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const defaultApiUrl = "https://api.github.com";
 
@@ -87,14 +87,11 @@ export async function addGitHubApp(
         name: input.slug,
         externalId: input.appId,
         settings: { clientId: input.clientId } satisfies GitHubAppSettings,
-        secrets: encryptSecret(
-          encryptionKey,
-          JSON.stringify({
-            privateKey: input.privateKey,
-            webhookSecret: input.webhookSecret,
-            clientSecret: input.clientSecret,
-          } satisfies GitHubAppSecrets),
-        ),
+        secrets: encryptJson<GitHubAppSecrets>(encryptionKey, {
+          privateKey: input.privateKey,
+          webhookSecret: input.webhookSecret,
+          clientSecret: input.clientSecret,
+        }),
       })
       .onConflictDoNothing()
       .returning();
@@ -107,9 +104,6 @@ export async function addGitHubApp(
 /** The page on GitHub that installs an App. */
 export const githubInstallUrl = (app: App) =>
   `https://github.com/apps/${app.name}/installations/new`;
-
-const readSecrets = (encryptionKey: Buffer, app: App): GitHubAppSecrets =>
-  JSON.parse(decryptSecret(encryptionKey, app.secrets));
 
 /** A JSON Web Token that authenticates as the GitHub App itself, for ten minutes at most. */
 export function githubAppJwt(appId: string, privateKey: string | KeyObject, now = Date.now()) {
@@ -195,7 +189,7 @@ export function createGitHubRoutes(options: {
   const { db, waiters, encryptionKey, apiUrl = defaultApiUrl } = options;
   const router = express.Router();
 
-  const findApp = async (appId: string) =>
+  const findAppByGitHubId = async (appId: string) =>
     (await db.query.apps.findFirst({
       where: and(eq(apps.provider, "github"), eq(apps.externalId, appId)),
     })) ?? null;
@@ -213,7 +207,7 @@ export function createGitHubRoutes(options: {
   // learned from GitHub before its event is dropped.
   const knowsInstallation = async (app: App, installationId: number) => {
     if (await hasInstallation(app.id, installationId)) return true;
-    const { privateKey } = readSecrets(encryptionKey, app);
+    const { privateKey } = decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets);
     const installed = await listInstallations(apiUrl, app.externalId, privateKey);
     if ("status" in installed) {
       throw new Error(`GitHub answered ${installed.status} listing ${app.name}'s installations`);
@@ -227,12 +221,14 @@ export function createGitHubRoutes(options: {
     // GitHub sends at most 25 MB.
     express.raw({ type: () => true, limit: "25mb" }),
     async (request, response) => {
-      const app = await findApp(request.get("x-github-hook-installation-target-id") ?? "");
+      const app = await findAppByGitHubId(
+        request.get("x-github-hook-installation-target-id") ?? "",
+      );
       const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       if (
         !app ||
         !verifySignature(
-          readSecrets(encryptionKey, app).webhookSecret,
+          decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets).webhookSecret,
           body,
           request.get("x-hub-signature-256"),
         )
@@ -254,12 +250,10 @@ export function createGitHubRoutes(options: {
         if (payload.action === "deleted") {
           await removeInstallation(db, app.id, String(installationId));
         } else if (payload.action === "created") {
-          await recordInstallation(
-            db,
-            app.id,
-            String(installationId),
-            accountName(payload.installation ?? {}),
-          );
+          await recordInstallation(db, app.id, {
+            externalId: String(installationId),
+            account: accountName(payload.installation ?? {}),
+          });
         }
       } else if (installationId === undefined || !(await knowsInstallation(app, installationId))) {
         console.warn(
@@ -282,12 +276,7 @@ export function createGitHubRoutes(options: {
   // GitHub's call proves the installation is this App's, and an App is one Organization's.
   router.get(githubSetupPath(":appId"), async (request, response) => {
     const installationId = String(request.query.installation_id ?? "");
-    const appId = String(request.params.appId);
-    const app = UUID.test(appId)
-      ? await db.query.apps.findFirst({
-          where: and(eq(apps.id, appId), eq(apps.provider, "github")),
-        })
-      : undefined;
+    const app = await findApp(db, "github", String(request.params.appId));
     if (!app || !/^\d+$/.test(installationId)) {
       response.status(400).type("text").send("GitHub sent no installation of an App on this hub.");
       return;
@@ -295,7 +284,7 @@ export function createGitHubRoutes(options: {
     const account = await fetchInstallationAccount(
       apiUrl,
       app,
-      readSecrets(encryptionKey, app),
+      decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets),
       installationId,
     );
     if (account === null) {
@@ -305,101 +294,71 @@ export function createGitHubRoutes(options: {
         .send(`GitHub has no installation ${installationId} of ${app.name}.`);
       return;
     }
-    await recordInstallation(db, app.id, installationId, account);
+    await recordInstallation(db, app.id, { externalId: installationId, account });
     response.redirect(303, `/apps/${app.id}`);
   });
 
   return router;
 }
 
-/** What {@link GitHubTokens.issue} answers: a token, or the status and message to refuse with. */
-export type GitHubTokenResult =
-  | { token: GitHubTokenResponse }
-  | { status: 404 | 409; error: string };
-
 /**
- * Issues factories installation tokens of their GitHub Apps, minting a fresh
- * one for every request and keeping none: the factory caches its own, and asks
- * again only when it needs a longer-lived token or GitHub rejected the last.
+ * A token of the one GitHub App assigned to the factory that is installed on
+ * `owner`, minted fresh for every request and kept nowhere: the factory caches
+ * its own, and asks again only when it needs a longer-lived token or GitHub
+ * rejected the last.
  */
-export class GitHubTokens {
-  readonly #db: HubDatabase;
-  readonly #encryptionKey: Buffer;
-  readonly #apiUrl: string;
-
-  constructor(options: { db: HubDatabase; encryptionKey: Buffer; apiUrl?: string }) {
-    this.#db = options.db;
-    this.#encryptionKey = options.encryptionKey;
-    this.#apiUrl = options.apiUrl ?? defaultApiUrl;
-  }
-
-  /** A token of the one GitHub App assigned to the factory that is installed on `owner`. */
-  async issue(factoryId: string, owner: string): Promise<GitHubTokenResult> {
-    const found = await this.#db
-      .select({ app: apps, installationId: installations.externalId })
-      .from(installations)
-      .innerJoin(apps, eq(apps.id, installations.appId))
-      .innerJoin(assignments, eq(assignments.appId, apps.id))
-      .where(
-        and(
-          eq(assignments.factoryId, factoryId),
-          eq(apps.provider, "github"),
-          sql`lower(${installations.account}) = lower(${owner})`,
-        ),
-      );
-    const [first] = found;
-    if (!first) {
-      return {
-        status: 404,
-        error: `No GitHub App assigned to this factory is installed on ${owner}.`,
-      };
-    }
-    if (found.length > 1) {
-      const names = found
-        .map((row) => row.app.name)
-        .sort()
-        .join(", ");
-      return {
-        status: 409,
-        error: `More than one GitHub App assigned to this factory is installed on ${owner}: ${names}.`,
-      };
-    }
-    return { token: await this.#mint(first.app, first.installationId) };
-  }
-
-  async #mint(app: App, installationId: string): Promise<GitHubTokenResponse> {
-    const { privateKey } = readSecrets(this.#encryptionKey, app);
-    const response = await fetch(
-      `${this.#apiUrl}/app/installations/${installationId}/access_tokens`,
-      { method: "POST", headers: githubHeaders(app.externalId, privateKey) },
+export async function issueGitHubToken(
+  db: HubDatabase,
+  encryptionKey: Buffer,
+  factoryId: string,
+  owner: string,
+  apiUrl = defaultApiUrl,
+): Promise<{ token: GitHubTokenResponse } | { status: 404 | 409; error: string }> {
+  const found = await findAssignedInstallation(
+    db,
+    factoryId,
+    "github",
+    sql`lower(${installations.account}) = lower(${owner})`,
+    {
+      none: `No GitHub App assigned to this factory is installed on ${owner}.`,
+      several: `More than one GitHub App assigned to this factory is installed on ${owner}`,
+    },
+  );
+  if ("error" in found) return found;
+  const { app, installation } = found;
+  const { privateKey } = decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets);
+  const response = await fetch(
+    `${apiUrl}/app/installations/${installation.externalId}/access_tokens`,
+    { method: "POST", headers: githubHeaders(app.externalId, privateKey) },
+  );
+  if (!response.ok) {
+    throw new Error(
+      `GitHub answered ${response.status} minting a token for ${app.name}'s installation ${installation.externalId}`,
     );
-    if (!response.ok) {
-      throw new Error(
-        `GitHub answered ${response.status} minting a token for ${app.name}'s installation ${installationId}`,
-      );
-    }
-    const { token, expires_at } = (await response.json()) as { token: string; expires_at: string };
-    const botUserId = await this.#botUserId(app, token);
-    return { token, expiresAt: expires_at, app: { slug: app.name, botUserId } };
   }
+  const { token, expires_at } = (await response.json()) as { token: string; expires_at: string };
+  const botUserId = await readBotUserId(db, apiUrl, app, token);
+  return { token: { token, expiresAt: expires_at, app: { slug: app.name, botUserId } } };
+}
 
-  async #botUserId(app: App, token: string): Promise<number> {
-    const settings = app.settings as GitHubAppSettings;
-    if (settings.botUserId !== undefined) return settings.botUserId;
-    const response = await fetch(
-      `${this.#apiUrl}/users/${encodeURIComponent(`${app.name}[bot]`)}`,
-      {
-        headers: bearerHeaders(token),
-      },
-    );
-    if (!response.ok) {
-      throw new Error(`GitHub answered ${response.status} reading the user ${app.name}[bot]`);
-    }
-    const { id } = (await response.json()) as { id: number };
-    await this.#db
-      .update(apps)
-      .set({ settings: { ...settings, botUserId: id } satisfies GitHubAppSettings })
-      .where(eq(apps.id, app.id));
-    return id;
+async function readBotUserId(
+  db: HubDatabase,
+  apiUrl: string,
+  app: App,
+  token: string,
+): Promise<number> {
+  const settings = app.settings as GitHubAppSettings;
+  if (settings.botUserId !== undefined) return settings.botUserId;
+  const response = await fetch(`${apiUrl}/users/${encodeURIComponent(`${app.name}[bot]`)}`, {
+    headers: bearerHeaders(token),
+  });
+  if (!response.ok) {
+    throw new Error(`GitHub answered ${response.status} reading the user ${app.name}[bot]`);
   }
+  const { id } = (await response.json()) as { id: number };
+  await db
+    .update(apps)
+    .set({ settings: { ...settings, botUserId: id } satisfies GitHubAppSettings })
+    .where(eq(apps.id, app.id));
+  return id;
 }

@@ -1,8 +1,30 @@
-import { and, eq, inArray, sql } from "drizzle-orm";
+import type { Provider } from "@jigs-ai/hub-protocol";
+import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 
 export type App = typeof apps.$inferSelect;
+
+export type Installation = typeof installations.$inferSelect;
+
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** Whether a string from a URL can be a row's id. */
+export const isUuid = (value: string) => UUID.test(value);
+
+/** The provider's app with this id, or `null`; any string may come from a URL. */
+export async function findApp(
+  db: HubDatabase,
+  provider: Provider,
+  appId: string,
+): Promise<App | null> {
+  if (!isUuid(appId)) return null;
+  return (
+    (await db.query.apps.findFirst({
+      where: and(eq(apps.id, appId), eq(apps.provider, provider)),
+    })) ?? null
+  );
+}
 
 /** Remove an app with its installations and assignments. Its stored provider events stay. */
 export async function removeApp(
@@ -43,19 +65,27 @@ export async function setAssignments(
   });
 }
 
-/** Record where an app is installed, or update the account of an installation it has. */
+/** An installation as the hub records it. `secrets` are already encrypted. */
+export interface InstallationValues {
+  externalId: string;
+  account: string;
+  settings?: unknown;
+  secrets?: string;
+}
+
+/** Record where an app is installed, or update an installation it has, clearing any failure. */
 export async function recordInstallation(
-  db: HubDatabase,
+  db: HubDatabase | Transaction,
   appId: string,
-  externalId: string,
-  account: string,
+  installation: InstallationValues,
 ): Promise<void> {
+  const { externalId, ...values } = installation;
   await db
     .insert(installations)
-    .values({ appId, externalId, account })
+    .values({ appId, externalId, ...values })
     .onConflictDoUpdate({
       target: [installations.appId, installations.externalId],
-      set: { account },
+      set: { ...values, failure: null },
     });
 }
 
@@ -94,4 +124,35 @@ export async function recordInstallations(
       target: [installations.appId, installations.externalId],
       set: { account: sql`excluded.account` },
     });
+}
+
+/** The one installation of a provider's apps assigned to a factory that `where` matches, or the status and message to refuse with. */
+export async function findAssignedInstallation(
+  db: HubDatabase,
+  factoryId: string,
+  provider: Provider,
+  where: SQL | undefined,
+  wording: {
+    /** The 404 message when nothing matches. */
+    none: string;
+    /** The 409 message when several match, before the list of them. */
+    several: string;
+  },
+): Promise<{ app: App; installation: Installation } | { status: 404 | 409; error: string }> {
+  const found = await db
+    .select({ app: apps, installation: installations })
+    .from(installations)
+    .innerJoin(apps, eq(apps.id, installations.appId))
+    .innerJoin(assignments, eq(assignments.appId, apps.id))
+    .where(and(eq(assignments.factoryId, factoryId), eq(apps.provider, provider), where));
+  const [first] = found;
+  if (!first) return { status: 404, error: wording.none };
+  if (found.length > 1) {
+    const names = found
+      .map((row) => `${row.app.name} (${row.installation.account})`)
+      .sort()
+      .join(", ");
+    return { status: 409, error: `${wording.several}: ${names}.` };
+  }
+  return first;
 }

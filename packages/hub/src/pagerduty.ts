@@ -2,12 +2,11 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type PagerDutyTokenResponse, pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
-import { findApp } from "./app-oauth.ts";
-import type { App } from "./apps.ts";
+import { type App, findApp, findAssignedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations } from "./db/schema.ts";
+import { apps } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { decryptSecret, encryptSecret } from "./secrets.ts";
+import { decryptJson, encryptJson } from "./secrets.ts";
 
 /** Where PagerDuty sends one PagerDuty app's webhooks. Its payloads do not name the app, so each has its own. */
 export const pagerDutyWebhookPath = (appId: string) => `/webhooks/pagerduty/${appId}`;
@@ -40,8 +39,8 @@ export interface PagerDutyAppInput {
 
 const defaultIdentityUrl = "https://identity.pagerduty.com";
 
-const readSecrets = (encryptionKey: Buffer, app: App): PagerDutyAppSecrets =>
-  JSON.parse(decryptSecret(encryptionKey, app.secrets));
+const readSecrets = (encryptionKey: Buffer, app: App) =>
+  decryptJson<PagerDutyAppSecrets>(encryptionKey, app.secrets);
 
 /** Mint an app token for the account with the client-credentials grant, or say why PagerDuty refused. */
 async function mintToken(
@@ -103,10 +102,9 @@ export async function addPagerDutyApp(
         name: input.name,
         externalId: input.clientId,
         settings: {},
-        secrets: encryptSecret(
-          encryptionKey,
-          JSON.stringify({ clientSecret: input.clientSecret } satisfies PagerDutyAppSecrets),
-        ),
+        secrets: encryptJson<PagerDutyAppSecrets>(encryptionKey, {
+          clientSecret: input.clientSecret,
+        }),
       })
       .onConflictDoNothing()
       .returning();
@@ -115,8 +113,7 @@ export async function addPagerDutyApp(
         error: `The PagerDuty app with client ID ${input.clientId} is already on this hub.`,
       };
     }
-    await tx.insert(installations).values({
-      appId: app.id,
+    await recordInstallation(tx, app.id, {
       externalId: `${input.region}.${input.subdomain}`,
       account: input.subdomain,
       settings: { region: input.region } as PagerDutyAccountSettings,
@@ -153,13 +150,10 @@ export async function setPagerDutyWebhookSecret(
     await tx
       .update(apps)
       .set({
-        secrets: encryptSecret(
-          encryptionKey,
-          JSON.stringify({
-            ...readSecrets(encryptionKey, app),
-            webhookSecret,
-          } satisfies PagerDutyAppSecrets),
-        ),
+        secrets: encryptJson<PagerDutyAppSecrets>(encryptionKey, {
+          ...readSecrets(encryptionKey, app),
+          webhookSecret,
+        }),
       })
       .where(eq(apps.id, appId));
     return true;
@@ -221,55 +215,30 @@ export function createPagerDutyRoutes(options: {
   return router;
 }
 
-/** What {@link PagerDutyTokens.issue} answers: a token, or the status and message to refuse with. */
-export type PagerDutyTokenResult =
-  | { token: PagerDutyTokenResponse }
-  | { status: 404 | 409 | 503; error: string };
-
-/** Mints a fresh app token, on every request, for the one PagerDuty app assigned to a factory. */
-export class PagerDutyTokens {
-  readonly #db: HubDatabase;
-  readonly #encryptionKey: Buffer;
-  readonly #identityUrl: string;
-
-  constructor(options: { db: HubDatabase; encryptionKey: Buffer; identityUrl?: string }) {
-    this.#db = options.db;
-    this.#encryptionKey = options.encryptionKey;
-    this.#identityUrl = options.identityUrl ?? defaultIdentityUrl;
+/** A fresh app token, minted on every request, of the one PagerDuty app assigned to a factory. */
+export async function issuePagerDutyToken(
+  db: HubDatabase,
+  encryptionKey: Buffer,
+  factoryId: string,
+  identityUrl = defaultIdentityUrl,
+): Promise<{ token: PagerDutyTokenResponse } | { status: 404 | 409 | 503; error: string }> {
+  const found = await findAssignedInstallation(db, factoryId, "pagerduty", undefined, {
+    none: "No PagerDuty app is assigned to this factory.",
+    several: "More than one PagerDuty app is assigned to this factory, so assign one",
+  });
+  if ("error" in found) return found;
+  const { app, installation } = found;
+  const minted = await mintToken(identityUrl, {
+    clientId: app.externalId,
+    clientSecret: readSecrets(encryptionKey, app).clientSecret,
+    subdomain: installation.account,
+    region: (installation.settings as PagerDutyAccountSettings).region,
+  });
+  if ("refused" in minted) {
+    return {
+      status: 503,
+      error: `PagerDuty refused ${app.name}'s credentials for ${installation.account} (${minted.refused}); remove the app on the hub and add it with working ones.`,
+    };
   }
-
-  async issue(factoryId: string): Promise<PagerDutyTokenResult> {
-    const found = await this.#db
-      .select({ app: apps, installation: installations })
-      .from(installations)
-      .innerJoin(apps, eq(apps.id, installations.appId))
-      .innerJoin(assignments, eq(assignments.appId, apps.id))
-      .where(and(eq(assignments.factoryId, factoryId), eq(apps.provider, "pagerduty")));
-    const [first] = found;
-    if (!first) return { status: 404, error: "No PagerDuty app is assigned to this factory." };
-    if (found.length > 1) {
-      const names = found
-        .map((row) => `${row.app.name} (${row.installation.account})`)
-        .sort()
-        .join(", ");
-      return {
-        status: 409,
-        error: `More than one PagerDuty app is assigned to this factory, so assign one: ${names}.`,
-      };
-    }
-    const { app, installation } = first;
-    const minted = await mintToken(this.#identityUrl, {
-      clientId: app.externalId,
-      clientSecret: readSecrets(this.#encryptionKey, app).clientSecret,
-      subdomain: installation.account,
-      region: (installation.settings as PagerDutyAccountSettings).region,
-    });
-    if ("refused" in minted) {
-      return {
-        status: 503,
-        error: `PagerDuty refused ${app.name}'s credentials for ${installation.account} (${minted.refused}); remove the app on the hub and add it with working ones.`,
-      };
-    }
-    return { token: minted };
-  }
+  return { token: minted };
 }

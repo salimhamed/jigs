@@ -17,10 +17,8 @@ import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { GitHubTokens } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
-import { PagerDutyTokens } from "./pagerduty.ts";
 import {
   addSlackApp,
   createSlackRoutes,
@@ -118,9 +116,7 @@ beforeAll(async () => {
         createFactoryApi({
           db,
           waiters,
-          githubTokens: new GitHubTokens({ db, encryptionKey }),
           linearTokens: new LinearTokens({ db, encryptionKey }),
-          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
           encryptionKey,
         }),
       ),
@@ -426,15 +422,14 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   expect(await eventNames(assigned.id)).toEqual(["message", "message", "message"]);
 });
 
-dbTest("issues the bot token of the installation the request names, or the only one", async () => {
+dbTest("issues the bot token of the factory's one installation", async () => {
   const slack = await newApp();
   const workspace = newWorkspace();
   await install(slack, workspace);
   const { factory, token } = await newFactory();
   await setAssignments(db, organizationId, slack.app.id, [factory.id]);
 
-  const named = await requestToken(token, { appId: slack.app.externalId, team: workspace.id });
-  expect(named).toEqual({
+  expect(await requestToken(token, {})).toEqual({
     status: 200,
     body: {
       token: expect.stringMatching(/^xoxb-/),
@@ -443,16 +438,6 @@ dbTest("issues the bot token of the installation the request names, or the only 
       team: workspace.id,
     } satisfies SlackTokenResponse,
   });
-  expect(await requestToken(token, {})).toEqual(named);
-  expect(await requestToken(token, { team: workspace.id })).toEqual(named);
-  expect(await requestToken(token, { team: "T0NOWHERE" })).toEqual({
-    status: 404,
-    body: {
-      error: "No installation of a Slack app assigned to this factory matches workspace T0NOWHERE.",
-    },
-  });
-  expect((await requestToken(token, { team: "" })).status).toBe(400);
-  expect((await requestToken(token, { appId: 7 })).status).toBe(400);
   expect((await requestToken("nope", {})).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
@@ -463,7 +448,7 @@ dbTest("issues the bot token of the installation the request names, or the only 
   ]);
 });
 
-dbTest("refuses a token when no installation, or more than one, matches", async () => {
+dbTest("refuses a token when there is no installation, or more than one", async () => {
   const [first, second] = [await newApp(), await newApp()];
   const [shared, own] = [newWorkspace(), newWorkspace()];
   const { factory, token } = await newFactory();
@@ -471,19 +456,21 @@ dbTest("refuses a token when no installation, or more than one, matches", async 
     status: 404,
     body: { error: "No Slack app assigned to this factory is installed in a workspace." },
   });
-  await install(first, shared);
   await install(second, shared);
   await install(second, own);
-  await setAssignments(db, organizationId, first.app.id, [factory.id]);
   await setAssignments(db, organizationId, second.app.id, [factory.id]);
+  const names = [`${second.app.name} (${shared.name})`, `${second.app.name} (${own.name})`];
+  expect(await requestToken(token, {})).toEqual({
+    status: 409,
+    body: {
+      error: `More than one Slack installation is assigned to this factory, so leave one: ${names.sort().join(", ")}.`,
+    },
+  });
 
-  expect((await requestToken(token, {})).status).toBe(409);
-  expect((await requestToken(token, { team: shared.id })).status).toBe(409);
-  expect((await requestToken(token, { appId: second.app.externalId })).status).toBe(409);
-  expect(
-    (await requestToken(token, { appId: second.app.externalId, team: shared.id })).status,
-  ).toBe(200);
-  expect((await requestToken(token, { team: own.id })).status).toBe(200);
+  await install(first, shared);
+  await setAssignments(db, organizationId, first.app.id, [factory.id]);
+  await setAssignments(db, organizationId, second.app.id, []);
+  expect((await requestToken(token, {})).status).toBe(200);
 });
 
 dbTest("validates a Slack app and adds it once per hub", async () => {
