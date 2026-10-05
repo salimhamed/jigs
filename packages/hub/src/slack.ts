@@ -8,6 +8,7 @@ import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
+import { parseWebhookJson, webhookBody } from "./webhooks.ts";
 
 /** Where Slack sends every Slack app's events, its Event Subscriptions "Request URL". */
 export const slackWebhookPath = "/webhooks/slack";
@@ -173,80 +174,72 @@ export function createSlackRoutes(options: {
   const signingSecret = (app: App) =>
     decryptJson<SlackAppSecrets>(encryptionKey, app.secrets).signingSecret;
 
-  router.post(
-    slackWebhookPath,
-    express.raw({ type: () => true, limit: "25mb" }),
-    async (request, response) => {
-      const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      const signed = (app: App) =>
-        verifySignature(
-          signingSecret(app),
-          body,
-          request.get("x-slack-request-timestamp"),
-          request.get("x-slack-signature"),
-        );
-      let payload: SlackEnvelope;
-      try {
-        payload = JSON.parse(body.toString("utf8"));
-      } catch {
-        response.status(400).json({ error: "The body is not JSON." });
-        return;
-      }
+  router.post(slackWebhookPath, webhookBody, async (request, response) => {
+    const body = request.body as Buffer;
+    const signed = (app: App) =>
+      verifySignature(
+        signingSecret(app),
+        body,
+        request.get("x-slack-request-timestamp"),
+        request.get("x-slack-signature"),
+      );
+    // Read before the signature check, since the body names the app whose secret signed it.
+    const payload = parseWebhookJson<SlackEnvelope>(body, response);
+    if (!payload) return;
 
-      if (payload.type === "url_verification") {
-        // The challenge names no app, so any Slack app's signing secret may have signed it.
-        const slackApps = await db.query.apps.findMany({ where: eq(apps.provider, "slack") });
-        if (!slackApps.some(signed)) {
-          response.status(401).json({ error: "No Slack app on this hub signed this request." });
-          return;
-        }
-        response.json({ challenge: payload.challenge });
+    if (payload.type === "url_verification") {
+      // The challenge names no app, so any Slack app's signing secret may have signed it.
+      const slackApps = await db.query.apps.findMany({ where: eq(apps.provider, "slack") });
+      if (!slackApps.some(signed)) {
+        response.status(401).json({ error: "No Slack app on this hub signed this request." });
         return;
       }
+      response.json({ challenge: payload.challenge });
+      return;
+    }
 
-      const app = await db.query.apps.findFirst({
-        where: and(eq(apps.provider, "slack"), eq(apps.externalId, payload.api_app_id ?? "")),
-      });
-      if (!app) {
-        // A 200, so Slack stops retrying an event no one here can take.
-        console.warn(`[slack] dropped a request for unknown Slack app ${payload.api_app_id}`);
-        response.status(200).end();
-        return;
-      }
-      if (!signed(app)) {
-        response.status(401).json({ error: "The signature is not this Slack app's." });
-        return;
-      }
-      if (payload.type !== "event_callback") {
-        response.status(200).end();
-        return;
-      }
-      const name = payload.event?.type ?? "";
-      const installation = await db.query.installations.findFirst({
-        where: and(
-          eq(installations.appId, app.id),
-          eq(installations.externalId, payload.team_id ?? ""),
-        ),
-      });
-      if (!installation) {
-        console.warn(
-          `[slack] dropped ${name} for ${app.name}: workspace ${payload.team_id ?? "(none)"} has not installed it`,
-        );
-        response.status(200).end();
-        return;
-      }
-      await fanOutProviderEvent(db, waiters, {
-        organizationId: app.organizationId,
-        appId: app.id,
-        provider: "slack",
-        name,
-        payload,
-        // Slack sends an event again when an answer is slow; it is stored and sent once.
-        dedupeKey: payload.event_id,
-      });
+    const app = await db.query.apps.findFirst({
+      where: and(eq(apps.provider, "slack"), eq(apps.externalId, payload.api_app_id ?? "")),
+    });
+    if (!app) {
+      // A 200, so Slack stops retrying an event no one here can take.
+      console.warn(`[slack] dropped a request for unknown Slack app ${payload.api_app_id}`);
       response.status(200).end();
-    },
-  );
+      return;
+    }
+    if (!signed(app)) {
+      response.status(401).json({ error: "The signature is not this Slack app's." });
+      return;
+    }
+    if (payload.type !== "event_callback") {
+      response.status(200).end();
+      return;
+    }
+    const name = payload.event?.type ?? "";
+    const installation = await db.query.installations.findFirst({
+      where: and(
+        eq(installations.appId, app.id),
+        eq(installations.externalId, payload.team_id ?? ""),
+      ),
+    });
+    if (!installation) {
+      console.warn(
+        `[slack] dropped ${name} for ${app.name}: workspace ${payload.team_id ?? "(none)"} has not installed it`,
+      );
+      response.status(200).end();
+      return;
+    }
+    await fanOutProviderEvent(db, waiters, {
+      organizationId: app.organizationId,
+      appId: app.id,
+      provider: "slack",
+      name,
+      payload,
+      // Slack sends an event again when an answer is slow; it is stored and sent once.
+      dedupeKey: payload.event_id,
+    });
+    response.status(200).end();
+  });
 
   router.get(slackInstallPath(":appId"), async (request, response) => {
     const app = await oauth.adminsApp(request, response);

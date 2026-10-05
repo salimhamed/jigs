@@ -7,7 +7,7 @@ import { Client } from "pg";
 import { afterEach, expect } from "vitest";
 import { connectDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
+import { dbTest, testDatabase } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
@@ -17,7 +17,8 @@ afterEach(async () => {
 });
 
 async function startHub() {
-  const database = await createTestDatabase();
+  const database = testDatabase();
+  await database.create();
   cleanups.push(database.drop);
   const child = spawn(process.execPath, [main], {
     env: {

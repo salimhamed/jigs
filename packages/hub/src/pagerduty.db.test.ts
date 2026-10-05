@@ -1,19 +1,12 @@
-import { createHmac, randomBytes } from "node:crypto";
-import { once } from "node:events";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createHmac } from "node:crypto";
 import { factoryStatusPath, pagerDutyScopes, pagerDutyTokenPath } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { afterAll, beforeAll, expect } from "vitest";
+import { beforeAll, expect } from "vitest";
 import { type App, setAssignments } from "./apps.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
-import { addFactory } from "./factories.ts";
-import { createFactoryApi } from "./factory-api.ts";
-import { LinearTokens } from "./linear.ts";
-import { MessageWaiters, readMessages } from "./messages.ts";
+import { dbTest } from "./db/test-database.ts";
+import { readMessages } from "./messages.ts";
 import {
   addPagerDutyApp,
   createPagerDutyRoutes,
@@ -21,27 +14,15 @@ import {
   pagerDutyWebhookPath,
   setPagerDutyWebhookSecret,
 } from "./pagerduty.ts";
+import { organizationId, setUpTestHub } from "./test-hub.ts";
 
-const encryptionKey = randomBytes(32);
-const organizationId = "acme";
-
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
-const waiters = new MessageWaiters();
-const servers: Server[] = [];
+const { db, encryptionKey, waiters, listen, serveHub, newFactory, requestToken } = setUpTestHub();
 let hub: string;
 let identity: string;
 
 // The fake PagerDuty identity server: each app's secret and the accounts it may act in.
 const clients = new Map<string, { secret: string; accounts: Set<string> }>();
 const grants: { clientId: string; scope: string }[] = [];
-
-async function listen(app: express.Express) {
-  const server = app.listen(0, "127.0.0.1");
-  servers.push(server);
-  await once(server, "listening");
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 function fakeIdentity() {
   return express().post("/oauth/token", express.urlencoded(), (request, response) => {
@@ -71,37 +52,11 @@ function fakeIdentity() {
 }
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
-  await migrateDatabase(db);
-  await db.insert(schema.organization).values([
-    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
-    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
-  ]);
   identity = await listen(fakeIdentity());
-  hub = await listen(
-    express()
-      .use(createPagerDutyRoutes({ db, waiters, encryptionKey }))
-      .use(
-        createFactoryApi({
-          db,
-          waiters,
-          linearTokens: new LinearTokens({ db, encryptionKey }),
-          pagerDutyIdentityUrl: identity,
-          encryptionKey,
-        }),
-      ),
-  );
-});
-
-afterAll(async () => {
-  waiters.close();
-  for (const server of servers) {
-    server.closeAllConnections();
-    server.close();
-  }
-  await db?.$client.end();
-  await database?.drop();
+  hub = await serveHub({
+    routes: createPagerDutyRoutes({ db, waiters, encryptionKey }),
+    apiUrls: { pagerduty: identity },
+  });
 });
 
 let appCount = 0;
@@ -124,19 +79,13 @@ async function newApp(webhookSecret: string | null = `pd_wh_${appCount + 1}`) {
       subdomain,
       region: "us",
     },
-    identity,
+    { apiUrl: identity },
   );
   if ("error" in added) throw new Error(added.error);
   if (webhookSecret) {
     await setPagerDutyWebhookSecret(db, encryptionKey, organizationId, added.app.id, webhookSecret);
   }
   return added.app;
-}
-
-let factoryCount = 0;
-async function newFactory() {
-  factoryCount += 1;
-  return addFactory(db, organizationId, `factory ${factoryCount}`);
 }
 
 const triggered = () => ({
@@ -164,19 +113,6 @@ async function deliver(app: App, payload: unknown, signature: (body: string) => 
   return response.status;
 }
 
-async function requestToken(token: string) {
-  const response = await fetch(`${hub}${pagerDutyTokenPath}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "user-agent": "jigs/1.2.3",
-      "content-type": "application/json",
-    },
-    body: "{}",
-  });
-  return { status: response.status, body: await response.json() };
-}
-
 dbTest("adds an app once PagerDuty mints a token for its account", async () => {
   clients.set("good", { secret: "s", accounts: new Set(["as_account-eu.acme"]) });
   const input = {
@@ -187,7 +123,15 @@ dbTest("adds an app once PagerDuty mints a token for its account", async () => {
     region: "eu",
   };
   const add = (changes: Partial<typeof input>, organization = organizationId) =>
-    addPagerDutyApp(db, encryptionKey, organization, { ...input, ...changes }, identity);
+    addPagerDutyApp(
+      db,
+      encryptionKey,
+      organization,
+      { ...input, ...changes },
+      {
+        apiUrl: identity,
+      },
+    );
 
   expect(await add({ subdomain: "" })).toEqual({
     error: "Enter the name, client ID, client secret and account subdomain.",
@@ -268,13 +212,13 @@ dbTest("sends a signed event only to the app's factories", async () => {
 
 dbTest("mints a token of the one assigned app on every request", async () => {
   const { factory, token } = await newFactory();
-  expect(await requestToken(token)).toEqual({
+  expect(await requestToken(pagerDutyTokenPath, token)).toEqual({
     status: 404,
     body: { error: "No PagerDuty app is assigned to this factory." },
   });
   const app = await newApp();
   await setAssignments(db, organizationId, app.id, [factory.id]);
-  const first = await requestToken(token);
+  const first = await requestToken(pagerDutyTokenPath, token);
   expect(first).toEqual({
     status: 200,
     body: { token: expect.stringMatching(/^pdus\+_/), expiresAt: expect.any(String) },
@@ -283,8 +227,8 @@ dbTest("mints a token of the one assigned app on every request", async () => {
     clientId: app.externalId,
     scope: [`as_account-us.${app.name.replace("Jigs ", "acme-")}`, ...pagerDutyScopes].join(" "),
   });
-  expect((await requestToken(token)).body.token).not.toBe(first.body.token);
-  expect((await requestToken("nope")).status).toBe(401);
+  expect((await requestToken(pagerDutyTokenPath, token)).body.token).not.toBe(first.body.token);
+  expect((await requestToken(pagerDutyTokenPath, "nope")).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
@@ -300,7 +244,7 @@ dbTest("mints a token of the one assigned app on every request", async () => {
   // PagerDuty stops taking the credentials, as when the app's secret is regenerated.
   const client = clients.get(app.externalId);
   if (client) client.secret = "regenerated";
-  expect(await requestToken(token)).toEqual({
+  expect(await requestToken(pagerDutyTokenPath, token)).toEqual({
     status: 503,
     body: {
       error: `PagerDuty refused ${app.name}'s credentials for ${app.name.replace("Jigs ", "acme-")} (401); remove the app on the hub and add it with working ones.`,
@@ -309,5 +253,5 @@ dbTest("mints a token of the one assigned app on every request", async () => {
 
   const second = await newApp();
   await setAssignments(db, organizationId, second.id, [factory.id]);
-  expect((await requestToken(token)).status).toBe(409);
+  expect((await requestToken(pagerDutyTokenPath, token)).status).toBe(409);
 });

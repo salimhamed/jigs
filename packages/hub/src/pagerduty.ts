@@ -7,6 +7,7 @@ import type { HubDatabase } from "./db/database.ts";
 import { apps } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
+import { parseWebhookJson, webhookBody } from "./webhooks.ts";
 
 /** Where PagerDuty sends one PagerDuty app's webhooks. Its payloads do not name the app, so each has its own. */
 export const pagerDutyWebhookPath = (appId: string) => `/webhooks/pagerduty/${appId}`;
@@ -37,18 +38,19 @@ export interface PagerDutyAppInput {
   region: string;
 }
 
-const defaultIdentityUrl = "https://identity.pagerduty.com";
+// PagerDuty mints app tokens from its identity service, not its REST API.
+const defaultApiUrl = "https://identity.pagerduty.com";
 
 const readSecrets = (encryptionKey: Buffer, app: App) =>
   decryptJson<PagerDutyAppSecrets>(encryptionKey, app.secrets);
 
 /** Mint an app token for the account with the client-credentials grant, or say why PagerDuty refused. */
 async function mintToken(
-  identityUrl: string,
+  apiUrl: string,
   credentials: { clientId: string; clientSecret: string; subdomain: string; region: string },
   now = Date.now(),
 ): Promise<PagerDutyTokenResponse | { refused: number }> {
-  const response = await fetch(`${identityUrl}/oauth/token`, {
+  const response = await fetch(`${apiUrl}/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
     body: new URLSearchParams({
@@ -79,7 +81,7 @@ export async function addPagerDutyApp(
   encryptionKey: Buffer,
   organizationId: string,
   input: PagerDutyAppInput,
-  identityUrl = defaultIdentityUrl,
+  { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ app: App } | { error: string }> {
   if (!input.name || !input.clientId || !input.clientSecret || !input.subdomain) {
     return { error: "Enter the name, client ID, client secret and account subdomain." };
@@ -87,7 +89,7 @@ export async function addPagerDutyApp(
   if (!(pagerDutyRegions as readonly string[]).includes(input.region)) {
     return { error: "The region is us or eu." };
   }
-  const minted = await mintToken(identityUrl, input);
+  const minted = await mintToken(apiUrl, input);
   if ("refused" in minted) {
     return {
       error: `PagerDuty refused these credentials for ${input.subdomain} in ${input.region} (${minted.refused}).`,
@@ -181,36 +183,33 @@ export function createPagerDutyRoutes(options: {
   const { db, waiters, encryptionKey } = options;
   const router = express.Router();
 
-  router.post(
-    pagerDutyWebhookPath(":appId"),
-    express.raw({ type: () => true, limit: "25mb" }),
-    async (request, response) => {
-      const app = await findApp(db, "pagerduty", String(request.params.appId));
-      const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      if (
-        !app ||
-        !verifySignature(
-          readSecrets(encryptionKey, app).webhookSecret,
-          body,
-          request.get("x-pagerduty-signature"),
-        )
-      ) {
-        response
-          .status(401)
-          .json({ error: "The hub does not know this PagerDuty app or signature." });
-        return;
-      }
-      const payload = JSON.parse(body.toString("utf8")) as { event?: { event_type?: string } };
-      await fanOutProviderEvent(db, waiters, {
-        organizationId: app.organizationId,
-        appId: app.id,
-        provider: "pagerduty",
-        name: payload.event?.event_type ?? "",
-        payload,
-      });
-      response.status(200).end();
-    },
-  );
+  router.post(pagerDutyWebhookPath(":appId"), webhookBody, async (request, response) => {
+    const app = await findApp(db, "pagerduty", String(request.params.appId));
+    const body = request.body as Buffer;
+    if (
+      !app ||
+      !verifySignature(
+        readSecrets(encryptionKey, app).webhookSecret,
+        body,
+        request.get("x-pagerduty-signature"),
+      )
+    ) {
+      response
+        .status(401)
+        .json({ error: "The hub does not know this PagerDuty app or signature." });
+      return;
+    }
+    const payload = parseWebhookJson<{ event?: { event_type?: string } }>(body, response);
+    if (!payload) return;
+    await fanOutProviderEvent(db, waiters, {
+      organizationId: app.organizationId,
+      appId: app.id,
+      provider: "pagerduty",
+      name: payload.event?.event_type ?? "",
+      payload,
+    });
+    response.status(200).end();
+  });
 
   return router;
 }
@@ -220,7 +219,7 @@ export async function issuePagerDutyToken(
   db: HubDatabase,
   encryptionKey: Buffer,
   factoryId: string,
-  identityUrl = defaultIdentityUrl,
+  { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ token: PagerDutyTokenResponse } | { status: 404 | 409 | 503; error: string }> {
   const found = await findAssignedInstallation(db, factoryId, "pagerduty", undefined, {
     none: "No PagerDuty app is assigned to this factory.",
@@ -228,7 +227,7 @@ export async function issuePagerDutyToken(
   });
   if ("error" in found) return found;
   const { app, installation } = found;
-  const minted = await mintToken(identityUrl, {
+  const minted = await mintToken(apiUrl, {
     clientId: app.externalId,
     clientSecret: readSecrets(encryptionKey, app).clientSecret,
     subdomain: installation.account,

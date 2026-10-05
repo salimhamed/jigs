@@ -1,7 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
-import { once } from "node:events";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createHmac } from "node:crypto";
 import {
   factoryStatusPath,
   type LinearTokenResponse,
@@ -9,13 +6,10 @@ import {
 } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { afterAll, beforeAll, expect, vi } from "vitest";
+import { beforeAll, expect, vi } from "vitest";
 import { type App, setAssignments } from "./apps.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
-import { addFactory } from "./factories.ts";
-import { createFactoryApi } from "./factory-api.ts";
+import { dbTest } from "./db/test-database.ts";
 import {
   addLinearApp,
   createLinearRoutes,
@@ -25,16 +19,21 @@ import {
   linearScopes,
   linearWebhookPath,
 } from "./linear.ts";
-import { MessageWaiters, readMessages } from "./messages.ts";
+import { readMessages } from "./messages.ts";
+import {
+  adminFromHeader,
+  authorizeUrl,
+  finishOAuth,
+  organizationId,
+  setUpTestHub,
+  startOAuth,
+  stateCookie,
+} from "./test-hub.ts";
 
-const encryptionKey = randomBytes(32);
-const organizationId = "acme";
 const publicUrl = new URL("https://hub.example.test");
 
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
-const waiters = new MessageWaiters();
-const servers: Server[] = [];
+const { db, encryptionKey, waiters, listen, serveHub, newFactory, eventNames, requestToken } =
+  setUpTestHub();
 let hub: string;
 let linearTokens: LinearTokens;
 
@@ -55,13 +54,6 @@ let refreshes = 0;
 // Runs once, while the next refresh is out at Linear.
 let beforeRefresh: (() => Promise<void>) | null = null;
 const clientSecrets = new Map<string, string>();
-
-async function listen(app: express.Express) {
-  const server = app.listen(0, "127.0.0.1");
-  servers.push(server);
-  await once(server, "listening");
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 function fakeLinear() {
   const tokens = (clientId: string, workspace: Workspace) => {
@@ -138,48 +130,20 @@ function fakeLinear() {
 }
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
-  await migrateDatabase(db);
-  await db.insert(schema.organization).values([
-    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
-    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
-  ]);
   const linear = await listen(fakeLinear());
   linearTokens = new LinearTokens({ db, encryptionKey, apiUrl: linear });
-  hub = await listen(
-    express()
-      .use(
-        createLinearRoutes({
-          db,
-          waiters,
-          encryptionKey,
-          publicUrl,
-          linearTokens,
-          // Stands in for the session: the header names the Organization the caller administers.
-          adminOrganization: async (request) => request.get("x-admin-of") ?? null,
-          apiUrl: linear,
-        }),
-      )
-      .use(
-        createFactoryApi({
-          db,
-          waiters,
-          linearTokens,
-          encryptionKey,
-        }),
-      ),
-  );
-});
-
-afterAll(async () => {
-  waiters.close();
-  for (const server of servers) {
-    server.closeAllConnections();
-    server.close();
-  }
-  await db?.$client.end();
-  await database?.drop();
+  hub = await serveHub({
+    routes: createLinearRoutes({
+      db,
+      waiters,
+      encryptionKey,
+      publicUrl,
+      linearTokens,
+      adminOrganization: adminFromHeader,
+      apiUrl: linear,
+    }),
+    linearTokens,
+  });
 });
 
 let appCount = 0;
@@ -209,40 +173,24 @@ function newWorkspace(): Workspace {
   };
 }
 
-let factoryCount = 0;
-async function newFactory() {
-  factoryCount += 1;
-  return addFactory(db, organizationId, `factory ${factoryCount}`);
-}
+const startConnect = (app: App, admin: string | null = app.organizationId) =>
+  startOAuth(`${hub}${linearConnectPath(app.id)}`, admin);
 
-const cookieOf = (response: Response) =>
-  (response.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
-
-async function startConnect(app: App, admin: string | null = app.organizationId) {
-  return fetch(`${hub}${linearConnectPath(app.id)}`, {
-    redirect: "manual",
-    headers: admin ? { "x-admin-of": admin } : {},
-  });
-}
-
-async function callback(app: App, query: Record<string, string>, cookie: string, admin = true) {
-  const response = await fetch(
-    `${hub}${linearCallbackPath(app.id)}?${new URLSearchParams(query)}`,
-    {
-      redirect: "manual",
-      headers: { cookie, ...(admin ? { "x-admin-of": app.organizationId } : {}) },
-    },
+const callback = (app: App, query: Record<string, string>, cookie: string, admin = true) =>
+  finishOAuth(
+    `${hub}${linearCallbackPath(app.id)}`,
+    query,
+    cookie,
+    admin ? app.organizationId : null,
   );
-  return { status: response.status, location: response.headers.get("location") };
-}
 
 /** Connect a workspace the way an admin does: start, approve in Linear, come back. */
 async function connect(app: App, workspace: Workspace) {
   const started = await startConnect(app);
-  const state = new URL(started.headers.get("location") ?? "").searchParams.get("state") ?? "";
+  const state = authorizeUrl(started).searchParams.get("state") ?? "";
   const code = `code-${crypto.randomUUID()}`;
   codes.set(code, { clientId: app.externalId, workspace });
-  const answered = await callback(app, { code, state }, cookieOf(started));
+  const answered = await callback(app, { code, state }, stateCookie(started));
   expect(answered).toEqual({ status: 303, location: `/apps/${app.id}` });
 }
 
@@ -301,30 +249,15 @@ async function deliver(
   return response.status;
 }
 
-const eventNames = async (factoryId: string) =>
-  (await readMessages(db, factoryId)).map((message) =>
-    message.kind === "event" ? message.event.name : message.kind,
-  );
-
-async function requestToken(token: string, body: unknown) {
-  const response = await fetch(`${hub}${linearTokenPath}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "user-agent": "jigs/1.2.3",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return { status: response.status, body: await response.json() };
-}
+const requestLinearToken = (token: string, body: unknown) =>
+  requestToken(linearTokenPath, token, body);
 
 dbTest("connects a workspace through Linear's OAuth flow as the app", async () => {
   const linear = await newApp();
   const workspace = newWorkspace();
   const started = await startConnect(linear.app);
   expect(started.status).toBe(303);
-  const authorize = new URL(started.headers.get("location") ?? "");
+  const authorize = authorizeUrl(started);
   expect(`${authorize.origin}${authorize.pathname}`).toBe("https://linear.app/oauth/authorize");
   expect(Object.fromEntries(authorize.searchParams)).toEqual({
     client_id: linear.app.externalId,
@@ -371,16 +304,18 @@ dbTest("refuses a callback whose state is not the admin's own", async () => {
   expect((await startConnect(linear.app, "other")).status).toBe(404);
 
   const started = await startConnect(linear.app);
-  const state = new URL(started.headers.get("location") ?? "").searchParams.get("state") ?? "";
+  const state = authorizeUrl(started).searchParams.get("state") ?? "";
   const code = "code-forged";
   codes.set(code, { clientId: linear.app.externalId, workspace });
   expect((await callback(linear.app, { code, state }, "")).status).toBe(400);
-  expect((await callback(linear.app, { code, state: "guess" }, cookieOf(started))).status).toBe(
+  expect((await callback(linear.app, { code, state: "guess" }, stateCookie(started))).status).toBe(
     400,
   );
-  expect((await callback(linear.app, { code, state }, cookieOf(started), false)).status).toBe(404);
+  expect((await callback(linear.app, { code, state }, stateCookie(started), false)).status).toBe(
+    404,
+  );
   expect(
-    (await callback(linear.app, { error: "access_denied", state }, cookieOf(started))).status,
+    (await callback(linear.app, { error: "access_denied", state }, stateCookie(started))).status,
   ).toBe(400);
   expect(
     await db
@@ -483,7 +418,7 @@ dbTest("issues the assigned app's workspace token by id or URL key, or the only 
   const { factory, token } = await newFactory();
   await setAssignments(db, organizationId, linear.app.id, [factory.id]);
 
-  const first = await requestToken(token, { organization: workspace.id });
+  const first = await requestLinearToken(token, { organization: workspace.id });
   expect(first.status).toBe(200);
   const body = first.body as LinearTokenResponse;
   expect(body).toEqual({
@@ -491,18 +426,18 @@ dbTest("issues the assigned app's workspace token by id or URL key, or the only 
     expiresAt: expect.any(String),
     app: { name: linear.app.name, userId: workspace.userId },
   });
-  expect(await requestToken(token, { organization: workspace.urlKey.toUpperCase() })).toEqual(
+  expect(await requestLinearToken(token, { organization: workspace.urlKey.toUpperCase() })).toEqual(
     first,
   );
-  expect(await requestToken(token, {})).toEqual(first);
+  expect(await requestLinearToken(token, {})).toEqual(first);
 
-  expect(await requestToken(token, { organization: "nowhere" })).toEqual({
+  expect(await requestLinearToken(token, { organization: "nowhere" })).toEqual({
     status: 404,
     body: { error: "No Linear app assigned to this factory is connected to nowhere." },
   });
-  expect((await requestToken(token, { organization: "" })).status).toBe(400);
-  expect((await requestToken(token, { organization: 7 })).status).toBe(400);
-  expect((await requestToken("nope", {})).status).toBe(401);
+  expect((await requestLinearToken(token, { organization: "" })).status).toBe(400);
+  expect((await requestLinearToken(token, { organization: 7 })).status).toBe(400);
+  expect((await requestLinearToken("nope", {})).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
@@ -516,7 +451,7 @@ dbTest("refuses a token when no workspace, or more than one, matches", async () 
   const [first, second] = [await newApp(), await newApp()];
   const [shared, own] = [newWorkspace(), newWorkspace()];
   const { factory, token } = await newFactory();
-  expect(await requestToken(token, {})).toEqual({
+  expect(await requestLinearToken(token, {})).toEqual({
     status: 404,
     body: { error: "No Linear app assigned to this factory is connected to a Linear workspace." },
   });
@@ -527,14 +462,14 @@ dbTest("refuses a token when no workspace, or more than one, matches", async () 
   await setAssignments(db, organizationId, second.app.id, [factory.id]);
 
   const both = [`${first.app.name} (${shared.urlKey})`, `${second.app.name} (${shared.urlKey})`];
-  expect(await requestToken(token, { organization: shared.urlKey })).toEqual({
+  expect(await requestLinearToken(token, { organization: shared.urlKey })).toEqual({
     status: 409,
     body: {
       error: `More than one Linear app assigned to this factory is connected to ${shared.urlKey}: ${both.sort().join(", ")}.`,
     },
   });
-  expect((await requestToken(token, {})).status).toBe(409);
-  expect((await requestToken(token, { organization: own.id })).status).toBe(200);
+  expect((await requestLinearToken(token, {})).status).toBe(409);
+  expect((await requestLinearToken(token, { organization: own.id })).status).toBe(200);
 });
 
 dbTest("refreshes a token near expiry once, and stops on a refused refresh", async () => {

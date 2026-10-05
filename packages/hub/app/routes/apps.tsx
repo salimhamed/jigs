@@ -5,7 +5,7 @@ import { addLinearApp } from "../../src/linear.ts";
 import { addPagerDutyApp } from "../../src/pagerduty.ts";
 import { addSlackApp } from "../../src/slack.ts";
 import { listApps } from "../apps.server.ts";
-import { requireMember } from "../auth.server.ts";
+import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { button, input, table } from "../components/ui.ts";
 import type { Route } from "./+types/apps.ts";
@@ -16,8 +16,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { organizationId, role } = await requireMember(context, request);
-  if (role !== "admin") return { error: "Only an admin can add apps." };
+  const admin = await requireAdmin(context, request);
+  if ("error" in admin) return admin;
+  const { organizationId } = admin;
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "").trim();
   const { db, config } = context;

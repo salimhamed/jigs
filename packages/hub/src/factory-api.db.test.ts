@@ -1,7 +1,3 @@
-import { randomBytes } from "node:crypto";
-import { once } from "node:events";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
 import {
   cursorPath,
   type FactoryStatus,
@@ -12,62 +8,21 @@ import {
   messagesPath,
 } from "@jigs-ai/hub-protocol";
 import { eq, sql } from "drizzle-orm";
-import express from "express";
-import { afterAll, beforeAll, expect } from "vitest";
+import { beforeAll, expect } from "vitest";
 import { setAssignments } from "./apps.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
+import { dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
-import { createFactoryApi } from "./factory-api.ts";
-import { LinearTokens } from "./linear.ts";
-import { fanOutProviderEvent, MessageWaiters } from "./messages.ts";
+import { fanOutProviderEvent } from "./messages.ts";
 import { deleteExpiredMessages } from "./retention.ts";
+import { CountingWaiters, organizationId, setUpTestHub } from "./test-hub.ts";
 
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
-let server: Server;
+const { db, waiters, serveHub, newFactory } = setUpTestHub();
 let url: string;
-const waiters = new MessageWaiters();
-const organizationId = "acme";
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
-  await migrateDatabase(db);
-  await db.insert(schema.organization).values([
-    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
-    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
-  ]);
-  const encryptionKey = randomBytes(32);
-  const linearTokens = new LinearTokens({ db, encryptionKey });
-  server = express()
-    .use(
-      createFactoryApi({
-        db,
-        waiters,
-        encryptionKey,
-        linearTokens,
-      }),
-    )
-    .listen(0, "127.0.0.1");
-  await once(server, "listening");
-  url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  url = await serveHub();
 });
-
-afterAll(async () => {
-  waiters.close();
-  server?.closeAllConnections();
-  server?.close();
-  await db?.$client.end();
-  await database?.drop();
-});
-
-let named = 0;
-async function newFactory() {
-  named += 1;
-  return addFactory(db, organizationId, `factory ${named}`);
-}
 
 const headers = (token: string) => ({
   authorization: `Bearer ${token}`,
@@ -234,33 +189,33 @@ dbTest("holds a poll until a message arrives or the wait ends", async () => {
   expect(Date.now() - started).toBeGreaterThanOrEqual(900);
 
   const held = poll(token, 30);
-  await until(() => waiters.waiting(factory.id) === 1);
+  await until(() => waiters.held(factory.id) === 1);
   const sentAt = Date.now();
   await send([factory.id]);
   const { body } = await held;
   expect(body.messages).toHaveLength(1);
   expect(Date.now() - sentAt).toBeLessThan(5000);
-  expect(waiters.waiting(factory.id)).toBe(0);
+  expect(waiters.held(factory.id)).toBe(0);
 });
 
 dbTest("releases a waiting poll when its factory disconnects", async () => {
   const { factory, token } = await newFactory();
   const controller = new AbortController();
   const held = poll(token, 30, controller.signal);
-  await until(() => waiters.waiting(factory.id) === 1);
+  await until(() => waiters.held(factory.id) === 1);
   controller.abort();
   await expect(held).rejects.toThrow();
-  await until(() => waiters.waiting(factory.id) === 0);
+  await until(() => waiters.held(factory.id) === 0);
 });
 
 dbTest("answers waiting polls at once when the waiters close", async () => {
-  const closing = new MessageWaiters();
+  const closing = new CountingWaiters();
   const { factory } = await newFactory();
   const wait = closing.wait(factory.id, 30_000, new AbortController().signal);
   closing.close();
   await wait;
   await closing.wait(factory.id, 30_000, new AbortController().signal);
-  expect(closing.waiting(factory.id)).toBe(0);
+  expect(closing.held(factory.id)).toBe(0);
 });
 
 dbTest("tells a factory once when expired messages it never confirmed are deleted", async () => {
@@ -314,12 +269,12 @@ dbTest("removing a factory removes its messages", async () => {
 dbTest("refuses a held poll once its token is re-issued or its factory removed", async () => {
   const { factory, token } = await newFactory();
   const held = poll(token, 30);
-  await until(() => waiters.waiting(factory.id) === 1);
+  await until(() => waiters.held(factory.id) === 1);
   const reissued = await reissueToken(db, waiters, organizationId, factory.id);
   expect((await held).status).toBe(401);
 
   const again = poll(reissued ?? "", 30);
-  await until(() => waiters.waiting(factory.id) === 1);
+  await until(() => waiters.held(factory.id) === 1);
   await removeFactory(db, waiters, organizationId, factory.id);
   expect((await again).status).toBe(401);
 });

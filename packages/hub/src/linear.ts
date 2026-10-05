@@ -14,6 +14,7 @@ import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
+import { parseWebhookJson, webhookBody } from "./webhooks.ts";
 
 /** Where Linear sends one Linear app's webhooks. Linear's payloads do not name the app, so each has its own. */
 export const linearWebhookPath = (appId: string) => `/webhooks/linear/${appId}`;
@@ -159,73 +160,71 @@ export function createLinearRoutes(options: {
     adminOrganization,
   });
 
-  router.post(
-    linearWebhookPath(":appId"),
-    express.raw({ type: () => true, limit: "25mb" }),
-    async (request, response) => {
-      const app = await findApp(db, "linear", String(request.params.appId));
-      const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      if (
-        !app ||
-        !verifySignature(
-          decryptJson<LinearAppSecrets>(encryptionKey, app.secrets).webhookSecret,
-          body,
-          request.get("linear-signature"),
-        )
-      ) {
-        response.status(401).json({ error: "The hub does not know this Linear app or signature." });
-        return;
-      }
-      const payload = JSON.parse(body.toString("utf8")) as {
-        type?: string;
-        action?: string;
-        organizationId?: string;
-        webhookTimestamp?: number;
-        agentSession?: { id?: string };
-      };
-      if (
-        typeof payload.webhookTimestamp !== "number" ||
-        Math.abs(Date.now() - payload.webhookTimestamp) > MAX_WEBHOOK_AGE_MS
-      ) {
-        response.status(401).json({ error: "The webhook is more than a minute old." });
-        return;
-      }
-      const name = payload.type ?? "";
-      const installation = await db.query.installations.findFirst({
-        where: and(
-          eq(installations.appId, app.id),
-          eq(installations.externalId, payload.organizationId ?? ""),
-        ),
-      });
-      if (!installation) {
-        console.warn(
-          `[linear] dropped ${name} for ${app.name}: workspace ${payload.organizationId ?? "(none)"} is not connected to it`,
-        );
-        response.status(202).end();
-        return;
-      }
-      const { appendedTo } = await fanOutProviderEvent(db, waiters, {
-        organizationId: app.organizationId,
-        appId: app.id,
-        provider: "linear",
-        name,
-        payload,
-      });
-      const sessionId = payload.agentSession?.id;
-      if (
-        name === "AgentSessionEvent" &&
-        payload.action === "created" &&
-        sessionId &&
-        appendedTo.length > 0
-      ) {
-        // Linear marks a session unresponsive unless an activity follows within ten
-        // seconds, longer than a factory may take to hear of it.
-        // https://linear.app/developers/agent-interaction
-        void acknowledge(app, installation, sessionId);
-      }
-      response.status(200).end();
-    },
-  );
+  router.post(linearWebhookPath(":appId"), webhookBody, async (request, response) => {
+    const app = await findApp(db, "linear", String(request.params.appId));
+    const body = request.body as Buffer;
+    if (
+      !app ||
+      !verifySignature(
+        decryptJson<LinearAppSecrets>(encryptionKey, app.secrets).webhookSecret,
+        body,
+        request.get("linear-signature"),
+      )
+    ) {
+      response.status(401).json({ error: "The hub does not know this Linear app or signature." });
+      return;
+    }
+    const payload = parseWebhookJson<{
+      type?: string;
+      action?: string;
+      organizationId?: string;
+      webhookTimestamp?: number;
+      agentSession?: { id?: string };
+    }>(body, response);
+    if (!payload) return;
+    if (
+      typeof payload.webhookTimestamp !== "number" ||
+      Math.abs(Date.now() - payload.webhookTimestamp) > MAX_WEBHOOK_AGE_MS
+    ) {
+      response.status(401).json({ error: "The webhook is more than a minute old." });
+      return;
+    }
+    const name = payload.type ?? "";
+    const installation = await db.query.installations.findFirst({
+      where: and(
+        eq(installations.appId, app.id),
+        eq(installations.externalId, payload.organizationId ?? ""),
+      ),
+    });
+    if (!installation) {
+      console.warn(
+        `[linear] dropped ${name} for ${app.name}: workspace ${payload.organizationId ?? "(none)"} is not connected to it`,
+      );
+      // 202, unlike Slack's 200: still a success, but the delivery log shows nothing was kept.
+      response.status(202).end();
+      return;
+    }
+    const { appendedTo } = await fanOutProviderEvent(db, waiters, {
+      organizationId: app.organizationId,
+      appId: app.id,
+      provider: "linear",
+      name,
+      payload,
+    });
+    const sessionId = payload.agentSession?.id;
+    if (
+      name === "AgentSessionEvent" &&
+      payload.action === "created" &&
+      sessionId &&
+      appendedTo.length > 0
+    ) {
+      // Linear marks a session unresponsive unless an activity follows within ten
+      // seconds, longer than a factory may take to hear of it.
+      // https://linear.app/developers/agent-interaction
+      void acknowledge(app, installation, sessionId);
+    }
+    response.status(200).end();
+  });
 
   const acknowledge = async (app: App, installation: Installation, sessionId: string) => {
     try {
