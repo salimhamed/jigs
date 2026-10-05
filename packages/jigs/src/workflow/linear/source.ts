@@ -59,8 +59,9 @@ export const linear = {
    * Every factory assigned the app hears every mention of it, and each of
    * their triggers on this source starts its own run. To have one run answer,
    * give each purpose its own Linear app, or split the issues between triggers
-   * with `teams`, `projects` and `labels`. Sessions not on an issue start no
-   * run.
+   * with `teams`, `projects` and `labels`. The hub's first reply appears even
+   * when the filters skip a session and no run starts, so make the filters
+   * match what the app is for. Sessions not on an issue start no run.
    *
    * @example
    * ```ts

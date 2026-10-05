@@ -6,7 +6,7 @@ import type { Factory } from "../workflow/factory.ts";
 import { linear } from "../workflow/linear/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import type { PreparedRun } from "./launch.ts";
-import { linearAgentSessions } from "./linear-agent-sessions.ts";
+import { type LinearAgentSessionsDeps, linearAgentSessions } from "./linear-agent-sessions.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 
@@ -140,7 +140,7 @@ test("empty filter lists are refused", () => {
   });
 });
 
-test("a session the hub delivers twice starts one run", async () => {
+function sessionEngine(issueFiling: LinearAgentSessionsDeps["issueFiling"], params = {}) {
   const T0 = new Date("2026-10-04T11:59:00.000Z");
   const memory = memoryTriggerStore(() => T0, T0);
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
@@ -151,11 +151,11 @@ test("a session the hub delivers twice starts one run", async () => {
         inputs: z.object({ session: z.string(), issue: z.object({ identifier: z.string() }) }),
       },
     },
-    triggers: { mentions: { workflow: "answer", source: linear.agentSessions() } },
+    triggers: { mentions: { workflow: "answer", source: linear.agentSessions(params) } },
   };
   const engine = createTriggerEngine(factory, {
     store: memory.store,
-    sources: { "linear.agentSessions": linearAgentSessions({ issueFiling: unread() }) },
+    sources: { "linear.agentSessions": linearAgentSessions({ issueFiling }) },
     now: () => T0,
     log: () => {},
     factorySlug: () => "factory-a",
@@ -171,6 +171,11 @@ test("a session the hub delivers twice starts one run", async () => {
       },
     }),
   });
+  return { engine, starts };
+}
+
+test("a session the hub delivers twice starts one run", async () => {
+  const { engine, starts } = sessionEngine(unread());
   await engine.arm();
 
   expect(await engine.push("linear", created())).toEqual(["mentions"]);
@@ -179,4 +184,12 @@ test("a session the hub delivers twice starts one run", async () => {
 
   expect(starts).toHaveLength(1);
   expect(starts[0]?.triggerId).toBe(eventTriggerId("mentions", SESSION));
+});
+
+test("a filter that cannot read the issue fails the push rather than passing the session over", async () => {
+  const { engine, starts } = sessionEngine(unread(), { labels: ["agent"] });
+  await engine.arm();
+  await expect(engine.push("linear", created())).rejects.toThrow("could not read the event");
+  await expect(engine.push("linear", withSession({}, { id: undefined }))).rejects.toThrow();
+  expect(starts).toEqual([]);
 });

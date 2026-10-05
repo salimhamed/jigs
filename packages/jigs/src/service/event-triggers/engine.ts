@@ -46,7 +46,10 @@ export interface TriggerEngine {
   /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
   poll(name: string): Promise<void>;
-  /** Record the occurrence a pushed event is for, and return the triggers that took it. */
+  /**
+   * Record the occurrence a pushed event is for, and return the triggers that took it. Rejects
+   * when a trigger could not read the event, after the others have taken it.
+   */
   push(provider: Provider, event: unknown): Promise<string[]>;
   /** Start waiting occurrences, oldest first, up to each trigger's cap. */
   drain(): Promise<void>;
@@ -352,6 +355,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     async push(provider, event) {
       await markers();
       const taken: string[] = [];
+      const failures: unknown[] = [];
       for (const entry of armed) {
         if (entry.source.provider !== provider) continue;
         try {
@@ -360,12 +364,20 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
           const occurrence = entry.source.occurrence(pushed.inputs);
           if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
         } catch (error) {
+          failures.push(error);
           log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
         }
       }
       // Not awaited: a provider wants its answer in seconds, and the row
       // already recorded is what makes the start certain.
       if (taken.length > 0) void drain();
+      // A trigger that could not tell whether the event was its occurrence
+      // must not read as one that passed it over.
+      if (failures.length > 0)
+        throw new AggregateError(
+          failures,
+          `${failures.length} trigger(s) could not read the event`,
+        );
       return taken;
     },
   };

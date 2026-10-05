@@ -282,6 +282,11 @@ this source in each of those factories starts its own run. jigs does not pick
 one for you: give each purpose its own Linear app, or split the issues between
 triggers with `teams`, `projects` and `labels`.
 
+The hub replies "Received — working on it." to every session before any
+factory reads it, so that reply appears even when this factory's filters skip
+the session and no run starts. Make the filters match what the app is for, so
+that a mention the app answers is one a run takes.
+
 ## `release` {#release}
 
 Release policy controls what happens to run-owned worktrees and scratch

@@ -95,7 +95,8 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
 /**
  * Hand a provider's pushed event to the running event triggers watching that
  * provider. It returns once the occurrence is recorded, before any run starts,
- * with the names of the triggers that took it.
+ * with the names of the triggers that took it. Rejects when a trigger could not
+ * read the event, after the others have taken it.
  */
 export async function pushEvent(provider: Provider, event: unknown): Promise<string[]> {
   return running === undefined ? [] : running.push(provider, event);

@@ -233,6 +233,17 @@ test("a Linear agent session goes to the triggers, not to waiting runs", async (
   );
 });
 
+test("a Linear agent session no trigger could read is a failure, logged", async () => {
+  push.mockRejectedValueOnce(new Error("issue lookup failed"));
+  const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
+  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+    outcome: "failed",
+  });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] linear dropped reason=push-failed event=AgentSessionEvent: Error: issue lookup failed",
+  );
+});
+
 const incidentTriggered = () =>
   JSON.parse(
     readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
