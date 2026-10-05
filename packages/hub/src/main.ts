@@ -1,9 +1,11 @@
 import type { AddressInfo } from "node:net";
-import { createAuth } from "./auth.ts";
+import { fromNodeHeaders } from "better-auth/node";
+import { adminOrganization, createAuth } from "./auth.ts";
 import { readConfig } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
 import { createGitHubRoutes, GitHubTokens } from "./github.ts";
+import { createLinearRoutes, LinearTokens } from "./linear.ts";
 import { MessageWaiters } from "./messages.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
@@ -28,13 +30,24 @@ const web = await createWebApp(
   process.env.NODE_ENV === "development",
 );
 
+const { encryptionKey } = config;
+const linearTokens = new LinearTokens({ db, encryptionKey });
 const routers = [
   createFactoryApi({
     db,
     waiters,
-    githubTokens: new GitHubTokens({ db, encryptionKey: config.encryptionKey }),
+    githubTokens: new GitHubTokens({ db, encryptionKey }),
+    linearTokens,
   }),
-  createGitHubRoutes({ db, waiters, encryptionKey: config.encryptionKey }),
+  createGitHubRoutes({ db, waiters, encryptionKey }),
+  createLinearRoutes({
+    db,
+    waiters,
+    encryptionKey,
+    publicUrl: config.publicUrl,
+    linearTokens,
+    adminOrganization: (request) => adminOrganization(auth, fromNodeHeaders(request.headers)),
+  }),
 ];
 const server = createHubApp(auth, routers, web).listen(config.port, config.host, () => {
   const address = server.address() as AddressInfo;

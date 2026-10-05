@@ -21,6 +21,7 @@ import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
 import { GitHubTokens } from "./github.ts";
+import { LinearTokens } from "./linear.ts";
 import { fanOutProviderEvent, MessageWaiters } from "./messages.ts";
 import { deleteExpiredMessages } from "./retention.ts";
 
@@ -39,8 +40,12 @@ beforeAll(async () => {
     { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
     { id: "other", name: "Other", slug: "other", createdAt: new Date() },
   ]);
-  const githubTokens = new GitHubTokens({ db, encryptionKey: randomBytes(32) });
-  server = express().use(createFactoryApi({ db, waiters, githubTokens })).listen(0, "127.0.0.1");
+  const encryptionKey = randomBytes(32);
+  const githubTokens = new GitHubTokens({ db, encryptionKey });
+  const linearTokens = new LinearTokens({ db, encryptionKey });
+  server = express()
+    .use(createFactoryApi({ db, waiters, githubTokens, linearTokens }))
+    .listen(0, "127.0.0.1");
   await once(server, "listening");
   url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
 });
@@ -105,13 +110,15 @@ async function appFor(factoryIds: string[], organization = organizationId) {
 }
 
 const send = async (factoryIds: string[], name = "issues") =>
-  fanOutProviderEvent(db, waiters, {
-    organizationId,
-    appId: await appFor(factoryIds),
-    provider: "github",
-    name,
-    payload: { action: name },
-  });
+  (
+    await fanOutProviderEvent(db, waiters, {
+      organizationId,
+      appId: await appFor(factoryIds),
+      provider: "github",
+      name,
+      payload: { action: name },
+    })
+  ).id;
 
 async function until(condition: () => boolean) {
   const deadline = Date.now() + 5000;

@@ -7,6 +7,12 @@ import {
   githubSetupPath,
   githubWebhookPath,
 } from "../src/github.ts";
+import {
+  type LinearWorkspaceSettings,
+  linearCallbackPath,
+  linearConnectPath,
+  linearWebhookPath,
+} from "../src/linear.ts";
 
 /** An Organization's apps, each with its installations and assigned factories. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
@@ -40,11 +46,15 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
     where: and(eq(apps.id, appId), eq(apps.organizationId, organizationId)),
   });
   if (!app) return null;
-  const settings = app.settings as GitHubAppSettings;
   const { origin } = context.config.publicUrl;
   const [installed, organizationFactories] = await Promise.all([
     context.db
-      .select({ externalId: installations.externalId, account: installations.account })
+      .select({
+        externalId: installations.externalId,
+        account: installations.account,
+        settings: installations.settings,
+        failure: installations.failure,
+      })
       .from(installations)
       .where(eq(installations.appId, app.id))
       .orderBy(asc(installations.account)),
@@ -58,21 +68,41 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       .where(eq(factories.organizationId, organizationId))
       .orderBy(asc(factories.name)),
   ]);
-  return {
+  const common = {
     id: app.id,
-    provider: app.provider,
     name: app.name,
-    appId: app.externalId,
-    clientId: settings.clientId,
-    installUrl: githubInstallUrl(app),
-    webhookUrl: `${origin}${githubWebhookPath}`,
-    setupUrl: `${origin}${githubSetupPath(app.id)}`,
-    installations: installed,
     factories: organizationFactories.map((factory) => ({
       id: factory.id,
       name: factory.name,
       assigned: factory.assigned !== null,
     })),
+  };
+  if (app.provider === "linear") {
+    return {
+      ...common,
+      provider: "linear" as const,
+      clientId: app.externalId,
+      connectUrl: linearConnectPath(app.id),
+      callbackUrl: `${origin}${linearCallbackPath(app.id)}`,
+      webhookUrl: `${origin}${linearWebhookPath(app.id)}`,
+      workspaces: installed.map((workspace) => ({
+        externalId: workspace.externalId,
+        urlKey: workspace.account,
+        name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
+        failure: workspace.failure,
+      })),
+    };
+  }
+  const settings = app.settings as GitHubAppSettings;
+  return {
+    ...common,
+    provider: "github" as const,
+    appId: app.externalId,
+    clientId: settings.clientId,
+    installUrl: githubInstallUrl(app),
+    webhookUrl: `${origin}${githubWebhookPath}`,
+    setupUrl: `${origin}${githubSetupPath(app.id)}`,
+    installations: installed.map(({ externalId, account }) => ({ externalId, account })),
   };
 }
 
