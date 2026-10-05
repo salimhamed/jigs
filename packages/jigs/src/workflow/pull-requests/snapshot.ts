@@ -104,9 +104,9 @@ export interface PullRequestSnapshot {
   approval: PullRequestApproval;
   /**
    * The login of the factory's GitHub App, `<slug>[bot]`: the account jigs posts as, and so do
-   * agents whose harness sets `github`. Absent with a personal access token.
+   * agents whose harness sets `github`.
    */
-  appBot?: string;
+  appBot: string;
 }
 
 /**

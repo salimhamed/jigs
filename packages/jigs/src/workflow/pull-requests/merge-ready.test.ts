@@ -8,7 +8,7 @@ import {
 import type { MergeApproval } from "./policy.ts";
 import type { PullRequestReview, PullRequestSnapshot } from "./snapshot.ts";
 
-type Facts = Omit<PullRequestSnapshot, "approval">;
+type Facts = Omit<PullRequestSnapshot, "approval" | "appBot">;
 
 const facts: Facts = {
   state: "open",
@@ -33,7 +33,11 @@ const read = (
   signal: MergeApproval = "review",
 ): PullRequestSnapshot => {
   const current = { ...facts, ...patch };
-  return { ...current, approval: { signal, state: approvalState(current, signal) } };
+  return {
+    ...current,
+    appBot: "jigs[bot]",
+    approval: { signal, state: approvalState(current, signal) },
+  };
 };
 const snapshot = read();
 const approved = (patch: Partial<Facts>, signal: MergeApproval = "review") =>

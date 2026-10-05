@@ -1,177 +1,71 @@
-import { expect, test, vi } from "vitest";
-import { runChecks } from "../checks/catalog.ts";
-import type { AppIdentity } from "../workflow/factory-schema.ts";
-import { type GithubIdentityProbes, githubIdentityChecks } from "./github-checks.ts";
+import type { FactoryStatus } from "@jigs-ai/hub-protocol";
+import { expect, test } from "vitest";
+import { JigsError } from "../errors.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
+import { githubChecks } from "./github-checks.ts";
 
-const APP: AppIdentity = {
-  mode: "app",
-  appId: 4958325,
-  installations: { salimhamed: 162033982 },
-  privateKeyPath: "/factory/github-app.private-key.pem",
-  operator: "salimhamed",
-};
-
-const GRANTED = {
-  contents: "write",
-  pull_requests: "write",
-  issues: "write",
-  metadata: "read",
-  checks: "read",
-  statuses: "read",
-};
-
-const probes = (overrides: Partial<GithubIdentityProbes> = {}): GithubIdentityProbes => ({
-  whoami: async () => ({ login: "salimhamed" }),
-  readPrivateKey: () => ({ key: "-----BEGIN PRIVATE KEY-----" }),
-  installation: async () => ({ permissions: GRANTED }),
-  registration: async () => ({ slug: "jigs-app-dev" }),
-  ...overrides,
-});
-
-const outcome = async (
-  identity: AppIdentity | { mode: "pat" },
-  id: string,
-  overrides: Partial<GithubIdentityProbes> = {},
-  env: Record<string, string> = { GITHUB_TOKEN: "ghp_live" },
-) => {
-  const report = await runChecks(
-    githubIdentityChecks([identity], probes(overrides), (name) => env[name]),
-  );
-  const found = report.checks.find((check) => check.id === id);
-  if (found === undefined) throw new Error(`no check ${id}`);
-  return found;
-};
-
-test("pat mode reports the login the token belongs to", async () => {
-  expect(await outcome({ mode: "pat" }, "github.identity")).toEqual({
-    id: "github.identity",
-    label: "GitHub identity",
-    ok: true,
-    detail: "jigs acts as salimhamed",
-  });
-});
-
-test("pat mode fails before probing when there is no token", async () => {
-  expect(await outcome({ mode: "pat" }, "github.identity", {}, {})).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("GITHUB_TOKEN is not set"),
-    repair: expect.stringContaining("pnpm exec jigs service restart"),
-  });
-});
-
-test("app mode names the bot it acts as and the operator it acts for", async () => {
-  expect(await outcome(APP, "github.identity")).toMatchObject({
-    ok: true,
-    detail: "jigs acts as jigs-app-dev[bot] on salimhamed; operator salimhamed",
-  });
-});
-
-test("an unreadable private key is the first thing said", async () => {
-  expect(
-    await outcome(APP, "github.identity", {
-      readPrivateKey: () => {
-        throw new Error("cannot read the GitHub App private key");
-      },
-    }),
-  ).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("cannot read"),
-    repair: expect.stringContaining("chmod 600 /factory/github-app.private-key.pem"),
-  });
-});
-
-test("a key anyone on the machine can read is a key anyone can act as the App with", async () => {
-  expect(
-    await outcome(APP, "github.identity", {
-      readPrivateKey: () => ({ key: "-----BEGIN PRIVATE KEY-----", looseMode: "0644" }),
-    }),
-  ).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("mode 0644"),
-    repair: "make it readable only by you: `chmod 600 /factory/github-app.private-key.pem`",
-  });
-});
-
-test("an installation that does not answer names the three facts that address it", async () => {
-  expect(
-    await outcome(APP, "github.identity", {
-      installation: async () => {
-        throw new Error("GitHub API 404 on /app/installations/162033982");
-      },
-    }),
-  ).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("162033982"),
-    repair: expect.stringContaining("installations"),
-  });
-});
-
-test("reading CI requires the checks and statuses permissions", async () => {
-  const { checks: _checks, statuses: _statuses, ...withoutCi } = GRANTED;
-  const check = await outcome(APP, "github.identity", {
-    installation: async () => ({ permissions: withoutCi }),
-  });
-  expect(check).toMatchObject({ ok: false });
-  if (check.ok !== false) throw new Error("expected failure");
-  expect(check.reason).toContain("checks: read");
-  expect(check.reason).toContain("statuses: read");
-});
-
-test("a read grant does not satisfy a write requirement", async () => {
-  expect(
-    await outcome(APP, "github.identity", {
-      installation: async () => ({ permissions: { ...GRANTED, contents: "read" } }),
-    }),
-  ).toMatchObject({ ok: false, reason: expect.stringContaining("contents: write") });
-});
-
-test("doctor probes every installation and registration once per App", async () => {
-  const app = APP;
-  const installation = vi.fn(async () => ({ permissions: GRANTED }));
-  const registration = vi.fn(async () => ({ slug: "jigs-app-dev" }));
-  const report = await runChecks(
-    githubIdentityChecks(
-      [
-        { ...app, installations: { salimhamed: 1, downstreamimpact: 2, Junglescout: 3 } },
-        { ...app, appId: 5, installations: { Other: 4 } },
-      ],
-      probes({ installation, registration }),
-      () => undefined,
-    ),
-  );
-  expect(report.ok).toBe(true);
-  expect(installation.mock.calls).toHaveLength(4);
-  expect(registration.mock.calls).toHaveLength(2);
-  expect(report.checks[0]).toMatchObject({
-    detail:
-      "jigs acts as jigs-app-dev[bot] on salimhamed, downstreamimpact, Junglescout; operator salimhamed",
-  });
-});
-
-test("multi-App key repairs identify the App entry rather than the singular config shape", async () => {
-  const result = await outcome(APP, "github.identity", {
-    readPrivateKey: () => {
-      throw new Error("missing key");
+const ctx = testFactoryContext({
+  config: {
+    bindings: {
+      api: { remote: "git@github.com:acme/api.git" },
+      web: { remote: "https://github.com/Widgets/web.git" },
+      local: { remote: "file:///srv/git/repo.git" },
     },
-  });
-  expect(result).toMatchObject({ ok: false, repair: expect.stringContaining(`App ${APP.appId}`) });
-  if (!result.ok) {
-    expect(result.repair).toContain("privateKeyPath");
-    expect(result.repair).not.toContain("github.identity.");
-  }
+  },
 });
 
-test("missing permissions retain the installation that failed", async () => {
-  const app = APP;
-  const result = await outcome(
-    { ...app, installations: { first: 10, second: 20 } },
-    "github.identity",
-    {
-      installation: async ({ installationId }) => ({
-        permissions: installationId === 10 ? GRANTED : { ...GRANTED, contents: "read" },
-      }),
-    },
-  );
-  expect(result).toMatchObject({ ok: false, reason: expect.stringContaining("installation 20") });
-  if (!result.ok) expect(result.reason).not.toContain("installation 10");
+const app = (name: string, ...accounts: string[]): FactoryStatus["apps"][number] => ({
+  provider: "github",
+  name,
+  installations: accounts.map((account) => ({ account })),
+});
+
+const status = (apps: FactoryStatus["apps"]) => async (): Promise<FactoryStatus> => ({
+  factory: { name: "personal" },
+  organization: { name: "Acme" },
+  apps,
+});
+
+const run = async (read: () => Promise<FactoryStatus>) => {
+  const [check] = githubChecks(ctx, read);
+  return check?.run();
+};
+
+test("an App installed on every bound owner passes and says where it acts", async () => {
+  expect(await run(status([app("jigs-dev", "acme", "widgets")]))).toEqual({
+    ok: true,
+    detail: "jigs-dev on acme, widgets",
+  });
+});
+
+test("no GitHub App assigned fails, whatever else is assigned", async () => {
+  expect(
+    await run(status([{ provider: "linear", name: "jigs", installations: [{ account: "acme" }] }])),
+  ).toMatchObject({ ok: false, reason: "no GitHub App is assigned to this factory on the hub" });
+});
+
+test("a bound owner no App is installed on is named", async () => {
+  expect(await run(status([app("jigs-dev", "acme")]))).toMatchObject({
+    ok: false,
+    reason: "no GitHub App assigned to this factory is installed on Widgets",
+  });
+});
+
+test("an owner with two of the factory's Apps installed is named, since the hub refuses its tokens", async () => {
+  expect(await run(status([app("one", "acme", "widgets"), app("two", "acme")]))).toMatchObject({
+    ok: false,
+    reason: "acme has more than one of this factory's GitHub Apps installed (one, two)",
+  });
+});
+
+test("a hub that cannot answer fails with its own repair", async () => {
+  expect(
+    await run(async () => {
+      throw new JigsError("JIGS_HUB_TOKEN is not set", "connect the factory");
+    }),
+  ).toEqual({
+    ok: false,
+    reason: "could not read this factory's GitHub Apps from the hub: JIGS_HUB_TOKEN is not set",
+    repair: "connect the factory",
+  });
 });

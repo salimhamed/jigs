@@ -5,15 +5,7 @@ import { expect, test } from "vitest";
 import { packageRoot } from "../../build/templates.ts";
 import { parseFactoryConfig } from "../../workflow/factory-schema.ts";
 import { layoutProblems } from "../output-layout.ts";
-import { initFactory, resolveIdentityOptions } from "./init.ts";
-
-const APP = {
-  mode: "app",
-  appId: 4958325,
-  installations: { salimhamed: 162033982 },
-  privateKeyPath: "github-app.private-key.pem",
-  operator: "salimhamed",
-} as const;
+import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {
   const dir = path.join(mkdtempSync(path.join(tmpdir(), "jigs-init-")), name);
@@ -276,25 +268,12 @@ test("the next steps are printed, not run", async () => {
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
 });
 
-test("the scaffold states an identity and leaves the approval to its default", async () => {
-  const patFactory = scaffold("pat-factory");
-  await init(patFactory);
-  const pat = readFileSync(path.join(patFactory, "jigs.config.ts"), "utf8");
-  expect(pat).toContain('identities: [{ mode: "pat" }]');
-  expect(pat).not.toContain("merge");
-
-  const appFactory = scaffold("app-factory");
-  const lines: string[] = [];
-  await initFactory({ cwd: appFactory, out: (line) => lines.push(line), identity: APP });
-  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
-  expect(app).toContain('mode: "app"');
-  expect(app).toContain("installations: { salimhamed: 162033982 }");
-  expect(app).toContain('operator: "salimhamed"');
-  expect(app).not.toContain("merge");
-  // App mode needs the key locked down.
-  expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
-  // The App's private key is a credential, and a scaffolded repo is a git repo.
-  expect(readFileSync(path.join(appFactory, ".gitignore"), "utf8")).toContain("*.private-key.pem");
+test("the scaffold leaves GitHub to its hub and the approval to its default", async () => {
+  const dir = scaffold("github-factory");
+  await init(dir);
+  const config = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
+  expect(config).toContain('// github: { operator: "your-github-login" },');
+  expect(config).not.toContain("merge");
 });
 
 // What the scaffolded jigs.config.test.ts asserts, evaluated here: the file
@@ -302,14 +281,9 @@ test("the scaffold states an identity and leaves the approval to its default", a
 // test is red on day one is the failure this guards.
 const scaffoldedExpectations = (dir: string) => {
   const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const [, github, linear] =
-    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.linear\)\.toEqual\((.+?)\);/s.exec(
-      text,
-    ) ?? [];
-  if (github === undefined || linear === undefined) {
-    throw new Error("the scaffolded test no longer asserts the identities");
-  }
-  return { github: evaluate(github), linear: evaluate(linear) };
+  const [, linear] = /expect\(factory\.linear\)\.toEqual\((.+?)\);/s.exec(text) ?? [];
+  if (linear === undefined) throw new Error("the scaffolded test no longer asserts the identity");
+  return { linear: evaluate(linear) };
 };
 
 // Both files carry settings objects rather than data formats, so both are read
@@ -324,28 +298,16 @@ const scaffoldedConfig = (dir: string) => {
     text.indexOf("defineFactory({") + "defineFactory(".length,
     text.lastIndexOf(")"),
   );
-  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as {
-    github: unknown;
-    linear: unknown;
-  };
+  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as { linear: unknown };
 };
 
-test.each([
-  ["pat", "key"],
-  ["app", "app"],
-] as const)(
-  "the %s/%s scaffold's own test asserts what its config declares",
-  async (mode, linearMode) => {
-    const dir = scaffold(`${mode}-agreement`);
-    await initFactory({
-      cwd: dir,
-      out: () => {},
-      identity: mode === "app" ? APP : { mode: "pat" },
-      linearIdentity: { mode: linearMode },
-    });
+test.each(["key", "app"] as const)(
+  "the %s scaffold's own test asserts what its config declares",
+  async (linearMode) => {
+    const dir = scaffold(`${linearMode}-agreement`);
+    await initFactory({ cwd: dir, out: () => {}, linearIdentity: { mode: linearMode } });
     const expectations = scaffoldedExpectations(dir);
     const config = scaffoldedConfig(dir);
-    expect(config.github).toEqual(expectations.github);
     expect(config.linear).toEqual({ identity: { mode: linearMode } });
     expect(config.linear).toEqual(expectations.linear);
     // And what it declares is what jigs accepts, so the first `jigs up` loads.
@@ -354,10 +316,7 @@ test.each([
       service: { dashboardPort: 9090 },
       ...config,
     });
-    expect(parsed.github).toEqual({
-      ...(expectations.github as object),
-      mergeApproval: mode === "app" ? "review" : "label",
-    });
+    expect(parsed.github).toEqual({ mergeApproval: "review" });
     expect(parsed.linear).toEqual(expectations.linear);
   },
 );
@@ -378,55 +337,4 @@ test("the scaffold names its Linear identity and the variables that mode reads",
   const example = readFileSync(path.join(appFactory, ".env.example"), "utf8");
   for (const name of ["LINEAR_API_KEY=", "LINEAR_CLIENT_ID=", "LINEAR_CLIENT_SECRET="])
     expect(example).toContain(name);
-});
-
-test("app mode is refused rather than stubbed when a fact is missing", () => {
-  expect(() => resolveIdentityOptions("app", {})).toThrow("--github-app-id");
-  expect(() => resolveIdentityOptions("app", { githubAppId: "1" })).toThrow(
-    "--github-app-installation",
-  );
-  expect(() =>
-    resolveIdentityOptions("app", {
-      githubAppId: "0",
-      githubAppInstallation: ["salimhamed=2"],
-      githubAppPrivateKeyPath: "k.pem",
-      githubOperatorLogin: "salimhamed",
-    }),
-  ).toThrow("--github-app-id must be a positive whole number");
-  expect(resolveIdentityOptions("pat", {})).toEqual({ mode: "pat" });
-  expect(
-    resolveIdentityOptions("app", {
-      githubAppId: "4958325",
-      githubAppInstallation: ["salimhamed=162033982"],
-      githubAppPrivateKeyPath: "github-app.private-key.pem",
-      githubOperatorLogin: "salimhamed",
-      gitCoAuthor: "Salim Hamed <salim@example.com>",
-    }),
-  ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
-});
-
-test("repeatable installations scaffold a loadable account map", async () => {
-  const options = {
-    githubAppId: "1",
-    githubAppPrivateKeyPath: "app.pem",
-    githubOperatorLogin: "human",
-    githubAppInstallation: ["some-org=10", "Other=20"],
-  };
-  const identity = resolveIdentityOptions("app", options);
-  expect(identity).toMatchObject({ installations: { "some-org": 10, Other: 20 } });
-  const dir = scaffold("installation-map");
-  await initFactory({ cwd: dir, out: () => {}, identity });
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      ...scaffoldedConfig(dir),
-    }).github.identities,
-  ).toEqual([identity]);
-  expect(() =>
-    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["Other=1", "other=2"] }),
-  ).toThrow("duplicate");
-  expect(() =>
-    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["bad"] }),
-  ).toThrow("<account>=<id>");
 });

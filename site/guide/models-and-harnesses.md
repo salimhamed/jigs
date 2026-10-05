@@ -334,7 +334,7 @@ access the files your user can access.
 
 ## GitHub access for agents {#github-access}
 
-With a [GitHub App identity](/guide/configuration#github-identity), jigs acts
+With its [GitHub App](/guide/configuration#github-identity), jigs acts
 on GitHub as one bot, `<app-slug>[bot]`. An agent can act as the same bot: set
 `github: true` on its harness.
 
@@ -375,10 +375,7 @@ The agent still runs as your user on your machine. It can read any file you
 can, your SSH keys and other credentials included: the token limits what the
 agent does as itself, not what it could find on disk.
 
-It needs an App identity. With a personal access token, a run whose workflow
-declares such an agent fails preflight, and the agent's step fails before the
-agent starts. Install the [GitHub CLI](https://cli.github.com); `jigs doctor`
-checks for it.
+Install the [GitHub CLI](https://cli.github.com); `jigs doctor` checks for it.
 
 ### GitHub's MCP server
 

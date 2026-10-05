@@ -1,7 +1,9 @@
 import { expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { githubRequest } from "./github-api.ts";
+import * as hub from "./hub.ts";
 import { fakeGithub } from "./test-fixtures.ts";
+import { jsonResponse } from "./test-support.ts";
 
 test("repository and GraphQL calls require an account before authentication", async () => {
   for (const apiPath of ["/repos//repo/issues", "/repos/owner", "/graphql"]) {
@@ -9,34 +11,21 @@ test("repository and GraphQL calls require an account before authentication", as
   }
 });
 
-test("repository paths and GraphQL select their target accounts", async () => {
-  const context = testFactoryContext({
-    config: {
-      github: {
-        identities: [
-          {
-            mode: "app",
-            appId: 1,
-            privateKeyPath: "absent.pem",
-            operator: "human",
-            installations: { covered: 10 },
-          },
-        ],
-      },
-    },
-  });
+test("repository paths and GraphQL use the token of their target account", async () => {
   const github = fakeGithub();
   try {
-    await expect(
-      githubRequest("GET", "/repos/Uncovered/repo/issues", undefined, { context }),
-    ).rejects.toThrow("account Uncovered");
-    await expect(
-      githubRequest("POST", "/graphql", {}, { account: "Other", context }),
-    ).rejects.toThrow("account Other");
-    await expect(githubRequest("GET", "/user", undefined, { context })).rejects.toThrow(
-      "/user requires a PAT identity",
+    const owners = vi.mocked(hub.fetchGithubToken).mock.calls;
+    github.reply(jsonResponse({})).reply(jsonResponse({}));
+    await githubRequest("GET", "/repos/Acme/repo/issues", undefined, {
+      context: testFactoryContext(),
+    });
+    await githubRequest(
+      "POST",
+      "/graphql",
+      {},
+      { account: "Other", context: testFactoryContext() },
     );
-    expect(github.calls).toHaveLength(0);
+    expect(owners.map(([owner]) => owner)).toEqual(["Acme", "Other"]);
   } finally {
     vi.restoreAllMocks();
   }

@@ -1,17 +1,13 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
-import { githubIdentities } from "../providers/github-auth.ts";
 import { factoryAgentEnv, harnessEnv } from "../steps/agents/shared/env.ts";
-import { NEEDS_APP_IDENTITY } from "../steps/agents/shared/github-access.ts";
 import type { Harness } from "../workflow/agents/harness-config.ts";
-import type { GithubIdentity } from "../workflow/factory-schema.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
 
 const execFileAsync = promisify(execFile);
 
 export interface AgentCommandDeps {
-  identities?: () => GithubIdentity[];
   exec?: (
     file: string,
     args: string[],
@@ -48,29 +44,13 @@ export function agentCommandCheck(
   };
 }
 
-/**
- * What an agent whose harness sets `github` needs: a GitHub App identity to act as, and `gh`.
- * Nothing when no harness sets it.
- */
+/** What an agent whose harness sets `github` needs beyond the factory's GitHub App: `gh`. */
 export function agentGithubChecks(
   agents: readonly Harness[],
   deps: AgentCommandDeps = {},
 ): Check[] {
   if (!agents.some((agent) => agent.github !== undefined)) return [];
   return [
-    {
-      id: "github.agent-identity",
-      label: "GitHub App for agents",
-      run: async (): Promise<CheckResult> => {
-        const identities = (deps.identities ?? githubIdentities)();
-        if (identities.some((identity) => identity.mode === "app")) return { ok: true };
-        return {
-          ok: false,
-          reason: NEEDS_APP_IDENTITY.reason,
-          repair: `${NEEDS_APP_IDENTITY.repair}, then: \`pnpm exec jigs up\``,
-        };
-      },
-    },
     agentCommandCheck(
       "agent.gh",
       "GitHub CLI for agents",

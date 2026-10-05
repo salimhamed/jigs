@@ -23,7 +23,7 @@ export default defineFactory({
   bindings: {
     app: { remote: "git@github.com:owner/app.git" },
   },
-  github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
+  github: { operator: "your-github-login" },
   linear: { identity: { mode: "key" } },
   workflows: {
     hello: () => import("./workflows/hello/hello.ts"),
@@ -39,7 +39,8 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 Every factory hears GitHub through a hub. The hub receives GitHub's events
 and holds them until the factory's service collects them, so nothing is lost
-while the service is down.
+while the service is down. The hub also hands the factory every GitHub token
+it uses: see [GitHub identity](#github-identity).
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -286,61 +287,27 @@ user and can read any file you can.
 
 ### Identity {#github-identity}
 
-`github.identities` says who jigs is on GitHub. Choose the mode when you create
-the factory, with `jigs init --github-identity-mode pat` (the default) or `app`.
+jigs acts on GitHub as a GitHub App that your [hub](#hub) holds and assigns to
+the factory. For each repository owner, the factory asks the hub for a token of
+the assigned App installed on that owner. Pull requests come from
+`<app-slug>[bot]`, and you review them like anyone else's. Agents can act as the
+same bot: see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
-#### PAT: jigs acts as you
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-github: { identities: [{ mode: "pat" }] },
-```
-
-Put a personal access token in `.env` as `GITHUB_TOKEN`. Pull requests jigs
-opens are authored by you, so GitHub will not let you approve them: jigs uses
-[label approval](#merging). You can still send work back with review comments or a comment on the
-pull request. A classic token needs `repo` (or `public_repo`).
-
-#### App: jigs acts as a bot
+Every GitHub binding needs one of the factory's Apps installed on its owner, and
+only one. `jigs doctor` checks this against the hub.
+The hub's page for each GitHub App lists the permissions and events to set on it.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
 github: {
-  identities: [{
-    mode: "app",
-    appId: 123456,
-    installations: { owner: 7654321 },
-    privateKeyPath: "github-app.private-key.pem",
-    operator: "your-github-login",
-    coAuthor: "Your Name <you@example.com>",
-  }],
+  operator: "your-github-login",
+  coAuthor: "Your Name <you@example.com>",
 },
 ```
 
-Pull requests come from `<app-slug>[bot]`, and you review them like anyone
-else's, so jigs uses [review approval](#merging) unless you choose the label.
-Agents can act as the same bot: see
-[GitHub access for agents](/guide/models-and-harnesses#github-access).
-`jigs init --github-identity-mode app` takes all of these values as flags. To
-set one up:
-
-1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
-   Leave OAuth and device flow off, and turn its webhook off.
-2. **Grant repository permissions**: Contents, Pull requests and Issues read
-   and write; Metadata, Checks and Commit statuses read. `jigs doctor` names
-   any that are missing.
-3. **`appId`** is the App ID on its settings page.
-4. **`privateKeyPath`** is the key GitHub generates under Private keys. Save it
-   in the factory (`.gitignore` already excludes `*.private-key.pem`) and run
-   `chmod 600` on it; `jigs doctor` fails on a looser mode.
-5. **`installations`**: install the App on the repositories you bind. The
-   installation's URL ends in its ID; add it under the account name.
-6. **`operator`** is your GitHub login. jigs assigns pull requests to you.
-   **`coAuthor`** is optional and adds a `Co-authored-by` line to merge commits.
-
-Every GitHub binding needs an installation for its owner. To use different Apps
-for different organizations, add more entries to `identities`; no two may claim
-the same account. A PAT must be the only entry.
+**`operator`** is optional: your GitHub login. jigs assigns its pull requests
+to you and names you in them. **`coAuthor`** is optional and adds a
+`Co-authored-by` line to merge commits.
 
 ### Merging {#merging}
 
@@ -356,10 +323,7 @@ These are three independent decisions:
 - **`github.mergeApproval`**: what counts as your consent. `"review"` is an
   approving review of the current commit; a new push withdraws it. `"label"`
   is the `jigs:approved` label on the pull request; it survives later pushes,
-  so it means "merge whenever ready". The default follows the
-  [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
-  A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
-  not let you approve your own.
+  so it means "merge whenever ready". The default is `"review"`.
 - **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
   `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
   repository can differ. `"latest-commit"`, the default, counts a review only
@@ -394,7 +358,7 @@ reviews, so label approval only works on repositories without that rule. jigs
 never changes branch protection.
 
 A protected branch that restricts who can push also restricts who can merge.
-If the account jigs merges as is not on that list (the App, or you with a PAT),
+If the factory's App is not on that list,
 GitHub reports an approved, green pull request as `blocked` and refuses the
 merge without saying why. jigs cannot read branch rules without admin access,
 so it does not check them ahead of time. It says so in `jigs status`, and the
@@ -587,8 +551,7 @@ is missing, and lists the credentials still empty.
 | Variable | When you need it |
 | --- | --- |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. |
-| `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub tokens come from the hub. |
 | `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
 | `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |

@@ -60,12 +60,8 @@ async function routeGithub({ name, payload }: ProviderEvent, deps: RouteDeps) {
     let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
     try {
       prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context);
-    } catch (error) {
-      const reason =
-        error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
-          ? "missing-github-credential"
-          : "status-lookup-failed";
-      console.log(`[events] github dropped reason=${reason} event=${event}`);
+    } catch {
+      console.log(`[events] github dropped reason=status-lookup-failed event=${event}`);
       return { outcome: "failed" } as const;
     }
     if (prs.length === 0) {

@@ -2,6 +2,7 @@ import { copyFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
+import * as hub from "../providers/hub.ts";
 import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
@@ -123,6 +124,7 @@ const preflightIds = (requires: WorkflowRequires): string[] =>
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 
 inTestFactory();
@@ -324,21 +326,29 @@ function factoryWith(config: string): string {
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }',
   );
   for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
     vi.stubEnv(name, "");
   vi.stubEnv("LINEAR_API_KEY", "set-but-unused");
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
+    factory: { name: "personal" },
+    organization: { name: "Acme" },
+    apps: [],
+  });
   const report = await runChecks(doctorChecks({ hello: {} }));
-  expect(report).toEqual({ ok: true, checks: [{ id: "hub.token", label: "hub token", ok: true }] });
+  expect(report).toEqual({
+    ok: true,
+    checks: [{ id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" }],
+  });
 });
 
 test("doctor fails a factory without its hub token, naming hub connect", async () => {
   factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(doctorChecks({ hello: {} }));
-  expect(report.checks.find((c) => c.id === "hub.token")).toMatchObject({
+  expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
     ok: false,
     repair: expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
   });
@@ -346,7 +356,7 @@ test("doctor fails a factory without its hub token, naming hub connect", async (
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, github: { identities: [{ mode: "pat" }] }, linear: { identity: { mode: "key" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }',
   );
   for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
     vi.stubEnv(name, "");
@@ -377,7 +387,7 @@ test("doctor checks the factory's Linear operator, preflight never does", () => 
     doctorChecks({
       ship: { requires: linear },
     }).map((check) => check.id),
-  ).toEqual(["hub.token", "linear.identity", "linear.operator"]);
+  ).toEqual(["hub.connection", "linear.identity", "linear.operator"]);
   expect(preflightIds(linear)).toEqual(["linear.identity"]);
 });
 
@@ -386,10 +396,28 @@ test("doctor checks a set Linear operator even when no workflow requires Linear"
     '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
   );
   expect(doctorChecks({ hello: {} }).map((check) => check.id)).toEqual([
-    "hub.token",
+    "hub.connection",
     "linear.identity",
     "linear.operator",
   ]);
+});
+
+test("doctor reads the hub once for both the hub and GitHub checks", async () => {
+  factoryWith(
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
+  );
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  const status = vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
+    factory: { name: "personal" },
+    organization: { name: "Acme" },
+    apps: [{ provider: "github", name: "jigs-dev", installations: [{ account: "o" }] }],
+  });
+  const report = await runChecks(doctorChecks({ hello: {} }));
+  expect(report.checks.filter((check) => check.id !== "binding.api")).toEqual([
+    { id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" },
+    { id: "github.identity", label: "GitHub App", ok: true, detail: "jigs-dev on o" },
+  ]);
+  expect(status).toHaveBeenCalledTimes(1);
 });
 
 test("doctor checks a provider the factory configuration asks for", () => {
@@ -413,11 +441,11 @@ test("a slack section asks doctor for the Slack checks, and Socket Mode adds its
   factoryWith(
     "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: { socketMode: false } }",
   );
-  expect(ids()).toEqual(["hub.token", "slack.identity"]);
+  expect(ids()).toEqual(["hub.connection", "slack.identity"]);
   factoryWith(
     "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: { socketMode: true } }",
   );
-  expect(ids()).toEqual(["hub.token", "slack.identity", "slack.socket-mode"]);
+  expect(ids()).toEqual(["hub.connection", "slack.identity", "slack.socket-mode"]);
 });
 
 test("a workflow requiring slack preflights the bot token, never the Socket Mode connection", async () => {
@@ -516,7 +544,7 @@ test("preflight checks the PagerDuty identity only, doctor adds the from user", 
   const pagerduty = { integrations: ["pagerduty" as const] };
   expect(preflightIds(pagerduty)).toEqual(["pagerduty.identity"]);
   expect(doctorChecks({ triage: { requires: pagerduty } }).map((check) => check.id)).toEqual([
-    "hub.token",
+    "hub.connection",
     "pagerduty.identity",
     "pagerduty.from",
   ]);
@@ -532,7 +560,7 @@ test("doctor checks PagerDuty when the factory configures it, and not otherwise"
   factoryWith(
     `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
   );
-  expect(ids()).toEqual(["hub.token", "pagerduty.identity", "pagerduty.from"]);
+  expect(ids()).toEqual(["hub.connection", "pagerduty.identity", "pagerduty.from"]);
   factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   expect(ids().filter((id) => id.startsWith("pagerduty."))).toEqual([]);
 });

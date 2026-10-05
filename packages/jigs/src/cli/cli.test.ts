@@ -11,29 +11,10 @@ const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
 const run = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
 
-test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
+test("init's flags reach the scaffold through the CLI parser, and bind records its binding", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "jigs-cli-"));
   try {
-    const result = run(
-      cwd,
-      "init",
-      "--github-identity-mode",
-      "app",
-      "--github-app-id",
-      "123",
-      "--github-app-installation",
-      "some-org=10",
-      "--github-app-installation",
-      "Other=20",
-      "--github-app-private-key-path",
-      "app.pem",
-      "--github-operator-login",
-      "human",
-      "--git-co-author",
-      "Human <human@example.com>",
-      "--linear-identity-mode",
-      "app",
-    );
+    const result = run(cwd, "init", "--linear-identity-mode", "app");
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     // Scaffold installation is a separate command; load only its emitted settings here.
@@ -52,20 +33,10 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
       "--binding-name",
       "example-alias",
     );
-    // With no real App behind it the label leg fails, after the binding is recorded.
+    // With no hub behind it the label leg fails, after the binding is recorded.
     expect(bound.status).not.toBe(0);
     expect(bound.stderr).toContain("jigs:approved label could not be ensured");
     const config = readFactoryConfig(cwd);
-    expect(config.github.identities).toEqual([
-      {
-        mode: "app",
-        appId: 123,
-        installations: { "some-org": 10, Other: 20 },
-        privateKeyPath: "app.pem",
-        operator: "human",
-        coAuthor: "Human <human@example.com>",
-      },
-    ]);
     expect(config.linear).toEqual({ identity: { mode: "app" } });
     expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
   } finally {

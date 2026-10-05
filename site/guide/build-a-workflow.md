@@ -7,8 +7,8 @@ findings into a structured verdict. It assumes a running factory from
 
 ## 1. Connect a repository
 
-The agent needs a repository to work in. Binding one needs GitHub credentials,
-so set them first: see [GitHub identity](/guide/configuration#github-identity).
+The agent needs a repository to work in. Binding one needs the factory's GitHub
+App installed on the repository's owner: see [GitHub identity](/guide/configuration#github-identity).
 Then bind the repository and bring the factory up so the service clones it:
 
 ```sh

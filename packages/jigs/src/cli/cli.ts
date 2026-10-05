@@ -12,12 +12,7 @@ import { runDoctor } from "./commands/doctor.ts";
 import { downFactory } from "./commands/down.ts";
 import { generateIntegration } from "./commands/generate.ts";
 import { connectHub } from "./commands/hub.ts";
-import {
-  type AppIdentityOptions,
-  type IdentityMode,
-  initFactory,
-  resolveIdentityOptions,
-} from "./commands/init.ts";
+import { initFactory } from "./commands/init.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
@@ -141,53 +136,19 @@ program
   .description("scaffold a factory repo in the current directory")
   .addOption(
     new Option(
-      "--github-identity-mode <mode>",
-      "which GitHub credential this factory is written for",
-    )
-      .choices(["pat", "app"])
-      .default("pat"),
-  )
-  // Required together by --github-identity-mode app, and refused there as a set rather
-  // than defaulted: a scaffold with placeholder ids does not load.
-  .option("--github-app-id <id>", "GitHub App id (--github-identity-mode app)")
-  .option(
-    "--github-app-installation <account=installation-id>",
-    "App installation by account (repeatable)",
-    (value: string, previous: string[]) => [...previous, value],
-    [],
-  )
-  .option(
-    "--github-app-private-key-path <path>",
-    "the App's private key .pem (--github-identity-mode app)",
-  )
-  .option("--github-operator-login <login>", "your GitHub login (--github-identity-mode app)")
-  .option(
-    "--git-co-author <author>",
-    '"Name <email>" for merge commit trailers (--github-identity-mode app)',
-  )
-  .addOption(
-    new Option(
       "--linear-identity-mode <mode>",
       "which Linear credential this factory is written for",
     )
       .choices(["key", "app"])
       .default("key"),
   )
-  .action(
-    async (
-      options: {
-        githubIdentityMode: IdentityMode;
-        linearIdentityMode: LinearIdentity["mode"];
-      } & AppIdentityOptions,
-    ) => {
-      await initFactory({
-        cwd: process.cwd(),
-        out,
-        identity: resolveIdentityOptions(options.githubIdentityMode, options),
-        linearIdentity: { mode: options.linearIdentityMode },
-      });
-    },
-  );
+  .action(async (options: { linearIdentityMode: LinearIdentity["mode"] }) => {
+    await initFactory({
+      cwd: process.cwd(),
+      out,
+      linearIdentity: { mode: options.linearIdentityMode },
+    });
+  });
 
 const recipe = program.command("recipe").description("copy a shipped workflow into this factory");
 recipe

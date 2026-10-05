@@ -99,7 +99,7 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   // The slots that stay empty are named, not refused.
   const printed = lines.join("\n");
   expect(printed).toMatch(/^ok {3}env \(\d+ms\)$/m);
-  expect(printed).toContain("LINEAR_API_KEY, GITHUB_TOKEN empty in .env");
+  expect(printed).toContain("LINEAR_API_KEY empty in .env");
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
@@ -131,9 +131,7 @@ test("an app Linear identity names its client variables as the empty slots", asy
   const port = await fakeService(io.procs);
   const root = factory({ port, linearIdentity: "app" });
   expect((await up(root, io)).ok).toBe(true);
-  expect(lines.join("\n")).toContain(
-    "LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET, GITHUB_TOKEN empty in .env",
-  );
+  expect(lines.join("\n")).toContain("LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET empty in .env");
 });
 
 test("a pagerduty section names its client variables as empty slots", async () => {
@@ -142,34 +140,7 @@ test("a pagerduty section names its client variables as empty slots", async () =
   const root = factory({ port, pagerduty: true });
   expect((await up(root, io)).ok).toBe(true);
   expect(lines.join("\n")).toContain(
-    "LINEAR_API_KEY, GITHUB_TOKEN, PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env",
-  );
-});
-
-test("a GitHub App identity does not name GITHUB_TOKEN as an empty slot", async () => {
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-  const port = await fakeService(io.procs);
-  const root = factory({
-    port,
-    githubIdentity: "app",
-    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\n",
-  });
-  expect((await up(root, io)).ok).toBe(true);
-  const printed = lines.join("\n");
-  expect(printed).toContain("LINEAR_API_KEY empty in .env");
-  expect(printed).not.toContain("GITHUB_TOKEN");
-});
-
-test("a PAT identity names a missing GITHUB_TOKEN as an empty slot", async () => {
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-  const port = await fakeService(io.procs);
-  const root = factory({
-    port,
-    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\n",
-  });
-  expect((await up(root, io)).ok).toBe(true);
-  expect(lines).toContain(
-    "  GITHUB_TOKEN empty in .env (fill them in before a workflow needs them)",
+    "LINEAR_API_KEY, PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env",
   );
 });
 
