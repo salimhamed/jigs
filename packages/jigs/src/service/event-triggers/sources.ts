@@ -1,17 +1,20 @@
 // The service-side half of an event trigger's source: how to read a kind's
-// occurrences from its provider's pushed events. Config holds only the plain descriptor; this
-// registry, keyed by the descriptor's `kind`, is what the engine runs.
+// occurrences from its provider's pushed events. Config holds only the plain
+// descriptor; this registry, keyed by the descriptor's `kind`, is what the
+// engine runs.
 
 import type { z } from "zod";
 import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
-import { linearAgentSessions } from "../linear-agent-sessions.ts";
+import { LINEAR_AGENT_SESSIONS } from "../linear-agent-sessions.ts";
 import { PAGERDUTY_INCIDENTS } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
-/** One occurrence as a source reports it: the reference the run reads, and when it happened. */
+/** One occurrence as a source reports it: its key, the reference the run reads, and when it happened. */
 export interface SourceOccurrence {
+  /** Names the occurrence however often its event arrives, so it starts at most one run. */
+  key: string;
   inputs: Record<string, unknown>;
   at: Date;
 }
@@ -23,9 +26,10 @@ export interface Source<P = unknown> {
   /** A representative of the inputs this source hands every run, which doctor checks the
    *  trigger's workflow accepts. */
   sampleInputs: Record<string, unknown>;
-  /** The occurrence key, read off the inputs. */
-  occurrence(inputs: Record<string, unknown>): string;
-  /** The occurrence a pushed provider event is, or null when the event is not one. */
+  /**
+   * The occurrence a pushed provider event is, or null when the event is not
+   * one. Throws only when it could not tell, so the event is routed again.
+   */
   fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
   /** What a run this source started was started for, in an operator's words, read off its inputs. */
   describe(inputs: Record<string, unknown>): string;
@@ -37,5 +41,5 @@ export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
   [PAGERDUTY_INCIDENTS_SOURCE]: PAGERDUTY_INCIDENTS,
-  [LINEAR_AGENT_SESSIONS_SOURCE]: linearAgentSessions(),
+  [LINEAR_AGENT_SESSIONS_SOURCE]: LINEAR_AGENT_SESSIONS,
 };

@@ -32,11 +32,6 @@ export const PAGERDUTY_INCIDENTS: Source<PagerDutyIncidentsParams> = {
   provider: "pagerduty",
   params: pagerDutyIncidentsParamsSchema,
   sampleInputs: { incident: "P000000" },
-  occurrence(inputs) {
-    if (typeof inputs.incident !== "string" || inputs.incident === "")
-      throw new Error("no incident id in the occurrence");
-    return inputs.incident;
-  },
   // The run gets only the incident id, so the event's copy of the incident
   // is read only to key it and to apply the trigger's filters.
   async fromPush(params, event) {
@@ -53,12 +48,12 @@ export const PAGERDUTY_INCIDENTS: Source<PagerDutyIncidentsParams> = {
     const matches = (values: readonly string[] | undefined, ...found: string[]) =>
       values === undefined || found.some((value) => values.includes(value));
     if (
-      !matches(params.service_ids, data.service.id) ||
-      !matches(params.team_ids, ...data.teams.map((team) => team.id)) ||
+      !matches(params.services, data.service.id) ||
+      !matches(params.teams, ...data.teams.map((team) => team.id)) ||
       !matches(params.urgencies, data.urgency)
     )
       return null;
-    return { inputs: { incident: data.id }, at: new Date(data.created_at) };
+    return { key: data.id, inputs: { incident: data.id }, at: new Date(data.created_at) };
   },
   describe: ({ incident }) => `pagerduty ${String(incident)}`,
 };

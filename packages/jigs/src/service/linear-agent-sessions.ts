@@ -1,6 +1,6 @@
 // The `linear.agentSessions` source: every Linear agent session created on an
 // issue, by a mention of the factory's app or an assignment to it, is one
-// occurrence, keyed by the session's id, read off the webhook the hub passes on.
+// occurrence, keyed by the session's id, read off the event the hub passes on.
 
 import { z } from "zod";
 import { HubResponseError } from "../providers/hub.ts";
@@ -35,11 +35,6 @@ const createdSchema = z.object({
   }),
 });
 
-export interface LinearAgentSessionsDeps {
-  /** The issue's project and labels, read as the factory's app in the session's workspace. */
-  issueFiling?: (issueId: string, workspace: string) => Promise<LinearIssueFiling | null>;
-}
-
 const SAMPLE_INPUTS = {
   session: "00000000-0000-0000-0000-000000000000",
   workspace: "00000000-0000-0000-0000-000000000000",
@@ -53,83 +48,74 @@ const SAMPLE_INPUTS = {
   creator: { id: "00000000-0000-0000-0000-000000000000", name: "Ada", email: "ada@example.com" },
 } satisfies LinearAgentSessionInputs;
 
-export function linearAgentSessions(
-  deps: LinearAgentSessionsDeps = {},
-): Source<LinearAgentSessionsParams> {
-  const issueFiling =
-    deps.issueFiling ??
-    ((issueId, workspace) =>
-      createLinearClient({ auth: linearAuthFor(undefined, workspace) }).fetchIssueFiling(issueId));
-  // An issue that is gone, or a workspace the hub has no app in, will read the
-  // same way every time, so the session is passed over rather than retried.
-  const readFiling = async (issueId: string, workspace: string) => {
-    try {
-      const filing = await issueFiling(issueId, workspace);
-      if (filing === null)
-        console.error(
-          `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
-        );
-      return filing;
-    } catch (error) {
-      if (!(error instanceof HubResponseError && error.status === 404)) throw error;
+// The issue's project and labels, read as the factory's app in the session's
+// workspace. An issue that is gone, or a workspace the hub has no app in, will
+// read the same way every time, so the session is passed over rather than retried.
+async function readFiling(issueId: string, workspace: string): Promise<LinearIssueFiling | null> {
+  try {
+    const filing = await createLinearClient({
+      auth: linearAuthFor(undefined, workspace),
+    }).fetchIssueFiling(issueId);
+    if (filing === null)
       console.error(
-        `[linear] ignored an agent session in workspace ${workspace}, which the hub has no app for: ${String(error)}`,
+        `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
+      );
+    return filing;
+  } catch (error) {
+    if (!(error instanceof HubResponseError && error.status === 404)) throw error;
+    console.error(
+      `[linear] ignored an agent session in workspace ${workspace}, which the hub has no app for: ${String(error)}`,
+    );
+    return null;
+  }
+}
+
+export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
+  provider: "linear",
+  params: linearAgentSessionsParamsSchema,
+  sampleInputs: SAMPLE_INPUTS,
+  async fromPush(params, event) {
+    const head = headSchema.safeParse(event).data;
+    if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;
+    // A shape Linear will send the same way every time is no reason to retry.
+    const created = createdSchema.safeParse(event);
+    if (!created.success) {
+      console.error(
+        `[linear] ignored an agent session event it could not read: ${created.error.message}`,
       );
       return null;
     }
-  };
-  return {
-    provider: "linear",
-    params: linearAgentSessionsParamsSchema,
-    sampleInputs: SAMPLE_INPUTS,
-    occurrence({ session }) {
-      if (typeof session !== "string" || session === "")
-        throw new Error("no agent session id in the occurrence");
-      return session;
-    },
-    async fromPush(params, event) {
-      const head = headSchema.safeParse(event).data;
-      if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;
-      // A shape Linear will send the same way every time is no reason to retry.
-      const created = createdSchema.safeParse(event);
-      if (!created.success) {
-        console.error(
-          `[linear] ignored an agent session event it could not read: ${created.error.message}`,
-        );
-        return null;
-      }
-      const { organizationId: workspace, agentSession } = created.data;
-      const { issue } = agentSession;
-      if (!issue) return null;
+    const { organizationId: workspace, agentSession } = created.data;
+    const { issue } = agentSession;
+    if (!issue) return null;
+    if (
+      params.teams &&
+      !params.teams.some((team) => [issue.team.key, issue.team.id].includes(team))
+    )
+      return null;
+    if (params.projects || params.labels) {
+      const filing = await readFiling(issue.id, workspace);
+      if (filing === null) return null;
+      const { project, labels } = filing;
       if (
-        params.teams &&
-        !params.teams.some((team) => [issue.team.key, issue.team.id].includes(team))
+        params.projects &&
+        !params.projects.some(
+          (ref) => project !== null && [project.id, project.slugId].includes(ref),
+        )
       )
         return null;
-      if (params.projects || params.labels) {
-        const filing = await readFiling(issue.id, workspace);
-        if (filing === null) return null;
-        const { project, labels } = filing;
-        if (
-          params.projects &&
-          !params.projects.some(
-            (ref) => project !== null && [project.id, project.slugId].includes(ref),
-          )
-        )
-          return null;
-        if (params.labels && !params.labels.some((label) => labels.includes(label))) return null;
-      }
-      const { creator } = agentSession;
-      const inputs = {
-        session: agentSession.id,
-        workspace,
-        issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
-        comment: agentSession.comment?.body ?? null,
-        creator: creator ? { id: creator.id, name: creator.name, email: creator.email } : null,
-      } satisfies LinearAgentSessionInputs;
-      return { inputs, at: new Date(agentSession.createdAt) };
-    },
-    describe: ({ session, issue }) =>
-      `linear ${String((issue as { identifier?: unknown } | undefined)?.identifier)} session ${String(session)}`,
-  };
-}
+      if (params.labels && !params.labels.some((label) => labels.includes(label))) return null;
+    }
+    const { creator } = agentSession;
+    const inputs = {
+      session: agentSession.id,
+      workspace,
+      issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
+      comment: agentSession.comment?.body ?? null,
+      creator: creator ? { id: creator.id, name: creator.name, email: creator.email } : null,
+    } satisfies LinearAgentSessionInputs;
+    return { key: agentSession.id, inputs, at: new Date(agentSession.createdAt) };
+  },
+  describe: ({ session, issue }) =>
+    `linear ${String((issue as { identifier?: unknown } | undefined)?.identifier)} session ${String(session)}`,
+};

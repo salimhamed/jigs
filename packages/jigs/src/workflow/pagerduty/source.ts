@@ -3,13 +3,12 @@ import type { SourceDescriptor } from "../factory.ts";
 
 export const PAGERDUTY_INCIDENTS_SOURCE = "pagerduty.incidents";
 
-// An empty list would send no filter at all and match every incident on the
-// account, so a list, when given, names at least one value.
+// An empty list would match nothing, which no one means.
 const ids = z.array(z.string().min(1)).min(1);
 
 export const pagerDutyIncidentsParamsSchema = z.strictObject({
-  service_ids: ids.optional(),
-  team_ids: ids.optional(),
+  services: ids.optional(),
+  teams: ids.optional(),
   urgencies: z
     .array(z.enum(["high", "low"]))
     .min(1)
@@ -17,9 +16,12 @@ export const pagerDutyIncidentsParamsSchema = z.strictObject({
 });
 
 /**
- * Which incidents a `pagerduty.incidents` source watches, in PagerDuty's own
- * list-incidents parameters. Each list matches any of its values; leaving one
- * out does not filter on it.
+ * Which incidents a `pagerduty.incidents` source starts runs for. Each list
+ * matches any of its values; leaving one out does not filter on it.
+ *
+ * - `services`: PagerDuty service IDs, such as `P48FPG2`.
+ * - `teams`: PagerDuty team IDs.
+ * - `urgencies`: `high`, `low` or both.
  *
  * @group Factory and workflows
  */
@@ -42,7 +44,7 @@ export const pagerduty = {
    * ```ts
    * import { pagerduty } from "@jigs-ai/jigs";
    *
-   * const source = pagerduty.incidents({ service_ids: ["P48FPG2"], urgencies: ["high"] });
+   * const source = pagerduty.incidents({ services: ["P48FPG2"], urgencies: ["high"] });
    * ```
    */
   incidents(params: PagerDutyIncidentsParams = {}): SourceDescriptor {

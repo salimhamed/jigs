@@ -107,7 +107,7 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     triggers: {
       pages: {
         workflow: "respond",
-        source: pagerduty.incidents({ service_ids: [SERVICE] }),
+        source: pagerduty.incidents({ services: [SERVICE] }),
         inputs: { team: "live" },
         // Other tests' incidents on the sandbox start runs here too.
         maxActive: 100,

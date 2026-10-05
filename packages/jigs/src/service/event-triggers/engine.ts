@@ -111,8 +111,8 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
   let marking: Promise<void> | undefined;
   let chain: Promise<void> = Promise.resolve();
 
-  // Pushes wait on this alone, never on a drain: a restart with a
-  // backlog of pending rows must not hold a provider's push past its deadline.
+  // Pushes wait on this alone, never on a drain: a restart with a backlog of
+  // pending rows must not hold up the hub client's batch of events.
   const markers = () =>
     (marking ??= (async () => {
       const at = now();
@@ -123,14 +123,14 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }));
 
   // Occurrences before the trigger was first enabled are not its business at
-  // all; ones older than the lookback are recorded so they are never started.
+  // all, and the lookback cannot say so: a service down while a trigger was
+  // added gets the hub's backlog on restart, and events in it from before the
+  // trigger existed must not start runs however recent. Ones older than the
+  // lookback are recorded so they are never started.
   // The comparison is by whole second, since some providers stamp only seconds
   // and an occurrence in the second of enabling must not read as before it.
-  async function observe(
-    entry: Armed,
-    seen: SourceOccurrence,
-    occurrence: string,
-  ): Promise<boolean> {
+  async function observe(entry: Armed, seen: SourceOccurrence): Promise<boolean> {
+    const occurrence = seen.key;
     const enabledAt = entry.marker?.enabledAt;
     if (enabledAt === undefined || seen.at.getTime() < floorToSecond(enabledAt)) return false;
     const stale = seen.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
@@ -299,24 +299,15 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         if (entry.source.provider !== provider) continue;
         try {
           const pushed = await entry.source.fromPush(entry.params, event);
-          if (pushed === null) continue;
-          // An event the source cannot key would fail the same way every time,
-          // so it is passed over rather than retried.
-          let occurrence: string;
-          try {
-            occurrence = entry.source.occurrence(pushed.inputs);
-          } catch (error) {
-            log(`[trigger] ${entry.name} passed over an event it could not key: ${String(error)}`);
-            continue;
-          }
-          if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
+          if (pushed !== null && (await observe(entry, pushed))) taken.push(entry.name);
         } catch (error) {
           failures.push(error);
           log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
         }
       }
-      // Not awaited: a provider wants its answer in seconds, and the row
-      // already recorded is what makes the start certain.
+      // Not awaited: the hub client routes its batch in order, so a start
+      // must not hold up the next event, and the recorded row already makes
+      // the start certain.
       if (taken.length > 0) void drain();
       // A trigger that could not tell whether the event was its occurrence
       // must not read as one that passed it over.

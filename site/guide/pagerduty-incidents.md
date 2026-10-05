@@ -147,7 +147,7 @@ export default defineFactory({
   triggers: {
     "triage-checkout": {
       workflow: "incident-triage",
-      source: pagerduty.incidents({ service_ids: ["PABC123"] }),
+      source: pagerduty.incidents({ services: ["PABC123"] }),
     },
   },
 });

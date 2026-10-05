@@ -168,6 +168,7 @@ test("messages keeps new top-level posts", async () => {
   }
   expect(found).toEqual(
     [ME_POST, FILE_POST, APP_POST, OTHER_BOT, MENTION, THREAD_PARENT, TOP_LEVEL].map((m) => ({
+      key: `${CHANNEL}:${m.ts}`,
       inputs: { channel: CHANNEL, ts: m.ts },
       at: new Date(Number(m.ts) * 1000),
     })),
@@ -185,7 +186,7 @@ test("mentions keeps only the top-level messages that tag the bot", async () => 
 
 test("a pushed message is keyed and described by its channel and timestamp", async () => {
   const push = await messages.fromPush(params, pushed(TOP_LEVEL));
-  expect(messages.occurrence(push?.inputs ?? {})).toBe(`${CHANNEL}:${TOP_LEVEL.ts}`);
+  expect(push?.key).toBe(`${CHANNEL}:${TOP_LEVEL.ts}`);
   expect(messages.describe(push?.inputs ?? {})).toBe(`slack ${CHANNEL} ${TOP_LEVEL.ts}`);
 });
 
