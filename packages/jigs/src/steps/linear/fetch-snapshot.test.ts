@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import * as hub from "../../providers/hub.ts";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
+import { answerHubTokens } from "../../providers/test-fixtures.ts";
 import { inTestFactory } from "../../test-fixtures.ts";
 import { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 
@@ -8,11 +8,11 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
-  vi.spyOn(hub, "fetchLinearToken").mockResolvedValue({
+  answerHubTokens("linear", async () => ({
     token: "lin_oauth",
     expiresAt: "2999-01-01T00:00:00Z",
     app: { name: "jigs", userId: "app-user" },
-  });
+  }));
   fetchMock.mockReset();
 });
 afterEach(() => {

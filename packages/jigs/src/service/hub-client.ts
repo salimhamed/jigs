@@ -132,13 +132,13 @@ async function handleBatch(
 }
 
 async function route(message: ProviderEventMessage, options: HubClientOptions): Promise<boolean> {
-  const { id, provider, name, payload } = message.event;
+  const { id, provider, name } = message.event;
   const failed = (reason: string) => {
     console.error(`[hub] could not route ${provider} event ${id} (${name}): ${reason}`);
     return false;
   };
   try {
-    const result = await routeProviderEvent({ provider, name, payload }, options.route);
+    const result = await routeProviderEvent(message.event, options.route);
     return result.outcome === "failed" ? failed("routing failed") : true;
   } catch (error) {
     return failed(String(error));

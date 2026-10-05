@@ -12,13 +12,8 @@ import {
 import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
 import { createHubTokens, type HubTokens, perContext } from "./credentials.ts";
-import {
-  MAX_RATE_LIMIT_WAIT_SECONDS,
-  ProviderApiError,
-  rateLimitWaits,
-  reauthorize,
-} from "./http.ts";
-import { fetchPagerDutyToken } from "./hub.ts";
+import { MAX_RATE_LIMIT_WAIT_SECONDS, ProviderApiError, rateLimitWaits } from "./http.ts";
+import { hubToken } from "./hub.ts";
 
 export const PAGERDUTY_API_URL = "https://api.pagerduty.com";
 
@@ -75,7 +70,7 @@ export type PagerDutyTokens = Pick<HubTokens<{ token: string }>, "bearer" | "inv
 
 /** The factory's PagerDuty tokens, cached once per factory context. */
 export const pagerDutyTokens: (ctx?: FactoryContext) => PagerDutyTokens = perContext((ctx) =>
-  createHubTokens(() => fetchPagerDutyToken(ctx)),
+  createHubTokens(() => hubToken("pagerduty", {}, ctx)),
 );
 
 export interface PagerDutyClientDeps {
@@ -131,7 +126,8 @@ export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDuty
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const text = await res.text();
-      if (res.status === 401 && !reauthorized && reauthorize(callAuth, credential)) {
+      if (res.status === 401 && !reauthorized) {
+        callAuth.invalidate(credential);
         reauthorized = true;
         continue;
       }

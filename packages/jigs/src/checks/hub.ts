@@ -1,7 +1,13 @@
 import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { fetchFactoryStatus, HUB_CONNECT } from "../providers/hub.ts";
+import {
+  fetchFactoryStatus,
+  HUB_CONNECT,
+  type HubConnection,
+  hubConnection,
+  hubRefused,
+} from "../providers/hub.ts";
 import type { Check } from "./check.ts";
 
 /** Whether the hub answers and takes this factory's token. */
@@ -14,24 +20,21 @@ export function hubChecks(
       id: "hub.connection",
       label: "hub",
       run: async () => {
-        if (ctx.env("JIGS_HUB_TOKEN") === undefined)
+        let hub: HubConnection;
+        try {
+          hub = hubConnection(ctx);
+        } catch (err) {
           return {
             ok: false,
-            reason:
-              "JIGS_HUB_TOKEN is not set, so this factory hears nothing and gets no GitHub, Linear, Slack or PagerDuty token",
-            repair: HUB_CONNECT,
+            reason: `${err instanceof Error ? err.message : String(err)}, so this factory hears nothing and gets no GitHub, Linear, Slack or PagerDuty token`,
+            repair: (err instanceof JigsError ? err.hint : undefined) ?? HUB_CONNECT,
           };
+        }
         try {
           const { factory, organization } = await status(ctx);
           return { ok: true, detail: `factory ${factory.name} in ${organization.name}` };
         } catch (err) {
-          return {
-            ok: false,
-            reason: `could not reach the hub at ${ctx.config.hub.url}: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused(`could not reach the hub at ${hub.url}`, err);
         }
       },
     },
@@ -67,13 +70,7 @@ export function hubAppChecks(
         try {
           ({ apps } = await status(ctx));
         } catch (err) {
-          return {
-            ok: false,
-            reason: `could not read this factory's ${label} apps from the hub: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused(`could not read this factory's ${label} apps from the hub`, err);
         }
         const assigned = apps.filter((app) => app.provider === provider);
         if (assigned.length === 0)

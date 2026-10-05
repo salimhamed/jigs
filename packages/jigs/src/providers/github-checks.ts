@@ -5,9 +5,8 @@
 import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import type { Check, CheckResult } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
-import { JigsError } from "../errors.ts";
 import { parseGithubRemote } from "./github-remote.ts";
-import { fetchFactoryStatus } from "./hub.ts";
+import { fetchFactoryStatus, hubRefused } from "./hub.ts";
 
 export function githubChecks(
   ctx: FactoryContext,
@@ -22,13 +21,7 @@ export function githubChecks(
         try {
           ({ apps } = await status(ctx));
         } catch (err) {
-          return {
-            ok: false,
-            reason: `could not read this factory's GitHub Apps from the hub: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused("could not read this factory's GitHub Apps from the hub", err);
         }
         const github = apps.filter((app) => app.provider === "github");
         if (github.length === 0)

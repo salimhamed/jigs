@@ -6,7 +6,7 @@
 import type { FactoryContext } from "../config/factory-context.ts";
 import { createHubTokens, perContext } from "./credentials.ts";
 import type { ProviderAuth } from "./http.ts";
-import { fetchLinearToken } from "./hub.ts";
+import { hubToken } from "./hub.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
 
@@ -19,7 +19,6 @@ export interface LinearAppUser {
 export interface LinearAuth extends ProviderAuth {
   /** The bearer token, asked of the hub again when less than `minLifetimeMs` of it is left. */
   bearer(minLifetimeMs?: number): Promise<string>;
-  invalidate(stale: string): void;
   /** The app's own user in the workspace. */
   user(): Promise<LinearAppUser>;
 }
@@ -60,7 +59,8 @@ export function linearAuthFor(ctx?: FactoryContext, organization?: string): Line
   let auth = linear.auths.get(organization);
   if (!auth) {
     auth = createLinearAuth(organization, {
-      issue: (named) => fetchLinearToken(named, linear.ctx),
+      issue: (named) =>
+        hubToken("linear", named === undefined ? {} : { organization: named }, linear.ctx),
     });
     linear.auths.set(organization, auth);
   }

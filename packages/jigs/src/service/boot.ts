@@ -89,39 +89,28 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   return true;
 }
 
-async function serviceEnv(): Promise<FactoryContext["env"]> {
-  return (await serviceContext()).env;
-}
-
 /** Injectable configuration and output used by the hub startup gate. */
 export interface HubTokenGateDeps {
-  env?: () => Promise<FactoryContext["env"]>;
+  context?: () => Promise<FactoryContext>;
   exit?: (code: number) => void;
   error?: (line: string) => void;
 }
 
 // Without its token the factory hears nothing from its providers, and every run
 // that waits on one waits forever.
-/** Refuse service startup when `JIGS_HUB_TOKEN` is not set. */
+/** Refuse service startup when the factory is not connected to its hub. */
 export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boolean> {
-  const error = deps.error ?? ((line: string) => console.error(line));
-  const exit = deps.exit ?? process.exit;
-  let env: FactoryContext["env"];
   try {
-    env = await (deps.env ?? serviceEnv)();
+    const { hubConnection } = await import("../providers/hub.ts");
+    hubConnection(await (deps.context ?? serviceContext)());
+    return true;
   } catch (err) {
-    error(`[service] could not read the hub token: ${describe(err)}`);
-    exit(1);
-    return false;
-  }
-  if (env("JIGS_HUB_TOKEN") === undefined) {
-    error(
-      "[service] JIGS_HUB_TOKEN is not set. Connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`, then restart the service",
+    (deps.error ?? ((line: string) => console.error(line)))(
+      `[service] cannot reach the hub: ${describe(err)}`,
     );
-    exit(1);
+    (deps.exit ?? process.exit)(1);
     return false;
   }
-  return true;
 }
 
 /** Injectable database operations and output used by the registry startup gate. */
@@ -366,13 +355,13 @@ export async function startWorld() {
 // the service was down comes first. startService started the triggers before
 // this boot reached readiness, and a push waits for them to be enabled.
 async function startHub(ctx: FactoryContext): Promise<void> {
-  const [{ startHubClient }, { pushEvent }] = await Promise.all([
+  const [{ startHubClient }, { pushEvent }, { hubConnection }] = await Promise.all([
     import("./hub-client.ts"),
     import("./event-triggers/runner.ts"),
+    import("../providers/hub.ts"),
   ]);
   const client = startHubClient({
-    url: ctx.config.hub.url,
-    token: ctx.env("JIGS_HUB_TOKEN") ?? "",
+    ...hubConnection(ctx),
     route: { context: ctx, push: pushEvent },
   });
   onShutdown(() => client.stop(), { phase: "quiesce" });

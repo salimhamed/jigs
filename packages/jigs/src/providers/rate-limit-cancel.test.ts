@@ -37,7 +37,10 @@ const rateLimited = async () =>
 test("a step's GitHub call stops waiting out a rate limit once its run is cancelled", async () => {
   const github = createGithubClient({ fetch: rateLimited });
   const started = Date.now();
-  const call = github.send({ auth: { bearer: async () => "t" }, apiPath: "/repos/o/r/pulls/1" });
+  const call = github.send({
+    auth: { bearer: async () => "t", invalidate: () => {} },
+    apiPath: "/repos/o/r/pulls/1",
+  });
   setTimeout(() => {
     world.status = "cancelled";
   }, 50);

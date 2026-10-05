@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { runChecks } from "../checks/catalog.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import { ProviderApiError } from "./http.ts";
 import { HubResponseError } from "./hub.ts";
 import {
@@ -25,7 +26,7 @@ function probes(overrides: Partial<PagerDutyAppProbes> = {}) {
 }
 
 const outcome = async (p: PagerDutyAppProbes) => {
-  const [found] = (await runChecks(pagerDutyAppChecks(p))).checks;
+  const [found] = (await runChecks(pagerDutyAppChecks(testFactoryContext(), p))).checks;
   if (found?.id !== "pagerduty.app") throw new Error("no pagerduty.app check");
   return found;
 };

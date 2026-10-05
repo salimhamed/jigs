@@ -2,7 +2,8 @@
 // restored by `vi.restoreAllMocks()`.
 
 import { slackBotScopes } from "@jigs-ai/hub-protocol";
-import { vi } from "vitest";
+import { type Mock, vi } from "vitest";
+import type { FactoryContext } from "../config/factory-context.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
 import * as hub from "./hub.ts";
@@ -10,17 +11,48 @@ import { createPagerDutyClient, PAGERDUTY_API_URL, type PagerDutyIncident } from
 import { createSlackClient, type SlackClientDeps, slackClient } from "./slack.ts";
 import { type FetchCall, fakeFetch } from "./test-support.ts";
 
+type TokenAnswer<P extends keyof hub.HubTokenExchange> = (
+  request: hub.HubTokenExchange[P]["request"],
+  ctx?: FactoryContext,
+) => Promise<hub.HubTokenExchange[P]["response"]>;
+
+const hubTokenAnswers = new WeakMap<object, Map<string, TokenAnswer<never>>>();
+
+/**
+ * Answer the hub's `provider` token requests with the returned mock, keeping the answers this test
+ * already gives for the other providers.
+ */
+export function answerHubTokens<P extends keyof hub.HubTokenExchange>(
+  provider: P,
+  answer: TokenAnswer<P>,
+): Mock<TokenAnswer<P>> {
+  let answers = hubTokenAnswers.get(hub.hubToken);
+  if (answers === undefined) {
+    const table = new Map<string, TokenAnswer<never>>();
+    vi.spyOn(hub, "hubToken").mockImplementation((async (asked, request, ctx) => {
+      const answered = table.get(asked);
+      if (answered === undefined) throw new Error(`this test answers no ${asked} token request`);
+      return answered(request as never, ctx);
+    }) as typeof hub.hubToken);
+    hubTokenAnswers.set(hub.hubToken, table);
+    answers = table;
+  }
+  const mock = vi.fn(answer);
+  answers.set(provider, mock as unknown as TokenAnswer<never>);
+  return mock;
+}
+
 /** The installation token and bot every faked GitHub call gets from the hub. */
 export const TEST_GITHUB_TOKEN = "ghs_test";
 export const TEST_APP_BOT = { login: "jigs-test[bot]", id: 4242 };
 
 /** Answer every GitHub token request with {@link TEST_GITHUB_TOKEN}, as the hub would. */
 export function useHubGithubTokens(): void {
-  vi.spyOn(hub, "fetchGithubToken").mockResolvedValue({
+  answerHubTokens("github", async () => ({
     token: TEST_GITHUB_TOKEN,
     expiresAt: "2999-01-01T00:00:00Z",
     app: { slug: "jigs-test", botUserId: TEST_APP_BOT.id },
-  });
+  }));
 }
 
 export function useGithubClient(deps: GithubClientDeps): void {
@@ -35,20 +67,22 @@ export const TEST_SLACK_BOT = { appId: "A0TEST", name: "jigs-test", botUserId: "
 
 /** Answer every Slack token request with {@link TEST_SLACK_TOKEN}, as the hub would. */
 export function useHubSlackTokens(scopes: readonly string[] = slackBotScopes) {
-  return vi.spyOn(hub, "fetchSlackToken").mockResolvedValue({
+  return answerHubTokens("slack", async () => ({
     token: TEST_SLACK_TOKEN,
     app: TEST_SLACK_BOT,
     team: "T0TEST",
     scopes: [...scopes],
-  });
+  }));
 }
 
-export function useSlackClient(deps: SlackClientDeps): void {
-  useHubSlackTokens();
+/** Route the process's Slack calls to a client built on `deps`; returns the hub's Slack token answer. */
+export function useSlackClient(deps: SlackClientDeps) {
+  const tokens = useHubSlackTokens();
   const client = createSlackClient(deps);
   for (const key of Object.keys(client) as Array<keyof typeof client>) {
     vi.spyOn(slackClient, key).mockImplementation(client[key] as never);
   }
+  return tokens;
 }
 
 export interface FakeGithub {
@@ -93,12 +127,12 @@ export async function useLiveSlackToken(token: string): Promise<void> {
     app_id?: string;
   };
   const scopes = (res.headers.get("x-oauth-scopes") ?? "").split(",").filter(Boolean);
-  vi.spyOn(hub, "fetchSlackToken").mockResolvedValue({
+  answerHubTokens("slack", async () => ({
     token,
     app: { appId: auth.app_id ?? "A0LIVE", name: auth.user, botUserId: auth.user_id },
     team: auth.team_id,
     scopes,
-  });
+  }));
 }
 
 /**

@@ -11,11 +11,12 @@ import {
   type LinearTokenResponse,
   linearTokenPath,
   type PagerDutyTokenResponse,
+  type Provider,
   pagerDutyTokenPath,
-  type SlackTokenRequest,
   type SlackTokenResponse,
   slackTokenPath,
 } from "@jigs-ai/hub-protocol";
+import type { CheckResult } from "../checks/check.ts";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
@@ -80,16 +81,31 @@ export async function hubRequest(
   );
 }
 
+/** Where this factory's hub is and its token there; throws when the factory is not connected. */
+export function hubConnection(ctx: FactoryContext): HubConnection {
+  const token = ctx.env("JIGS_HUB_TOKEN");
+  if (token === undefined) throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
+  return { url: ctx.config.hub.url, token };
+}
+
 async function hubSend<T>(
   ctx: FactoryContext,
   apiPath: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  const token = ctx.env("JIGS_HUB_TOKEN");
-  if (token === undefined || token === "")
-    throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
-  const response = await hubRequest({ url: ctx.config.hub.url, token }, apiPath, init);
+  const response = await hubRequest(hubConnection(ctx), apiPath, init);
   return (await response.json()) as T;
+}
+
+/** A failed check for a hub request that failed: what was asked, why, and the hub's repair when it named one. */
+export function hubRefused(asked: string, err: unknown): CheckResult {
+  return {
+    ok: false,
+    reason: `${asked}: ${err instanceof Error ? err.message : String(err)}`,
+    repair:
+      (err instanceof JigsError ? err.hint : undefined) ??
+      "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
+  };
 }
 
 /** Who this factory is on its hub, and the apps assigned to it. */
@@ -97,103 +113,67 @@ export function fetchFactoryStatus(ctx: FactoryContext = currentFactoryContext()
   return hubSend<FactoryStatus>(ctx, factoryStatusPath);
 }
 
-/** An installation token of the factory's GitHub App installed on `owner`. */
-export async function fetchGithubToken(
-  owner: string,
-  ctx: FactoryContext = currentFactoryContext(),
-): Promise<GitHubTokenResponse> {
-  try {
-    return await hubSend<GitHubTokenResponse>(ctx, githubTokenPath, {
-      method: "POST",
-      body: { owner } satisfies GitHubTokenRequest,
-    });
-  } catch (error) {
-    if (error instanceof HubResponseError && (error.status === 404 || error.status === 409))
-      throw new HubResponseError(
-        error.status,
-        error.message,
-        error.status === 404
-          ? `in the hub, install one of this factory's GitHub Apps on ${owner}, or assign the factory an App installed there`
-          : `in the hub, leave this factory assigned only one App installed on ${owner}`,
-      );
-    throw error;
-  }
+/** What the factory asks the hub for each provider's token, and what it gets back. */
+export interface HubTokenExchange {
+  github: { request: GitHubTokenRequest; response: GitHubTokenResponse };
+  linear: { request: LinearTokenRequest; response: LinearTokenResponse };
+  slack: { request: Record<string, never>; response: SlackTokenResponse };
+  pagerduty: { request: Record<string, never>; response: PagerDutyTokenResponse };
 }
+
+type HintsByStatus = Partial<Record<number, string>>;
+
+const HUB_TOKENS: {
+  [P in Provider]: { path: string; hints(request: HubTokenExchange[P]["request"]): HintsByStatus };
+} = {
+  github: {
+    path: githubTokenPath,
+    hints: ({ owner }) => ({
+      404: `in the hub, install one of this factory's GitHub Apps on ${owner}, or assign the factory an App installed there`,
+      409: `in the hub, leave this factory assigned only one App installed on ${owner}`,
+    }),
+  },
+  linear: {
+    path: linearTokenPath,
+    hints: () => ({
+      404: "in the hub, connect a Linear workspace to one of this factory's Linear apps, or assign the factory an app connected there",
+      409: "in the hub, leave this factory assigned one Linear app, connected to one workspace",
+      503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
+    }),
+  },
+  slack: {
+    path: slackTokenPath,
+    hints: () => ({
+      404: "in the hub, install one of this factory's Slack apps in the workspace, or assign the factory a Slack app installed there",
+      409: "in the hub, leave this factory assigned one Slack app, installed in one workspace",
+    }),
+  },
+  pagerduty: {
+    path: pagerDutyTokenPath,
+    hints: () => ({
+      404: "in the hub, assign this factory a PagerDuty app",
+      409: "in the hub, leave this factory assigned only one PagerDuty app",
+      503: "PagerDuty refused the hub's credentials for this factory's PagerDuty app: in the hub, remove the app and add it again with its current client id and secret",
+    }),
+  },
+};
 
 /**
- * An access token of the factory's Linear app in a connected workspace: the one `organization`
- * names (an organization id or URL key), or the only one when it is left out.
+ * A token the hub mints for the factory's app of `provider`: GitHub's for the repository owner
+ * `request` names, Linear's for the workspace it names or the only one.
  */
-export async function fetchLinearToken(
-  organization: string | undefined,
+export async function hubToken<P extends Provider>(
+  provider: P,
+  request: HubTokenExchange[P]["request"],
   ctx: FactoryContext = currentFactoryContext(),
-): Promise<LinearTokenResponse> {
+): Promise<HubTokenExchange[P]["response"]> {
+  const { path, hints } = HUB_TOKENS[provider];
   try {
-    return await hubSend<LinearTokenResponse>(ctx, linearTokenPath, {
-      method: "POST",
-      body: (organization === undefined ? {} : { organization }) satisfies LinearTokenRequest,
-    });
+    return await hubSend(ctx, path, { method: "POST", body: request });
   } catch (error) {
-    if (error instanceof HubResponseError && error.status in LINEAR_TOKEN_REPAIRS)
-      throw new HubResponseError(
-        error.status,
-        error.message,
-        LINEAR_TOKEN_REPAIRS[error.status as keyof typeof LINEAR_TOKEN_REPAIRS],
-      );
-    throw error;
+    if (!(error instanceof HubResponseError)) throw error;
+    const hint = hints(request)[error.status];
+    if (hint === undefined) throw error;
+    throw new HubResponseError(error.status, error.message, hint);
   }
 }
-
-const LINEAR_TOKEN_REPAIRS = {
-  404: "in the hub, connect a Linear workspace to one of this factory's Linear apps, or assign the factory an app connected there",
-  409: "in the hub, leave this factory assigned one Linear app, connected to one workspace",
-  503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
-};
-
-/** The bot token of the factory's Slack app in the one workspace it is installed in. */
-export async function fetchSlackToken(
-  ctx: FactoryContext = currentFactoryContext(),
-): Promise<SlackTokenResponse> {
-  try {
-    return await hubSend<SlackTokenResponse>(ctx, slackTokenPath, {
-      method: "POST",
-      body: {} satisfies SlackTokenRequest,
-    });
-  } catch (error) {
-    if (error instanceof HubResponseError && (error.status === 404 || error.status === 409))
-      throw new HubResponseError(
-        error.status,
-        error.message,
-        error.status === 404
-          ? "in the hub, install one of this factory's Slack apps in the workspace, or assign the factory a Slack app installed there"
-          : "in the hub, leave this factory assigned one Slack app, installed in one workspace",
-      );
-    throw error;
-  }
-}
-
-/** A token of the factory's one PagerDuty app, acting as the app in its account. */
-export async function fetchPagerDutyToken(
-  ctx: FactoryContext = currentFactoryContext(),
-): Promise<PagerDutyTokenResponse> {
-  try {
-    return await hubSend<PagerDutyTokenResponse>(ctx, pagerDutyTokenPath, {
-      method: "POST",
-      body: {},
-    });
-  } catch (error) {
-    if (error instanceof HubResponseError && error.status in PAGERDUTY_TOKEN_REPAIRS)
-      throw new HubResponseError(
-        error.status,
-        error.message,
-        PAGERDUTY_TOKEN_REPAIRS[error.status as keyof typeof PAGERDUTY_TOKEN_REPAIRS],
-      );
-    throw error;
-  }
-}
-
-const PAGERDUTY_TOKEN_REPAIRS = {
-  404: "in the hub, assign this factory a PagerDuty app",
-  409: "in the hub, leave this factory assigned only one PagerDuty app",
-  503: "PagerDuty refused the hub's credentials for this factory's PagerDuty app: in the hub, remove the app and add it again with its current client id and secret",
-};

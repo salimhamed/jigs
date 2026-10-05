@@ -37,3 +37,17 @@ test("an agent asking for a long-lived token gets a fresh one", async () => {
   expect(await tokens.bearer()).toBe("tok-1");
   expect(await tokens.bearer(5 * 3600_000)).toBe("tok-2");
 });
+
+test("a token without an expiry is kept until it is refused", async () => {
+  let now = 0;
+  let issued = 0;
+  const tokens = createHubTokens(
+    async () => ({ token: `tok-${++issued}` }),
+    () => now,
+  );
+  expect(await tokens.bearer(5 * 3600_000)).toBe("tok-1");
+  now = 365 * 24 * 3600_000;
+  expect(await tokens.bearer()).toBe("tok-1");
+  tokens.invalidate("tok-1");
+  expect(await tokens.bearer()).toBe("tok-2");
+});

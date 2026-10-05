@@ -1,8 +1,7 @@
 import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
 import type { Check } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
-import { JigsError } from "../errors.ts";
-import { fetchSlackToken } from "./hub.ts";
+import { hubRefused, hubToken } from "./hub.ts";
 
 const and = (items: readonly string[]) => items.join(" and ");
 
@@ -21,7 +20,7 @@ function declaredScopes(ctx: FactoryContext): string[] {
  */
 export function slackChecks(
   ctx: FactoryContext,
-  issue: (ctx: FactoryContext) => Promise<SlackTokenResponse> = fetchSlackToken,
+  issue: (ctx: FactoryContext) => Promise<SlackTokenResponse> = (ctx) => hubToken("slack", {}, ctx),
 ): Check[] {
   return [
     {
@@ -32,13 +31,7 @@ export function slackChecks(
         try {
           issued = await issue(ctx);
         } catch (err) {
-          return {
-            ok: false,
-            reason: `the hub has no Slack token for this factory: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused("the hub has no Slack token for this factory", err);
         }
         const granted = new Set(issued.scopes);
         const missing = declaredScopes(ctx).filter((scope) => !granted.has(scope));

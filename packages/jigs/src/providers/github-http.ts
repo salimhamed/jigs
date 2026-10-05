@@ -3,7 +3,7 @@
 // live beside the per-account credential choice in github-api.ts.
 
 import { runSignal } from "../config/factory-context.ts";
-import { ProviderApiError, type ProviderAuth, rateLimitWaits, reauthorize } from "./http.ts";
+import { ProviderApiError, type ProviderAuth, rateLimitWaits } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -102,7 +102,8 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         body: json === undefined ? undefined : JSON.stringify(json),
       });
       const text = await res.text();
-      if (res.status === 401 && !reauthorized && reauthorize(auth, credential)) {
+      if (res.status === 401 && !reauthorized) {
+        auth.invalidate(credential);
         reauthorized = true;
         continue;
       }

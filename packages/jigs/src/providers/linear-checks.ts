@@ -1,16 +1,15 @@
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
 import type { Check } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
-import { JigsError } from "../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
-import { fetchLinearToken } from "./hub.ts";
+import { hubRefused, hubToken } from "./hub.ts";
 import { findUserByEmail, type LinearUser } from "./linear.ts";
 
 /** Whether the hub hands this factory a Linear token: a Linear app assigned, connected and current. */
 export function linearChecks(
   ctx: FactoryContext,
   issue: (ctx: FactoryContext) => Promise<LinearTokenResponse> = (ctx) =>
-    fetchLinearToken(undefined, ctx),
+    hubToken("linear", {}, ctx),
 ): Check[] {
   return [
     {
@@ -21,13 +20,7 @@ export function linearChecks(
           const { app } = await issue(ctx);
           return { ok: true, detail: `acting as ${app.name}` };
         } catch (err) {
-          return {
-            ok: false,
-            reason: `the hub has no Linear token for this factory: ${err instanceof Error ? err.message : String(err)}`,
-            repair:
-              (err instanceof JigsError ? err.hint : undefined) ??
-              "check hub.url in jigs.config.ts and that the hub is running, then: `pnpm exec jigs doctor`",
-          };
+          return hubRefused("the hub has no Linear token for this factory", err);
         }
       },
     },

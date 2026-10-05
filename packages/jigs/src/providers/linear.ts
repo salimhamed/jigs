@@ -14,7 +14,6 @@ import {
   ProviderApiError,
   type ProviderApiErrorInit,
   rateLimitWaits,
-  reauthorize,
   retryAfterSeconds,
 } from "./http.ts";
 import {
@@ -186,7 +185,8 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
         body: JSON.stringify({ query, variables }),
       });
       const text = await res.text();
-      if (rejectedCredential(res, text) && !reauthorized && reauthorize(auth, credential)) {
+      if (rejectedCredential(res, text) && !reauthorized) {
+        auth.invalidate(credential);
         reauthorized = true;
         continue;
       }

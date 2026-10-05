@@ -14,7 +14,7 @@ import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import * as triggers from "./event-triggers/runner.ts";
 import type { PreparedRun } from "./launch.ts";
 import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
-import { type ProviderEvent, routeProviderEvent } from "./provider-events.ts";
+import { type RoutedEvent, routeProviderEvent } from "./provider-events.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 import { clearWakes, lastWake } from "./wake.ts";
@@ -29,7 +29,7 @@ const delivers = () => resumeHookMock.mockResolvedValueOnce({ runId: RUN } as ne
 
 const context = testFactoryContext({ slug: "factory-test", env: { GITHUB_TOKEN: "gh-token" } });
 const push = vi.fn(triggers.pushEvent);
-const route = (event: ProviderEvent) => routeProviderEvent(event, { context, push });
+const route = (event: RoutedEvent) => routeProviderEvent(event, { context, push });
 
 let log: ReturnType<typeof vi.spyOn>;
 
@@ -48,7 +48,7 @@ const review = {
   pull_request: { number: 41 },
   repository: { name: "api", owner: { login: "acme" } },
 };
-const github = (name: string, payload: unknown): ProviderEvent => ({
+const github = (name: string, payload: unknown): RoutedEvent => ({
   provider: "github",
   name,
   payload,
@@ -222,7 +222,7 @@ test("an unroutable GitHub event is ignored", async () => {
 
 const comment = () => {
   const issueId = crypto.randomUUID();
-  const event: ProviderEvent = {
+  const event: RoutedEvent = {
     provider: "linear",
     name: "Comment",
     payload: { action: "create", type: "Comment", data: { id: "c1", body: "reply", issueId } },
@@ -293,7 +293,7 @@ const incidentTriggered = () =>
   JSON.parse(
     readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
   ) as { event: { event_type: string } };
-const page = (payload = incidentTriggered()): ProviderEvent => ({
+const page = (payload = incidentTriggered()): RoutedEvent => ({
   provider: "pagerduty",
   name: payload.event.event_type,
   payload,
@@ -394,19 +394,43 @@ const callback = (event: object) => ({
   team_id: "T0A7SCMC5",
   event,
 });
-const slack = (event: object = reply): ProviderEvent => ({
+const slack = (event: object = reply): RoutedEvent => ({
   provider: "slack",
   name: "message",
   payload: callback(event),
 });
 
+const THREAD = "slack:thread:C0C5EUZ7P9Q:1790723478.961719";
+
 test("a Slack message goes to the triggers and wakes the thread it replies in", async () => {
   delivers();
   expect(await route(slack())).toEqual({ outcome: "woken" });
   expect(push).toHaveBeenCalledExactlyOnceWith("slack", callback(reply));
-  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
-    "slack:thread:C0C5EUZ7P9Q:1790723478.961719",
-    undefined,
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(THREAD, undefined);
+  expect(lastWake(THREAD, RUN)?.kind).toBe("slack message");
+  expect(log).toHaveBeenCalledWith(`[events] slack accepted token=${THREAD} event=message`);
+});
+
+test("a reply in a thread no run waits on is dropped", async () => {
+  expect(await route(slack())).toEqual({ outcome: "dropped" });
+  expect(log).toHaveBeenCalledWith(
+    `[events] slack dropped reason=no-matching-hook token=${THREAD} event=message`,
+  );
+});
+
+test("a top-level message or a bot's reply wakes nothing", async () => {
+  expect(await route(slack({ ...reply, thread_ts: undefined }))).toEqual({ outcome: "ignored" });
+  expect(await route(slack({ ...reply, bot_id: "B0C5JPZUW1J" }))).toEqual({ outcome: "ignored" });
+  expect(resumeHookMock).not.toHaveBeenCalled();
+});
+
+test("a Slack wake that fails fails the routing, so the message is routed again", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  resumeHookMock.mockRejectedValueOnce(new Error("world down"));
+  push.mockResolvedValueOnce(["questions"]);
+  expect(await route(slack())).toEqual({ outcome: "failed" });
+  expect(log).toHaveBeenCalledWith(
+    `[events] slack dropped reason=delivery-failed token=${THREAD} event=message`,
   );
 });
 
@@ -424,7 +448,7 @@ test("a Slack push that fails still wakes the thread, which is what routing repo
   expect(await route(slack())).toEqual({ outcome: "woken" });
   expect(resumeHookMock).toHaveBeenCalledOnce();
   expect(log).toHaveBeenCalledWith(
-    "[slack] could not start runs for C0C5EUZ7P9Q:1790723501.000300: Error: registry unreachable",
+    "[events] slack dropped reason=push-failed channel=C0C5EUZ7P9Q ts=1790723501.000300: Error: registry unreachable",
   );
 });
 
