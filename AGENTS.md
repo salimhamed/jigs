@@ -5,7 +5,7 @@ package you change:
 
 - `packages/jigs`: `@jigs-ai/jigs`, the published library, CLI and service.
   Its layering and Workflow SDK rules live in `packages/jigs/AGENTS.md`.
-- `packages/hub`: `@jigs-ai/hub`, the hub server (private for now).
+- `packages/hub`: `@jigs-ai/hub`, the published hub server.
 - `packages/hub-protocol`: messages between the hub and a factory, bundled
   into `@jigs-ai/jigs` (private).
 - `tools/api-docs`: TypeDoc and VitePress tooling for `site/`.

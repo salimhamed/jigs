@@ -202,7 +202,8 @@ The hub publishes before jigs, so it must be publishable first: its first
 publish is by hand with an npm token, then add an npm trusted publisher for
 `@jigs-ai/hub` with the same repository and `release.yml` workflow as jigs.
 npm points `latest` at a package's first version whatever `--tag` says, so the
-hub's `latest` is that hand-published version until it ships for real.
+hub's `latest` is that hand-published version until the next release, which
+moves it like jigs's.
 
 ## Website
 

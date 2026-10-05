@@ -217,8 +217,6 @@ hub
   .description("set the hub's URL in jigs.config.ts and the factory token in .env")
   .argument("<url>", "the address the hub is reached at")
   .argument("<token>", "the factory token the hub showed when this factory was added")
-  // Lets a token that starts with "-" through as the argument, not an unknown option.
-  .allowUnknownOption()
   .action((url: string, token: string) => {
     connectHub(url, token, { cwd: process.cwd(), out });
   });
