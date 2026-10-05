@@ -28,6 +28,7 @@ function recorder(failOn: (body: string) => boolean = () => false) {
 
 // A pull request carrying no notes yet, so every note is new.
 const unannotated = async (): Promise<PullRequestSnapshot> => ({
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,

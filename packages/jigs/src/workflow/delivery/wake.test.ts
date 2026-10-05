@@ -3,6 +3,7 @@ import type { PullRequestSnapshot } from "../pull-requests/snapshot.ts";
 import { builderWakeFacts } from "./wake.ts";
 
 const opened: PullRequestSnapshot = {
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,

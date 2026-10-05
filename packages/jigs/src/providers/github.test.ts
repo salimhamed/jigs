@@ -21,7 +21,6 @@ import { type FetchCall, fakeSleep } from "./test-support.ts";
 let github: FakeGithub;
 
 beforeEach(() => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   github = fakeGithub();
 });
 afterEach(() => {
@@ -219,7 +218,7 @@ test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => 
     "https://api.github.com/repos/acme/api/commits/head-sha-1/status?per_page=100",
   ]);
   const call = github.calls[0] as FetchCall;
-  expect(call.headers.authorization).toBe("Bearer gh_test_token");
+  expect(call.headers.authorization).toBe("Bearer ghs_test");
 });
 
 test("review comments group into threads by in_reply_to_id", async () => {
@@ -467,12 +466,6 @@ test("two check runs of one name are two builds, and neither hides the other", a
 test("a non-2xx response throws with the path named", async () => {
   github.reply(new Response("nope", { status: 404 }));
   await expect(fetchPrSnapshot(pr)).rejects.toThrow("/repos/acme/api/pulls/41");
-});
-
-test("a missing GITHUB_TOKEN throws before any request", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "");
-  await expect(fetchPrSnapshot(pr)).rejects.toThrow("GITHUB_TOKEN");
-  expect(github.calls).toHaveLength(0);
 });
 
 test("a threaded reply posts to the thread root's replies endpoint", async () => {

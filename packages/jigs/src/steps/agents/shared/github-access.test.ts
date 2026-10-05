@@ -10,13 +10,6 @@ import {
   agentGithubEnv,
 } from "./github-access.ts";
 
-const APP = {
-  mode: "app",
-  appId: 1,
-  installationId: 2,
-  privateKeyPath: "/key.pem",
-  operator: "salimhamed",
-} as const;
 const TOKEN = "ghs_agent_token";
 
 let tmp: string;
@@ -25,14 +18,13 @@ beforeEach(() => {
 });
 afterEach(() => removeTmpDir(tmp));
 
-function deps(identity: GithubAuth["identity"] = APP, remote = "git@github.com:acme/api.git") {
+function deps(
+  remote = "git@github.com:acme/api.git",
+  bot: GithubAuth["bot"] = async () => ({ login: "jigs-dev[bot]", id: 4242 }),
+) {
   const bearer = vi.fn(async () => TOKEN);
-  const auth = vi.fn((_owner: string): GithubAuth => ({ identity, bearer }));
-  const fake: AgentGithubDeps = {
-    remoteUrl: async () => remote,
-    auth,
-    bot: async () => ({ login: "jigs-dev[bot]", id: 4242 }),
-  };
+  const auth = vi.fn((_owner: string): GithubAuth => ({ bearer, invalidate: () => {}, bot }));
+  const fake: AgentGithubDeps = { remoteUrl: async () => remote, auth };
   return { fake, auth, bearer };
 }
 
@@ -141,28 +133,17 @@ test("github with an owner acts on that account, with no checkout needed", async
 });
 
 test("github: true outside a github.com checkout asks for the owner", async () => {
-  const { fake } = deps(APP, "https://gitlab.com/acme/api.git");
-  await expect(envFor(optedIn, fake)).rejects.toThrow("github: { owner }");
-});
-
-test("with a personal access token, an opted-in agent fails before it starts, without a retry", async () => {
-  const { fake, bearer } = deps({ mode: "pat" });
+  const { fake } = deps("https://gitlab.com/acme/api.git");
   const failure = await envFor(optedIn, fake).catch((err: unknown) => err);
-  expect(failure).toMatchObject({
-    message: expect.stringContaining("needs a GitHub App identity"),
-  });
+  expect(failure).toMatchObject({ message: expect.stringContaining("github: { owner }") });
   expect(FatalError.is(failure)).toBe(true);
-  expect(bearer).not.toHaveBeenCalled();
 });
 
 test("a failure after the token is minted never names it", async () => {
-  const { fake } = deps();
-  const failure = await envFor(optedIn, {
-    ...fake,
-    bot: async () => {
-      throw new Error("GitHub API 502 on /users/jigs-dev[bot]");
-    },
-  }).catch((err: unknown) => err);
+  const { fake } = deps(undefined, async () => {
+    throw new Error("the hub answered 502");
+  });
+  const failure = await envFor(optedIn, fake).catch((err: unknown) => err);
   expect(String(failure)).toContain("502");
   expect(String(failure)).not.toContain(TOKEN);
 });

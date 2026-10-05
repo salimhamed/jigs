@@ -65,8 +65,8 @@ beforeEach(() => {
 });
 
 const prSnapshot = (
-  patch: Partial<Omit<github.PullRequestSnapshot, "approval">> = {},
-): Omit<github.PullRequestSnapshot, "approval"> => ({
+  patch: Partial<Omit<github.PullRequestSnapshot, "approval" | "appBot">> = {},
+): Omit<github.PullRequestSnapshot, "approval" | "appBot"> => ({
   state: "open",
   merged: false,
   draft: false,
@@ -98,22 +98,15 @@ function reviewApproval(): void {
     testFactoryContext({
       slug: "factory-test",
       config: {
-        github: {
-          identities: [
-            {
-              mode: "app",
-              appId: 1,
-              installations: { acme: 2 },
-              privateKeyPath: "k",
-              operator: "me",
-            },
-          ],
-          mergeApproval: "review",
-        },
+        github: { operator: "me", mergeApproval: "review" },
       },
     }),
   );
-  vi.spyOn(githubAuth, "appBotFor").mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
+  vi.spyOn(githubAuth, "githubAuthFor").mockReturnValue({
+    bearer: async () => "t",
+    invalidate: () => {},
+    bot: async () => ({ login: "jigs-dev[bot]", id: 1 }),
+  });
 }
 
 function parkedOnPr(): RunSuspension {

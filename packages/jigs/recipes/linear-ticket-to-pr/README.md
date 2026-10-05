@@ -17,7 +17,7 @@ following the pull request, runs in four jigs routines the workflow calls.
 
 ## What it needs
 
-- **Linear and GitHub credentials**, with a GitHub App as the GitHub identity. See
+- **Linear credentials, and the factory's GitHub App installed on the repository's owner**. See
   [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
   and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
@@ -29,9 +29,7 @@ following the pull request, runs in four jigs routines the workflow calls.
   GitHub as the factory's App, the same bot jigs posts as: `gh` and its pushes
   use a token jigs gives it, and its commits are authored by the bot. See
   [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access).
-  With a personal access token instead of an App, remove `github: true` and give
-  the builder GitHub access yourself; its replies then look like anyone else's,
-  so each one wakes it once more. Missing access makes maintenance ask for help.
+  Missing access makes maintenance ask for help.
 - **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
   `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is

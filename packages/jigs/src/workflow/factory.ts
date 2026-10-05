@@ -176,13 +176,11 @@ export interface Factory {
 }
 
 /**
- * Who jigs is on GitHub, the operator's own token or a GitHub App installation, and how the
- * operator approves a pull request for merging.
+ * Who the operator is on GitHub, and how they approve a pull request for merging.
  *
  * @remarks
- * `mergeApproval` defaults to `label` with a token and to `review` with an App. A token cannot use
- * `review`: jigs opens pull requests as the operator, and GitHub does not let the author approve
- * their own pull request.
+ * jigs acts on GitHub as the GitHub App the hub assigns this factory, so its pull requests come
+ * from `<app-slug>[bot]` and the operator can approve them. `mergeApproval` defaults to `review`.
  *
  * @example
  * Use this value for `github` in `jigs.config.ts`.
@@ -190,7 +188,7 @@ export interface Factory {
  * import type { GitHubDefinition } from "@jigs-ai/jigs";
  *
  * const github = {
- *   identities: [{ mode: "pat" }],
+ *   operator: "octocat",
  *   mergeApproval: "label",
  * } satisfies GitHubDefinition;
  * ```

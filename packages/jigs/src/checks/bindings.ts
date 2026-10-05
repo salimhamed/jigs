@@ -1,9 +1,8 @@
 import path from "node:path";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
-import { parseGithubRemote } from "../providers/github-remote.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
@@ -11,7 +10,6 @@ import {
   type BindingEntry,
   FACTORY_CONFIG_FILE,
   type FactoryConfig,
-  installationFor,
 } from "../workflow/factory-schema.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { type Check, type CheckResult, failedCheck } from "./check.ts";
@@ -53,13 +51,12 @@ export function bindingChecks(options: BindingChecksOptions): Check[] {
   return (options.names ?? Object.keys(config.bindings)).map((name) => ({
     id: `binding.${name}`,
     label: `binding ${name}`,
-    run: () => checkBinding(factoryRoot, config, name, config.bindings[name]),
+    run: () => checkBinding(factoryRoot, name, config.bindings[name]),
   }));
 }
 
 async function checkBinding(
   factoryRoot: string,
-  config: FactoryConfig,
   name: string,
   binding: BindingEntry | undefined,
 ): Promise<CheckResult> {
@@ -75,21 +72,6 @@ async function checkBinding(
 
   const copyFailure = checkCopySources(factoryRoot, name, binding.copy);
   if (copyFailure !== null) return copyFailure;
-
-  const account = parseGithubRemote(binding.remote)?.owner;
-  if (account) {
-    try {
-      installationFor(config.github.identities, account);
-    } catch (err) {
-      if (err instanceof JigsError)
-        return {
-          ok: false,
-          reason: err.message,
-          repair: err.hint ?? "repair github installations",
-        };
-      throw err;
-    }
-  }
 
   // A binding declared while the service was running has no clone, and the
   // worktree request would be the first thing to say so — mid-run.
@@ -108,7 +90,7 @@ async function checkBinding(
     return {
       ok: false,
       reason: `git could not reach ${binding.remote}: ${stderr}`,
-      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or GITHUB_TOKEN in ${SERVICE_ENV_FILE}), then: \`${RESTART_SERVICE}\``,
+      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or a git credential helper for an https remote), then: \`${RESTART_SERVICE}\``,
     };
   }
   return { ok: true };

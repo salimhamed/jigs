@@ -30,8 +30,7 @@ import { reviewTicket, type TicketHandoff } from "./review-ticket.ts";
 
 // The agents this workflow can run, by the part they play. A run picks one per
 // part by name; edit a line here to change a default model or harness. The
-// builder acts on GitHub as the factory's App (`github: true`), so it needs a
-// GitHub App identity.
+// builder acts on GitHub as the factory's App (`github: true`).
 const agents = {
   builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
   reviewer: harnesses.claude({ model: "opus" }),

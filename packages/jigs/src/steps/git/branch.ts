@@ -12,7 +12,7 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor, githubUsesPat } from "../../providers/github-auth.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -21,19 +21,15 @@ import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
 // key on this machine — the operator. An installation token cannot travel that
-// way, so App mode pushes to the same repository over HTTPS and hands the token
+// way, so jigs pushes to the same repository over HTTPS and hands the token
 // to `PushTarget`, which keeps it out of the URL and out of argv. Only the push
 // is redirected: the binding's clone and every fetch still use its own remote,
-// as the operator.
+// as the operator. A remote off GitHub has no installation token, so it is
+// pushed to as the operator too.
 async function pushTarget(worktreePath: string): Promise<PushTarget> {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  if (githubUsesPat()) return DEFAULT_PUSH_TARGET;
-  if (ref === null) {
-    throw new Error(
-      `${worktreePath} pushes to ${url}, which is not a github.com remote — a GitHub App installation token can only push to GitHub`,
-    );
-  }
+  if (ref === null) return DEFAULT_PUSH_TARGET;
   return {
     remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
     token: await githubAuthFor(ref.owner).bearer(),

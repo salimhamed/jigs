@@ -3,7 +3,7 @@
 
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { githubAuthFor, githubUsesPat } from "./github-auth.ts";
+import { githubAuthFor } from "./github-auth.ts";
 import { GitHubApiError, githubSend } from "./github-http.ts";
 
 export interface GithubRequestOptions {
@@ -21,12 +21,9 @@ export async function githubRequest<T>(
 ): Promise<T> {
   const owner = /^\/repos\/([^/?#]+)\/[^/?#]+(?:[/?]|$)/.exec(apiPath)?.[1];
   const target = owner ?? options.account;
-  if (!target && apiPath !== "/user")
-    throw new JigsError(`GitHub request ${apiPath} requires an account`);
-  if (apiPath === "/user" && !githubUsesPat(options.context))
-    throw new JigsError("/user requires a PAT identity");
+  if (!target) throw new JigsError(`GitHub request ${apiPath} requires an account`);
   return githubSend<T>({
-    auth: githubAuthFor(target ?? "", options.context),
+    auth: githubAuthFor(target, options.context),
     method,
     apiPath,
     json: body,

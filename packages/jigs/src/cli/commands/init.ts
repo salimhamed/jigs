@@ -3,11 +3,7 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../../build/templates.ts";
 import { JigsError } from "../../errors.ts";
-import {
-  type GithubIdentity,
-  githubIdentitySchema,
-  type LinearIdentity,
-} from "../../workflow/factory-schema.ts";
+import type { LinearIdentity } from "../../workflow/factory-schema.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { columns, command, heading, note } from "../output.ts";
@@ -16,86 +12,11 @@ import { columns, command, heading, note } from "../output.ts";
 // integration. Existing files are preserved; `jigs generate` explicitly
 // refreshes jigs/. `jigs up` owns operations on the machine.
 
-/** Which GitHub credential the scaffolded factory is written for. */
-export type IdentityMode = "pat" | "app";
-
-/** The `--github-identity-mode app` facts, which have no defaults jigs could invent. */
-export interface AppIdentityOptions {
-  githubAppId?: string;
-  githubAppInstallation?: string[];
-  githubAppPrivateKeyPath?: string;
-  githubOperatorLogin?: string;
-  gitCoAuthor?: string;
-}
-
 export interface InitDeps {
   cwd: string;
   out: (line: string) => void;
-  /** Defaults to `{ mode: "pat" }`: the token an operator already has. */
-  identity?: GithubIdentity;
   /** Defaults to `{ mode: "key" }`: a personal Linear API key. */
   linearIdentity?: LinearIdentity;
-}
-
-/**
- * Turn `jigs init`'s flags into the identity the scaffold is written for.
- *
- * App mode is refused rather than stubbed: a scaffold carrying placeholder ids
- * does not load, so the first `jigs up` would fail on a file the operator was
- * never told to finish.
- */
-export function resolveIdentityOptions(
-  mode: IdentityMode,
-  options: AppIdentityOptions,
-): GithubIdentity {
-  if (mode === "pat") return { mode: "pat" };
-  const missing = (
-    [
-      "githubAppId",
-      "githubAppInstallation",
-      "githubAppPrivateKeyPath",
-      "githubOperatorLogin",
-    ] as const
-  ).filter((flag) => !options[flag]?.length);
-  if (missing.length > 0) {
-    throw new JigsError(
-      `jigs init --github-identity-mode app needs ${missing.map((flag) => `--${FLAGS[flag]}`).join(", ")}`,
-      'for example: `pnpm exec jigs init --github-identity-mode app --github-app-id 123 --github-app-installation your-github-login=456 --github-app-private-key-path github-app.private-key.pem --github-operator-login your-github-login [--git-co-author "Your Name <you@example.com>"]`',
-    );
-  }
-  const installations: Record<string, number> = {};
-  for (const entry of options.githubAppInstallation ?? []) {
-    const match = /^([a-zA-Z0-9-]+)=(\d+)$/.exec(entry);
-    if (!match)
-      throw new JigsError(`--github-app-installation must be <account>=<id>, not ${entry}`);
-    const account = match[1] as string;
-    if (Object.keys(installations).some((login) => login.toLowerCase() === account.toLowerCase()))
-      throw new JigsError(`duplicate --github-app-installation account ${account}`);
-    installations[account] = positiveInt(match[2], "--github-app-installation");
-  }
-  return githubIdentitySchema.parse({
-    mode: "app",
-    appId: positiveInt(options.githubAppId, "--github-app-id"),
-    installations,
-    privateKeyPath: String(options.githubAppPrivateKeyPath),
-    operator: String(options.githubOperatorLogin),
-    ...(options.gitCoAuthor === undefined ? {} : { coAuthor: options.gitCoAuthor }),
-  });
-}
-
-const FLAGS = {
-  githubAppId: "github-app-id",
-  githubAppInstallation: "github-app-installation",
-  githubAppPrivateKeyPath: "github-app-private-key-path",
-  githubOperatorLogin: "github-operator-login",
-} as const;
-
-function positiveInt(value: string | undefined, flag: string): number {
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) {
-    throw new JigsError(`${flag} must be a positive whole number, not ${value}`);
-  }
-  return parsed;
 }
 
 export interface InitResult {
@@ -110,7 +31,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const root = path.resolve(deps.cwd);
   const templates = locateTemplates();
   const ports = factoryPorts(root);
-  const identity = deps.identity ?? { mode: "pat" };
   const linearIdentity = deps.linearIdentity ?? { mode: "key" };
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
@@ -118,11 +38,9 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
-    GITHUB_IDENTITY: `  github: {\n${IDENTITY_COMMENT[identity.mode]}\n    identities: [${literal(identity, "    ")}],\n  },`,
     LINEAR_IDENTITY: `  linear: {\n${LINEAR_IDENTITY_COMMENT[linearIdentity.mode]}\n    identity: ${literal(linearIdentity, "    ")},\n  },`,
     // The scaffolded test asserts what the scaffolded config declares, and both
     // are written from the one value here, so neither mode can scaffold red.
-    GITHUB_EXPECTED: literal({ identities: [identity] }, "  "),
     LINEAR_EXPECTED: literal({ identity: linearIdentity }, "  "),
   };
 
@@ -134,12 +52,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
 
   deps.out("");
   deps.out(heading("Next, in this directory"));
-  // Outside the aligned block, so a long key path doesn't push every comment right.
-  if (identity.mode === "app") {
-    deps.out(
-      `  ${command(`chmod 600 ${identity.privateKeyPath}`)}  ${note("# and keep it out of git")}`,
-    );
-  }
   const next: Array<[string, string?]> = [
     ["pnpm install"],
     ["cp .env.example .env", "then fill in what your workflows need"],
@@ -157,11 +69,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
 
   return { created, skipped, ...ports };
 }
-
-const IDENTITY_COMMENT: Record<IdentityMode, string> = {
-  pat: "    // jigs acts as you, using GITHUB_TOKEN from .env.",
-  app: "    // jigs acts as <app-slug>[bot], minting installation tokens from the key.",
-};
 
 const LINEAR_IDENTITY_COMMENT: Record<LinearIdentity["mode"], string> = {
   key: "    // jigs acts as the user whose LINEAR_API_KEY is in .env.",

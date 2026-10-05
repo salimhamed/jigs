@@ -32,6 +32,7 @@ beforeEach(() => {
 
 const pr = { owner: "Acme", repo: "App", number: 7 };
 const snapshot = (patch: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,

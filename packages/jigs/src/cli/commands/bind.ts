@@ -4,7 +4,6 @@ import { upsertBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
 import type { FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import {
   type EnsureRepoLabelOptions,
@@ -14,7 +13,6 @@ import {
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { installationFor } from "../../workflow/factory-schema.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { detail, hint, note } from "../output.ts";
 
@@ -62,8 +60,6 @@ export async function bindRepo(
   }
 
   const { config } = ctx;
-  const account = parseGithubRemote(remoteUrl)?.owner;
-  if (account) installationFor(config.github.identities, account);
   const matchingBindings = Object.entries(config.bindings).filter(
     ([, binding]) => binding.remote === remoteUrl,
   );
@@ -137,33 +133,26 @@ async function ensureJigsLabels(
   reBindCommand: string,
   deps: BindDeps,
 ): Promise<void> {
-  const factoryRoot = ctx.root;
   const repoRef = parseGithubRemote(remoteUrl);
   if (repoRef === null) {
     deps.out(note(`note: skipping jigs labels (${remoteUrl} is not a github.com remote)`));
     return;
   }
   const slug = `${repoRef.owner}/${repoRef.repo}`;
-  const { identity } = githubAuthFor(repoRef.owner, ctx);
-  const credentialRepair =
-    identity.mode === "app"
-      ? `grant the App "Issues: read & write", accept it on the installation for ${slug}, then re-run: \`${reBindCommand}\``
-      : `set GITHUB_TOKEN in ${path.join(factoryRoot, ".env")} to a classic PAT with repo (or public_repo for a public repository) on ${slug} (an exported GITHUB_TOKEN wins over the file), then re-run: \`${reBindCommand}\``;
   for (const label of JIGS_LABELS) {
     const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
       ...repoRef,
       label,
       context: ctx,
     }).catch((err: unknown) => {
-      const tokenMissing = identity.mode === "pat" && ctx.env("GITHUB_TOKEN") === undefined;
-      const repair =
-        tokenMissing || tokenWasRejected(err)
-          ? credentialRepair
-          : err instanceof GitHubApiError && err.status === 404 && identity.mode === "app"
-            ? `check the remote, and install the App on ${slug} or grant its installation access to the repo, then re-run: \`${reBindCommand}\``
-            : err instanceof GitHubApiError && err.status === 404
-              ? `check the remote, and that this token can see ${slug}, then re-run: \`${reBindCommand}\``
-              : `once that clears, re-run: \`${reBindCommand}\``;
+      const rerun = `re-run: \`${reBindCommand}\``;
+      const repair = tokenWasRejected(err)
+        ? `grant the factory's GitHub App "Issues: read & write", accept it on the installation for ${slug}, then ${rerun}`
+        : err instanceof GitHubApiError && err.status === 404
+          ? `check the remote, and that the factory's GitHub App installation on ${repoRef.owner} can see ${slug}, then ${rerun}`
+          : err instanceof JigsError && err.hint !== undefined
+            ? `${err.hint}, then ${rerun}`
+            : `once that clears, ${rerun}`;
       throw new JigsError(
         `${slug}'s ${label.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
         repair,
