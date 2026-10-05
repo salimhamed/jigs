@@ -42,6 +42,8 @@ export async function action({ context, request }: Route.ActionArgs) {
           name: field("name"),
           clientId: field("clientId"),
           clientSecret: field("clientSecret"),
+          subdomain: field("subdomain"),
+          region: field("region"),
         });
       default:
         return addGitHubApp(db, config.encryptionKey, organizationId, {
@@ -87,6 +89,7 @@ const pagerDutyFields: Field[] = [
   { name: "name", label: "Name, as the app is called in PagerDuty" },
   { name: "clientId", label: "Client ID" },
   { name: "clientSecret", label: "Client secret", secret: true },
+  { name: "subdomain", label: "Account subdomain, as in <subdomain>.pagerduty.com" },
 ];
 
 function Fields({ fields }: { fields: Field[] }) {
@@ -189,11 +192,18 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
           <h2 className="text-lg font-semibold">Add a PagerDuty connection</h2>
           <p className="text-sm text-zinc-500">
             Create an app in PagerDuty first, under Integrations, App Registration, with Scoped
-            OAuth, then copy its details here. The connection's page on the hub then shows what to
-            set in PagerDuty, takes the webhook subscription's signing secret and connects the
-            account.
+            OAuth and the scopes its page on the hub lists, then copy its details here. The hub
+            checks them by getting a token. The connection's page then shows the webhook to add in
+            PagerDuty and takes its signing secret.
           </p>
           <Fields fields={pagerDutyFields} />
+          <label className="flex flex-col gap-1 text-sm">
+            Region
+            <select name="region" defaultValue="us" className={input}>
+              <option value="us">US</option>
+              <option value="eu">EU</option>
+            </select>
+          </label>
           <button type="submit" className={button}>
             Add PagerDuty connection
           </button>

@@ -381,13 +381,16 @@ function PagerDutyApp({
     <>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">{app.name}</h1>
-        <p className="text-sm text-zinc-500">PagerDuty connection, client ID {app.clientId}</p>
+        <p className="text-sm text-zinc-500">
+          PagerDuty connection, client ID {app.clientId}, acting as the app in{" "}
+          {app.accounts.map((account) => `${account.subdomain} (${account.region})`).join(", ")}
+        </p>
       </div>
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">In PagerDuty</h2>
         <p className="text-sm">
-          In the app's Scoped OAuth settings, set the Redirect URL and grant these scopes:{" "}
+          In the app's Scoped OAuth settings, grant these scopes:{" "}
           {app.scopes.map((scope, index) => (
             <span key={scope}>
               {index > 0 && ", "}
@@ -397,7 +400,6 @@ function PagerDutyApp({
           .
         </p>
         <ul className="space-y-1 text-sm">
-          <Setting label="Redirect URL" value={app.redirectUrl} />
           <Setting label="Webhook URL" value={app.webhookUrl} />
         </ul>
         <p className="text-sm">
@@ -434,55 +436,6 @@ function PagerDutyApp({
           <p className="text-sm text-red-600 dark:text-red-400">
             No signing secret yet, so the hub refuses this connection's webhooks.
           </p>
-        )}
-      </section>
-
-      <section className="space-y-2">
-        <h2 className="text-lg font-semibold">Account</h2>
-        {app.accounts.length === 0 ? (
-          <p className="text-zinc-500">No account connected yet.</p>
-        ) : (
-          <table className={table}>
-            <thead className="text-zinc-500">
-              <tr>
-                <th>Subdomain</th>
-                <th>Region</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {app.accounts.map((account) => (
-                <tr
-                  key={account.externalId}
-                  className="border-t border-zinc-200 dark:border-zinc-800"
-                >
-                  <td>{account.subdomain}</td>
-                  <td>{account.region}</td>
-                  <td>
-                    {account.failure === null ? (
-                      "Connected"
-                    ) : (
-                      <span className="text-red-600 dark:text-red-400">
-                        Connect again: {account.failure}
-                      </span>
-                    )}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-        {isAdmin && (
-          <>
-            <p className="text-sm text-zinc-500">
-              The tokens act as the PagerDuty user who connects the account. Connect again to fix an
-              account that stopped working.
-            </p>
-            <a href={app.connectUrl} className={button}>
-              <Link2 className="size-4" />
-              Connect PagerDuty
-            </a>
-          </>
         )}
       </section>
     </>

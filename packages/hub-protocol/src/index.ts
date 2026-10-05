@@ -169,10 +169,10 @@ export interface SlackTokenResponse {
 }
 
 /**
- * `POST` an empty object for a {@link PagerDutyTokenResponse}: the access
- * token of the PagerDuty account connected to the one PagerDuty app assigned
- * to the factory. The hub answers 404 when none is, 409 when several are, and
- * 503 when the account must be connected again on the hub.
+ * `POST` an empty object for a {@link PagerDutyTokenResponse}: a fresh token
+ * of the one PagerDuty app assigned to the factory, acting as the app in its
+ * account. The hub answers 404 when none is, 409 when several are, and 503
+ * when PagerDuty refuses the app's credentials.
  */
 export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
 

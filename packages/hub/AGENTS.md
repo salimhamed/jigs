@@ -81,8 +81,7 @@ then connects each workspace through Linear's OAuth flow as the app
 workspace's access and refresh tokens live encrypted on its installation;
 `LinearTokens` refreshes them one at a time per workspace, since Linear
 rotates the refresh token, and a refused refresh marks the installation as
-needing a reconnect (`src/oauth.ts` holds that refresh, shared with
-PagerDuty). Each Linear app has its own webhook URL, because Linear's
+needing a reconnect. Each Linear app has its own webhook URL, because Linear's
 payloads do not name the app. On a new agent session the hub posts the first
 activity itself, as Linear wants one within ten seconds.
 
@@ -92,6 +91,8 @@ the hub finds the app by `api_app_id`, checks the signing secret, answers
 URL verification with any Slack app's secret (the challenge names no app),
 answers 200 to events it cannot place so Slack stops retrying, and drops a
 retry of an event it already stored. `src/pagerduty.ts` adds PagerDuty
-connections: one account each, connected through PagerDuty's OAuth with
-PKCE (the account is read from the id token), with a webhook URL per
-connection whose signing secret is entered after the subscription exists.
+apps, each acting as itself in one account: an admin enters a Scoped OAuth
+app's credentials with the account's subdomain and region, the hub checks
+them by minting a token, and mints a fresh client-credentials token for every
+factory request. Each app has its own webhook URL, whose signing secret is
+entered after the subscription exists.

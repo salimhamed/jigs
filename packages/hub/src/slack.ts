@@ -6,8 +6,7 @@ import type { App } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations, providerEvents } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { readCookie, readSecrets } from "./oauth.ts";
-import { encryptSecret } from "./secrets.ts";
+import { decryptSecret, encryptSecret } from "./secrets.ts";
 
 /** Where Slack sends every Slack app's events, its Event Subscriptions "Request URL". */
 export const slackWebhookPath = "/webhooks/slack";
@@ -122,6 +121,17 @@ const verifySignature = (
 };
 
 const STATE_COOKIE = "hub_slack_state";
+
+const readSecrets = <T>(encryptionKey: Buffer, stored: string): T =>
+  JSON.parse(decryptSecret(encryptionKey, stored));
+
+const readCookie = (request: Request, name: string) => {
+  for (const part of (request.get("cookie") ?? "").split(";")) {
+    const [key, ...value] = part.trim().split("=");
+    if (key === name) return decodeURIComponent(value.join("="));
+  }
+  return undefined;
+};
 
 interface SlackEnvelope {
   type?: string;

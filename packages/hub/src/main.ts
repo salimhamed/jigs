@@ -55,7 +55,7 @@ const routers = [
     adminOrganization: adminOf,
   }),
   createSlackRoutes({ db, waiters, encryptionKey, publicUrl, adminOrganization: adminOf }),
-  createPagerDutyRoutes({ db, waiters, encryptionKey, publicUrl, adminOrganization: adminOf }),
+  createPagerDutyRoutes({ db, waiters, encryptionKey }),
 ];
 const server = createHubApp(auth, routers, web).listen(config.port, config.host, () => {
   const address = server.address() as AddressInfo;

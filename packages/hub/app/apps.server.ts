@@ -16,8 +16,6 @@ import {
 import {
   hasPagerDutyWebhookSecret,
   type PagerDutyAccountSettings,
-  pagerDutyCallbackPath,
-  pagerDutyConnectPath,
   pagerDutyEventTypes,
   pagerDutyScopes,
   pagerDutyWebhookPath,
@@ -129,18 +127,14 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       ...common,
       provider: "pagerduty" as const,
       clientId: app.externalId,
-      connectUrl: pagerDutyConnectPath(app.id),
       webhookSecretSet: hasPagerDutyWebhookSecret(context.config.encryptionKey, app),
-      redirectUrl: `${origin}${pagerDutyCallbackPath(app.id)}`,
       webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
-      // openid is asked for at connect, not granted on the app.
-      scopes: pagerDutyScopes.filter((scope) => scope !== "openid"),
+      scopes: [...pagerDutyScopes],
       eventTypes: [...pagerDutyEventTypes],
       accounts: installed.map((account) => ({
         externalId: account.externalId,
         subdomain: account.account,
         region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
-        failure: account.failure,
       })),
     };
   }
