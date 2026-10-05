@@ -23,6 +23,8 @@ export class GitHubApiError extends ProviderApiError {
   readonly githubMessage: string;
   /** The response body as GitHub sent it. */
   declare readonly body: string;
+  /** GitHub refused for its rate limit, and the waits for it ran out. */
+  rateLimited = false;
 
   constructor(status: number, apiPath: string, body: string, message?: string) {
     super({
@@ -105,7 +107,11 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         continue;
       }
       if (isRateLimited(res) && (await rateLimit.wait(rateLimitSeconds(res)))) continue;
-      if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+      if (!res.ok) {
+        const refused = refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+        if (refused instanceof GitHubApiError) refused.rateLimited = isRateLimited(res);
+        throw refused;
+      }
       // 204 on a POST that adds nothing to say — assignees and labels do this.
       return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
     }

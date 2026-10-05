@@ -75,8 +75,8 @@ closure.
 question or fix a problem; a verified reply lets the workflow continue.
 _Avoid_: failure, abort
 
-**Wake**: A signal that makes a suspended run recheck its condition: a webhook,
-the service's poll, `jigs poke` or reconciliation.
+**Wake**: A signal that makes a suspended run recheck its condition: a provider
+event from the hub, or `jigs poke`.
 
 **Claim**: A run-long hold on a ticket, keyed by a hook token that names it, so
 a second active run cannot take it.
@@ -202,15 +202,6 @@ _Avoid_: filter, feed
 such as a new incident or a top-level message. An event trigger starts at most
 one run per occurrence, ever.
 _Avoid_: event (for the deduplicated unit), delivery
-
-**Delivery kind**: How a source learns of occurrences: polling, or a push kind
-such as a webhook or a socket. A Linear agent session is pushed only.
-_Avoid_: transport, mode
-
-**Ingress**: The optional webhook routes that turn provider events into wakes
-and occurrences. The poll does the same either way; ingress only makes it
-sooner.
-_Avoid_: webhook handler
 
 **Preflight**: Checking a workflow's declared `requires` before a run exists.
 

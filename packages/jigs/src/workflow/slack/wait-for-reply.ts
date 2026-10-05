@@ -57,8 +57,8 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
  * Without `until`, waits until a reply or `jigs cancel`. With it, the thread is
  * read at least once, so a reply already there wins even when `until` has
  * passed; after that the wait ends `timed-out` at `until`, and a later
- * reply wakes nothing. A reply heard through the hub, the service's poll and
- * `jigs poke` each make it read the thread again. Replies from bots, including the factory's
+ * reply wakes nothing. A reply heard through the hub and `jigs poke` each make
+ * it read the thread again. Replies from bots, including the factory's
  * own, never count. `threadTs` must be the thread's top-level message: a
  * reply's ts fails the wait, naming the top-level message's ts. A reply
  * already in the thread returns at once, and may not answer the question the

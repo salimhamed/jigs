@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import { HubResponseError } from "../providers/hub.ts";
 import type { LinearIssueFiling } from "../providers/linear.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { linear } from "../workflow/linear/source.ts";
@@ -87,9 +88,14 @@ test("only a created session on an issue is an occurrence", async () => {
   expect(await source.fromPush({}, { type: "Issue", action: "create", data: {} })).toBeNull();
 });
 
-test("a created session without an id is refused rather than taken", async () => {
+test("a created session without an id is ignored loudly, not retried", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
   const source = linearAgentSessions({ issueFiling: unread() });
-  await expect(source.fromPush({}, withSession({}, { id: undefined }))).rejects.toThrow();
+  expect(await source.fromPush({}, withSession({}, { id: undefined }))).toBeNull();
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[linear] ignored an agent session event it could not read"),
+  );
+  errors.mockRestore();
 });
 
 test("teams match the issue's team key or id without reading the issue", async () => {
@@ -125,9 +131,30 @@ test("an issue in no project never matches a project filter", async () => {
   expect(await source.fromPush({ projects: ["8f2c1a9b7e3d"] }, created())).toBeNull();
 });
 
-test("the poll finds nothing, since Linear only pushes sessions", async () => {
-  const source = linearAgentSessions({ issueFiling: unread() });
-  expect(await source.poll({}, undefined, new Date())).toEqual({ occurrences: [], cursor: null });
+test("an issue the app cannot read, or a workspace the hub has no app for, is ignored loudly", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const gone = linearAgentSessions({ issueFiling: vi.fn(async () => null) });
+  expect(await gone.fromPush({ labels: ["agent"] }, created())).toBeNull();
+  const unassigned = linearAgentSessions({
+    issueFiling: vi.fn(async () => {
+      throw new HubResponseError(404, "no Linear app in this workspace");
+    }),
+  });
+  expect(await unassigned.fromPush({ labels: ["agent"] }, created())).toBeNull();
+  expect(errors.mock.calls.map(([line]) => String(line))).toEqual([
+    expect.stringContaining("which the app cannot read"),
+    expect.stringContaining("which the hub has no app for"),
+  ]);
+  errors.mockRestore();
+});
+
+test("a hub that cannot answer for the workspace fails the push, to be retried", async () => {
+  const source = linearAgentSessions({
+    issueFiling: vi.fn(async () => {
+      throw new HubResponseError(503, "unavailable");
+    }),
+  });
+  await expect(source.fromPush({ labels: ["agent"] }, created())).rejects.toThrow("unavailable");
 });
 
 test("empty filter lists are refused", () => {
@@ -190,6 +217,5 @@ test("a filter that cannot read the issue fails the push rather than passing the
   const { engine, starts } = sessionEngine(unread(), { labels: ["agent"] });
   await engine.arm();
   await expect(engine.push("linear", created())).rejects.toThrow("could not read the event");
-  await expect(engine.push("linear", withSession({}, { id: undefined }))).rejects.toThrow();
   expect(starts).toEqual([]);
 });

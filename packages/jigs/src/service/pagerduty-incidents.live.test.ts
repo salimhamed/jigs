@@ -1,5 +1,6 @@
-// A real incident on the PagerDuty sandbox service, found by a real poll and
-// started as a real run on a Postgres World of its own. Runs only with
+// A real incident on the PagerDuty sandbox service, pushed as the
+// `incident.triggered` event the hub would pass on and started as a real run on
+// a Postgres World of its own. Runs only with
 // JIGS_TEST_PAGERDUTY_TOKEN (a PagerDuty app's token), PAGERDUTY_FROM and
 // PAGERDUTY_EVENTS_ROUTING_KEY set. Other tests may open incidents on the same
 // service at the same time, so only this test's own incident is asserted on.
@@ -12,14 +13,13 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { databaseUrl, postgresAdminUrl } from "../db-test-fixtures.ts";
-import type { PagerDutyIncident } from "../providers/pagerduty.ts";
-import { livePagerDutyClient } from "../providers/test-fixtures.ts";
+import { waitForLiveIncident } from "../providers/test-fixtures.ts";
 import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import { triggerStore } from "./event-triggers/store.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
+import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
 import { findRunsByAttribute } from "./runs.ts";
 
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
@@ -31,8 +31,6 @@ const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 const SLUG = "pagerduty-live";
 
 describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
-  const client = livePagerDutyClient(token ?? "", from ?? "");
-
   const database = `jigs_pd_trigger_${crypto.randomUUID().replaceAll("-", "")}`;
   const testUrl = databaseUrl(database);
   const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 });
@@ -117,24 +115,31 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     },
   };
 
-  test("a triggered incident starts one run, and a second poll starts no other", async () => {
+  test("a triggered incident starts one run, and a second delivery starts no other", async () => {
     const store = triggerStore(db as RegistrySql, SLUG);
     const engine = createTriggerEngine(factory, {
       store,
-      sources: { "pagerduty.incidents": pagerDutyIncidents({ client: () => client }) },
+      sources: { "pagerduty.incidents": PAGERDUTY_INCIDENTS },
       factorySlug: () => SLUG,
       log: () => {},
     });
     await engine.arm();
     expect((await enqueue("trigger")).status).toBe(202);
 
-    let mine: PagerDutyIncident | undefined;
-    for (let attempt = 0; attempt < 30 && mine === undefined; attempt += 1) {
-      [mine] = await client.listIncidents({ incident_key: dedupKey });
-      if (mine === undefined) await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-    if (mine === undefined) throw new Error("the test incident never appeared");
+    const mine = await waitForLiveIncident(token ?? "", dedupKey);
     const id = mine.id;
+    const triggered = {
+      event: {
+        event_type: "incident.triggered",
+        data: {
+          id,
+          created_at: mine.created_at,
+          service: { id: mine.service.id },
+          teams: [],
+          urgency: mine.urgency,
+        },
+      },
+    };
 
     const row = async () =>
       (
@@ -149,15 +154,17 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
         )
       ).rows[0];
 
+    expect(await engine.push("pagerduty", triggered)).toEqual(["pages"]);
     for (let attempt = 0; attempt < 20 && (await row())?.state !== "started"; attempt += 1) {
-      await engine.poll("pages");
+      await engine.drain();
       if ((await row())?.state !== "started")
         await new Promise((resolve) => setTimeout(resolve, 3_000));
     }
     const started = await row();
     expect(started).toMatchObject({ state: "started", inputs: { incident: id } });
 
-    await engine.poll("pages");
+    expect(await engine.push("pagerduty", triggered)).toEqual([]);
+    await engine.drain();
     const runs = await findRunsByAttribute({
       workflowName,
       key: "jigs.occurrence",

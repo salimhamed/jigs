@@ -247,8 +247,7 @@ export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
  *
  * @remarks
  * The hub assigns the factory its Slack app, hands it the bot token and sends
- * it the app's events. Polling also runs, every
- * `service.pollIntervalSeconds.slack` seconds. `scopes` lists extra bot scopes
+ * it the app's events. `scopes` lists extra bot scopes
  * the factory's own Slack calls need, such as `reactions:write`, so
  * `jigs doctor` checks the workspace granted them.
  *

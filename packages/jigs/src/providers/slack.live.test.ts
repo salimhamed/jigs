@@ -1,7 +1,7 @@
 import { tmpdir } from "node:os";
 import { beforeAll, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
-import { slackBot, slackHistory, slackPermalink, slackReplies } from "./slack.ts";
+import { type SlackMessage, slackBot, slackCall, slackPermalink, slackReplies } from "./slack.ts";
 import { slackChecks } from "./slack-checks.ts";
 import { useLiveSlackToken } from "./test-fixtures.ts";
 
@@ -22,7 +22,12 @@ test.skipIf(!configured)("the bot is the token's own user", async () => {
 
 test.skipIf(!configured)("history, replies and a permalink read the test channel", async () => {
   const since = (Date.now() / 1000 - 30 * 24 * 3600).toFixed(6);
-  const messages = await slackHistory(channel, { oldest: since });
+  const { messages } = (
+    await slackCall<{ ok: true; messages: SlackMessage[] }>("conversations.history", {
+      channel,
+      oldest: since,
+    })
+  ).body;
   const [newest] = messages;
   if (newest === undefined) return;
   expect(newest.ts).toMatch(/^\d+\.\d+$/);

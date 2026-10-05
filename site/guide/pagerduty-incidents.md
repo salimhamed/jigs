@@ -159,10 +159,8 @@ workflow checks the status in its snapshot and skips one that is already
 resolved. Rebuild and start the service with `pnpm exec jigs up`.
 
 A run starts within seconds of PagerDuty's `incident.triggered` event, which
-reaches the service through the [hub](/guide/configuration#hub). The service
-also looks for new incidents every
-[`pollIntervalSeconds.pagerduty`](/guide/configuration#service), 300 seconds by
-default, and an incident seen both ways still starts one run.
+reaches the service through the [hub](/guide/configuration#hub). An incident
+whose event arrives twice still starts one run.
 
 To try the workflow by hand, start a run with an incident's id, the part of its
 URL after `/incidents/`:

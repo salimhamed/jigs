@@ -1,9 +1,9 @@
 // The `linear.agentSessions` source: every Linear agent session created on an
 // issue, by a mention of the factory's app or an assignment to it, is one
-// occurrence, keyed by the session's id. Linear sends these only as webhooks,
-// which reach the factory through its hub, so the poll finds nothing.
+// occurrence, keyed by the session's id, read off the webhook the hub passes on.
 
 import { z } from "zod";
+import { HubResponseError } from "../providers/hub.ts";
 import { createLinearClient, type LinearIssueFiling } from "../providers/linear.ts";
 import { linearAuthFor } from "../providers/linear-auth.ts";
 import {
@@ -37,7 +37,7 @@ const createdSchema = z.object({
 
 export interface LinearAgentSessionsDeps {
   /** The issue's project and labels, read as the factory's app in the session's workspace. */
-  issueFiling?: (issueId: string, workspace: string) => Promise<LinearIssueFiling>;
+  issueFiling?: (issueId: string, workspace: string) => Promise<LinearIssueFiling | null>;
 }
 
 const SAMPLE_INPUTS = {
@@ -55,26 +55,50 @@ const SAMPLE_INPUTS = {
 
 export function linearAgentSessions(
   deps: LinearAgentSessionsDeps = {},
-): Source<LinearAgentSessionsParams, null> {
+): Source<LinearAgentSessionsParams> {
   const issueFiling =
     deps.issueFiling ??
     ((issueId, workspace) =>
       createLinearClient({ auth: linearAuthFor(undefined, workspace) }).fetchIssueFiling(issueId));
+  // An issue that is gone, or a workspace the hub has no app in, will read the
+  // same way every time, so the session is passed over rather than retried.
+  const readFiling = async (issueId: string, workspace: string) => {
+    try {
+      const filing = await issueFiling(issueId, workspace);
+      if (filing === null)
+        console.error(
+          `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
+        );
+      return filing;
+    } catch (error) {
+      if (!(error instanceof HubResponseError && error.status === 404)) throw error;
+      console.error(
+        `[linear] ignored an agent session in workspace ${workspace}, which the hub has no app for: ${String(error)}`,
+      );
+      return null;
+    }
+  };
   return {
     provider: "linear",
     params: linearAgentSessionsParamsSchema,
-    cursor: z.null(),
     sampleInputs: SAMPLE_INPUTS,
     occurrence({ session }) {
       if (typeof session !== "string" || session === "")
         throw new Error("no agent session id in the occurrence");
       return session;
     },
-    poll: async () => ({ occurrences: [], cursor: null }),
     async fromPush(params, event) {
       const head = headSchema.safeParse(event).data;
       if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;
-      const { organizationId: workspace, agentSession } = createdSchema.parse(event);
+      // A shape Linear will send the same way every time is no reason to retry.
+      const created = createdSchema.safeParse(event);
+      if (!created.success) {
+        console.error(
+          `[linear] ignored an agent session event it could not read: ${created.error.message}`,
+        );
+        return null;
+      }
+      const { organizationId: workspace, agentSession } = created.data;
       const { issue } = agentSession;
       if (!issue) return null;
       if (
@@ -83,7 +107,9 @@ export function linearAgentSessions(
       )
         return null;
       if (params.projects || params.labels) {
-        const { project, labels } = await issueFiling(issue.id, workspace);
+        const filing = await readFiling(issue.id, workspace);
+        if (filing === null) return null;
+        const { project, labels } = filing;
         if (
           params.projects &&
           !params.projects.some(

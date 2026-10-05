@@ -94,7 +94,7 @@ src/
   steps/      code that runs in steps, called by factory "use step" wrappers
               (both split by topic: agents, git, human, linear,
                pagerduty, pull-requests, runtime, workspaces)
-  service/    the long-running process: routes, ingress, schedules, release
+  service/    the long-running process: routes, hub client, schedules, release
   cli/        commands
   build/      the templates and the generated factory files, shared by the
               CLI and the service build

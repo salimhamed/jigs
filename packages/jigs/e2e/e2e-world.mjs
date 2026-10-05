@@ -8,9 +8,6 @@ import { SPEC_VERSION_CURRENT } from "@workflow/world";
 export default () => ({
   specVersion: SPEC_VERSION_CURRENT,
   createQueueHandler: () => async () => new Response("ok"),
-  // The startup nudge sweep enumerates held hooks: an empty page is a World
-  // with nothing parked on a pull request.
-  hooks: { list: async () => ({ data: [], cursor: null, hasMore: false }) },
   start: async () => {},
   close: async () => {},
 });

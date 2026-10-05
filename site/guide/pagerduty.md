@@ -17,7 +17,7 @@ An account admin or owner registers the app once per PagerDuty account.
 
    | Scope | What jigs uses it for |
    | --- | --- |
-   | `incidents.read` | Reading and listing incidents, polling for new ones, and the preflight check. |
+   | `incidents.read` | Reading incidents, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
    | `users.read` | `jigs doctor`'s check of the `from` user. |
 
@@ -111,10 +111,8 @@ export default defineFactory({
   its run ends does not start another, and neither does acknowledging and
   re-triggering it.
 - The run starts as soon as the hub passes on PagerDuty's `incident.triggered`
-  event. The service also asks PagerDuty for new incidents every
-  `service.pollIntervalSeconds.pagerduty` seconds (default 300, minimum 30),
-  which finds any incident whose event was missed.
-- Every new incident starts a run, even one acknowledged or resolved before a
-  poll saw it. The workflow can check the status in its snapshot and skip an
+  event. The hub keeps the events that arrive while the service is down.
+- Every new incident starts a run, even one acknowledged or resolved before the
+  service saw it. The workflow can check the status in its snapshot and skip an
   incident that is already handled.
 

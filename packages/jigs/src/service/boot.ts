@@ -11,7 +11,6 @@ import type { RegistrySql } from "../steps/runtime/registry.ts";
 import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { WorkflowDefinition } from "../workflow/factory.ts";
-import { POLLED_PROVIDERS } from "../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
 import { installShutdown, onShutdown } from "./shutdown.ts";
 
@@ -307,7 +306,7 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
   return true;
 }
 
-/** Run the ordered service startup gates, then enable readiness and reconciliation. */
+/** Run the ordered service startup gates, then enable readiness and start the hub client. */
 export async function startWorld() {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
   // stop` during a first clone or against a hanging Postgres has to end in an
@@ -360,21 +359,7 @@ export async function startWorld() {
 
   setBootPhase(READY_PHASE);
 
-  // Startup reconciliation, then the poll: every parked run is re-read now, in
-  // case something happened while the service was down, and again on each
-  // provider's interval. After readiness, not before: a slow nudge pass must
-  // not hold `jigs service start` on a service that is already answering.
-  const [{ nudgeProvider, startNudges }, ctx] = await Promise.all([
-    import("./nudge.ts"),
-    serviceContext(),
-  ]);
-  const { config } = ctx;
-  const nudge = startNudges(config.service.pollIntervalSeconds);
-  onShutdown(() => {
-    nudge.stop();
-  });
-  await startHub(ctx);
-  await Promise.all(POLLED_PROVIDERS.map((provider) => nudgeProvider(provider)));
+  await startHub(await serviceContext());
 }
 
 // The hub keeps what it holds until it is confirmed, so whatever arrived while

@@ -4,7 +4,6 @@
 import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
-import { POLLED_PROVIDERS, perProvider } from "./providers.ts";
 import { mergeApprovalSchema } from "./pull-requests/policy.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
@@ -61,26 +60,12 @@ export const bindingSchema = z.strictObject({
 
 const portSchema = z.int().min(1).max(65535);
 
-// A floor, so a slip between seconds and minutes cannot turn the sweep into a
-// loop of provider reads for every parked run.
-const pollIntervalSchema = z.int().min(30).default(300);
-
 const serviceSchema = z.strictObject({
   port: portSchema.default(8990),
   // Where this factory's service hosts the SDK's run dashboard. Required and
   // never derived: a default would silently land on another factory's service
   // port, and the two numbers have to be the operator's to move.
   dashboardPort: portSchema,
-  /**
-   * Seconds between the service's reads of each provider but GitHub, whose
-   * events arrive through the hub: re-reading parked runs, and polling the
-   * event triggers whose source is on that provider. Each defaults to 300 and may not go below 30. Up to a tenth
-   * of the interval is taken off at random so services do not all poll at
-   * once.
-   */
-  pollIntervalSeconds: z
-    .strictObject(perProvider(POLLED_PROVIDERS, pollIntervalSchema))
-    .prefault({}),
 });
 
 // jigs acts on GitHub as the App the hub assigns this factory, so pull requests

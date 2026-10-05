@@ -218,7 +218,7 @@ export async function mergePullRequest(
   // A snapshot that still reads mergeable after GitHub refused the merge is
   // one no later wake will read differently: the method was disabled since it
   // was read, or a protection GitHub does not express in `mergeable_state`
-  // stopped it. Retrying that on every nudge would never end.
+  // stopped it. Retrying that on every wake would never end.
   return {
     merged: false,
     ...(mergeRefusal(after, expectedHeadSha) ?? {

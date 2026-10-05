@@ -40,12 +40,11 @@ export interface TriggerDeps {
   log?: (line: string) => void;
 }
 
-/** One factory's valid event triggers, ready to poll, take pushes and start runs. */
+/** One factory's valid event triggers, ready to take pushes and start runs. */
 export interface TriggerEngine {
   readonly triggers: ReadonlyArray<{ name: string; provider: Provider }>;
   /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
-  poll(name: string): Promise<void>;
   /**
    * Record the occurrence a pushed event is for, and return the triggers that took it. Rejects
    * when a trigger could not read the event, after the others have taken it.
@@ -107,13 +106,12 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }
     armed.push(resolved);
   }
-  const byName = new Map(armed.map((entry) => [entry.name, entry]));
 
   let stopped = false;
   let marking: Promise<void> | undefined;
   let chain: Promise<void> = Promise.resolve();
 
-  // Polls and pushes wait on this alone, never on a drain: a restart with a
+  // Pushes wait on this alone, never on a drain: a restart with a
   // backlog of pending rows must not hold a provider's push past its deadline.
   const markers = () =>
     (marking ??= (async () => {
@@ -283,7 +281,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
     async arm() {
       // Before the markers: arm runs once the World is ready, and a failed
-      // marker write, retried by the polls, must not leave the clock unset.
+      // marker write, retried by the next push, must not leave the clock unset.
       bootedAt ??= now();
       await markers();
       void drain();
@@ -292,65 +290,6 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     stop: () => {
       stopped = true;
       return chain;
-    },
-    async poll(name) {
-      const entry = byName.get(name);
-      if (entry === undefined) return;
-      try {
-        await markers();
-        const marker = entry.marker as TriggerMarker;
-        const stored = entry.source.cursor.safeParse(marker.cursor);
-        if (marker.cursor !== null && !stored.success)
-          log(`[trigger] ${name} reads from its lookback: its stored cursor is not one it wrote`);
-        // Nothing before the trigger was enabled is its business, and nothing
-        // older than the lookback would start a run.
-        const floor = new Date(
-          Math.max(
-            floorToSecond(marker.enabledAt),
-            now().getTime() - entry.lookbackMinutes * 60_000,
-          ),
-        );
-        const polled = await entry.source.poll(
-          entry.params,
-          stored.success ? stored.data : undefined,
-          floor,
-        );
-        let fresh = 0;
-        let lost = 0;
-        for (const seen of polled.occurrences) {
-          // An occurrence the source cannot key would fail the same way on every
-          // poll, so it is passed over rather than held for.
-          let occurrence: string;
-          try {
-            occurrence = entry.source.occurrence(seen.inputs);
-          } catch (error) {
-            log(`[trigger] ${name} passed over an occurrence it could not key: ${String(error)}`);
-            continue;
-          }
-          try {
-            if (await observe(entry, seen, occurrence)) fresh += 1;
-          } catch (error) {
-            lost += 1;
-            log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
-          }
-        }
-        // The cursor stays put, so the next poll reads the lost occurrence
-        // again; what this poll did record is deduplicated then. The whole
-        // trigger holds, not just the lost occurrence's channel: a failed
-        // write is the store failing, which every occurrence shares, and a
-        // held channel delays nothing it already recorded, only re-reads it.
-        if (lost === 0) {
-          await store().advance(name, polled.cursor);
-          entry.marker = { ...marker, cursor: polled.cursor };
-        } else {
-          log(`[trigger] ${name}: ${lost} not recorded, reading them again next poll`);
-        }
-        log(`[trigger] ${name}: polled, ${polled.occurrences.length} seen, ${fresh} new`);
-      } catch (error) {
-        log(`[trigger] ${name} poll failed: ${String(error)}`);
-        return;
-      }
-      await drain();
     },
     async push(provider, event) {
       await markers();
@@ -361,7 +300,15 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
         try {
           const pushed = await entry.source.fromPush(entry.params, event);
           if (pushed === null) continue;
-          const occurrence = entry.source.occurrence(pushed.inputs);
+          // An event the source cannot key would fail the same way every time,
+          // so it is passed over rather than retried.
+          let occurrence: string;
+          try {
+            occurrence = entry.source.occurrence(pushed.inputs);
+          } catch (error) {
+            log(`[trigger] ${entry.name} passed over an event it could not key: ${String(error)}`);
+            continue;
+          }
           if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
         } catch (error) {
           failures.push(error);

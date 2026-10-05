@@ -465,18 +465,20 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
   }
 
   /** The project and labels an issue is filed under. */
-  async function fetchIssueFiling(issueId: string): Promise<LinearIssueFiling> {
+  /** Null when the issue is gone or the app cannot see it. */
+  async function fetchIssueFiling(issueId: string): Promise<LinearIssueFiling | null> {
     const data = await linearGraphql<{
       issue: {
         project: { id: string; slugId: string } | null;
         labels: { nodes: Array<{ name: string }> };
-      };
+      } | null;
     }>(
       `query IssueFiling($id: String!) {
         issue(id: $id) { project { id slugId } labels(first: 250) { nodes { name } } }
       }`,
       { id: issueId },
     );
+    if (data.issue === null) return null;
     return {
       project: data.issue.project,
       labels: data.issue.labels.nodes.map((label) => label.name),

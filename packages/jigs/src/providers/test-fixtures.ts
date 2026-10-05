@@ -6,7 +6,7 @@ import { vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
 import * as hub from "./hub.ts";
-import { createPagerDutyClient } from "./pagerduty.ts";
+import { createPagerDutyClient, PAGERDUTY_API_URL, type PagerDutyIncident } from "./pagerduty.ts";
 import { createSlackClient, type SlackClientDeps, slackClient } from "./slack.ts";
 import { type FetchCall, fakeFetch } from "./test-support.ts";
 
@@ -110,4 +110,27 @@ export function livePagerDutyClient(token: string, from: string) {
     tokens: { bearer: async () => token, invalidate: () => {} },
     context: testFactoryContext({ config: { pagerduty: { from } } }),
   });
+}
+
+/** The incident a live test opened under `dedupKey`, once PagerDuty lists it. */
+export async function waitForLiveIncident(
+  token: string,
+  dedupKey: string,
+): Promise<PagerDutyIncident> {
+  for (let attempt = 0; attempt < 30; attempt += 1) {
+    const res = await fetch(
+      `${PAGERDUTY_API_URL}/incidents?incident_key=${encodeURIComponent(dedupKey)}`,
+      {
+        headers: {
+          authorization: `Bearer ${token}`,
+          accept: "application/vnd.pagerduty+json;version=2",
+        },
+      },
+    );
+    if (!res.ok) throw new Error(`PagerDuty answered ${res.status} listing incidents`);
+    const [incident] = ((await res.json()) as { incidents: PagerDutyIncident[] }).incidents;
+    if (incident !== undefined) return incident;
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  throw new Error("the test incident never appeared");
 }

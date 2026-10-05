@@ -73,7 +73,7 @@ dbTest("a fresh database gets the resource and trigger tables, twice without cha
       "jigs_trigger_markers",
       "jigs_triggers",
     ]);
-    expect(await migrations(fresh.db)).toHaveLength(5);
+    expect(await migrations(fresh.db)).toHaveLength(6);
   } finally {
     await fresh.db.$client.end();
   }
@@ -116,7 +116,7 @@ dbTest(
         "jigs_trigger_markers",
         "jigs_triggers",
       ]);
-      expect(await migrations(old.db)).toHaveLength(5);
+      expect(await migrations(old.db)).toHaveLength(6);
       expect(
         (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
       ).toEqual([{ id: 42, hash: "world" }]);

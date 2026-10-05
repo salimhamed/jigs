@@ -5,7 +5,6 @@ export default defineFactory({
   // Set this and the token with: pnpm exec jigs hub connect <url> <token>
   hub: { url: "https://hub.example.com" },
   service: { port: {{SERVICE_PORT}}, dashboardPort: {{DASHBOARD_PORT}} },
-  // Parked runs re-read Linear every 300 seconds by default.
   bindings: {},
   // Agents get only a small base environment; name any other variable they need.
   // agents: { env: ["SSH_AUTH_SOCK"] },

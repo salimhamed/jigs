@@ -128,9 +128,6 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | --- | --- | --- |
 | `port` | `8990` | Where the service listens. The CLI talks to it here. |
 | `dashboardPort` | required | Where the service hosts the run dashboard. |
-| `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
-| `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels, and runs waiting on a thread reply re-read it. Minimum 30. |
-| `pollIntervalSeconds.pagerduty` | `300` | How often [event triggers](#triggers) on PagerDuty look for new incidents. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine
 rarely clash.
@@ -216,9 +213,9 @@ export default defineFactory({
   merged over the fixed `inputs`. The run reads the rest itself.
 - An occurrence starts at most one run, ever, even if the run decides to do
   nothing or ends while the incident is still open.
-- The service polls each source on its provider's
-  [`pollIntervalSeconds`](#service). A PagerDuty event from the [hub](#hub)
-  starts runs sooner; the poll still finds anything an event missed.
+- Occurrences arrive as provider events through the [hub](#hub). The hub
+  keeps the events that arrive while the service is down and hands them over
+  when it is back.
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
@@ -260,9 +257,7 @@ the app at work while the run starts. Each run gets:
 
 `teams` takes team keys such as `ENG` or team ids, `projects` takes project
 ids or the id at the end of a project's URL, and `labels` takes label names.
-Sessions not on an issue start no run. Linear only sends sessions, so the
-service never polls for them; the hub keeps the ones that arrive while the
-service is down, and `lookbackMinutes` applies to them as to any occurrence.
+Sessions not on an issue start no run.
 
 ```ts
 import { linear } from "@jigs-ai/jigs";
@@ -540,9 +535,7 @@ slack: { scopes: ["reactions:write"] },
 | --- | --- | --- |
 | `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the workspace granted them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
 
-Slack events arrive through the hub. The service also polls the channels its
-Slack triggers watch every [`service.pollIntervalSeconds.slack`](#service)
-seconds.
+Slack events arrive through the hub.
 
 To start runs from Slack messages, see
 [Start runs from messages](/guide/slack#start-runs-from-messages).

@@ -3,6 +3,9 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { z } from "zod";
+import * as githubApi from "../providers/github.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
+import { HubResponseError } from "../providers/hub.ts";
 import { useGithubClient } from "../providers/test-fixtures.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
@@ -10,7 +13,7 @@ import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import * as triggers from "./event-triggers/runner.ts";
 import type { PreparedRun } from "./launch.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
+import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
 import { type ProviderEvent, routeProviderEvent } from "./provider-events.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
@@ -167,6 +170,48 @@ test("a status lookup failure fails rather than throws", async () => {
   );
 });
 
+test.each([
+  ["the hub has no installation for the repository", new HubResponseError(404, "no installation")],
+  ["the hub has more than one", new HubResponseError(409, "ambiguous installation")],
+  ["GitHub refuses the request", new GitHubApiError(404, "/repos/acme/api/commits/x/pulls", "{}")],
+  ["GitHub cannot process it", new GitHubApiError(422, "/repos/acme/api/commits/x/pulls", "{}")],
+])("a status lookup refused for good is ignored loudly, not retried: %s", async (_name, error) => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  vi.spyOn(githubApi, "findOpenPullRequestsByHeadSha").mockRejectedValue(error);
+  expect(await route(status("success"))).toEqual({ outcome: "ignored" });
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[events] github ignored reason=status-lookup-refused event=status"),
+  );
+});
+
+test.each([
+  ["the hub is down", new HubResponseError(503, "unavailable")],
+  [
+    "GitHub rejects the credential",
+    new GitHubApiError(401, "/repos/acme/api/commits/x/pulls", "{}"),
+  ],
+  ["GitHub is rate limiting", new GitHubApiError(429, "/repos/acme/api/commits/x/pulls", "{}")],
+  ["GitHub errs", new GitHubApiError(502, "/repos/acme/api/commits/x/pulls", "{}")],
+])("a status lookup that may pass later fails, to be retried: %s", async (_name, error) => {
+  vi.spyOn(githubApi, "findOpenPullRequestsByHeadSha").mockRejectedValue(error);
+  expect(await route(status("success"))).toEqual({ outcome: "failed" });
+});
+
+test("a GitHub 403 for its rate limit is retried; any other 403 is ignored", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const forbidden = (headers: Record<string, string>) =>
+    useGithubClient({
+      fetch: vi.fn().mockImplementation(async () => new Response("{}", { status: 403, headers })),
+      sleep: async () => {},
+    });
+  forbidden({ "retry-after": "3600" });
+  expect(await route(status("success"))).toEqual({ outcome: "failed" });
+  forbidden({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "99999999999" });
+  expect(await route(status("success"))).toEqual({ outcome: "failed" });
+  forbidden({});
+  expect(await route(status("success"))).toEqual({ outcome: "ignored" });
+});
+
 test("an unroutable GitHub event is ignored", async () => {
   const ping = { zen: "Keep it logically awesome.", hook_id: 1, repository: review.repository };
   expect(await route(github("ping", ping))).toEqual({ outcome: "ignored" });
@@ -293,10 +338,7 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
   triggers.startTriggers(paged, {
     store: memory.store,
     sources: {
-      "pagerduty.incidents": pagerDutyIncidents({
-        client: () => ({ listIncidents: async () => [] }) as never,
-        now: () => T0,
-      }),
+      "pagerduty.incidents": PAGERDUTY_INCIDENTS,
     },
     now: () => T0,
     log: () => {},
@@ -315,14 +357,12 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
       },
     }),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
-    random: () => 0,
     setTimer: (_fire, ms) => {
       timers.push(ms);
       return () => {};
     },
   });
-  await vi.waitFor(() => expect(timers).toHaveLength(2));
+  await vi.waitFor(() => expect(timers).toHaveLength(1));
 
   expect(await route(page())).toEqual({ outcome: "triggered", triggers: ["pages"] });
   expect(log).toHaveBeenCalledWith(

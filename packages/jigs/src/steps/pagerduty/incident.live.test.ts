@@ -4,7 +4,7 @@ import {
   type PagerDutyIncident,
   pagerDutyClientFor,
 } from "../../providers/pagerduty.ts";
-import { livePagerDutyClient } from "../../providers/test-fixtures.ts";
+import { livePagerDutyClient, waitForLiveIncident } from "../../providers/test-fixtures.ts";
 import { fetchIncidentSnapshot } from "./fetch-snapshot.ts";
 import { postIncidentNote } from "./notes.ts";
 
@@ -55,12 +55,7 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
 
   async function openIncident(): Promise<PagerDutyIncident> {
     expect((await enqueue("trigger")).status).toBe(202);
-    for (let attempt = 0; attempt < 30; attempt += 1) {
-      const [incident] = await client.listIncidents({ incident_key: dedupKey });
-      if (incident !== undefined) return incident;
-      await new Promise((resolve) => setTimeout(resolve, 2_000));
-    }
-    throw new Error("the test incident never appeared");
+    return waitForLiveIncident(token ?? "", dedupKey);
   }
 
   test("reads the incident, then notes it once, naming the run", async () => {

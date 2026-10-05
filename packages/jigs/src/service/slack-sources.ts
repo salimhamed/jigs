@@ -1,14 +1,11 @@
-// The Slack sources: top-level channel messages, polled from
-// `conversations.history` and pushed as Events API bodies through the hub.
-// Both deliveries go through the same rule, so a polled and a pushed message
-// never disagree.
+// The Slack sources: top-level channel messages, pushed as Events API bodies
+// through the hub.
 
 import { z } from "zod";
-import { plainHint } from "../errors.ts";
-import { type SlackBot, type SlackMessage, slackBot, slackHistory } from "../providers/slack.ts";
+import { type SlackBot, type SlackMessage, slackBot } from "../providers/slack.ts";
 import type { Source, SourceOccurrence } from "./event-triggers/sources.ts";
 
-// A direct message's ID starts with D, so the ID alone keeps DMs out of polling.
+// A direct message's ID starts with D, so a trigger can never name one.
 const paramsSchema = z.strictObject({
   channels: z
     .array(z.string().regex(/^[CG][A-Z0-9]+$/, "must be a channel ID such as C0123ABCD"))
@@ -50,55 +47,15 @@ const occurred = (channel: string, ts: string): SourceOccurrence => ({
   at: new Date(Number(ts) * 1000),
 });
 
-const slackTs = (at: Date) => (at.getTime() / 1000).toFixed(6);
-
-// Each channel's own `oldest`: one channel that cannot be read holds back
-// only itself, so the others' new messages still start runs.
-const cursorSchema = z.record(z.string(), z.string().regex(/^\d+\.\d{6}$/));
-type Cursor = z.output<typeof cursorSchema>;
-
-function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cursor> {
+function slackSource(mentionsOnly: boolean): Source<Params> {
   return {
     provider: "slack",
     params: paramsSchema,
-    cursor: cursorSchema,
     sampleInputs: { channel: "C0123ABCD", ts: "1790723244.335019" },
     occurrence: ({ channel, ts }) => {
       if (typeof channel !== "string" || typeof ts !== "string")
         throw new Error("no channel and ts in the inputs");
       return `${channel}:${ts}`;
-    },
-    async poll({ channels }, cursor, floor) {
-      const bot = await slackBot();
-      const floorTs = slackTs(floor);
-      const occurrences: SourceOccurrence[] = [];
-      const next: Cursor = {};
-      for (const channel of channels) {
-        const held = cursor?.[channel];
-        const oldest = held !== undefined && Number(held) > Number(floorTs) ? held : floorTs;
-        // Taken before the read, so a message landing during it is read again
-        // next time; the engine drops the repeat.
-        const through = slackTs(now());
-        let messages: SlackMessage[];
-        try {
-          messages = await slackHistory(channel, { oldest });
-        } catch (error) {
-          if (held !== undefined) next[channel] = held;
-          const why = error instanceof Error ? error.message : String(error);
-          console.log(`[slack] could not poll channel ${channel}: ${why}`);
-          console.log(
-            plainHint(
-              `invite @${bot.name} to ${channel} again, or remove ${channel} from the trigger`,
-            ),
-          );
-          continue;
-        }
-        for (const message of messages)
-          if (startsRun(message, bot, mentionsOnly))
-            occurrences.push(occurred(channel, message.ts));
-        next[channel] = through;
-      }
-      return { occurrences, cursor: next };
     },
     async fromPush({ channels }, body) {
       const callback = callbackSchema.safeParse(body).data;
@@ -114,11 +71,7 @@ function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cur
   };
 }
 
-export function slackSources(now: () => Date = () => new Date()) {
-  return {
-    "slack.messages": slackSource(false, now),
-    "slack.mentions": slackSource(true, now),
-  };
-}
-
-export const SLACK_SOURCES = slackSources();
+export const SLACK_SOURCES = {
+  "slack.messages": slackSource(false),
+  "slack.mentions": slackSource(true),
+};
