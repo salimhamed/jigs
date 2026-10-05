@@ -92,67 +92,68 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       assigned: factory.assigned !== null,
     })),
   };
-  if (app.provider === "linear") {
-    return {
-      ...common,
-      provider: "linear" as const,
-      clientId: app.externalId,
-      connectUrl: linearConnectPath(app.id),
-      callbackUrl: `${origin}${linearCallbackPath(app.id)}`,
-      webhookUrl: `${origin}${linearWebhookPath(app.id)}`,
-      workspaces: installed.map((workspace) => ({
-        externalId: workspace.externalId,
-        urlKey: workspace.account,
-        name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
-        failure: workspace.failure,
-      })),
-    };
+  switch (app.provider) {
+    case "linear":
+      return {
+        ...common,
+        provider: "linear" as const,
+        clientId: app.externalId,
+        connectUrl: linearConnectPath(app.id),
+        callbackUrl: `${origin}${linearCallbackPath(app.id)}`,
+        webhookUrl: `${origin}${linearWebhookPath(app.id)}`,
+        workspaces: installed.map((workspace) => ({
+          externalId: workspace.externalId,
+          urlKey: workspace.account,
+          name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
+          failure: workspace.failure,
+        })),
+      };
+    case "slack":
+      return {
+        ...common,
+        provider: "slack" as const,
+        appId: app.externalId,
+        clientId: (app.settings as SlackAppSettings).clientId,
+        scopes: (app.settings as SlackAppSettings).scopes,
+        installUrl: slackInstallPath(app.id),
+        redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
+        requestUrl: `${origin}${slackWebhookPath}`,
+        events: [...slackBotEvents],
+        workspaces: installed.map(({ externalId, account, settings }) => ({
+          externalId,
+          name: account,
+          scopes: (settings as SlackWorkspaceSettings | null)?.scopes ?? [],
+        })),
+      };
+    case "pagerduty":
+      return {
+        ...common,
+        provider: "pagerduty" as const,
+        clientId: app.externalId,
+        webhookSecretSet: hasPagerDutyWebhookSecret(context.config.encryptionKey, app),
+        webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
+        scopes: [...pagerDutyScopes],
+        eventTypes: [...pagerDutyEventTypes],
+        accounts: installed.map((account) => ({
+          externalId: account.externalId,
+          subdomain: account.account,
+          region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
+        })),
+      };
+    case "github":
+      return {
+        ...common,
+        provider: "github" as const,
+        appId: app.externalId,
+        clientId: (app.settings as GitHubAppSettings).clientId,
+        installUrl: githubInstallUrl(app),
+        webhookUrl: `${origin}${githubWebhookPath}`,
+        setupUrl: `${origin}${githubSetupPath(app.id)}`,
+        installations: installed.map(({ externalId, account }) => ({ externalId, account })),
+      };
+    default:
+      throw new Error(`Unknown provider ${app.provider satisfies never}`);
   }
-  if (app.provider === "slack") {
-    return {
-      ...common,
-      provider: "slack" as const,
-      appId: app.externalId,
-      clientId: (app.settings as SlackAppSettings).clientId,
-      scopes: (app.settings as SlackAppSettings).scopes,
-      installUrl: slackInstallPath(app.id),
-      redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
-      requestUrl: `${origin}${slackWebhookPath}`,
-      events: [...slackBotEvents],
-      workspaces: installed.map(({ externalId, account, settings }) => ({
-        externalId,
-        name: account,
-        scopes: (settings as SlackWorkspaceSettings | null)?.scopes ?? [],
-      })),
-    };
-  }
-  if (app.provider === "pagerduty") {
-    return {
-      ...common,
-      provider: "pagerduty" as const,
-      clientId: app.externalId,
-      webhookSecretSet: hasPagerDutyWebhookSecret(context.config.encryptionKey, app),
-      webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
-      scopes: [...pagerDutyScopes],
-      eventTypes: [...pagerDutyEventTypes],
-      accounts: installed.map((account) => ({
-        externalId: account.externalId,
-        subdomain: account.account,
-        region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
-      })),
-    };
-  }
-  const settings = app.settings as GitHubAppSettings;
-  return {
-    ...common,
-    provider: "github" as const,
-    appId: app.externalId,
-    clientId: settings.clientId,
-    installUrl: githubInstallUrl(app),
-    webhookUrl: `${origin}${githubWebhookPath}`,
-    setupUrl: `${origin}${githubSetupPath(app.id)}`,
-    installations: installed.map(({ externalId, account }) => ({ externalId, account })),
-  };
 }
 
 /** The apps assigned to a factory. */

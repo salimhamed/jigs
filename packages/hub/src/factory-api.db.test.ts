@@ -20,10 +20,8 @@ import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { GitHubTokens } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { fanOutProviderEvent, MessageWaiters } from "./messages.ts";
-import { PagerDutyTokens } from "./pagerduty.ts";
 import { deleteExpiredMessages } from "./retention.ts";
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -42,17 +40,14 @@ beforeAll(async () => {
     { id: "other", name: "Other", slug: "other", createdAt: new Date() },
   ]);
   const encryptionKey = randomBytes(32);
-  const githubTokens = new GitHubTokens({ db, encryptionKey });
   const linearTokens = new LinearTokens({ db, encryptionKey });
   server = express()
     .use(
       createFactoryApi({
         db,
         waiters,
-        githubTokens,
-        linearTokens,
-        pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
         encryptionKey,
+        linearTokens,
       }),
     )
     .listen(0, "127.0.0.1");

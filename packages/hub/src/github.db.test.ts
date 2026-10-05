@@ -16,14 +16,12 @@ import {
   addGitHubApp,
   createGitHubRoutes,
   type GitHubAppSettings,
-  GitHubTokens,
   githubInstallUrl,
   githubSetupPath,
   githubWebhookPath,
 } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
-import { PagerDutyTokens } from "./pagerduty.ts";
 
 const encryptionKey = randomBytes(32);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -43,7 +41,6 @@ const githubBots = new Map<string, number>();
 const minted: { installationId: string; token: string }[] = [];
 let botLookups = 0;
 const tokenLifetimeMs = 60 * 60 * 1000;
-let githubTokens: GitHubTokens;
 
 async function listen(app: express.Express) {
   const server = app.listen(0, "127.0.0.1");
@@ -133,7 +130,6 @@ beforeAll(async () => {
     { id: "other", name: "Other", slug: "other", createdAt: new Date() },
   ]);
   github = await listen(fakeGitHub());
-  githubTokens = new GitHubTokens({ db, encryptionKey, apiUrl: github });
   hub = await listen(
     express()
       .use(createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github }))
@@ -141,10 +137,9 @@ beforeAll(async () => {
         createFactoryApi({
           db,
           waiters,
-          githubTokens,
-          linearTokens: new LinearTokens({ db, encryptionKey }),
-          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
           encryptionKey,
+          linearTokens: new LinearTokens({ db, encryptionKey }),
+          githubApiUrl: github,
         }),
       ),
   );
@@ -554,7 +549,13 @@ dbTest(
     expect(await requestToken(token, "shared")).toEqual({
       status: 409,
       body: {
-        error: `More than one GitHub App assigned to this factory is installed on shared: ${[first.app.name, second.app.name].sort().join(", ")}.`,
+        error: `More than one GitHub App assigned to this factory is installed on shared: ${[
+          first.app.name,
+          second.app.name,
+        ]
+          .sort()
+          .map((name) => `${name} (shared)`)
+          .join(", ")}.`,
       },
     });
     expect((await requestToken(token, "")).status).toBe(400);

@@ -1,5 +1,6 @@
 import { Check } from "lucide-react";
 import { data, Link } from "react-router";
+import { isUuid } from "../../src/apps.ts";
 import { assignedApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { Time } from "../components/time.tsx";
@@ -7,12 +8,10 @@ import { table } from "../components/ui.ts";
 import { readEventLog } from "../factories.server.ts";
 import type { Route } from "./+types/factory.ts";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { organizationId } = await requireMember(context, request);
   const before = new URL(request.url).searchParams.get("before");
-  const log = UUID.test(params.id)
+  const log = isUuid(params.id)
     ? await readEventLog(
         context,
         organizationId,

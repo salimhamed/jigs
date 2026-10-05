@@ -174,7 +174,7 @@ export const apps = pgTable(
     externalId: text("external_id").notNull(),
     /** What the provider's own settings show, such as a GitHub App's client ID. */
     settings: jsonb("settings").notNull(),
-    /** The app's secrets as JSON, encrypted with `encryptSecret`. */
+    /** The app's secrets as JSON, encrypted with `encryptJson`. */
     secrets: text("secrets").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
@@ -195,7 +195,7 @@ export const installations = pgTable(
     account: text("account").notNull(),
     /** What the provider says about the installation, such as a Linear workspace's name. */
     settings: jsonb("settings"),
-    /** The installation's own credentials as JSON, encrypted with `encryptSecret`, such as Linear's OAuth tokens. */
+    /** The installation's own credentials as JSON, encrypted with `encryptJson`, such as Linear's OAuth tokens. */
     secrets: text("secrets"),
     /** Why the installation stopped working, until it is connected again. */
     failure: text("failure"),
