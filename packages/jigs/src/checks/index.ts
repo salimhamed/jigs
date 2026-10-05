@@ -5,7 +5,6 @@ import { JigsError } from "../errors.ts";
 import { githubChecks } from "../providers/github-checks.ts";
 import { fetchFactoryStatus } from "../providers/hub.ts";
 import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
-import { linearWebhookChecks } from "../providers/linear-webhook-checks.ts";
 import {
   pagerDutyChecks,
   pagerDutyFromDoctorChecks,
@@ -93,20 +92,15 @@ export function preflightChecks(
 }
 
 // Beyond what a workflow requires, the configuration can ask for a provider
-// itself: a binding needs GitHub, a Linear webhook needs
-// Linear, a PagerDuty webhook needs PagerDuty, and a Linear app identity, a
-// pagerduty section or a slack section is set up on purpose. The key identity
-// is what every scaffold states, so it asks for nothing. An unreadable config
-// asks for nothing either: the binding checks report it.
+// itself: a binding needs GitHub, a Linear operator needs Linear, a PagerDuty
+// webhook needs PagerDuty, and a pagerduty or slack section is set up on
+// purpose. An unreadable config asks for nothing: the binding checks report it.
 function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
   try {
     const { bindings, webhooks, linear, pagerduty, slack } = ctx.config;
     return {
       github: Object.keys(bindings).length > 0,
-      linear:
-        (webhooks?.linear.enabled ?? false) ||
-        linear.identity.mode === "app" ||
-        linear.operator !== undefined,
+      linear: linear.operator !== undefined,
       pagerduty: pagerduty !== undefined || (webhooks?.pagerduty.enabled ?? false),
       slack: slack !== undefined,
     };
@@ -266,9 +260,6 @@ export function doctorChecks(
     ...provider("github", () => githubChecks(ctx, status)),
     ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
     ...provider("slack", () => slackDoctorChecks(ctx)),
-    // Keyed on the config rather than the Linear credential: a Linear webhook
-    // switched on without its secret is a failure even where that is missing too.
-    ...linearWebhookChecks({ context: ctx }),
     ...pagerDutyWebhookChecks({ context: ctx, probes: pagerDutyWebhookProbes(ctx) }),
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),

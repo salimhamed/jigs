@@ -56,7 +56,6 @@ const fixture = {
   },
   webhooks: {
     url: "https://factory.example.ts.net",
-    linear: { enabled: true },
     pagerduty: { enabled: false },
   },
 } satisfies Factory;
@@ -114,7 +113,6 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
   Object.assign(env, {
     GITHUB_TOKEN: "gh-service-token",
-    LINEAR_WEBHOOK_SECRET: "linear-hook-secret",
     PAGERDUTY_WEBHOOK_SECRET: "pd-hook-secret",
   });
   push.mockReset().mockImplementation(triggers.pushEvent);
@@ -131,93 +129,21 @@ afterEach(() => {
 const sign = (body: string, secret: string) =>
   createHmac("sha256", secret).update(body).digest("hex");
 
-const postLinear = (body: string, headers: Record<string, string>) =>
-  app.request("/ingress/linear", { method: "POST", body, headers });
-
-const commentPayload = () =>
-  JSON.stringify({
-    action: "create",
-    type: "Comment",
-    data: { id: "c1", body: "reply", issueId: crypto.randomUUID() },
-  });
-
 test.each([
   ["no webhooks section", undefined],
   [
-    "each provider switched off",
-    {
-      url: "https://factory.example.ts.net",
-      linear: { enabled: false },
-      pagerduty: { enabled: false },
-    },
+    "PagerDuty switched off",
+    { url: "https://factory.example.ts.net", pagerduty: { enabled: false } },
   ],
 ])("with %s, no ingress route exists", async (_name, webhooks) => {
   const polling = createApp({ workflows: fixture.workflows, webhooks }, deps);
-  const body = commentPayload();
   const pagerDuty = await polling.request("/ingress/pagerduty", {
     method: "POST",
     body: "{}",
     headers: { "x-pagerduty-signature": `v1=${sign("{}", "pd-hook-secret")}` },
   });
-  const linearDelivery = await polling.request("/ingress/linear", {
-    method: "POST",
-    body,
-    headers: { "linear-signature": sign(body, "linear-hook-secret") },
-  });
-  expect([pagerDuty.status, linearDelivery.status]).toEqual([404, 404]);
+  expect(pagerDuty.status).toBe(404);
   expect(resumeHookMock).not.toHaveBeenCalled();
-});
-
-test("one provider switched on mounts only its own route", async () => {
-  const linearOnly = createApp(
-    {
-      workflows: fixture.workflows,
-      webhooks: { url: "https://f.test", linear: { enabled: true } },
-    },
-    deps,
-  );
-  expect(
-    (await linearOnly.request("/ingress/pagerduty", { method: "POST", body: "{}" })).status,
-  ).toBe(404);
-  expect(
-    (await linearOnly.request("/ingress/linear", { method: "POST", body: commentPayload() }))
-      .status,
-  ).toBe(401);
-});
-
-test("POST /ingress/linear with a forged signature is a 401", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = commentPayload();
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "wrong-secret"),
-  });
-  expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear rejected reason=signature");
-});
-
-test("a validly signed Comment delivery for an unclaimed issue is acknowledged", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = commentPayload();
-  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data.issueId;
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
-  );
-});
-
-test("a validly signed non-JSON linear body is acknowledged and ignored", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = "not json";
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored reason=unrecognized-shape");
 });
 
 test("poke of an unknown run is a 404", async () => {
@@ -711,7 +637,6 @@ const paged = {
   },
   webhooks: {
     url: "https://factory.example.ts.net",
-    linear: { enabled: false },
     pagerduty: { enabled: true },
   },
 } satisfies Factory;

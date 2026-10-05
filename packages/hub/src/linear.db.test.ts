@@ -550,8 +550,12 @@ dbTest("refreshes a token near expiry once, and stops on a refused refresh", asy
   const current = await linearTokens.issue(factory.id, undefined);
   if (!("token" in current)) throw new Error(current.error);
 
-  const nearExpiry = Date.parse(current.token.expiresAt) - 4 * 60 * 1000;
   const before = refreshes;
+  const hours = (n: number) => Date.parse(current.token.expiresAt) - n * 60 * 60 * 1000;
+  expect(await linearTokens.issue(factory.id, undefined, hours(7))).toEqual(current);
+  expect(refreshes).toBe(before);
+
+  const nearExpiry = hours(5);
   const [one, two] = await Promise.all([
     linearTokens.issue(factory.id, undefined, nearExpiry),
     linearTokens.issue(factory.id, undefined, nearExpiry),

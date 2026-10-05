@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import * as hub from "../../providers/hub.ts";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
 import { inTestFactory } from "../../test-fixtures.ts";
 import { fetchTicketSnapshot } from "./fetch-snapshot.ts";
@@ -7,12 +8,16 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("LINEAR_API_KEY", "lin_test_key");
+  vi.spyOn(hub, "fetchLinearToken").mockResolvedValue({
+    token: "lin_oauth",
+    expiresAt: "2999-01-01T00:00:00Z",
+    app: { name: "jigs", userId: "app-user" },
+  });
   fetchMock.mockReset();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 inTestFactory();
 

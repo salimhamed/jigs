@@ -7,6 +7,9 @@ import {
   type GitHubTokenRequest,
   type GitHubTokenResponse,
   githubTokenPath,
+  type LinearTokenRequest,
+  type LinearTokenResponse,
+  linearTokenPath,
 } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
@@ -111,3 +114,33 @@ export async function fetchGithubToken(
     throw error;
   }
 }
+
+/**
+ * An access token of the factory's Linear app in a connected workspace: the one `organization`
+ * names (an organization id or URL key), or the only one when it is left out.
+ */
+export async function fetchLinearToken(
+  organization: string | undefined,
+  ctx: FactoryContext = currentFactoryContext(),
+): Promise<LinearTokenResponse> {
+  try {
+    return await hubSend<LinearTokenResponse>(ctx, linearTokenPath, {
+      method: "POST",
+      body: (organization === undefined ? {} : { organization }) satisfies LinearTokenRequest,
+    });
+  } catch (error) {
+    if (error instanceof HubResponseError && error.status in LINEAR_TOKEN_REPAIRS)
+      throw new HubResponseError(
+        error.status,
+        error.message,
+        LINEAR_TOKEN_REPAIRS[error.status as keyof typeof LINEAR_TOKEN_REPAIRS],
+      );
+    throw error;
+  }
+}
+
+const LINEAR_TOKEN_REPAIRS = {
+  404: "in the hub, connect a Linear workspace to one of this factory's Linear apps, or assign the factory an app connected there",
+  409: "in the hub, leave this factory assigned one Linear app, connected to one workspace",
+  503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
+};

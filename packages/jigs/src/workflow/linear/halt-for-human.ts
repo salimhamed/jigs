@@ -75,7 +75,7 @@ export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanRe
 
 // Posts the halt to the Linear ticket (@-mentioning the operator, or the
 // creator, and the assignee), then suspends on the claim hook. A wake is the
-// service's poll or, with Linear webhooks on, a comment delivery, and either
+// service's poll or a comment event from the hub, and either
 // carries nothing: each one re-reads the comment thread from Linear and
 // re-suspends when no human has replied — no agent step executes on an
 // unsatisfied wake.

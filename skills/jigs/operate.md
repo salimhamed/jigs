@@ -145,8 +145,8 @@ its footer names the run, where it paused, and links its dashboard page.
 The answer goes **on the ticket**, in that comment thread — with option letters
 like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
 it is theirs to write: you do not answer for them, and you do not resume the run
-by hand. Once the reply lands, the next poll (or the Linear webhook, if it is
-on) wakes the run, the reply is re-checked against Linear, and the run
+by hand. Once the reply lands, its Linear event from the hub (or the next
+poll) wakes the run, the reply is re-checked against Linear, and the run
 continues.
 
 If the reply is there and the interval is too long to wait, or a webhook

@@ -3,12 +3,11 @@ import { describeHookToken } from "../hook-tokens.ts";
 import { ticketToken } from "./ticket-token.ts";
 
 // The claim's hook token names the ticket, never the run: owning it is the
-// exclusivity lock. The Linear ingress, when on, has only a webhook payload to
-// go on, so it reconstructs the token through ticketToken — build and parse
+// exclusivity lock. A Linear event from the hub has only its payload to go on, so it reconstructs the token through ticketToken — build and parse
 // cannot drift while they share the one constructor. Linear Comment payloads
 // carry issueId as a UUID, so the token does too.
 
-/** Derive a claimed ticket's hook token from a Linear comment webhook. */
+/** Derive a claimed ticket's hook token from a Linear comment event. */
 export function tokenFromLinearPayload(payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { type, data } = payload as {

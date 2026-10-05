@@ -400,9 +400,9 @@ An agent can also act as the factory on Linear and PagerDuty: set `linear: true`
 or `pagerduty: true` on its harness. When it starts, jigs puts the factory's own
 token in its environment:
 
-- **`JIGS_LINEAR_TOKEN`** holds the [Linear identity](/guide/configuration#linear-identity)'s
-  credential: the app's token in `app` mode, so the agent acts as the factory's
-  Linear app, or the API key in `key` mode.
+- **`JIGS_LINEAR_TOKEN`** holds a token of the factory's
+  [Linear app](/guide/configuration#linear-identity), from the hub, so the agent
+  acts as that app.
 - **`JIGS_PAGERDUTY_TOKEN`** holds a token for the factory's
   [PagerDuty](/guide/configuration#pagerduty) OAuth app, with the scopes jigs
   itself uses: the agent can read and update incidents and read users.

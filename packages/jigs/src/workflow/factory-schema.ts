@@ -106,27 +106,11 @@ export const githubSchema = z.strictObject({
 });
 
 /**
- * Who jigs is on Linear. `key` is a personal API key, so jigs acts as that user.
- * `app` is a Linear OAuth application acting as itself, which mints its own
- * token from a client id and secret.
- *
- * @remarks
- * Only the mode lives in config. The secrets live in the factory's `.env`:
- * `LINEAR_API_KEY` for `key`, `LINEAR_CLIENT_ID` and `LINEAR_CLIENT_SECRET`
- * for `app`.
- */
-export const linearIdentitySchema = z.discriminatedUnion("mode", [
-  z.strictObject({ mode: z.literal("key") }),
-  z.strictObject({ mode: z.literal("app") }),
-]);
-
-/**
- * A factory's Linear settings: exactly one Linear identity, and optionally the
- * operator, the Linear user's email that every comment jigs posts mentions
- * together with the ticket's assignee.
+ * A factory's Linear settings: optionally the operator, the Linear user's
+ * email that every comment jigs posts mentions together with the ticket's
+ * assignee. jigs acts on Linear as the Linear app the hub assigns the factory.
  */
 export const linearSchema = z.strictObject({
-  identity: linearIdentitySchema.default({ mode: "key" }),
   operator: z.email().optional(),
 });
 
@@ -311,8 +295,6 @@ export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type SlackConfig = z.output<typeof slackSchema>;
 
-/** Who jigs is on Linear: a personal API key, or an OAuth application acting as itself. */
-export type LinearIdentity = z.output<typeof linearIdentitySchema>;
 /** Who jigs is on PagerDuty: a scoped OAuth application acting on one account. */
 export type PagerDutyIdentity = z.output<typeof pagerDutyIdentitySchema>;
 

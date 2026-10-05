@@ -1,8 +1,10 @@
 # A factory has its own identity on each provider
 
-Status: accepted; superseded for GitHub by [0015](./0015-hub.md)
+Status: accepted; superseded for GitHub and Linear by [0015](./0015-hub.md)
 
 A factory now acts on GitHub only as the App its hub assigns it, with installation tokens the hub mints; the `pat` and `app` modes below are gone.
+
+A factory now acts on Linear only as the Linear app its hub assigns it, with access tokens the hub refreshes; the `key` and `app` modes below are gone.
 
 When a factory acts with its operator's personal credential, the two become one
 account: GitHub refuses to let the operator approve a pull request jigs opened,

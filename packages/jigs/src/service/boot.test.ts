@@ -461,61 +461,32 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
 
 const WEBHOOKS = {
   url: "https://factory.example.ts.net",
-  linear: { enabled: true },
-  pagerduty: { enabled: false },
+  pagerduty: { enabled: true },
 };
 
-test("an enabled provider without its secret refuses the boot and names the variable", async () => {
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
+test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
   const exit = vi.fn();
   const error = vi.fn();
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit, error })).toBe(false);
-  expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("LINEAR_WEBHOOK_SECRET"));
-  expect(error.mock.calls[0]?.[0]).not.toContain("PAGERDUTY_WEBHOOK_SECRET");
-});
-
-test("both providers on and unsigned name both variables", async () => {
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const error = vi.fn();
-  await gateOnWebhookSecrets({
-    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
-    exit: vi.fn(),
-    error,
-  });
-  expect(error.mock.calls[0]?.[0]).toContain("LINEAR_WEBHOOK_SECRET and PAGERDUTY_WEBHOOK_SECRET");
-});
-
-test.each([
-  ["no webhooks section", undefined],
-  ["both providers off", { ...WEBHOOKS, linear: { enabled: false } }],
-])("%s needs no secret to boot", async (_name, webhooks) => {
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
-  expect(exit).not.toHaveBeenCalled();
-});
-
-test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "signed");
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  const error = vi.fn();
-  await gateOnWebhookSecrets({
-    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
-    exit,
-    error,
-  });
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(
     expect.stringContaining("PAGERDUTY_WEBHOOK_SECRET is not set"),
   );
 });
 
+test.each([
+  ["no webhooks section", undefined],
+  ["PagerDuty off", { ...WEBHOOKS, pagerduty: { enabled: false } }],
+])("%s needs no secret to boot", async (_name, webhooks) => {
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
+  const exit = vi.fn();
+  expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
+});
+
 test("an enabled provider with its secret boots", async () => {
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "signed");
+  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "signed");
   expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
 });
 

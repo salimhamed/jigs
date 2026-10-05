@@ -1,213 +1,143 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resolveFactoryContext } from "../config/factory-context.ts";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { afterEach, expect, test, vi } from "vitest";
+import { testFactoryContext } from "../test-fixtures.ts";
+import * as hub from "./hub.ts";
 import { createLinearClient } from "./linear.ts";
-import {
-  createLinearAuth,
-  LINEAR_API_URL,
-  LINEAR_TOKEN_URL,
-  linearAuthFor,
-  missingLinearVariables,
-} from "./linear-auth.ts";
+import { createLinearAuth, LINEAR_API_URL, linearAuthFor } from "./linear-auth.ts";
 import { fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
-let tmp: string;
+const NOW = Date.parse("2026-10-04T12:00:00Z");
+const APP = { name: "jigs", userId: "app-user" };
 
-beforeEach(() => {
-  tmp = makeTmpDir();
-  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"])
-    vi.stubEnv(name, "");
-});
 afterEach(() => {
-  vi.unstubAllEnvs();
-  removeTmpDir(tmp);
+  vi.restoreAllMocks();
 });
 
-const APP_ENV: Record<string, string> = {
-  LINEAR_CLIENT_ID: "client-id",
-  LINEAR_CLIENT_SECRET: "client-secret",
-};
-const lookup = (values: Record<string, string>) => (name: string) => values[name];
-
-const tokenResponse = (token: string) =>
-  new Response(JSON.stringify({ access_token: token, token_type: "Bearer", expires_in: 1 }), {
-    status: 200,
+// The hub answering each token request with the next token, each living a day.
+function hubIssuing(...tokens: string[]) {
+  return vi.fn(async (_organization: string | undefined) => {
+    const token = tokens.shift();
+    if (token === undefined) throw new Error("the hub is down");
+    return { token, expiresAt: new Date(NOW + 86_400_000).toISOString(), app: APP };
   });
-
-function writeFactory(identity: unknown, env: string): void {
-  writeFileSync(
-    path.join(tmp, "jigs.config.ts"),
-    `export default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity } })}`,
-  );
-  writeFileSync(path.join(tmp, ".env"), env);
 }
 
-test("a key identity sends the raw key, with no Bearer prefix", async () => {
-  const auth = createLinearAuth({ mode: "key" }, { env: lookup({ LINEAR_API_KEY: "lin_key" }) });
-  expect(await auth.bearer()).toBe("lin_key");
-  expect(auth.invalidate).toBeUndefined();
-  const server = fakeFetch(() => jsonResponse({ data: { viewer: { id: "u1", name: "jigs" } } }));
-  await createLinearClient({ auth, fetch: server.fetch }).getViewer();
-  expect(server.calls[0]?.headers.authorization).toBe("lin_key");
+test("a token is reused until five minutes are left, then asked for again", async () => {
+  const issue = hubIssuing("first", "second");
+  let now = NOW;
+  const auth = createLinearAuth(undefined, { issue, now: () => now });
+  expect(await auth.bearer()).toBe("first");
+  now = NOW + 86_400_000 - 6 * 60_000;
+  expect(await auth.bearer()).toBe("first");
+  now = NOW + 86_400_000 - 4 * 60_000;
+  expect(await auth.bearer()).toBe("second");
+  expect(issue).toHaveBeenCalledTimes(2);
 });
 
-test("an app identity's minted token is sent as a bearer", async () => {
-  const doFetch = vi.fn(async () => tokenResponse("app-token"));
-  const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });
-  expect(await auth.bearer()).toBe("app-token");
-  const server = fakeFetch(() => jsonResponse({ data: { viewer: { id: "u1", name: "jigs" } } }));
-  await createLinearClient({ auth, fetch: server.fetch }).getViewer();
-  expect(server.calls[0]?.headers.authorization).toBe("Bearer app-token");
-  expect(doFetch).toHaveBeenCalledTimes(1);
+test("a caller can ask for a token with more time left than jigs' own margin", async () => {
+  const issue = hubIssuing("first", "second");
+  let now = NOW;
+  const auth = createLinearAuth(undefined, { issue, now: () => now });
+  await auth.bearer();
+  now = NOW + 86_400_000 - 3 * 60 * 60_000;
+  expect(await auth.bearer()).toBe("first");
+  expect(await auth.bearer(4 * 60 * 60_000)).toBe("second");
 });
 
-test("an app identity mints a client-credentials token once", async () => {
-  const doFetch = vi.fn(async () => tokenResponse("app-token"));
-  const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });
-  // Concurrent first calls share the one mint.
-  expect(await Promise.all([auth.bearer(), auth.bearer()])).toEqual(["app-token", "app-token"]);
-  // expires_in is advisory: the cached token is kept past it.
-  expect(await auth.bearer()).toBe("app-token");
-  expect(doFetch).toHaveBeenCalledTimes(1);
-  const [url, init] = doFetch.mock.calls[0] as unknown as [string, RequestInit];
-  expect(url).toBe(LINEAR_TOKEN_URL);
-  expect(init.method).toBe("POST");
-  expect(Object.fromEntries(new URLSearchParams(init.body as string))).toEqual({
-    grant_type: "client_credentials",
-    scope: "read,write",
-    client_id: "client-id",
-    client_secret: "client-secret",
-  });
+test("the app's own user is the one the hub names", async () => {
+  const issue = hubIssuing("t");
+  const auth = createLinearAuth(undefined, { issue, now: () => NOW });
+  expect(await auth.user()).toEqual({ id: "app-user", name: "jigs" });
+  await auth.bearer();
+  expect(issue).toHaveBeenCalledTimes(1);
 });
 
-test("invalidating an app token mints a fresh one on the next call", async () => {
-  let minted = 0;
-  const doFetch = vi.fn(async () => tokenResponse(`token-${++minted}`));
-  const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });
-  expect(await auth.bearer()).toBe("token-1");
-  auth.invalidate?.("token-1");
-  expect(await auth.bearer()).toBe("token-2");
-  // A late rejection of the old token keeps the new one.
-  auth.invalidate?.("token-1");
-  expect(await auth.bearer()).toBe("token-2");
-  expect(doFetch).toHaveBeenCalledTimes(2);
+test("callers that arrive together share one request", async () => {
+  const issue = hubIssuing("shared");
+  const auth = createLinearAuth(undefined, { issue, now: () => NOW });
+  const tokens = await Promise.all(Array.from({ length: 4 }, () => auth.bearer()));
+  expect(tokens).toEqual(Array(4).fill("shared"));
+  expect(issue).toHaveBeenCalledTimes(1);
 });
 
-test("a refused mint names the client variables", async () => {
-  const doFetch = vi.fn(async () => new Response('{"error":"invalid_client"}', { status: 401 }));
-  const auth = createLinearAuth({ mode: "app" }, { env: lookup(APP_ENV), fetch: doFetch });
-  await expect(auth.bearer()).rejects.toThrow("HTTP 401");
-  await expect(auth.bearer()).rejects.toMatchObject({
-    hint: expect.stringContaining("LINEAR_CLIENT_SECRET"),
-  });
-});
-
-test("a missing variable is named along with the mode that needs it", async () => {
-  const doFetch = vi.fn();
-  await expect(createLinearAuth({ mode: "key" }, { env: lookup({}) }).bearer()).rejects.toThrow(
-    'LINEAR_API_KEY is not set, and linear.identity mode "key" needs it',
-  );
-  await expect(
-    createLinearAuth(
-      { mode: "app" },
-      { env: lookup({ LINEAR_CLIENT_ID: "id" }), fetch: doFetch },
-    ).bearer(),
-  ).rejects.toThrow('LINEAR_CLIENT_SECRET is not set, and linear.identity mode "app" needs it');
-  expect(doFetch).not.toHaveBeenCalled();
-  expect(missingLinearVariables({ mode: "app" }, lookup({}))).toEqual([
-    "LINEAR_CLIENT_ID",
-    "LINEAR_CLIENT_SECRET",
+test("each workspace has its own token, asked of the factory's hub once per factory", async () => {
+  const spy = vi.spyOn(hub, "fetchLinearToken").mockImplementation(async (organization) => ({
+    token: `token-${organization ?? "only"}`,
+    expiresAt: "2999-01-01T00:00:00Z",
+    app: APP,
+  }));
+  const ctx = testFactoryContext();
+  expect(await linearAuthFor(ctx).bearer()).toBe("token-only");
+  expect(await linearAuthFor(ctx).bearer()).toBe("token-only");
+  expect(await linearAuthFor(ctx, "acme").bearer()).toBe("token-acme");
+  expect(spy.mock.calls).toEqual([
+    [undefined, ctx],
+    ["acme", ctx],
   ]);
 });
 
-test("a factory's key comes from its .env, unless the shell sets one", async () => {
-  writeFactory({ mode: "key" }, "LINEAR_API_KEY=from-dotenv\n");
-  expect(await linearAuthFor(resolveFactoryContext(tmp)).bearer()).toBe("from-dotenv");
-  vi.stubEnv("LINEAR_API_KEY", "from-shell");
-  expect(await linearAuthFor(resolveFactoryContext(tmp)).bearer()).toBe("from-shell");
-});
-
+const USERS = { data: { users: { nodes: [{ id: "u1", name: "Ada" }] } } };
 const AUTHENTICATION_ERROR = {
-  errors: [
-    {
-      message: "Authentication required, not authenticated",
-      extensions: { type: "authentication error", code: "AUTHENTICATION_ERROR", statusCode: 401 },
-    },
-  ],
+  errors: [{ message: "Authentication required", extensions: { code: "AUTHENTICATION_ERROR" } }],
 };
 
-function graphqlServer(graphqlStatuses: Array<number | "auth-error">) {
-  let minted = 0;
-  const server = fakeFetch((call) => {
-    if (call.url.toString() === LINEAR_TOKEN_URL) return tokenResponse(`token-${++minted}`);
-    const status = graphqlStatuses.shift() ?? 200;
-    if (status === "auth-error") return jsonResponse(AUTHENTICATION_ERROR);
-    return status === 200
-      ? jsonResponse({ data: { viewer: { id: "u1", name: "jigs" } } })
-      : new Response("authentication required", { status });
+function graphqlServer(replies: Array<number | "auth-error">) {
+  const server = fakeFetch(() => {
+    const reply = replies.shift() ?? 200;
+    if (reply === "auth-error") return jsonResponse(AUTHENTICATION_ERROR);
+    return reply === 200
+      ? jsonResponse(USERS)
+      : new Response("authentication required", { status: reply });
   });
-  const auth = (identity: "key" | "app") =>
-    createLinearAuth(
-      { mode: identity },
-      {
-        env: lookup(identity === "key" ? { LINEAR_API_KEY: "stale" } : APP_ENV),
-        fetch: server.fetch,
-      },
-    );
-  const client = (identity: "key" | "app") =>
-    createLinearClient({ auth: auth(identity), fetch: server.fetch });
-  return { calls: server.calls, client };
+  const issue = hubIssuing("token-1", "token-2", "token-3");
+  const client = createLinearClient({
+    auth: createLinearAuth(undefined, { issue, now: () => NOW }),
+    fetch: server.fetch,
+  });
+  return { calls: server.calls, client, issue };
 }
 
-test("an app token Linear rejects is re-minted and the call retried once", async () => {
+test("a token Linear rejects is asked of the hub again and the call retried once", async () => {
   const { calls, client } = graphqlServer([401]);
-  expect(await client("app").getViewer()).toEqual({ id: "u1", name: "jigs" });
+  expect(await client.findUserByEmail("ada@example.com")).toEqual({ id: "u1", name: "Ada" });
   expect(calls.map((call) => [call.url.toString(), call.headers.authorization])).toEqual([
-    [LINEAR_TOKEN_URL, undefined],
     [LINEAR_API_URL, "Bearer token-1"],
-    [LINEAR_TOKEN_URL, undefined],
     [LINEAR_API_URL, "Bearer token-2"],
   ]);
 });
 
-test("an AUTHENTICATION_ERROR under a 200 re-mints the app token once", async () => {
+test("an AUTHENTICATION_ERROR under a 200 asks the hub again once", async () => {
   const { calls, client } = graphqlServer(["auth-error"]);
-  expect(await client("app").getViewer()).toEqual({ id: "u1", name: "jigs" });
+  expect(await client.findUserByEmail("ada@example.com")).toEqual({ id: "u1", name: "Ada" });
   expect(calls.map((call) => call.headers.authorization)).toEqual([
-    undefined,
     "Bearer token-1",
-    undefined,
     "Bearer token-2",
   ]);
 });
 
-test("a second 401 after a re-mint is thrown, not retried again", async () => {
-  const { calls, client } = graphqlServer([401, 401]);
-  await expect(client("app").getViewer()).rejects.toThrow("Linear API 401 on Viewer");
-  expect(calls.filter((call) => call.url.toString() === LINEAR_API_URL)).toHaveLength(2);
-});
-
-test("a rejected personal key is not retried", async () => {
-  const { calls, client } = graphqlServer([401]);
-  await expect(client("key").getViewer()).rejects.toThrow("Linear API 401");
-  expect(calls).toHaveLength(1);
+test("a second rejection says to connect the workspace again in the hub", async () => {
+  for (const reply of [401, "auth-error"] as const) {
+    const { calls, client, issue } = graphqlServer([reply, reply]);
+    await expect(client.findUserByEmail("ada@example.com")).rejects.toThrow(
+      "Linear refused the app's token again after the hub issued a fresh one; connect the Linear workspace again in the hub",
+    );
+    expect(calls).toHaveLength(2);
+    expect(issue).toHaveBeenCalledTimes(2);
+  }
 });
 
 test("a rate-limited call waits as Linear asks, then retries", async () => {
   const server = fakeFetch(() =>
     server.calls.length === 1
       ? new Response("slow down", { status: 429, headers: { "retry-after": "2" } })
-      : jsonResponse({ data: { viewer: { id: "u1", name: "jigs" } } }),
+      : jsonResponse(USERS),
   );
   const { sleep, sleeps } = fakeSleep();
   const client = createLinearClient({
-    auth: createLinearAuth({ mode: "key" }, { env: lookup({ LINEAR_API_KEY: "k" }) }),
+    auth: createLinearAuth(undefined, { issue: hubIssuing("t"), now: () => NOW }),
     fetch: server.fetch,
     sleep,
   });
-  expect(await client.getViewer()).toEqual({ id: "u1", name: "jigs" });
+  expect(await client.findUserByEmail("ada@example.com")).toEqual({ id: "u1", name: "Ada" });
   expect(sleeps).toEqual([2000]);
   expect(server.calls).toHaveLength(2);
 });

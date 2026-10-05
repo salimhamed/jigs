@@ -198,12 +198,10 @@ export interface Factory {
 export type GitHubDefinition = z.input<typeof githubSchema>;
 
 /**
- * Who jigs is on Linear, and who its comments mention.
+ * Who jigs' Linear comments mention.
  *
  * @remarks
- * `identity`: `key` acts as the user whose `LINEAR_API_KEY` is in `.env`, `app`
- * acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
- * `LINEAR_CLIENT_SECRET`. Defaults to `key`.
+ * jigs acts on Linear as the Linear app the hub assigns this factory.
  *
  * `operator` is the email of the Linear user who runs the factory. With it,
  * every Linear comment jigs posts mentions the operator and the ticket's
@@ -217,7 +215,6 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * import type { LinearDefinition } from "@jigs-ai/jigs";
  *
  * const linear = {
- *   identity: { mode: "app" },
  *   operator: "salim@example.com",
  * } satisfies LinearDefinition;
  * ```
@@ -277,9 +274,9 @@ export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
 export type SlackDefinition = z.input<typeof slackSchema>;
 
 /**
- * Where provider webhooks reach the service, and which providers send them.
- * A provider left out sends none. Without this section the service still wakes
- * parked runs by polling.
+ * Where PagerDuty's webhooks reach the service, and whether PagerDuty sends them.
+ * Left out, it sends none. Without this section the service still finds new
+ * incidents by polling.
  *
  * @example
  * Use this value for `webhooks` in `jigs.config.ts`.
@@ -288,7 +285,7 @@ export type SlackDefinition = z.input<typeof slackSchema>;
  *
  * const webhooks = {
  *   url: "https://factory.example.ts.net",
- *   linear: { enabled: true },
+ *   pagerduty: { enabled: true },
  * } satisfies WebhooksDefinition;
  * ```
  *

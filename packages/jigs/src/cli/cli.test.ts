@@ -11,10 +11,10 @@ const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
 const run = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
 
-test("init's flags reach the scaffold through the CLI parser, and bind records its binding", () => {
+test("init scaffolds through the CLI parser, and bind records its binding", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "jigs-cli-"));
   try {
-    const result = run(cwd, "init", "--linear-identity-mode", "app");
+    const result = run(cwd, "init");
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     // Scaffold installation is a separate command; load only its emitted settings here.
@@ -37,7 +37,6 @@ test("init's flags reach the scaffold through the CLI parser, and bind records i
     expect(bound.status).not.toBe(0);
     expect(bound.stderr).toContain("jigs:approved label could not be ensured");
     const config = readFactoryConfig(cwd);
-    expect(config.linear).toEqual({ identity: { mode: "app" } });
     expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
   } finally {
     rmSync(cwd, { recursive: true, force: true });

@@ -312,8 +312,9 @@ export type LinearTokenResult =
   | { token: LinearTokenResponse }
   | { status: 404 | 409 | 503; error: string };
 
-// A token is refreshed once it has less than this to live.
-const MIN_TOKEN_LIFE_MS = 5 * 60 * 1000;
+// A token is refreshed once it has less than this to live, so a factory can
+// hand an agent one that outlasts a turn of several hours.
+const MIN_TOKEN_LIFE_MS = 6 * 60 * 60 * 1000;
 
 /**
  * Hands out the access tokens of connected Linear workspaces, refreshing them

@@ -1,7 +1,7 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
-import { fetchFactoryStatus, fetchGithubToken } from "./hub.ts";
+import { fetchFactoryStatus, fetchGithubToken, fetchLinearToken } from "./hub.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 afterEach(() => {
@@ -64,4 +64,33 @@ test("no request is made without a factory token", async () => {
   const { calls } = hubAnswering(jsonResponse({}));
   await expect(fetchFactoryStatus(ctx(null))).rejects.toThrow("JIGS_HUB_TOKEN is not set");
   expect(calls).toEqual([]);
+});
+
+test("a Linear token names the workspace only when the factory knows it", async () => {
+  const issued = {
+    token: "lin_1",
+    expiresAt: "2026-10-05T12:00:00Z",
+    app: { name: "jigs", userId: "app-user" },
+  };
+  const { calls } = hubAnswering(jsonResponse(issued));
+  await expect(fetchLinearToken(undefined, ctx())).resolves.toEqual(issued);
+  const named = hubAnswering(jsonResponse(issued));
+  await fetchLinearToken("acme", ctx());
+  expect(calls[0]).toMatchObject({
+    method: "POST",
+    url: new URL("https://hub.example.test/api/factory/tokens/linear"),
+    json: {},
+  });
+  expect(named.calls[0]).toMatchObject({ json: { organization: "acme" } });
+});
+
+test("a Linear workspace that needs reconnecting says so with the repair", async () => {
+  hubAnswering(
+    jsonResponse({ error: "Connect acme to jigs again on the hub: invalid_grant" }, 503),
+  );
+  await expect(fetchLinearToken(undefined, ctx())).rejects.toMatchObject({
+    status: 503,
+    message: expect.stringContaining("Connect acme to jigs again on the hub"),
+    hint: expect.stringContaining("connect the Linear workspace again"),
+  });
 });
