@@ -86,7 +86,6 @@ test("a call sends the bot token the hub hands out", async () => {
     url: `${SLACK_API_URL}/auth.test`,
     auth: `Bearer ${TEST_SLACK_TOKEN}`,
   });
-  expect(hub.fetchSlackToken).toHaveBeenCalledWith({}, expect.anything());
 });
 
 test("a Slack error carries its code and never the token", async () => {
@@ -191,24 +190,20 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
   expect(sleeps).toEqual([1_000, 1_000, 1_000]);
 });
 
-test("the bot is read from the hub once per installation and factory context", async () => {
+test("the bot is read from the hub once per factory context", async () => {
   const [first, second] = await Promise.all([slackBot(), slackBot()]);
   expect(first).toEqual(second);
   expect(first).toEqual({
     userId: TEST_SLACK_BOT.botUserId,
+    appId: TEST_SLACK_BOT.appId,
     name: TEST_SLACK_BOT.name,
     team: "T0TEST",
     scopes: expect.any(Array),
   });
   expect(hub.fetchSlackToken).toHaveBeenCalledTimes(1);
-  await slackBot({ appId: "A0OTHER", team: "T0OTHER" });
-  expect(hub.fetchSlackToken).toHaveBeenLastCalledWith(
-    { appId: "A0OTHER", team: "T0OTHER" },
-    expect.anything(),
-  );
   vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
   await slackBot();
-  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(3);
+  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(2);
   expect(calls).toHaveLength(0);
 });
 

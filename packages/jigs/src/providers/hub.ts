@@ -148,22 +148,14 @@ const LINEAR_TOKEN_REPAIRS = {
   503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
 };
 
-/**
- * The bot token of the factory's Slack app in a workspace: the installation `installation` names
- * (an event's `api_app_id` and `team_id`), or the only one when it names none.
- */
+/** The bot token of the factory's Slack app in the one workspace it is installed in. */
 export async function fetchSlackToken(
-  installation: SlackTokenRequest,
   ctx: FactoryContext = currentFactoryContext(),
 ): Promise<SlackTokenResponse> {
-  const { appId, team } = installation;
   try {
     return await hubSend<SlackTokenResponse>(ctx, slackTokenPath, {
       method: "POST",
-      body: {
-        ...(appId === undefined ? {} : { appId }),
-        ...(team === undefined ? {} : { team }),
-      },
+      body: {} satisfies SlackTokenRequest,
     });
   } catch (error) {
     if (error instanceof HubResponseError && (error.status === 404 || error.status === 409))

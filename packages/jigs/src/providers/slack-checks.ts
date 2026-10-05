@@ -21,7 +21,7 @@ function declaredScopes(ctx: FactoryContext): string[] {
  */
 export function slackChecks(
   ctx: FactoryContext,
-  issue: (ctx: FactoryContext) => Promise<SlackTokenResponse> = (ctx) => fetchSlackToken({}, ctx),
+  issue: (ctx: FactoryContext) => Promise<SlackTokenResponse> = fetchSlackToken,
 ): Check[] {
   return [
     {

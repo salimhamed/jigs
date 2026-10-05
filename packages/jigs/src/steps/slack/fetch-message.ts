@@ -41,7 +41,7 @@ async function authorOf(
       id,
       name: message.bot_profile?.name ?? id,
       bot: true,
-      isOwnBot: message.user === bot.userId,
+      isOwnBot: message.user === bot.userId || message.app_id === bot.appId,
     };
   }
   let user = users.get(message.user);

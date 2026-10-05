@@ -6,9 +6,9 @@ import { waitForSlackReply } from "../../workflow/slack/wait-for-reply.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
 
-// Posts to the test channel, then deletes what it posted. Set SLACK_BOT_TOKEN
+// Posts to the test channel, then deletes what it posted. Set JIGS_TEST_SLACK_BOT_TOKEN
 // in the shell to a test app's bot token; the app must be in the channel.
-const token = process.env.SLACK_BOT_TOKEN;
+const token = process.env.JIGS_TEST_SLACK_BOT_TOKEN;
 const configured = Boolean(token);
 vi.stubEnv("JIGS_FACTORY_ROOT", tmpdir());
 

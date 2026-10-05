@@ -74,15 +74,11 @@ export interface SlackClientDeps {
   context?: FactoryContext;
 }
 
-/** Which installation of the factory's Slack app: an event's app and workspace ids. */
-export interface SlackInstallation {
-  appId?: string;
-  team?: string;
-}
-
 /** The factory's Slack app in one workspace: its bot user, and the scopes the workspace granted. */
 export interface SlackBot {
   userId: string;
+  /** The app's id, which its posts carry as `app_id` even without a user. */
+  appId: string;
   name: string;
   team: string;
   scopes: string[];
@@ -94,6 +90,7 @@ export interface SlackMessage {
   text?: string;
   user?: string;
   bot_id?: string;
+  app_id?: string;
   bot_profile?: { name?: string };
   subtype?: string;
   thread_ts?: string;
@@ -121,7 +118,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
     const rateLimit = rateLimitWaits("slack", runSignal, deps.sleep);
-    const tokens = slackTokensFor(ctx());
+    const tokens = slackTokens(ctx());
     let reissued = false;
     for (;;) {
       const { token } = await tokens.issued();
@@ -287,28 +284,10 @@ function createSlackTokens(issue: () => Promise<SlackTokenResponse>): SlackToken
   };
 }
 
-const factorySlack = perContext((ctx) => ({ ctx, tokens: new Map<string, SlackTokens>() }));
+const slackTokens = perContext((ctx) => createSlackTokens(() => fetchSlackToken(ctx)));
 
-/** The bot token of one installation of the factory's Slack app, or of its only one. */
-function slackTokensFor(
-  ctx: FactoryContext | undefined,
-  installation: SlackInstallation = {},
-): SlackTokens {
-  const slack = factorySlack(ctx);
-  const key = `${installation.appId ?? ""}/${installation.team ?? ""}`;
-  let tokens = slack.tokens.get(key);
-  if (!tokens) {
-    tokens = createSlackTokens(() => fetchSlackToken(installation, slack.ctx));
-    slack.tokens.set(key, tokens);
-  }
-  return tokens;
-}
-
-/** The factory's own bot in the workspace `installation` names, or in its only one. */
-export async function slackBot(
-  installation: SlackInstallation = {},
-  ctx?: FactoryContext,
-): Promise<SlackBot> {
-  const { app, team, scopes } = await slackTokensFor(ctx, installation).issued();
-  return { userId: app.botUserId, name: app.name, team, scopes };
+/** The factory's own bot. */
+export async function slackBot(ctx?: FactoryContext): Promise<SlackBot> {
+  const { app, team, scopes } = await slackTokens(ctx).issued();
+  return { userId: app.botUserId, appId: app.appId, name: app.name, team, scopes };
 }

@@ -6,6 +6,7 @@ import { slackSources } from "./slack-sources.ts";
 
 const BOT = {
   userId: "U0C59SU5V29",
+  appId: "A0C5JPZUW1J",
   name: "salims_jigs",
   team: "T0A7SCMC5",
   scopes: [],
@@ -288,7 +289,18 @@ test("another bot's post that mentions the bot is a mention", async () => {
   expect(await mentions.fromPush(params, pushed(OTHER_BOT))).toBeNull();
 });
 
-test("a pushed message reads the bot of the app and workspace it came from", async () => {
-  await messages.fromPush(params, pushed(TOP_LEVEL));
-  expect(slackApi.slackBot).toHaveBeenCalledWith({ appId: "A0C5JPZUW1J", team: "T0A7SCMC5" });
+test("the bot's own post under a custom username, with no user, is skipped by its app id", async () => {
+  const ownBotMessage = {
+    type: "message",
+    subtype: "bot_message",
+    bot_id: "B0C5JPZUW1J",
+    app_id: BOT.appId,
+    username: "Deploy bot",
+    ts: "1790723390.000100",
+    text: `<@${BOT.userId}> posted by the factory under another name`,
+  };
+  vi.spyOn(slackApi, "slackHistory").mockResolvedValue([ownBotMessage]);
+  expect((await messages.poll(params, undefined, new Date(0))).occurrences).toEqual([]);
+  expect(await messages.fromPush(params, pushed(ownBotMessage))).toBeNull();
+  expect(await mentions.fromPush(params, pushed(ownBotMessage))).toBeNull();
 });

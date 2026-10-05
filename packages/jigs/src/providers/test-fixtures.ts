@@ -76,7 +76,7 @@ export function fakeGithub(deps: Pick<GithubClientDeps, "sleep"> = {}): FakeGith
 }
 
 /**
- * Hand the live tests' `SLACK_BOT_TOKEN` (a test app's, from the shell) out as the hub would,
+ * Hand the live tests' `JIGS_TEST_SLACK_BOT_TOKEN` (a test app's, from the shell) out as the hub would,
  * with the bot and scopes Slack reports for it.
  */
 export async function useLiveSlackToken(token: string): Promise<void> {
@@ -84,11 +84,16 @@ export async function useLiveSlackToken(token: string): Promise<void> {
     method: "POST",
     headers: { authorization: `Bearer ${token}` },
   });
-  const auth = (await res.json()) as { user_id: string; user: string; team_id: string };
+  const auth = (await res.json()) as {
+    user_id: string;
+    user: string;
+    team_id: string;
+    app_id?: string;
+  };
   const scopes = (res.headers.get("x-oauth-scopes") ?? "").split(",").filter(Boolean);
   vi.spyOn(hub, "fetchSlackToken").mockResolvedValue({
     token,
-    app: { appId: "A0LIVE", name: auth.user, botUserId: auth.user_id },
+    app: { appId: auth.app_id ?? "A0LIVE", name: auth.user, botUserId: auth.user_id },
     team: auth.team_id,
     scopes,
   });

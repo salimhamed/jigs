@@ -30,20 +30,18 @@ interface SlackMessageEvent extends SlackMessage {
   channel_type?: string;
 }
 
-// The outer body of every Events API event: which app and workspace it is for.
 const callbackSchema = z.object({
   type: z.literal("event_callback"),
-  api_app_id: z.string(),
-  team_id: z.string(),
   event: z.object({ type: z.literal("message"), channel: z.string(), ts: z.string() }).loose(),
 });
 
 // The bot's own posts are skipped by author, which ADR 0011 allows because
-// the factory's app only ever acts as itself, and its bot user posts them.
+// the factory's app only ever acts as itself. A post under a custom username
+// carries only the app's id.
 function startsRun(message: SlackMessage, bot: SlackBot, mentionsOnly: boolean): boolean {
   if (!NEW_POST_SUBTYPES.has(message.subtype)) return false;
   if (message.thread_ts !== undefined && message.thread_ts !== message.ts) return false;
-  if (message.user === bot.userId) return false;
+  if (message.user === bot.userId || message.app_id === bot.appId) return false;
   return !mentionsOnly || (message.text ?? "").includes(`<@${bot.userId}>`);
 }
 
@@ -108,8 +106,9 @@ function slackSource(mentionsOnly: boolean, now: () => Date): Source<Params, Cur
       const message = callback.event as SlackMessageEvent;
       if (!channels.includes(message.channel)) return null;
       if (!CHANNEL_TYPES.has(message.channel_type ?? "")) return null;
-      const bot = await slackBot({ appId: callback.api_app_id, team: callback.team_id });
-      return startsRun(message, bot, mentionsOnly) ? occurred(message.channel, message.ts) : null;
+      return startsRun(message, await slackBot(), mentionsOnly)
+        ? occurred(message.channel, message.ts)
+        : null;
     },
     describe: ({ channel, ts }) => `slack ${String(channel)} ${String(ts)}`,
   };

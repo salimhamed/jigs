@@ -95,7 +95,7 @@ test("a Linear workspace that needs reconnecting says so with the repair", async
   });
 });
 
-test("a Slack token is asked for by app and workspace, either left out when unknown", async () => {
+test("a Slack token is asked for with an empty body", async () => {
   const issued = {
     token: "xoxb-1",
     scopes: ["chat:write"],
@@ -103,20 +103,17 @@ test("a Slack token is asked for by app and workspace, either left out when unkn
     team: "T1",
   };
   const { calls } = hubAnswering(jsonResponse(issued));
-  await expect(fetchSlackToken({}, ctx())).resolves.toEqual(issued);
-  const named = hubAnswering(jsonResponse(issued));
-  await fetchSlackToken({ appId: "A1", team: "T1" }, ctx());
+  await expect(fetchSlackToken(ctx())).resolves.toEqual(issued);
   expect(calls[0]).toMatchObject({
     method: "POST",
     url: new URL("https://hub.example.test/api/factory/tokens/slack"),
     json: {},
   });
-  expect(named.calls[0]).toMatchObject({ json: { appId: "A1", team: "T1" } });
 });
 
 test("no Slack installation for the factory says so with the repair", async () => {
   hubAnswering(jsonResponse({ error: "No Slack app assigned to this factory." }, 404));
-  await expect(fetchSlackToken({}, ctx())).rejects.toMatchObject({
+  await expect(fetchSlackToken(ctx())).rejects.toMatchObject({
     status: 404,
     hint: expect.stringContaining("in the hub, install one of this factory's Slack apps"),
   });
