@@ -2,6 +2,7 @@ import { Download, KeyRound, Link2, Trash2 } from "lucide-react";
 import { data, Form, redirect } from "react-router";
 import { removeApp, setAssignments } from "../../src/apps.ts";
 import { setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
+import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -45,6 +46,16 @@ export async function action({ context, request, params }: Route.ActionArgs) {
         throw notFound();
       }
       return { message: "Saved the signing secret." };
+    }
+    case "scopes": {
+      const saved = await setSlackScopes(
+        context.db,
+        organizationId,
+        params.id,
+        String(form.get("scopes") ?? ""),
+      );
+      if ("error" in saved) return saved;
+      return { message: "Saved the scopes. Install the app again in each workspace." };
     }
     default: {
       const factoryIds = form.getAll("factoryId").map(String);
@@ -317,16 +328,32 @@ function SlackApp({
               <code>{event}</code>
             </span>
           ))}
-          . The Redirect URL goes under <strong>OAuth &amp; Permissions</strong>, with these Bot
-          Token Scopes:{" "}
-          {app.scopes.map((scope, index) => (
-            <span key={scope}>
-              {index > 0 && ", "}
-              <code>{scope}</code>
-            </span>
-          ))}
-          . Leave token rotation off. Invite the bot to each channel factories should hear.
+          . The Redirect URL goes under <strong>OAuth &amp; Permissions</strong>, where token
+          rotation stays off. Invite the bot to each channel factories should hear.
         </p>
+      </section>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Bot scopes</h2>
+        <p className="text-sm text-zinc-500">
+          What installing asks a workspace for: every scope jigs uses, plus any a factory's config
+          adds.
+        </p>
+        <Form method="post" className="max-w-xl space-y-2">
+          <textarea
+            name="scopes"
+            rows={3}
+            required
+            readOnly={!isAdmin}
+            defaultValue={app.scopes.join(", ")}
+            className={`${input} w-full font-mono`}
+          />
+          {isAdmin && (
+            <button type="submit" name="intent" value="scopes" className={button}>
+              Save
+            </button>
+          )}
+        </Form>
       </section>
 
       <section className="space-y-2">
@@ -339,6 +366,7 @@ function SlackApp({
               <tr>
                 <th>Workspace</th>
                 <th>Team ID</th>
+                <th>Granted scopes</th>
               </tr>
             </thead>
             <tbody>
@@ -349,6 +377,7 @@ function SlackApp({
                 >
                   <td>{workspace.name}</td>
                   <td>{workspace.externalId}</td>
+                  <td className="font-mono text-xs">{workspace.scopes.join(", ")}</td>
                 </tr>
               ))}
             </tbody>

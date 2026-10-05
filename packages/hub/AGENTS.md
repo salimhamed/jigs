@@ -85,12 +85,20 @@ needing a reconnect. Each Linear app has its own webhook URL, because Linear's
 payloads do not name the app. On a new agent session the hub posts the first
 activity itself, as Linear wants one within ten seconds.
 
-`src/slack.ts` adds Slack apps: "Add to Slack" runs Slack's OAuth v2 and
-stores each workspace's bot token. Every Slack app shares `/webhooks/slack`;
+`src/app-oauth.ts` holds what Linear's and Slack's admin-started OAuth flows
+share: finding the admin's app and the state cookie.
+
+`src/slack.ts` adds Slack apps: each app keeps the bot scopes its installs ask
+for (jigs's base list from `@jigs-ai/hub-protocol`, plus what an admin adds),
+"Add to Slack" runs Slack's OAuth v2 and stores each workspace's bot token and
+granted scopes, refusing an expiring token since the hub keeps no refresh
+token. Every Slack app shares `/webhooks/slack`;
 the hub finds the app by `api_app_id`, checks the signing secret, answers
 URL verification with any Slack app's secret (the challenge names no app),
 answers 200 to events it cannot place so Slack stops retrying, and drops a
-retry of an event it already stored. `src/pagerduty.ts` adds PagerDuty
+retry of an event it already stored: a provider event's optional dedupe key
+(Slack's `event_id`) is unique per app, and `fanOutProviderEvent` sends a
+repeat to no one. `src/pagerduty.ts` adds PagerDuty
 apps, each acting as itself in one account: an admin enters a Scoped OAuth
 app's credentials with the account's subdomain and region, the hub checks
 them by minting a token, and mints a fresh client-credentials token for every

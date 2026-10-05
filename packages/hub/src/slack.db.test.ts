@@ -2,7 +2,12 @@ import { createHmac, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { factoryStatusPath, type SlackTokenResponse, slackTokenPath } from "@jigs-ai/hub-protocol";
+import {
+  factoryStatusPath,
+  type SlackTokenResponse,
+  slackBotScopes,
+  slackTokenPath,
+} from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
 import { afterAll, beforeAll, expect, vi } from "vitest";
@@ -19,7 +24,7 @@ import { PagerDutyTokens } from "./pagerduty.ts";
 import {
   addSlackApp,
   createSlackRoutes,
-  slackBotScopes,
+  setSlackScopes,
   slackCallbackPath,
   slackInstallPath,
   slackWebhookPath,
@@ -42,7 +47,10 @@ interface Workspace {
 }
 
 // The fake Slack: codes it handed out for an app and workspace.
-const codes = new Map<string, { clientId: string; appId: string; workspace: Workspace }>();
+const codes = new Map<
+  string,
+  { clientId: string; appId: string; workspace: Workspace; scope?: string; expiresIn?: number }
+>();
 const clientSecrets = new Map<string, string>();
 let issued = 0;
 
@@ -71,7 +79,10 @@ function fakeSlack() {
       ok: true,
       access_token: `xoxb-${issued}`,
       token_type: "bot",
-      scope: slackBotScopes.join(","),
+      scope: granted.scope,
+      ...(granted.expiresIn === undefined
+        ? {}
+        : { expires_in: granted.expiresIn, refresh_token: "xoxe-1" }),
       bot_user_id: granted.workspace.botUserId,
       app_id: granted.appId,
       team: { id: granted.workspace.id, name: granted.workspace.name },
@@ -184,11 +195,22 @@ async function callback(app: App, query: Record<string, string>, cookie: string,
 }
 
 /** Install an app the way an admin does: start, approve in Slack, come back. */
-async function install(slack: SlackApp, workspace: Workspace, appId = slack.app.externalId) {
+async function install(
+  slack: SlackApp,
+  workspace: Workspace,
+  options: { appId?: string; expiresIn?: number } = {},
+) {
   const started = await startInstall(slack.app);
-  const state = new URL(started.headers.get("location") ?? "").searchParams.get("state") ?? "";
+  const authorize = new URL(started.headers.get("location") ?? "").searchParams;
+  const state = authorize.get("state") ?? "";
   const code = `code-${crypto.randomUUID()}`;
-  codes.set(code, { clientId: slack.clientId, appId, workspace });
+  codes.set(code, {
+    clientId: slack.clientId,
+    appId: options.appId ?? slack.app.externalId,
+    workspace,
+    scope: authorize.get("scope") ?? "",
+    expiresIn: options.expiresIn,
+  });
   return callback(slack.app, { code, state }, cookieOf(started));
 }
 
@@ -281,7 +303,7 @@ dbTest("installs an app in a workspace through Slack's OAuth flow", async () => 
   expect(row).toMatchObject({
     externalId: workspace.id,
     account: workspace.name,
-    settings: { botUserId: workspace.botUserId },
+    settings: { botUserId: workspace.botUserId, scopes: [...slackBotScopes] },
   });
   expect(row?.secrets).not.toContain("xoxb");
 
@@ -292,8 +314,29 @@ dbTest("installs an app in a workspace through Slack's OAuth flow", async () => 
   ]);
 
   // Slack installed some other app with this client ID: the app ID was mistyped.
-  expect((await install(slack, newWorkspace(), "A0WRONG")).status).toBe(400);
+  expect((await install(slack, newWorkspace(), { appId: "A0WRONG" })).status).toBe(400);
+  // Token rotation on: the hub keeps no refresh token, so it refuses a token that expires.
+  expect((await install(slack, newWorkspace(), { expiresIn: 43200 })).status).toBe(400);
   expect(await installationsOf(slack.app)).toHaveLength(1);
+
+  // A factory's extra scopes are asked for once an admin adds them.
+  expect(
+    await setSlackScopes(db, organizationId, slack.app.id, "chat:write, im:history\nchat:write"),
+  ).toEqual({ scopes: ["chat:write", "im:history"] });
+  const asked = new URL((await startInstall(slack.app)).headers.get("location") ?? "");
+  expect(asked.searchParams.get("scope")).toBe("chat:write,im:history");
+  await install(slack, workspace);
+  const [reinstalled] = await installationsOf(slack.app);
+  expect(reinstalled?.settings).toMatchObject({ scopes: ["chat:write", "im:history"] });
+  expect(await setSlackScopes(db, organizationId, slack.app.id, " ")).toEqual({
+    error: "Enter at least one scope.",
+  });
+  expect(await setSlackScopes(db, organizationId, slack.app.id, "chat:write, Bad Scope")).toEqual({
+    error: "These are not Slack scopes: Bad, Scope.",
+  });
+  expect(await setSlackScopes(db, "other", slack.app.id, "chat:write")).toEqual({
+    error: "There is no such Slack app.",
+  });
 });
 
 dbTest("refuses a callback whose state is not the admin's own", async () => {
@@ -357,11 +400,18 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
     (await deliver(slack.signingSecret, fresh(), { timestamp: Date.now() / 1000 - 6 * 60 })).status,
   ).toBe(401);
 
-  // Slack retries after three seconds without an answer; a retry of a stored event is dropped.
+  // Slack retries after three seconds without an answer; a retry of a stored event is dropped,
+  // even when it arrives while the first is still being stored.
   expect((await deliver(slack.signingSecret, payload, { retry: 1 })).status).toBe(200);
+  const racing = fresh();
+  const raced = await Promise.all([
+    deliver(slack.signingSecret, racing),
+    deliver(slack.signingSecret, racing, { retry: 1 }),
+  ]);
+  expect(raced.map((response) => response.status)).toEqual([200, 200]);
   // A retry of an event the hub never stored is the first it hears of it.
   expect((await deliver(slack.signingSecret, fresh(), { retry: 1 })).status).toBe(200);
-  expect(await eventNames(assigned.id)).toEqual(["message", "message"]);
+  expect(await eventNames(assigned.id)).toEqual(["message", "message", "message"]);
 
   // Events the hub cannot place get a 200, so Slack does not retry them for ever.
   const warnings = vi.spyOn(console, "warn").mockImplementation(() => {});
@@ -373,7 +423,7 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   );
   expect(warnings).toHaveBeenCalledTimes(2);
   warnings.mockRestore();
-  expect(await eventNames(assigned.id)).toEqual(["message", "message"]);
+  expect(await eventNames(assigned.id)).toEqual(["message", "message", "message"]);
 });
 
 dbTest("issues the bot token of the installation the request names, or the only one", async () => {
@@ -388,6 +438,7 @@ dbTest("issues the bot token of the installation the request names, or the only 
     status: 200,
     body: {
       token: expect.stringMatching(/^xoxb-/),
+      scopes: [...slackBotScopes],
       app: { appId: slack.app.externalId, name: slack.app.name, botUserId: workspace.botUserId },
       team: workspace.id,
     } satisfies SlackTokenResponse,

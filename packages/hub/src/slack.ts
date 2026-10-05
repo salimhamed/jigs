@@ -1,10 +1,11 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
-import type { SlackTokenResponse } from "@jigs-ai/hub-protocol";
+import { createHmac, timingSafeEqual } from "node:crypto";
+import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
 import { and, eq, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
+import { appOAuth } from "./app-oauth.ts";
 import type { App } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations, providerEvents } from "./db/schema.ts";
+import { apps, assignments, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptSecret, encryptSecret } from "./secrets.ts";
 
@@ -17,26 +18,21 @@ export const slackInstallPath = (appId: string) => `/oauth/slack/${appId}/instal
 /** Where Slack returns after a workspace approves an app, its OAuth "Redirect URL". */
 export const slackCallbackPath = (appId: string) => `/oauth/slack/${appId}/callback`;
 
-/** The bot token scopes factories use. */
-export const slackBotScopes = [
-  "channels:history",
-  "groups:history",
-  "chat:write",
-  "users:read",
-  "users:read.email",
-] as const;
-
 /** The bot events factories hear. */
 export const slackBotEvents = ["message.channels", "message.groups"] as const;
 
 /** What the hub knows of a Slack app besides its secrets, kept in `apps.settings`. Its Slack app ID is its `externalId`. */
 export interface SlackAppSettings {
   clientId: string;
+  /** The bot token scopes an install asks for. */
+  scopes: string[];
 }
 
 /** What the hub knows of a workspace an app is installed in, kept in `installations.settings`. */
 export interface SlackWorkspaceSettings {
   botUserId: string;
+  /** The bot token scopes the workspace granted. */
+  scopes: string[];
 }
 
 interface SlackAppSecrets {
@@ -46,8 +42,6 @@ interface SlackAppSecrets {
 
 interface SlackWorkspaceSecrets {
   botToken: string;
-  /** Only when the app rotates its tokens. */
-  expiresAt?: string;
 }
 
 /** What an admin copies from a Slack app they made by hand. */
@@ -56,8 +50,6 @@ export interface SlackAppInput extends SlackAppSecrets {
   appId: string;
   clientId: string;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const defaultApiUrl = "https://slack.com/api";
 const authorizeUrl = "https://slack.com/oauth/v2/authorize";
@@ -85,7 +77,10 @@ export async function addSlackApp(
       provider: "slack",
       name: input.name,
       externalId: input.appId,
-      settings: { clientId: input.clientId } satisfies SlackAppSettings,
+      settings: {
+        clientId: input.clientId,
+        scopes: [...slackBotScopes],
+      } satisfies SlackAppSettings,
       secrets: encryptSecret(
         encryptionKey,
         JSON.stringify({
@@ -98,6 +93,32 @@ export async function addSlackApp(
     .returning();
   if (!app) return { error: `The Slack app ${input.appId} is already on this hub.` };
   return { app };
+}
+
+const SCOPE = /^[a-z][a-z_.:-]*$/;
+
+/** Set the bot token scopes an app's installs ask for, from a list split on commas or spaces. */
+export async function setSlackScopes(
+  db: HubDatabase,
+  organizationId: string,
+  appId: string,
+  list: string,
+): Promise<{ error: string } | { scopes: string[] }> {
+  const scopes = [...new Set(list.split(/[\s,]+/).filter(Boolean))];
+  if (scopes.length === 0) return { error: "Enter at least one scope." };
+  const bad = scopes.filter((scope) => !SCOPE.test(scope));
+  if (bad.length > 0) return { error: `These are not Slack scopes: ${bad.join(", ")}.` };
+  const [updated] = await db
+    .update(apps)
+    .set({
+      settings: sql`jsonb_set(${apps.settings}, '{scopes}', ${JSON.stringify(scopes)}::jsonb)`,
+    })
+    .where(
+      and(eq(apps.id, appId), eq(apps.organizationId, organizationId), eq(apps.provider, "slack")),
+    )
+    .returning({ id: apps.id });
+  if (!updated) return { error: "There is no such Slack app." };
+  return { scopes };
 }
 
 // Slack asks receivers to refuse a request signed more than five minutes from now, against replays.
@@ -120,18 +141,8 @@ const verifySignature = (
   );
 };
 
-const STATE_COOKIE = "hub_slack_state";
-
 const readSecrets = <T>(encryptionKey: Buffer, stored: string): T =>
   JSON.parse(decryptSecret(encryptionKey, stored));
-
-const readCookie = (request: Request, name: string) => {
-  for (const part of (request.get("cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
-  }
-  return undefined;
-};
 
 interface SlackEnvelope {
   type?: string;
@@ -156,6 +167,14 @@ export function createSlackRoutes(options: {
   const { db, waiters, encryptionKey, publicUrl, adminOrganization } = options;
   const apiUrl = options.apiUrl ?? defaultApiUrl;
   const router = express.Router();
+  const oauth = appOAuth({
+    db,
+    provider: "slack",
+    label: "Slack",
+    publicUrl,
+    callbackPath: slackCallbackPath,
+    adminOrganization,
+  });
 
   const signingSecret = (app: App) =>
     readSecrets<SlackAppSecrets>(encryptionKey, app.secrets).signingSecret;
@@ -222,99 +241,42 @@ export function createSlackRoutes(options: {
         response.status(200).end();
         return;
       }
-      if (request.get("x-slack-retry-num") !== undefined && payload.event_id) {
-        const [stored] = await db
-          .select({ id: providerEvents.id })
-          .from(providerEvents)
-          .where(
-            and(
-              eq(providerEvents.appId, app.id),
-              sql`${providerEvents.payload}->>'event_id' = ${payload.event_id}`,
-            ),
-          )
-          .limit(1);
-        if (stored) {
-          response.status(200).end();
-          return;
-        }
-      }
       await fanOutProviderEvent(db, waiters, {
         organizationId: app.organizationId,
         appId: app.id,
         provider: "slack",
         name,
         payload,
+        // Slack sends an event again when an answer is slow; it is stored and sent once.
+        dedupeKey: payload.event_id,
       });
       response.status(200).end();
     },
   );
 
-  // The app, when the signed-in user is an admin of its Organization.
-  const adminsApp = async (request: Request) => {
-    const appId = String(request.params.appId);
-    const app = UUID.test(appId)
-      ? await db.query.apps.findFirst({
-          where: and(eq(apps.id, appId), eq(apps.provider, "slack")),
-        })
-      : undefined;
-    return app && (await adminOrganization(request)) === app.organizationId ? app : null;
-  };
-
-  const callbackUrl = (app: App) => `${publicUrl.origin}${slackCallbackPath(app.id)}`;
-  const cookieOptions = (app: App) => ({
-    httpOnly: true,
-    secure: publicUrl.protocol === "https:",
-    // Lax still sends it on Slack's top-level redirect back.
-    sameSite: "lax" as const,
-    path: slackCallbackPath(app.id),
-  });
-
   router.get(slackInstallPath(":appId"), async (request, response) => {
-    const app = await adminsApp(request);
-    if (!app) {
-      response.status(404).type("text").send("No Slack app of yours on this hub has that id.");
-      return;
-    }
-    const state = randomBytes(32).toString("base64url");
-    response.cookie(STATE_COOKIE, state, { ...cookieOptions(app), maxAge: 10 * 60 * 1000 });
+    const app = await oauth.adminsApp(request, response);
+    if (!app) return;
+    const settings = app.settings as SlackAppSettings;
     const query = new URLSearchParams({
-      client_id: (app.settings as SlackAppSettings).clientId,
-      scope: slackBotScopes.join(","),
-      redirect_uri: callbackUrl(app),
-      state,
+      client_id: settings.clientId,
+      scope: settings.scopes.join(","),
+      redirect_uri: oauth.callbackUrl(app),
+      state: oauth.startState(response, app),
     });
     response.redirect(303, `${authorizeUrl}?${query}`);
   });
 
   router.get(slackCallbackPath(":appId"), async (request, response) => {
-    const app = await adminsApp(request);
-    if (!app) {
-      response.status(404).type("text").send("No Slack app of yours on this hub has that id.");
-      return;
-    }
-    const expected = readCookie(request, STATE_COOKIE);
-    response.clearCookie(STATE_COOKIE, cookieOptions(app));
-    if (!expected || String(request.query.state ?? "") !== expected) {
-      response
-        .status(400)
-        .type("text")
-        .send("This answer from Slack is not for an install you started. Start again.");
-      return;
-    }
-    if (request.query.error) {
-      response
-        .status(400)
-        .type("text")
-        .send(`Slack did not install the app: ${request.query.error}`);
-      return;
-    }
+    const app = await oauth.adminsApp(request, response);
+    if (!app || !oauth.checkCallback(request, response, app)) return;
     const { clientSecret } = readSecrets<SlackAppSecrets>(encryptionKey, app.secrets);
     const exchanged = await fetch(`${apiUrl}/oauth.v2.access`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         code: String(request.query.code ?? ""),
-        redirect_uri: callbackUrl(app),
+        redirect_uri: oauth.callbackUrl(app),
         client_id: (app.settings as SlackAppSettings).clientId,
         client_secret: clientSecret,
       }),
@@ -323,6 +285,7 @@ export function createSlackRoutes(options: {
       ok?: boolean;
       error?: string;
       access_token?: string;
+      scope?: string;
       expires_in?: number;
       bot_user_id?: string;
       app_id?: string;
@@ -349,16 +312,25 @@ export function createSlackRoutes(options: {
         .send("Install the app in one workspace; the hub does not take org-wide installs.");
       return;
     }
-    const secrets: SlackWorkspaceSecrets = {
-      botToken: body.access_token,
-      ...(body.expires_in === undefined
-        ? {}
-        : { expiresAt: new Date(Date.now() + body.expires_in * 1000).toISOString() }),
-    };
+    if (body.expires_in !== undefined) {
+      response
+        .status(400)
+        .type("text")
+        .send(
+          "Slack gave a token that expires: turn off token rotation in the app's OAuth & Permissions settings, then install again.",
+        );
+      return;
+    }
     const values = {
       account: body.team.name,
-      settings: { botUserId: body.bot_user_id } satisfies SlackWorkspaceSettings,
-      secrets: encryptSecret(encryptionKey, JSON.stringify(secrets)),
+      settings: {
+        botUserId: body.bot_user_id,
+        scopes: (body.scope ?? "").split(",").filter(Boolean),
+      } satisfies SlackWorkspaceSettings,
+      secrets: encryptSecret(
+        encryptionKey,
+        JSON.stringify({ botToken: body.access_token } satisfies SlackWorkspaceSecrets),
+      ),
       failure: null,
     };
     await db
@@ -418,11 +390,11 @@ export async function issueSlackToken(
   }
   const { app, installation } = first;
   const secrets = readSecrets<SlackWorkspaceSecrets>(encryptionKey, installation.secrets ?? "");
-  const { botUserId } = installation.settings as SlackWorkspaceSettings;
+  const { botUserId, scopes } = installation.settings as SlackWorkspaceSettings;
   return {
     token: {
       token: secrets.botToken,
-      ...(secrets.expiresAt === undefined ? {} : { expiresAt: secrets.expiresAt }),
+      scopes,
       app: { appId: app.externalId, name: app.name, botUserId },
       team: installation.externalId,
     },

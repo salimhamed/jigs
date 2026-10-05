@@ -2,7 +2,7 @@ import { createHmac, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { factoryStatusPath, pagerDutyTokenPath } from "@jigs-ai/hub-protocol";
+import { factoryStatusPath, pagerDutyScopes, pagerDutyTokenPath } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
 import { afterAll, beforeAll, expect } from "vitest";
@@ -20,7 +20,6 @@ import {
   createPagerDutyRoutes,
   hasPagerDutyWebhookSecret,
   PagerDutyTokens,
-  pagerDutyScopes,
   pagerDutyWebhookPath,
   setPagerDutyWebhookSecret,
 } from "./pagerduty.ts";

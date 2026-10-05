@@ -1,7 +1,8 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHmac, timingSafeEqual } from "node:crypto";
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq, or, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
+import { appOAuth, findApp } from "./app-oauth.ts";
 import type { App } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations } from "./db/schema.ts";
@@ -43,8 +44,6 @@ export interface LinearAppInput extends LinearAppSecrets {
   name: string;
   clientId: string;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const defaultApiUrl = "https://api.linear.app";
 const authorizeUrl = "https://linear.app/oauth/authorize";
@@ -135,16 +134,6 @@ const verifySignature = (secret: string, body: Buffer, header: string | undefine
 // Linear asks receivers to refuse a webhook sent more than a minute ago, against replays.
 const MAX_WEBHOOK_AGE_MS = 60 * 1000;
 
-const STATE_COOKIE = "hub_linear_state";
-
-const readCookie = (request: Request, name: string) => {
-  for (const part of (request.get("cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
-  }
-  return undefined;
-};
-
 type Installation = typeof installations.$inferSelect;
 
 /** Linear's webhooks and the OAuth flow that connects a Linear workspace to an app. */
@@ -163,33 +152,20 @@ export function createLinearRoutes(options: {
   const apiUrl = options.apiUrl ?? defaultApiUrl;
   const router = express.Router();
 
-  const findApp = async (appId: string) =>
-    UUID.test(appId)
-      ? ((await db.query.apps.findFirst({
-          where: and(eq(apps.id, appId), eq(apps.provider, "linear")),
-        })) ?? null)
-      : null;
-
-  // The app, when the signed-in user is an admin of its Organization.
-  const adminsApp = async (request: Request) => {
-    const app = await findApp(String(request.params.appId));
-    return app && (await adminOrganization(request)) === app.organizationId ? app : null;
-  };
-
-  const callbackUrl = (app: App) => `${publicUrl.origin}${linearCallbackPath(app.id)}`;
-  const cookieOptions = (app: App) => ({
-    httpOnly: true,
-    secure: publicUrl.protocol === "https:",
-    // Lax still sends it on Linear's top-level redirect back.
-    sameSite: "lax" as const,
-    path: linearCallbackPath(app.id),
+  const oauth = appOAuth({
+    db,
+    provider: "linear",
+    label: "Linear",
+    publicUrl,
+    callbackPath: linearCallbackPath,
+    adminOrganization,
   });
 
   router.post(
     linearWebhookPath(":appId"),
     express.raw({ type: () => true, limit: "25mb" }),
     async (request, response) => {
-      const app = await findApp(String(request.params.appId));
+      const app = await findApp(db, "linear", String(request.params.appId));
       const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       if (
         !app ||
@@ -276,16 +252,12 @@ export function createLinearRoutes(options: {
   };
 
   router.get(linearConnectPath(":appId"), async (request, response) => {
-    const app = await adminsApp(request);
-    if (!app) {
-      response.status(404).type("text").send("No Linear app of yours on this hub has that id.");
-      return;
-    }
-    const state = randomBytes(32).toString("base64url");
-    response.cookie(STATE_COOKIE, state, { ...cookieOptions(app), maxAge: 10 * 60 * 1000 });
+    const app = await oauth.adminsApp(request, response);
+    if (!app) return;
+    const state = oauth.startState(response, app);
     const query = new URLSearchParams({
       client_id: app.externalId,
-      redirect_uri: callbackUrl(app),
+      redirect_uri: oauth.callbackUrl(app),
       response_type: "code",
       scope: linearScopes,
       state,
@@ -296,36 +268,14 @@ export function createLinearRoutes(options: {
   });
 
   router.get(linearCallbackPath(":appId"), async (request, response) => {
-    const app = await adminsApp(request);
-    if (!app) {
-      response.status(404).type("text").send("No Linear app of yours on this hub has that id.");
-      return;
-    }
-    const expected = readCookie(request, STATE_COOKIE);
-    response.clearCookie(STATE_COOKIE, cookieOptions(app));
-    const state = String(request.query.state ?? "");
-    if (!expected || state !== expected) {
-      response
-        .status(400)
-        .type("text")
-        .send("This answer from Linear is not for a connection you started. Start again.");
-      return;
-    }
-    if (request.query.error) {
-      response
-        .status(400)
-        .type("text")
-        .send(
-          `Linear did not connect the workspace: ${request.query.error_description ?? request.query.error}`,
-        );
-      return;
-    }
+    const app = await oauth.adminsApp(request, response);
+    if (!app || !oauth.checkCallback(request, response, app)) return;
     const { clientSecret } = readSecrets<LinearAppSecrets>(encryptionKey, app.secrets);
     const now = Date.now();
     const exchanged = await requestToken(apiUrl, {
       grant_type: "authorization_code",
       code: String(request.query.code ?? ""),
-      redirect_uri: callbackUrl(app),
+      redirect_uri: oauth.callbackUrl(app),
       client_id: app.externalId,
       client_secret: clientSecret,
     });

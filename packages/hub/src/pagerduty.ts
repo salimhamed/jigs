@@ -1,7 +1,8 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
-import type { PagerDutyTokenResponse } from "@jigs-ai/hub-protocol";
+import { type PagerDutyTokenResponse, pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
+import { findApp } from "./app-oauth.ts";
 import type { App } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations } from "./db/schema.ts";
@@ -10,14 +11,6 @@ import { decryptSecret, encryptSecret } from "./secrets.ts";
 
 /** Where PagerDuty sends one PagerDuty app's webhooks. Its payloads do not name the app, so each has its own. */
 export const pagerDutyWebhookPath = (appId: string) => `/webhooks/pagerduty/${appId}`;
-
-/** The scopes the app grants factories, besides its account. */
-export const pagerDutyScopes = [
-  "incidents.read",
-  "incidents.write",
-  "webhook_subscriptions.read",
-  "users.read",
-] as const;
 
 /** The webhook event types factories hear. */
 export const pagerDutyEventTypes = ["incident.triggered"] as const;
@@ -44,8 +37,6 @@ export interface PagerDutyAppInput {
   subdomain: string;
   region: string;
 }
-
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const defaultIdentityUrl = "https://identity.pagerduty.com";
 
@@ -200,12 +191,7 @@ export function createPagerDutyRoutes(options: {
     pagerDutyWebhookPath(":appId"),
     express.raw({ type: () => true, limit: "25mb" }),
     async (request, response) => {
-      const appId = String(request.params.appId);
-      const app = UUID.test(appId)
-        ? await db.query.apps.findFirst({
-            where: and(eq(apps.id, appId), eq(apps.provider, "pagerduty")),
-          })
-        : undefined;
+      const app = await findApp(db, "pagerduty", String(request.params.appId));
       const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
       if (
         !app ||

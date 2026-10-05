@@ -1,3 +1,4 @@
+import { pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, asc, eq } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
 import { apps, assignments, factories, installations } from "../src/db/schema.ts";
@@ -17,13 +18,12 @@ import {
   hasPagerDutyWebhookSecret,
   type PagerDutyAccountSettings,
   pagerDutyEventTypes,
-  pagerDutyScopes,
   pagerDutyWebhookPath,
 } from "../src/pagerduty.ts";
 import {
   type SlackAppSettings,
+  type SlackWorkspaceSettings,
   slackBotEvents,
-  slackBotScopes,
   slackCallbackPath,
   slackInstallPath,
   slackWebhookPath,
@@ -114,12 +114,16 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       provider: "slack" as const,
       appId: app.externalId,
       clientId: (app.settings as SlackAppSettings).clientId,
+      scopes: (app.settings as SlackAppSettings).scopes,
       installUrl: slackInstallPath(app.id),
       redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
       requestUrl: `${origin}${slackWebhookPath}`,
-      scopes: [...slackBotScopes],
       events: [...slackBotEvents],
-      workspaces: installed.map(({ externalId, account }) => ({ externalId, name: account })),
+      workspaces: installed.map(({ externalId, account, settings }) => ({
+        externalId,
+        name: account,
+        scopes: (settings as SlackWorkspaceSettings | null)?.scopes ?? [],
+      })),
     };
   }
   if (app.provider === "pagerduty") {

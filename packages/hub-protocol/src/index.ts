@@ -156,12 +156,21 @@ export interface SlackTokenRequest {
   team?: string;
 }
 
+/** The bot token scopes every factory's Slack app needs; a factory may need more. */
+export const slackBotScopes = [
+  "channels:history",
+  "groups:history",
+  "chat:write",
+  "users:read",
+  "users:read.email",
+] as const;
+
 /** The body of a {@link slackTokenPath} response. */
 export interface SlackTokenResponse {
-  /** The bot token. */
+  /** The bot token, which does not expire. */
   token: string;
-  /** When the token stops working, as an ISO 8601 timestamp; only when the app rotates its tokens. */
-  expiresAt?: string;
+  /** The bot token scopes the workspace granted. */
+  scopes: string[];
   /** The app the token acts as and the user id of its bot in the workspace. */
   app: { appId: string; name: string; botUserId: string };
   /** The workspace's id. */
@@ -175,6 +184,14 @@ export interface SlackTokenResponse {
  * when PagerDuty refuses the app's credentials.
  */
 export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
+
+/** The scopes a PagerDuty app grants a factory, besides its account. */
+export const pagerDutyScopes = [
+  "incidents.read",
+  "incidents.write",
+  "webhook_subscriptions.read",
+  "users.read",
+] as const;
 
 /** The body of a {@link pagerDutyTokenPath} response. */
 export interface PagerDutyTokenResponse {

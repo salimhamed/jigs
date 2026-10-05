@@ -71,12 +71,15 @@ export interface ReceivedProviderEvent {
   provider: Provider;
   name: string;
   payload: unknown;
+  /** The provider's own id for the event; a second event with the same key for the app is not stored or sent. */
+  dedupeKey?: string;
 }
 
 /**
  * Store a provider event once and append an `event` message for each factory
  * the app is assigned to, then wake their long polls. Returns the stored
- * event's id and the factories it was appended for.
+ * event's id and the factories it was appended for: none when the app already
+ * has an event with the same dedupe key, whose id it returns.
  */
 export async function fanOutProviderEvent(
   db: HubDatabase,
@@ -88,8 +91,21 @@ export async function fanOutProviderEvent(
     const [stored] = await tx
       .insert(providerEvents)
       .values(event)
+      .onConflictDoNothing()
       .returning({ id: providerEvents.id });
-    if (!stored) throw new Error("storing a provider event returned no row");
+    if (!stored) {
+      const [earlier] = await tx
+        .select({ id: providerEvents.id })
+        .from(providerEvents)
+        .where(
+          and(
+            eq(providerEvents.appId, event.appId),
+            eq(providerEvents.dedupeKey, event.dedupeKey ?? ""),
+          ),
+        );
+      if (!earlier) throw new Error("storing a provider event returned no row");
+      return { id: earlier.id, appendedTo: [] };
+    }
     const appended = await tx.execute<{ factory_id: string }>(sql`
       insert into ${factoryMessages} (factory_id, kind, provider_event_id)
       select ${factories.id}, 'event', ${stored.id} from ${factories}
