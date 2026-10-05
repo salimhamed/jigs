@@ -6,7 +6,16 @@ import type { App } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { decryptSecret, encryptSecret } from "./secrets.ts";
+import {
+  type Installation,
+  postForm,
+  RefreshingTokens,
+  readCookie,
+  readSecrets,
+  type TokenBody,
+  toOAuthSecrets,
+} from "./oauth.ts";
+import { encryptSecret } from "./secrets.ts";
 
 /** Where Linear sends one Linear app's webhooks. Linear's payloads do not name the app, so each has its own. */
 export const linearWebhookPath = (appId: string) => `/webhooks/linear/${appId}`;
@@ -30,12 +39,6 @@ export interface LinearWorkspaceSettings {
 interface LinearAppSecrets {
   clientSecret: string;
   webhookSecret: string;
-}
-
-interface LinearWorkspaceSecrets {
-  accessToken: string;
-  refreshToken: string;
-  expiresAt: string;
 }
 
 /** What an admin copies from a Linear OAuth app they made by hand. */
@@ -82,28 +85,6 @@ export async function addLinearApp(
   return { app };
 }
 
-const readSecrets = <T>(encryptionKey: Buffer, stored: string): T =>
-  JSON.parse(decryptSecret(encryptionKey, stored));
-
-interface TokenBody {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
-
-const toSecrets = (body: TokenBody, now: number): LinearWorkspaceSecrets => ({
-  accessToken: body.access_token,
-  refreshToken: body.refresh_token,
-  expiresAt: new Date(now + body.expires_in * 1000).toISOString(),
-});
-
-const requestToken = (apiUrl: string, form: Record<string, string>) =>
-  fetch(`${apiUrl}/oauth/token`, {
-    method: "POST",
-    headers: { "content-type": "application/x-www-form-urlencoded" },
-    body: new URLSearchParams(form),
-  });
-
 async function graphql<T>(
   apiUrl: string,
   token: string,
@@ -136,16 +117,6 @@ const verifySignature = (secret: string, body: Buffer, header: string | undefine
 const MAX_WEBHOOK_AGE_MS = 60 * 1000;
 
 const STATE_COOKIE = "hub_linear_state";
-
-const readCookie = (request: Request, name: string) => {
-  for (const part of (request.get("cookie") ?? "").split(";")) {
-    const [key, ...value] = part.trim().split("=");
-    if (key === name) return decodeURIComponent(value.join("="));
-  }
-  return undefined;
-};
-
-type Installation = typeof installations.$inferSelect;
 
 /** Linear's webhooks and the OAuth flow that connects a Linear workspace to an app. */
 export function createLinearRoutes(options: {
@@ -322,7 +293,7 @@ export function createLinearRoutes(options: {
     }
     const { clientSecret } = readSecrets<LinearAppSecrets>(encryptionKey, app.secrets);
     const now = Date.now();
-    const exchanged = await requestToken(apiUrl, {
+    const exchanged = await postForm(`${apiUrl}/oauth/token`, {
       grant_type: "authorization_code",
       code: String(request.query.code ?? ""),
       redirect_uri: callbackUrl(app),
@@ -336,7 +307,7 @@ export function createLinearRoutes(options: {
         .send(`Linear refused the code (${exchanged.status}). Start again.`);
       return;
     }
-    const secrets = toSecrets((await exchanged.json()) as TokenBody, now);
+    const secrets = toOAuthSecrets((await exchanged.json()) as TokenBody, now);
     const { viewer, organization } = await graphql<{
       viewer: { id: string };
       organization: { id: string; name: string; urlKey: string };
@@ -362,28 +333,22 @@ export type LinearTokenResult =
   | { token: LinearTokenResponse }
   | { status: 404 | 409 | 503; error: string };
 
-// A token is refreshed once it has less than this to live.
-const MIN_TOKEN_LIFE_MS = 5 * 60 * 1000;
-
 /**
  * Hands out the access tokens of connected Linear workspaces, refreshing them
  * with their refresh tokens as they near expiry.
  */
 export class LinearTokens {
-  // Linear's 30-minute grace period on a spent refresh token makes two
-  // refreshes at once harmless; one at a time just saves a call.
-  readonly #refreshing = new Map<
-    string,
-    Promise<{ token: string; expiresAt: string } | { failure: string }>
-  >();
   readonly #db: HubDatabase;
-  readonly #encryptionKey: Buffer;
-  readonly #apiUrl: string;
+  readonly #tokens: RefreshingTokens;
 
   constructor(options: { db: HubDatabase; encryptionKey: Buffer; apiUrl?: string }) {
     this.#db = options.db;
-    this.#encryptionKey = options.encryptionKey;
-    this.#apiUrl = options.apiUrl ?? defaultApiUrl;
+    this.#tokens = new RefreshingTokens({
+      db: options.db,
+      encryptionKey: options.encryptionKey,
+      provider: "Linear",
+      tokenUrl: `${options.apiUrl ?? defaultApiUrl}/oauth/token`,
+    });
   }
 
   /** The token of the one connected workspace, among the Linear apps assigned to the factory, that `organization` names. */
@@ -443,71 +408,7 @@ export class LinearTokens {
   }
 
   /** A workspace's access token, refreshed first if it is near expiry, or why there is none. */
-  async access(
-    app: App,
-    installation: Installation,
-    now = Date.now(),
-  ): Promise<{ token: string; expiresAt: string } | { failure: string }> {
-    const fresh = this.#fresh(installation, now);
-    if (fresh) return fresh;
-    let refreshing = this.#refreshing.get(installation.id);
-    if (!refreshing) {
-      refreshing = this.#refresh(app, installation.id, now).finally(() =>
-        this.#refreshing.delete(installation.id),
-      );
-      this.#refreshing.set(installation.id, refreshing);
-    }
-    return refreshing;
-  }
-
-  #fresh(installation: Installation, now: number) {
-    if (installation.failure !== null) return { failure: installation.failure };
-    if (installation.secrets === null) return { failure: "The workspace has no tokens." };
-    const secrets = readSecrets<LinearWorkspaceSecrets>(this.#encryptionKey, installation.secrets);
-    return Date.parse(secrets.expiresAt) - now > MIN_TOKEN_LIFE_MS
-      ? { token: secrets.accessToken, expiresAt: secrets.expiresAt }
-      : null;
-  }
-
-  async #refresh(app: App, installationId: string, now: number) {
-    // Re-read: a refresh that finished since the caller read the row left a fresh token.
-    const installation = await this.#db.query.installations.findFirst({
-      where: eq(installations.id, installationId),
-    });
-    if (!installation) return { failure: "The workspace is no longer connected." };
-    const fresh = this.#fresh(installation, now);
-    if (fresh) return fresh;
-    const { refreshToken } = readSecrets<LinearWorkspaceSecrets>(
-      this.#encryptionKey,
-      installation.secrets ?? "",
-    );
-    const { clientSecret } = readSecrets<LinearAppSecrets>(this.#encryptionKey, app.secrets);
-    // A reconnect while the refresh was out replaced these secrets; leave its row alone.
-    const unchanged = and(
-      eq(installations.id, installationId),
-      eq(installations.secrets, installation.secrets ?? ""),
-    );
-    const response = await requestToken(this.#apiUrl, {
-      grant_type: "refresh_token",
-      refresh_token: refreshToken,
-      client_id: app.externalId,
-      client_secret: clientSecret,
-    });
-    if (response.status === 400 || response.status === 401) {
-      const failure = `Linear refused to refresh the token (${response.status}).`;
-      await this.#db.update(installations).set({ failure }).where(unchanged);
-      return { failure };
-    }
-    if (!response.ok) {
-      throw new Error(
-        `Linear answered ${response.status} refreshing ${app.name}'s token for ${installation.account}`,
-      );
-    }
-    const secrets = toSecrets((await response.json()) as TokenBody, now);
-    await this.#db
-      .update(installations)
-      .set({ secrets: encryptSecret(this.#encryptionKey, JSON.stringify(secrets)) })
-      .where(unchanged);
-    return { token: secrets.accessToken, expiresAt: secrets.expiresAt };
+  access(app: App, installation: Installation, now = Date.now()) {
+    return this.#tokens.access(app, installation, now);
   }
 }

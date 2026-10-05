@@ -139,3 +139,46 @@ export interface LinearTokenResponse {
   /** The app the token acts as, and the id of the user Linear made for it in that workspace. */
   app: { name: string; userId: string };
 }
+
+/**
+ * `POST` a {@link SlackTokenRequest} for a {@link SlackTokenResponse}: the bot
+ * token of a Slack workspace where a Slack app assigned to the factory is
+ * installed. The hub answers 404 when there is no such installation and 409
+ * when the request matches more than one.
+ */
+export const slackTokenPath = "/api/factory/tokens/slack";
+
+/** The body of a {@link slackTokenPath} request. Both fields are on every Slack event; either may be left out when only one installation matches. */
+export interface SlackTokenRequest {
+  /** The Slack app's id, an event's `api_app_id`. */
+  appId?: string;
+  /** The workspace's id, an event's `team_id`. */
+  team?: string;
+}
+
+/** The body of a {@link slackTokenPath} response. */
+export interface SlackTokenResponse {
+  /** The bot token. */
+  token: string;
+  /** When the token stops working, as an ISO 8601 timestamp; only when the app rotates its tokens. */
+  expiresAt?: string;
+  /** The app the token acts as and the user id of its bot in the workspace. */
+  app: { appId: string; name: string; botUserId: string };
+  /** The workspace's id. */
+  team: string;
+}
+
+/**
+ * `POST` an empty object for a {@link PagerDutyTokenResponse}: the access
+ * token of the PagerDuty account connected to the one PagerDuty app assigned
+ * to the factory. The hub answers 404 when none is, 409 when several are, and
+ * 503 when the account must be connected again on the hub.
+ */
+export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
+
+/** The body of a {@link pagerDutyTokenPath} response. */
+export interface PagerDutyTokenResponse {
+  token: string;
+  /** When the token stops working, as an ISO 8601 timestamp. */
+  expiresAt: string;
+}

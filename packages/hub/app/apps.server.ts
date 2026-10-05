@@ -13,6 +13,23 @@ import {
   linearConnectPath,
   linearWebhookPath,
 } from "../src/linear.ts";
+import {
+  hasPagerDutyWebhookSecret,
+  type PagerDutyAccountSettings,
+  pagerDutyCallbackPath,
+  pagerDutyConnectPath,
+  pagerDutyEventTypes,
+  pagerDutyScopes,
+  pagerDutyWebhookPath,
+} from "../src/pagerduty.ts";
+import {
+  type SlackAppSettings,
+  slackBotEvents,
+  slackBotScopes,
+  slackCallbackPath,
+  slackInstallPath,
+  slackWebhookPath,
+} from "../src/slack.ts";
 
 /** An Organization's apps, each with its installations and assigned factories. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
@@ -90,6 +107,40 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         urlKey: workspace.account,
         name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
         failure: workspace.failure,
+      })),
+    };
+  }
+  if (app.provider === "slack") {
+    return {
+      ...common,
+      provider: "slack" as const,
+      appId: app.externalId,
+      clientId: (app.settings as SlackAppSettings).clientId,
+      installUrl: slackInstallPath(app.id),
+      redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
+      requestUrl: `${origin}${slackWebhookPath}`,
+      scopes: [...slackBotScopes],
+      events: [...slackBotEvents],
+      workspaces: installed.map(({ externalId, account }) => ({ externalId, name: account })),
+    };
+  }
+  if (app.provider === "pagerduty") {
+    return {
+      ...common,
+      provider: "pagerduty" as const,
+      clientId: app.externalId,
+      connectUrl: pagerDutyConnectPath(app.id),
+      webhookSecretSet: hasPagerDutyWebhookSecret(context.config.encryptionKey, app),
+      redirectUrl: `${origin}${pagerDutyCallbackPath(app.id)}`,
+      webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
+      // openid is asked for at connect, not granted on the app.
+      scopes: pagerDutyScopes.filter((scope) => scope !== "openid"),
+      eventTypes: [...pagerDutyEventTypes],
+      accounts: installed.map((account) => ({
+        externalId: account.externalId,
+        subdomain: account.account,
+        region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
+        failure: account.failure,
       })),
     };
   }

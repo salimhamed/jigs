@@ -27,6 +27,7 @@ import {
   linearWebhookPath,
 } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
+import { PagerDutyTokens } from "./pagerduty.ts";
 
 const encryptionKey = randomBytes(32);
 const organizationId = "acme";
@@ -168,6 +169,8 @@ beforeAll(async () => {
           waiters,
           githubTokens: new GitHubTokens({ db, encryptionKey }),
           linearTokens,
+          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
+          encryptionKey,
         }),
       ),
   );

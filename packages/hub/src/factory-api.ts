@@ -10,6 +10,9 @@ import {
   type MessagesResponse,
   maxWaitSeconds,
   messagesPath,
+  pagerDutyTokenPath,
+  type SlackTokenRequest,
+  slackTokenPath,
 } from "@jigs-ai/hub-protocol";
 import { asc, eq } from "drizzle-orm";
 import express, { type Request, type Response, type Router } from "express";
@@ -19,6 +22,8 @@ import { authenticateFactory, type Factory } from "./factories.ts";
 import type { GitHubTokens } from "./github.ts";
 import type { LinearTokens } from "./linear.ts";
 import { confirmCursor, type MessageWaiters, readMessages } from "./messages.ts";
+import type { PagerDutyTokens } from "./pagerduty.ts";
+import { issueSlackToken } from "./slack.ts";
 
 const MAX_POSITION = 2n ** 63n - 1n;
 
@@ -28,8 +33,10 @@ export function createFactoryApi(options: {
   waiters: MessageWaiters;
   githubTokens: GitHubTokens;
   linearTokens: LinearTokens;
+  pagerDutyTokens: PagerDutyTokens;
+  encryptionKey: Buffer;
 }): Router {
-  const { db, waiters, githubTokens, linearTokens } = options;
+  const { db, waiters, githubTokens, linearTokens, pagerDutyTokens, encryptionKey } = options;
   const router = express.Router();
 
   // The factory the request's token belongs to, or `null` once it has answered 401.
@@ -108,6 +115,38 @@ export function createFactoryApi(options: {
       return;
     }
     const issued = await linearTokens.issue(factory.id, organization);
+    if ("error" in issued) {
+      response.status(issued.status).json({ error: issued.error });
+      return;
+    }
+    response.json(issued.token);
+  });
+
+  router.post(slackTokenPath, express.json(), async (request, response) => {
+    const factory = await authenticate(request, response);
+    if (!factory) return;
+    const { appId, team } = (request.body ?? {}) as Partial<SlackTokenRequest>;
+    for (const [field, value] of [
+      ["appId", appId],
+      ["team", team],
+    ] as const) {
+      if (value !== undefined && (typeof value !== "string" || value === "")) {
+        response.status(400).json({ error: `${field} must be a Slack id.` });
+        return;
+      }
+    }
+    const issued = await issueSlackToken(db, encryptionKey, factory.id, { appId, team });
+    if ("error" in issued) {
+      response.status(issued.status).json({ error: issued.error });
+      return;
+    }
+    response.json(issued.token);
+  });
+
+  router.post(pagerDutyTokenPath, async (request, response) => {
+    const factory = await authenticate(request, response);
+    if (!factory) return;
+    const issued = await pagerDutyTokens.issue(factory.id);
     if ("error" in issued) {
       response.status(issued.status).json({ error: issued.error });
       return;
