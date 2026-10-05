@@ -53,6 +53,8 @@ const refreshTokens = new Map<string, { clientId: string; workspace: Workspace }
 const activities: { token: string; input: unknown }[] = [];
 let issued = 0;
 let refreshes = 0;
+// Runs once, while the next refresh is out at Linear.
+let beforeRefresh: (() => Promise<void>) | null = null;
 const clientSecrets = new Map<string, string>();
 
 async function listen(app: express.Express) {
@@ -78,7 +80,7 @@ function fakeLinear() {
     };
   };
   return express()
-    .post("/oauth/token", express.urlencoded(), (request, response) => {
+    .post("/oauth/token", express.urlencoded(), async (request, response) => {
       const form = request.body as Record<string, string>;
       if (clientSecrets.get(form.client_id ?? "") !== form.client_secret) {
         response.status(401).json({ error: "invalid_client" });
@@ -99,6 +101,9 @@ function fakeLinear() {
         response.json(tokens(granted.clientId, granted.workspace));
         return;
       }
+      const hook = beforeRefresh;
+      beforeRefresh = null;
+      await hook?.();
       const granted = refreshTokens.get(form.refresh_token ?? "");
       refreshTokens.delete(form.refresh_token ?? "");
       if (form.grant_type !== "refresh_token" || !granted || granted.clientId !== form.client_id) {
@@ -462,21 +467,14 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
   ]);
 });
 
-dbTest("marks a workspace that revoked the app as needing a reconnect", async () => {
+dbTest("leaves a new agent session to Linear when no factory hears of it", async () => {
   const linear = await newApp();
   const workspace = newWorkspace();
   await connect(linear.app, workspace);
-  const revoked = {
-    type: "OAuthApp",
-    action: "revoked",
-    createdAt: new Date().toISOString(),
-    organizationId: workspace.id,
-    oauthClientId: linear.app.externalId,
-    webhookId: "webhook-3",
-    webhookTimestamp: Date.now(),
-  };
-  expect(await deliver(linear, revoked)).toBe(200);
-  expect((await installationOf(linear.app, workspace))?.failure).toMatch(/revoked/);
+  const before = activities.length;
+  expect(await deliver(linear, sessionCreated(workspace, crypto.randomUUID()))).toBe(200);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(activities.length).toBe(before);
 });
 
 dbTest("issues the assigned app's workspace token by id or URL key, or the only one", async () => {
@@ -579,6 +577,15 @@ dbTest("refreshes a token near expiry once, and stops on a refused refresh", asy
   expect(issued).toBe(issuedBefore);
 
   await connect(linear.app, workspace);
+  const reconnected = await linearTokens.issue(factory.id, undefined);
+  if (!("token" in reconnected)) throw new Error(reconnected.error);
+
+  // A reconnect that lands while a refused refresh is out keeps its own tokens.
+  refreshTokens.clear();
+  beforeRefresh = () => connect(linear.app, workspace);
+  const racing = Date.parse(reconnected.token.expiresAt) - 60 * 1000;
+  expect(await linearTokens.issue(factory.id, undefined, racing)).toMatchObject({ status: 503 });
+  expect((await installationOf(linear.app, workspace))?.failure).toBeNull();
   expect("token" in (await linearTokens.issue(factory.id, undefined))).toBe(true);
 });
 

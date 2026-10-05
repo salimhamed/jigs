@@ -110,13 +110,15 @@ async function appFor(factoryIds: string[], organization = organizationId) {
 }
 
 const send = async (factoryIds: string[], name = "issues") =>
-  fanOutProviderEvent(db, waiters, {
-    organizationId,
-    appId: await appFor(factoryIds),
-    provider: "github",
-    name,
-    payload: { action: name },
-  });
+  (
+    await fanOutProviderEvent(db, waiters, {
+      organizationId,
+      appId: await appFor(factoryIds),
+      provider: "github",
+      name,
+      payload: { action: name },
+    })
+  ).id;
 
 async function until(condition: () => boolean) {
   const deadline = Date.now() + 5000;

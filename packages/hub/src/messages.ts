@@ -76,13 +76,13 @@ export interface ReceivedProviderEvent {
 /**
  * Store a provider event once and append an `event` message for each factory
  * the app is assigned to, then wake their long polls. Returns the stored
- * event's id.
+ * event's id and the factories it was appended for.
  */
 export async function fanOutProviderEvent(
   db: HubDatabase,
   waiters: MessageWaiters,
   event: ReceivedProviderEvent,
-): Promise<string> {
+): Promise<{ id: string; appendedTo: string[] }> {
   const { id, appendedTo } = await db.transaction(async (tx) => {
     await lockAppends(tx);
     const [stored] = await tx
@@ -101,7 +101,7 @@ export async function fanOutProviderEvent(
     return { id: stored.id, appendedTo: appended.rows.map((row) => row.factory_id) };
   });
   waiters.wake(appendedTo);
-  return id;
+  return { id, appendedTo };
 }
 
 /** The oldest messages after the factory's confirmed cursor, at most one response's worth. */

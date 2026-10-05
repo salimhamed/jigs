@@ -230,26 +230,25 @@ export function createLinearRoutes(options: {
         response.status(202).end();
         return;
       }
-      if (name === "OAuthApp" && payload.action === "revoked") {
-        await db
-          .update(installations)
-          .set({ failure: "Linear says the app was revoked from this workspace." })
-          .where(eq(installations.id, installation.id));
-      }
-      const sessionId = payload.agentSession?.id;
-      if (name === "AgentSessionEvent" && payload.action === "created" && sessionId) {
-        // Linear marks a session unresponsive unless an activity follows within ten
-        // seconds, longer than a factory may take to hear of it.
-        // https://linear.app/developers/agent-interaction
-        void acknowledge(app, installation, sessionId);
-      }
-      await fanOutProviderEvent(db, waiters, {
+      const { appendedTo } = await fanOutProviderEvent(db, waiters, {
         organizationId: app.organizationId,
         appId: app.id,
         provider: "linear",
         name,
         payload,
       });
+      const sessionId = payload.agentSession?.id;
+      if (
+        name === "AgentSessionEvent" &&
+        payload.action === "created" &&
+        sessionId &&
+        appendedTo.length > 0
+      ) {
+        // Linear marks a session unresponsive unless an activity follows within ten
+        // seconds, longer than a factory may take to hear of it.
+        // https://linear.app/developers/agent-interaction
+        void acknowledge(app, installation, sessionId);
+      }
       response.status(200).end();
     },
   );
@@ -371,9 +370,8 @@ const MIN_TOKEN_LIFE_MS = 5 * 60 * 1000;
  * with their refresh tokens as they near expiry.
  */
 export class LinearTokens {
-  // Linear rotates the refresh token on every refresh, so two at once would
-  // spend the same one; the hub is one process, so one refresh at a time is
-  // kept in memory.
+  // Linear's 30-minute grace period on a spent refresh token makes two
+  // refreshes at once harmless; one at a time just saves a call.
   readonly #refreshing = new Map<
     string,
     Promise<{ token: string; expiresAt: string } | { failure: string }>
@@ -472,7 +470,7 @@ export class LinearTokens {
   }
 
   async #refresh(app: App, installationId: string, now: number) {
-    // Re-read: a refresh that finished since the caller read the row spent its refresh token.
+    // Re-read: a refresh that finished since the caller read the row left a fresh token.
     const installation = await this.#db.query.installations.findFirst({
       where: eq(installations.id, installationId),
     });
@@ -484,6 +482,11 @@ export class LinearTokens {
       installation.secrets ?? "",
     );
     const { clientSecret } = readSecrets<LinearAppSecrets>(this.#encryptionKey, app.secrets);
+    // A reconnect while the refresh was out replaced these secrets; leave its row alone.
+    const unchanged = and(
+      eq(installations.id, installationId),
+      eq(installations.secrets, installation.secrets ?? ""),
+    );
     const response = await requestToken(this.#apiUrl, {
       grant_type: "refresh_token",
       refresh_token: refreshToken,
@@ -492,10 +495,7 @@ export class LinearTokens {
     });
     if (response.status === 400 || response.status === 401) {
       const failure = `Linear refused to refresh the token (${response.status}).`;
-      await this.#db
-        .update(installations)
-        .set({ failure })
-        .where(eq(installations.id, installationId));
+      await this.#db.update(installations).set({ failure }).where(unchanged);
       return { failure };
     }
     if (!response.ok) {
@@ -507,7 +507,7 @@ export class LinearTokens {
     await this.#db
       .update(installations)
       .set({ secrets: encryptSecret(this.#encryptionKey, JSON.stringify(secrets)) })
-      .where(eq(installations.id, installationId));
+      .where(unchanged);
     return { token: secrets.accessToken, expiresAt: secrets.expiresAt };
   }
 }
