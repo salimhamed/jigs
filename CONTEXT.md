@@ -230,6 +230,11 @@ Linear OAuth app, a Slack bot or a PagerDuty connection. A provider can have
 several.
 _Avoid_: integration, connection or bot (for the general term)
 
+**Installation**: Where an app is installed or connected: a GitHub account, a
+Linear workspace, a Slack workspace or a PagerDuty account. Tokens are for one
+installation.
+_Avoid_: workspace, connection (for the general term)
+
 **Assignment**: An app allowed to a factory. A factory receives provider events
 from, and gets tokens for, only its assigned apps.
 _Avoid_: subscription, grant
@@ -237,3 +242,17 @@ _Avoid_: subscription, grant
 **Provider event**: One notification a provider sent through an app, kept as
 received. In a factory it becomes a wake, an occurrence, or nothing.
 _Avoid_: webhook (for the general term), delivery, message
+
+**Message**: One entry in a factory's ordered list on the hub, which the
+factory confirms in order. Its kind is `event`, carrying a provider event, or
+`fellBehind`, telling the factory the hub dropped events it never confirmed,
+so every waiting run re-reads its provider.
+_Avoid_: delivery, notification
+
+**Event log**: A factory's messages as the hub keeps them, confirmed or not,
+until the retention expires.
+_Avoid_: queue, inbox
+
+**Factory token**: The secret a factory proves itself to its hub with, shown
+once when the factory is added.
+_Avoid_: API key, hub key
