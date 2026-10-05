@@ -222,18 +222,24 @@ export const assignments = pgTable(
 );
 
 /** One provider event as received, stored once however many factories get it. */
-export const providerEvents = pgTable("provider_events", {
-  id: uuid("id").primaryKey().defaultRandom(),
-  organizationId: text("organization_id")
-    .notNull()
-    .references(() => organization.id, { onDelete: "cascade" }),
-  /** The app it came through; `null` once that app is removed. */
-  appId: uuid("app_id").references(() => apps.id, { onDelete: "set null" }),
-  provider: text("provider").$type<Provider>().notNull(),
-  name: text("name").notNull(),
-  receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
-  payload: jsonb("payload").notNull(),
-});
+export const providerEvents = pgTable(
+  "provider_events",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organization.id, { onDelete: "cascade" }),
+    /** The app it came through; `null` once that app is removed. */
+    appId: uuid("app_id").references(() => apps.id, { onDelete: "set null" }),
+    provider: text("provider").$type<Provider>().notNull(),
+    name: text("name").notNull(),
+    receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),
+    payload: jsonb("payload").notNull(),
+    /** The provider's own id for the event, where it may send one event twice, such as Slack's `event_id`. */
+    dedupeKey: text("dedupe_key"),
+  },
+  (table) => [unique("provider_events_app_dedupe_key").on(table.appId, table.dedupeKey)],
+);
 
 /** Every factory's messages, ordered by one sequence across all factories. */
 export const factoryMessages = pgTable(

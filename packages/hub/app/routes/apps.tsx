@@ -1,6 +1,8 @@
 import { Form, Link, redirect } from "react-router";
 import { addGitHubApp } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
+import { addPagerDutyApp } from "../../src/pagerduty.ts";
+import { addSlackApp } from "../../src/slack.ts";
 import { listApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -18,15 +20,33 @@ export async function action({ context, request }: Route.ActionArgs) {
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "").trim();
   const { db, config } = context;
-  const added =
-    form.get("provider") === "linear"
-      ? await addLinearApp(db, config.encryptionKey, organizationId, {
+  const added = await (() => {
+    switch (form.get("provider")) {
+      case "linear":
+        return addLinearApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
           clientId: field("clientId"),
           clientSecret: field("clientSecret"),
           webhookSecret: field("webhookSecret"),
-        })
-      : await addGitHubApp(db, config.encryptionKey, organizationId, {
+        });
+      case "slack":
+        return addSlackApp(db, config.encryptionKey, organizationId, {
+          name: field("name"),
+          appId: field("appId"),
+          clientId: field("clientId"),
+          clientSecret: field("clientSecret"),
+          signingSecret: field("signingSecret"),
+        });
+      case "pagerduty":
+        return addPagerDutyApp(db, config.encryptionKey, organizationId, {
+          name: field("name"),
+          clientId: field("clientId"),
+          clientSecret: field("clientSecret"),
+          subdomain: field("subdomain"),
+          region: field("region"),
+        });
+      default:
+        return addGitHubApp(db, config.encryptionKey, organizationId, {
           appId: field("appId"),
           slug: field("slug"),
           clientId: field("clientId"),
@@ -34,6 +54,8 @@ export async function action({ context, request }: Route.ActionArgs) {
           webhookSecret: field("webhookSecret"),
           privateKey: field("privateKey"),
         });
+    }
+  })();
   if ("error" in added) return added;
   return redirect(`/apps/${added.app.id}`);
 }
@@ -53,6 +75,21 @@ const linearFields: Field[] = [
   { name: "clientId", label: "Client ID" },
   { name: "clientSecret", label: "Client secret", secret: true },
   { name: "webhookSecret", label: "Webhook signing secret", secret: true },
+];
+
+const slackFields: Field[] = [
+  { name: "name", label: "Name, as the app is called in Slack" },
+  { name: "appId", label: "App ID" },
+  { name: "clientId", label: "Client ID" },
+  { name: "clientSecret", label: "Client secret", secret: true },
+  { name: "signingSecret", label: "Signing secret", secret: true },
+];
+
+const pagerDutyFields: Field[] = [
+  { name: "name", label: "Name, as the app is called in PagerDuty" },
+  { name: "clientId", label: "Client ID" },
+  { name: "clientSecret", label: "Client secret", secret: true },
+  { name: "subdomain", label: "Account subdomain, as in <subdomain>.pagerduty.com" },
 ];
 
 function Fields({ fields }: { fields: Field[] }) {
@@ -131,6 +168,44 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
           <Fields fields={linearFields} />
           <button type="submit" className={button}>
             Add Linear app
+          </button>
+        </Form>
+      )}
+      {loaderData.isAdmin && (
+        <Form method="post" className="max-w-xl space-y-3">
+          <input type="hidden" name="provider" value="slack" />
+          <h2 className="text-lg font-semibold">Add a Slack app</h2>
+          <p className="text-sm text-zinc-500">
+            Create an app at api.slack.com/apps first, from scratch, then copy its details from
+            Basic Information here. Its page on the hub then shows what to set in Slack and installs
+            it in workspaces.
+          </p>
+          <Fields fields={slackFields} />
+          <button type="submit" className={button}>
+            Add Slack app
+          </button>
+        </Form>
+      )}
+      {loaderData.isAdmin && (
+        <Form method="post" className="max-w-xl space-y-3">
+          <input type="hidden" name="provider" value="pagerduty" />
+          <h2 className="text-lg font-semibold">Add a PagerDuty connection</h2>
+          <p className="text-sm text-zinc-500">
+            Create an app in PagerDuty first, under Integrations, App Registration, with Scoped
+            OAuth and the scopes its page on the hub lists, then copy its details here. The hub
+            checks them by getting a token. The connection's page then shows the webhook to add in
+            PagerDuty and takes its signing secret.
+          </p>
+          <Fields fields={pagerDutyFields} />
+          <label className="flex flex-col gap-1 text-sm">
+            Region
+            <select name="region" defaultValue="us" className={input}>
+              <option value="us">US</option>
+              <option value="eu">EU</option>
+            </select>
+          </label>
+          <button type="submit" className={button}>
+            Add PagerDuty connection
           </button>
         </Form>
       )}

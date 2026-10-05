@@ -23,6 +23,7 @@ import { createFactoryApi } from "./factory-api.ts";
 import { GitHubTokens } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { fanOutProviderEvent, MessageWaiters } from "./messages.ts";
+import { PagerDutyTokens } from "./pagerduty.ts";
 import { deleteExpiredMessages } from "./retention.ts";
 
 let database: Awaited<ReturnType<typeof createTestDatabase>>;
@@ -44,7 +45,16 @@ beforeAll(async () => {
   const githubTokens = new GitHubTokens({ db, encryptionKey });
   const linearTokens = new LinearTokens({ db, encryptionKey });
   server = express()
-    .use(createFactoryApi({ db, waiters, githubTokens, linearTokens }))
+    .use(
+      createFactoryApi({
+        db,
+        waiters,
+        githubTokens,
+        linearTokens,
+        pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
+        encryptionKey,
+      }),
+    )
     .listen(0, "127.0.0.1");
   await once(server, "listening");
   url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;

@@ -23,6 +23,7 @@ import {
 } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
+import { PagerDutyTokens } from "./pagerduty.ts";
 
 const encryptionKey = randomBytes(32);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
@@ -142,6 +143,8 @@ beforeAll(async () => {
           waiters,
           githubTokens,
           linearTokens: new LinearTokens({ db, encryptionKey }),
+          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
+          encryptionKey,
         }),
       ),
   );

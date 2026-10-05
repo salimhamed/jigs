@@ -1,3 +1,4 @@
+import { pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, asc, eq } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
 import { apps, assignments, factories, installations } from "../src/db/schema.ts";
@@ -13,6 +14,20 @@ import {
   linearConnectPath,
   linearWebhookPath,
 } from "../src/linear.ts";
+import {
+  hasPagerDutyWebhookSecret,
+  type PagerDutyAccountSettings,
+  pagerDutyEventTypes,
+  pagerDutyWebhookPath,
+} from "../src/pagerduty.ts";
+import {
+  type SlackAppSettings,
+  type SlackWorkspaceSettings,
+  slackBotEvents,
+  slackCallbackPath,
+  slackInstallPath,
+  slackWebhookPath,
+} from "../src/slack.ts";
 
 /** An Organization's apps, each with its installations and assigned factories. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
@@ -90,6 +105,40 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         urlKey: workspace.account,
         name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
         failure: workspace.failure,
+      })),
+    };
+  }
+  if (app.provider === "slack") {
+    return {
+      ...common,
+      provider: "slack" as const,
+      appId: app.externalId,
+      clientId: (app.settings as SlackAppSettings).clientId,
+      scopes: (app.settings as SlackAppSettings).scopes,
+      installUrl: slackInstallPath(app.id),
+      redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
+      requestUrl: `${origin}${slackWebhookPath}`,
+      events: [...slackBotEvents],
+      workspaces: installed.map(({ externalId, account, settings }) => ({
+        externalId,
+        name: account,
+        scopes: (settings as SlackWorkspaceSettings | null)?.scopes ?? [],
+      })),
+    };
+  }
+  if (app.provider === "pagerduty") {
+    return {
+      ...common,
+      provider: "pagerduty" as const,
+      clientId: app.externalId,
+      webhookSecretSet: hasPagerDutyWebhookSecret(context.config.encryptionKey, app),
+      webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
+      scopes: [...pagerDutyScopes],
+      eventTypes: [...pagerDutyEventTypes],
+      accounts: installed.map((account) => ({
+        externalId: account.externalId,
+        subdomain: account.account,
+        region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
       })),
     };
   }

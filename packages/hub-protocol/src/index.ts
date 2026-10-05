@@ -139,3 +139,63 @@ export interface LinearTokenResponse {
   /** The app the token acts as, and the id of the user Linear made for it in that workspace. */
   app: { name: string; userId: string };
 }
+
+/**
+ * `POST` a {@link SlackTokenRequest} for a {@link SlackTokenResponse}: the bot
+ * token of a Slack workspace where a Slack app assigned to the factory is
+ * installed. The hub answers 404 when there is no such installation and 409
+ * when the request matches more than one.
+ */
+export const slackTokenPath = "/api/factory/tokens/slack";
+
+/** The body of a {@link slackTokenPath} request. Both fields are on every Slack event; either may be left out when only one installation matches. */
+export interface SlackTokenRequest {
+  /** The Slack app's id, an event's `api_app_id`. */
+  appId?: string;
+  /** The workspace's id, an event's `team_id`. */
+  team?: string;
+}
+
+/** The bot token scopes every factory's Slack app needs; a factory may need more. */
+export const slackBotScopes = [
+  "channels:history",
+  "groups:history",
+  "chat:write",
+  "users:read",
+  "users:read.email",
+] as const;
+
+/** The body of a {@link slackTokenPath} response. */
+export interface SlackTokenResponse {
+  /** The bot token, which does not expire. */
+  token: string;
+  /** The bot token scopes the workspace granted. */
+  scopes: string[];
+  /** The app the token acts as and the user id of its bot in the workspace. */
+  app: { appId: string; name: string; botUserId: string };
+  /** The workspace's id. */
+  team: string;
+}
+
+/**
+ * `POST` an empty object for a {@link PagerDutyTokenResponse}: a fresh token
+ * of the one PagerDuty app assigned to the factory, acting as the app in its
+ * account. The hub answers 404 when none is, 409 when several are, and 503
+ * when PagerDuty refuses the app's credentials.
+ */
+export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
+
+/** The scopes a PagerDuty app grants a factory, besides its account. */
+export const pagerDutyScopes = [
+  "incidents.read",
+  "incidents.write",
+  "webhook_subscriptions.read",
+  "users.read",
+] as const;
+
+/** The body of a {@link pagerDutyTokenPath} response. */
+export interface PagerDutyTokenResponse {
+  token: string;
+  /** When the token stops working, as an ISO 8601 timestamp. */
+  expiresAt: string;
+}
