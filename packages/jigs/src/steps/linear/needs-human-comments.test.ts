@@ -6,39 +6,47 @@ import { inTestFactory } from "../../test-fixtures.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
-const { createComment, findComment, findUserByEmail, getIssueParticipants, listCommentsSince } =
-  vi.hoisted(() => ({
-    findComment: vi.fn(async (_id: string) => null as { id: string; createdAt: string } | null),
-    findUserByEmail: vi.fn(
-      async (_email: string): Promise<{ id: string; name: string } | null> => null,
-    ),
-    createComment: vi.fn(async (_issueId: string, _body: string, _id?: string) => ({
-      id: "comment-1",
-      createdAt: "2026-08-31T12:00:00.000Z",
-    })),
-    listCommentsSince: vi.fn(
-      async (_issueId: string, _sinceIso: string) =>
-        [] as Array<{
-          id: string;
-          body: string;
-          createdAt: string;
-          user: { id: string; name: string } | null;
-        }>,
-    ),
-    getIssueParticipants: vi.fn(async () => ({
-      creator: { id: "user-1", name: "Salim" } as {
+const {
+  appUser,
+  createComment,
+  findComment,
+  findUserByEmail,
+  getIssueParticipants,
+  listCommentsSince,
+} = vi.hoisted(() => ({
+  appUser: vi.fn(async () => ({ id: "app-user", name: "jigs" })),
+  findComment: vi.fn(async (_id: string) => null as { id: string; createdAt: string } | null),
+  findUserByEmail: vi.fn(
+    async (_email: string): Promise<{ id: string; name: string } | null> => null,
+  ),
+  createComment: vi.fn(async (_issueId: string, _body: string, _id?: string) => ({
+    id: "comment-1",
+    createdAt: "2026-08-31T12:00:00.000Z",
+  })),
+  listCommentsSince: vi.fn(
+    async (_issueId: string, _sinceIso: string) =>
+      [] as Array<{
         id: string;
-        name: string;
-      } | null,
-      assignee: { id: "user-2", name: "Dana" } as {
-        id: string;
-        name: string;
-      } | null,
-    })),
-  }));
+        body: string;
+        createdAt: string;
+        user: { id: string; name: string } | null;
+      }>,
+  ),
+  getIssueParticipants: vi.fn(async () => ({
+    creator: { id: "user-1", name: "Salim" } as {
+      id: string;
+      name: string;
+    } | null,
+    assignee: { id: "user-2", name: "Dana" } as {
+      id: string;
+      name: string;
+    } | null,
+  })),
+}));
 
 vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
+  appUser,
   createComment,
   findComment,
   findUserByEmail,
@@ -55,8 +63,13 @@ const context = {
   stepId: "step_01",
 };
 
-const definition: Pick<FactoryDefinition, "linear"> = {};
-const operator = (email: string): Pick<FactoryDefinition, "linear"> => ({
+const definition: FactoryDefinition = {
+  hub: { url: "https://hub.example.test" },
+  service: { dashboardPort: 9090 },
+  workflows: {},
+};
+const operator = (email: string): FactoryDefinition => ({
+  ...definition,
   linear: { operator: email },
 });
 
@@ -500,5 +513,16 @@ test("a reply check skips every comment the run posted and moves the cursor past
   expect(await checkForTicketHumanReply("issue-1", "2026-08-31T12:03:00.000Z", ["note"])).toEqual({
     reply: null,
     cursor: "2026-08-31T12:04:00.000Z",
+  });
+});
+
+test("a reply check skips every comment the factory's app wrote, from any run", async () => {
+  const app = { id: "app-user", name: "jigs" };
+  listCommentsSince.mockResolvedValueOnce([
+    { id: "other-run", body: "jigs halt", createdAt: "2026-08-31T12:01:00.000Z", user: app },
+  ]);
+  expect(await checkForTicketHumanReply("issue-1", "2026-08-31T12:00:00.000Z", [])).toEqual({
+    reply: null,
+    cursor: "2026-08-31T12:01:00.000Z",
   });
 });

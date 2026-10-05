@@ -22,7 +22,7 @@ import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { pushEvent } from "./event-triggers/runner.ts";
 import { triggerStore } from "./event-triggers/store.ts";
 import { listTriggers, triggerChecks, triggerProviders } from "./event-triggers/view.ts";
-import { verifyLinearSignature, verifyPagerDutySignature } from "./ingress.ts";
+import { verifyPagerDutySignature } from "./ingress.ts";
 import { startRun } from "./launch.ts";
 import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { type ProviderEvent, type RouteResult, routeProviderEvent } from "./provider-events.ts";
@@ -170,7 +170,6 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // tables or persisted deliveries. Wakes are hints; consumers re-check the
   // provider. A provider whose webhooks are off has no route at all, so a
   // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.linear?.enabled) mountLinearIngress(app, routes);
   if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app, routes);
 
   // Manual wake on the same code path as the ingress: resume every token the
@@ -318,22 +317,6 @@ interface IngressDeps {
   context: () => FactoryContext;
   world: AppDeps["world"];
   push: typeof pushEvent;
-}
-
-function mountLinearIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/linear", async (c) => {
-    const secret = webhookSecret("linear", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("linear-signature");
-    if (secret === undefined || !verifyLinearSignature(rawBody, signature, secret)) {
-      console.log("[ingress] linear rejected reason=signature");
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    const type = (payload as { type?: unknown } | null)?.type;
-    const name = typeof type === "string" ? type : "";
-    return answer(c, await route(deps, { provider: "linear", name, payload }));
-  });
 }
 
 // An event no trigger takes, of any type, is acknowledged.

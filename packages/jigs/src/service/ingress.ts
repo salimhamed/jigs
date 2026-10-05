@@ -12,16 +12,6 @@ function hmacMatches(rawBody: string, signatureHex: string, secret: string) {
   return given.length === expected.length && timingSafeEqual(given, expected);
 }
 
-// Linear: `linear-signature: <hex hmac of the raw body>`, no prefix.
-export function verifyLinearSignature(
-  rawBody: string,
-  signatureHeader: string | undefined,
-  secret: string,
-): boolean {
-  if (signatureHeader === undefined) return false;
-  return hmacMatches(rawBody, signatureHeader, secret);
-}
-
 // PagerDuty: `x-pagerduty-signature: v1=<hex>[,v1=<hex>...]`. While a secret is
 // rotated PagerDuty signs with each, and any one matching is enough.
 export function verifyPagerDutySignature(

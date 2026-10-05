@@ -110,8 +110,7 @@ afterEach(() => {
 });
 
 function seedThreeFailures(): void {
-  vi.stubEnv("LINEAR_API_KEY", "");
-  vi.stubEnv("GITHUB_TOKEN", "");
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
 }
 
@@ -234,12 +233,15 @@ test("a green preflight lets the trigger call start()", async () => {
     repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
     remote: remoteDir,
   });
-  vi.stubEnv("LINEAR_API_KEY", "lin_live");
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.stubGlobal("fetch", async (input: unknown) => {
     const url = String(input);
-    if (url.startsWith("https://api.linear.app/")) {
-      return Response.json({ data: { viewer: { id: "u1", name: "Dev" } } });
+    if (url === "https://hub.example.test/api/factory/tokens/linear") {
+      return Response.json({
+        token: "lin_oauth",
+        expiresAt: "2999-01-01T00:00:00Z",
+        app: { name: "jigs", userId: "app-user" },
+      });
     }
     if (url === "https://hub.example.test/api/factory/status") {
       return Response.json({
@@ -277,8 +279,6 @@ test("doctor reports a malformed schedule and trigger beside the catalog's own c
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {
-  vi.stubEnv("LINEAR_API_KEY", "lin");
-  vi.stubEnv("GITHUB_TOKEN", "gh");
   vi.stubEnv("JIGS_FACTORY_ROOT", path.join(tmp, "no-factory-here"));
   vi.stubGlobal("fetch", async () => Response.json({ data: { viewer: {} } }));
   const body = (await (await app.request("/api/doctor")).json()) as {

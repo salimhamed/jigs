@@ -4,9 +4,11 @@ import { AGENT_TOKEN_ENV, assertAgentAccess } from "../../../workflow/agents/age
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentGithubEnv } from "./github-access.ts";
 
-// A PagerDuty token lasts a day and is not refreshed during an agent's turn,
-// which can last hours. Linear's lasts 30 days.
+// A PagerDuty or Linear token lasts about a day and is not refreshed during an
+// agent's turn, which can last hours.
 const PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS = 5 * 60 * 60 * 1000;
+// Under the six hours at which the hub refreshes, so asking again gets a new one.
+const LINEAR_AGENT_TOKEN_MIN_LIFETIME_MS = 4 * 60 * 60 * 1000;
 
 export interface AgentAccessDeps {
   github(
@@ -19,7 +21,7 @@ export interface AgentAccessDeps {
 
 const defaultDeps: AgentAccessDeps = {
   github: (target, env) => agentGithubEnv(target, env),
-  linearToken: () => linearAuthFor().bearer(),
+  linearToken: () => linearAuthFor().bearer(LINEAR_AGENT_TOKEN_MIN_LIFETIME_MS),
   pagerdutyToken: () => pagerDutyAuthFor().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
 };
 

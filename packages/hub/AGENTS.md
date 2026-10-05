@@ -79,7 +79,8 @@ user's id is looked up once and kept in the app's settings. Tests pass
 then connects each workspace through Linear's OAuth flow as the app
 (`actor=app`), with the state checked against an HttpOnly cookie. Each
 workspace's access and refresh tokens live encrypted on its installation;
-`LinearTokens` refreshes them one at a time per workspace, since Linear
+`LinearTokens` refreshes them when less than six hours remain, so an agent's
+token outlasts a long turn, and one at a time per workspace, since Linear
 rotates the refresh token, and a refused refresh marks the installation as
 needing a reconnect. Each Linear app has its own webhook URL, because Linear's
 payloads do not name the app. On a new agent session the hub posts the first

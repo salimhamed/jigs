@@ -300,15 +300,12 @@ test("a workflow's declared secrets are checked by preflight and doctor", async 
 });
 
 test("generic workflows require neither Linear nor GitHub credentials", async () => {
-  vi.stubEnv("LINEAR_API_KEY", "");
-  vi.stubEnv("GITHUB_TOKEN", "");
   expect(preflightIds({})).toEqual([]);
   expect((await runChecks(preflightChecks({}))).ok).toBe(true);
 });
 
 test("workflows check only explicitly declared integrations", async () => {
-  vi.stubEnv("LINEAR_API_KEY", "");
-  vi.stubEnv("GITHUB_TOKEN", "");
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
   expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
   expect(preflightIds({ integrations: ["github"] })).toEqual(["github.identity"]);
   const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
@@ -325,12 +322,7 @@ function factoryWith(config: string): string {
 }
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }',
-  );
-  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
-    vi.stubEnv(name, "");
-  vi.stubEnv("LINEAR_API_KEY", "set-but-unused");
+  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
     factory: { name: "personal" },
@@ -355,11 +347,8 @@ test("doctor fails a factory without its hub token, naming hub connect", async (
 });
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" } } }',
-  );
-  for (const name of ["LINEAR_API_KEY", "LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET", "GITHUB_TOKEN"])
-    vi.stubEnv(name, "");
+  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(
     doctorChecks({
       hello: {},
@@ -369,8 +358,7 @@ test("doctor checks each provider a workflow requires and names the workflows", 
   );
   expect(report.checks.find((c) => c.id === "linear.identity")).toMatchObject({
     ok: false,
-    reason:
-      "linear.identity uses key but LINEAR_API_KEY is not set (needed by workflows triage, ship)",
+    reason: expect.stringContaining("(needed by workflows triage, ship)"),
   });
   expect(report.checks.find((c) => c.id === "github.identity")).toMatchObject({
     ok: false,
@@ -380,7 +368,7 @@ test("doctor checks each provider a workflow requires and names the workflows", 
 
 test("doctor checks the factory's Linear operator, preflight never does", () => {
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
   );
   const linear = { integrations: ["linear" as const] };
   expect(
@@ -393,7 +381,7 @@ test("doctor checks the factory's Linear operator, preflight never does", () => 
 
 test("doctor checks a set Linear operator even when no workflow requires Linear", () => {
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "key" }, operator: "salim@example.com" } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
   );
   expect(doctorChecks({ hello: {} }).map((check) => check.id)).toEqual([
     "hub.connection",
@@ -428,7 +416,7 @@ test("doctor checks a provider the factory configuration asks for", () => {
   expect(ids()).toContain("github.identity");
   expect(ids()).not.toContain("linear.identity");
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "app" } } }',
+    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
   );
   expect(ids()).toContain("linear.identity");
   expect(ids()).not.toContain("github.identity");
@@ -461,27 +449,6 @@ test("a workflow requiring slack preflights the bot token, never the Socket Mode
     ok: false,
     reason: "SLACK_BOT_TOKEN is not set (needed by workflow answer)",
   });
-});
-
-test("a factory config that cannot be read fails the Linear check as itself", async () => {
-  const factory = makeTmpDir();
-  onTestFinished(() => removeTmpDir(factory));
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    'export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { identity: { mode: "nope" } } }',
-  );
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
-  vi.stubEnv("LINEAR_API_KEY", "configured");
-  const report = await runChecks(preflightChecks({ integrations: ["linear"] }));
-  expect(report.checks).toEqual([
-    expect.objectContaining({
-      id: "linear.identity",
-      ok: false,
-      reason: expect.stringContaining("jigs.config.ts"),
-      repair: "repair jigs.config.ts, then: `pnpm exec jigs up`",
-    }),
-  ]);
-  expect(report.checks[0]).not.toMatchObject({ reason: expect.stringContaining("rejected") });
 });
 
 test("doctor checks no harness for a factory whose workflows require none", () => {

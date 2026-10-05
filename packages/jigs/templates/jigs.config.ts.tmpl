@@ -1,15 +1,15 @@
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
-  // GitHub events and tokens reach this factory through its hub. Set this and
-  // the token with: pnpm exec jigs hub connect <url> <token>
+  // GitHub and Linear events and tokens reach this factory through its hub.
+  // Set this and the token with: pnpm exec jigs hub connect <url> <token>
   hub: { url: "https://hub.example.com" },
   service: { port: {{SERVICE_PORT}}, dashboardPort: {{DASHBOARD_PORT}} },
   // Parked runs re-read Linear every 300 seconds by default.
-  // Webhooks are optional: they wake runs sooner, and need a public URL.
+  // PagerDuty webhooks are optional: they start runs sooner, and need a public URL.
   // webhooks: {
   //   url: "https://<machine>.<tailnet>.ts.net",
-  //   linear: { enabled: true }, // also pagerduty; a provider left out is off
+  //   pagerduty: { enabled: true },
   // },
   bindings: {},
   // Agents get only a small base environment; name any other variable they need.
@@ -17,7 +17,9 @@ export default defineFactory({
   // jigs acts on GitHub as the App the hub assigns this factory. Name yourself
   // to be assigned every pull request it opens.
   // github: { operator: "your-github-login" },
-{{LINEAR_IDENTITY}}
+  // jigs acts on Linear as the Linear app the hub assigns this factory. Name
+  // yourself to be mentioned in every comment it posts.
+  // linear: { operator: "you@example.com" },
   // These loaders stay relative: they register workflow files for the build,
   // rather than being import sites factory code reads from.
   workflows: {

@@ -139,7 +139,7 @@ test.each([
     {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      webhooks: { linear: { enabled: true } },
+      webhooks: { pagerduty: { enabled: true } },
     },
     "url",
   ],
@@ -149,8 +149,7 @@ test.each([
       service: { dashboardPort: 9090 },
       webhooks: {
         url: "https://f.test",
-        linear: {},
-        pagerduty: { enabled: false },
+        pagerduty: {},
       },
     },
     "enabled",
@@ -161,7 +160,6 @@ test.each([
       service: { dashboardPort: 9090 },
       webhooks: {
         url: "not a url",
-        linear: { enabled: true },
         pagerduty: { enabled: false },
       },
     },
@@ -223,13 +221,9 @@ test("a webhook provider left out of the webhooks section is disabled", () => {
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 3456 },
-      webhooks: { url: "https://f.test", linear: { enabled: true } },
+      webhooks: { url: "https://f.test" },
     }).webhooks,
-  ).toEqual({
-    url: "https://f.test",
-    linear: { enabled: true },
-    pagerduty: { enabled: false },
-  });
+  ).toEqual({ url: "https://f.test", pagerduty: { enabled: false } });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
@@ -527,28 +521,12 @@ test("the GitHub section holds the operator, co-author and approval, and no iden
   expect(() => withSettings({ github: { identities: [{ mode: "pat" }] } })).toThrow("identities");
 });
 
-test("a factory that states no Linear identity acts with a personal key", () => {
-  expect(withSettings({}).linear).toEqual({ identity: { mode: "key" } });
-  expect(withSettings({ linear: {} }).linear).toEqual({ identity: { mode: "key" } });
-});
-
-test("a Linear identity is key or app and carries nothing else", () => {
-  for (const mode of ["key", "app"]) {
-    expect(withSettings({ linear: { identity: { mode } } }).linear.identity).toEqual({ mode });
-  }
-  expect(() => withSettings({ linear: { identity: { mode: "pat" } } })).toThrow("linear.identity");
-  // Secrets live in .env, so a client id in config is refused, not ignored.
-  expect(() => withSettings({ linear: { identity: { mode: "app", clientId: "abc" } } })).toThrow(
-    "clientId",
-  );
-  expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
-});
-
 test("a Linear operator is optional and must be an email", () => {
   expect(withSettings({ linear: { operator: "salim@example.com" } }).linear).toEqual({
-    identity: { mode: "key" },
     operator: "salim@example.com",
   });
+  expect(withSettings({}).linear).toEqual({});
+  expect(() => withSettings({ linear: { identity: { mode: "key" } } })).toThrow("identity");
   expect(withSettings({ linear: {} }).linear.operator).toBeUndefined();
   expect(() => withSettings({ linear: { operator: "salim" } })).toThrow("linear.operator");
   expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");

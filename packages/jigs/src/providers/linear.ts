@@ -17,7 +17,12 @@ import {
   reauthorize,
   retryAfterSeconds,
 } from "./http.ts";
-import { LINEAR_API_URL, type LinearAuth, linearAuthFor } from "./linear-auth.ts";
+import {
+  LINEAR_API_URL,
+  type LinearAppUser,
+  type LinearAuth,
+  linearAuthFor,
+} from "./linear-auth.ts";
 
 export interface LinearUser {
   id: string;
@@ -76,11 +81,6 @@ export interface LinearClientDeps {
   sleep?: (ms: number) => Promise<void>;
   /** The factory it acts for. Defaults to the process's own, resolved on each call. */
   context?: FactoryContext;
-}
-
-export interface LinearWebhook {
-  url: string;
-  enabled: boolean;
 }
 
 export interface LinearIssueRef {
@@ -175,8 +175,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       const res = await (deps.fetch ?? fetch)(LINEAR_API_URL, {
         method: "POST",
         headers: {
-          // A personal key goes bare; only an app token is a bearer.
-          authorization: auth.identity.mode === "key" ? credential : `Bearer ${credential}`,
+          authorization: `Bearer ${credential}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
@@ -201,18 +200,19 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
           detail,
           ...extra,
         });
+      // The hub refreshes a token before handing it out, so Linear refusing a
+      // fresh one means the app has lost its access to the workspace.
+      if (rejectedCredential(res, text))
+        throw fail({
+          detail: `Linear refused the app's token${reauthorized ? " again after the hub issued a fresh one" : ""}; connect the Linear workspace again in the hub`,
+        });
       return decodeGraphql<T>(res, text, fail);
     }
   }
 
-  // The preflight probe for the Linear identity: the cheapest call that proves
-  // the credential is both present and accepted, and names who jigs is.
-  async function getViewer(): Promise<LinearUser> {
-    const data = await linearGraphql<{ viewer: LinearUser }>(
-      "query Viewer { viewer { id name } }",
-      {},
-    );
-    return data.viewer;
+  /** The factory's own app user in the workspace, as the hub names it. */
+  function appUser(): Promise<LinearAppUser> {
+    return (deps.auth ?? linearAuthFor(ctx())).user();
   }
 
   /** The active Linear user with this email, or null when none has it. */
@@ -226,33 +226,6 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       { email },
     );
     return data.users.nodes[0] ?? null;
-  }
-
-  async function listWebhooks(): Promise<LinearWebhook[]> {
-    const webhooks: LinearWebhook[] = [];
-    let after: string | null = null;
-    do {
-      const data: {
-        webhooks: {
-          nodes: LinearWebhook[];
-          pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        };
-      } = await linearGraphql(
-        `query Webhooks($after: String) {
-          webhooks(after: $after) {
-            nodes { url enabled }
-            pageInfo { hasNextPage endCursor }
-          }
-        }`,
-        { after },
-      );
-      webhooks.push(...data.webhooks.nodes);
-      after = data.webhooks.pageInfo.hasNextPage ? data.webhooks.pageInfo.endCursor : null;
-      if (data.webhooks.pageInfo.hasNextPage && after === null) {
-        throw new JigsError("Linear webhooks page has no end cursor");
-      }
-    } while (after !== null);
-    return webhooks;
   }
 
   /** Read an issue's current state and the states its team accepts. */
@@ -487,9 +460,8 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
   }
 
   return {
-    getViewer,
+    appUser,
     findUserByEmail,
-    listWebhooks,
     fetchIssueStates,
     updateIssueState,
     resolveIssueRef,
@@ -511,9 +483,8 @@ const processClient = createLinearClient();
 // The three that factory steps re-export are declared below, with their own docs.
 
 export const {
-  getViewer,
+  appUser,
   findUserByEmail,
-  listWebhooks,
   fetchIssueStates,
   updateIssueState,
   resolveIssueRef,

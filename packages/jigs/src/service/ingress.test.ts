@@ -1,16 +1,9 @@
 import { createHmac } from "node:crypto";
 import { expect, test } from "vitest";
-import { verifyLinearSignature, verifyPagerDutySignature } from "./ingress.ts";
+import { verifyPagerDutySignature } from "./ingress.ts";
 
 const hmac = (body: string, secret: string) =>
   createHmac("sha256", secret).update(body).digest("hex");
-
-test("linear signature verifies and rejects the wrong secret", () => {
-  const body = JSON.stringify({ type: "Comment" });
-  expect(verifyLinearSignature(body, hmac(body, "lin-secret"), "lin-secret")).toBe(true);
-  expect(verifyLinearSignature(body, hmac(body, "wrong"), "lin-secret")).toBe(false);
-  expect(verifyLinearSignature(body, undefined, "lin-secret")).toBe(false);
-});
 
 test("pagerduty signature verifies a v1 hmac of the raw body", () => {
   const body = JSON.stringify({ event: { event_type: "incident.triggered" } });

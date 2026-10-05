@@ -3,7 +3,6 @@ import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
-import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";
@@ -134,20 +133,8 @@ program.helpInformation = () => ROOT_HELP;
 program
   .command("init")
   .description("scaffold a factory repo in the current directory")
-  .addOption(
-    new Option(
-      "--linear-identity-mode <mode>",
-      "which Linear credential this factory is written for",
-    )
-      .choices(["key", "app"])
-      .default("key"),
-  )
-  .action(async (options: { linearIdentityMode: LinearIdentity["mode"] }) => {
-    await initFactory({
-      cwd: process.cwd(),
-      out,
-      linearIdentity: { mode: options.linearIdentityMode },
-    });
+  .action(async () => {
+    await initFactory({ cwd: process.cwd(), out });
   });
 
 const recipe = program.command("recipe").description("copy a shipped workflow into this factory");

@@ -10,7 +10,7 @@
 // replaces no step.
 
 import { createHash } from "node:crypto";
-import { createComment, findComment, listCommentsSince } from "../../providers/linear.ts";
+import { appUser, createComment, findComment, listCommentsSince } from "../../providers/linear.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
@@ -45,7 +45,7 @@ export const postTicketHumanInputRequest = async (
   issueId: string,
   halt: Halt,
   metadata: StepRunMetadata,
-  definition: Pick<FactoryDefinition, "linear">,
+  definition: FactoryDefinition,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
 ): ReturnType<PostTicketHumanInputRequest> => {
   const context: NeedsHumanContext = {
@@ -77,7 +77,7 @@ export const postTicketNote = async (
   issueId: string,
   note: TicketNote,
   metadata: StepRunMetadata,
-  definition: Pick<FactoryDefinition, "linear">,
+  definition: FactoryDefinition,
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
   const comment = await postOnce(ticketCommentId(metadata, issueId), issueId, async () => {
@@ -140,15 +140,16 @@ export const checkForTicketHumanReply: CheckForTicketHumanReply = async (
   sinceIso,
   postedCommentIds,
 ) => {
-  const comments = await listCommentsSince(issueId, sinceIso);
+  const [comments, app] = await Promise.all([listCommentsSince(issueId, sinceIso), appUser()]);
   const cursor = comments.reduce(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
     sinceIso,
   );
-  // The factory may act as its operator, so author identity cannot tell jigs'
-  // comments from the human's: exclude, by id, every comment the run posted.
+  // Anything the factory's app wrote is not a human's answer, whichever run
+  // posted it.
   const human = comments.find(
-    (comment) => comment.user !== null && !postedCommentIds.includes(comment.id),
+    (comment) =>
+      comment.user !== null && comment.user.id !== app.id && !postedCommentIds.includes(comment.id),
   );
   console.log(
     `[checkForTicketHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,
