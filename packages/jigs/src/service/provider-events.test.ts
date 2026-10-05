@@ -197,6 +197,21 @@ test.each([
   expect(await route(status("success"))).toEqual({ outcome: "failed" });
 });
 
+test("a GitHub 403 for its rate limit is retried; any other 403 is ignored", async () => {
+  vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const forbidden = (headers: Record<string, string>) =>
+    useGithubClient({
+      fetch: vi.fn().mockImplementation(async () => new Response("{}", { status: 403, headers })),
+      sleep: async () => {},
+    });
+  forbidden({ "retry-after": "3600" });
+  expect(await route(status("success"))).toEqual({ outcome: "failed" });
+  forbidden({ "x-ratelimit-remaining": "0", "x-ratelimit-reset": "99999999999" });
+  expect(await route(status("success"))).toEqual({ outcome: "failed" });
+  forbidden({});
+  expect(await route(status("success"))).toEqual({ outcome: "ignored" });
+});
+
 test("an unroutable GitHub event is ignored", async () => {
   const ping = { zen: "Keep it logically awesome.", hook_id: 1, repository: review.repository };
   expect(await route(github("ping", ping))).toEqual({ outcome: "ignored" });

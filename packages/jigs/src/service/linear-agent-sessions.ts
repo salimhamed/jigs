@@ -3,6 +3,7 @@
 // occurrence, keyed by the session's id, read off the webhook the hub passes on.
 
 import { z } from "zod";
+import { HubResponseError } from "../providers/hub.ts";
 import { createLinearClient, type LinearIssueFiling } from "../providers/linear.ts";
 import { linearAuthFor } from "../providers/linear-auth.ts";
 import {
@@ -36,7 +37,7 @@ const createdSchema = z.object({
 
 export interface LinearAgentSessionsDeps {
   /** The issue's project and labels, read as the factory's app in the session's workspace. */
-  issueFiling?: (issueId: string, workspace: string) => Promise<LinearIssueFiling>;
+  issueFiling?: (issueId: string, workspace: string) => Promise<LinearIssueFiling | null>;
 }
 
 const SAMPLE_INPUTS = {
@@ -59,6 +60,24 @@ export function linearAgentSessions(
     deps.issueFiling ??
     ((issueId, workspace) =>
       createLinearClient({ auth: linearAuthFor(undefined, workspace) }).fetchIssueFiling(issueId));
+  // An issue that is gone, or a workspace the hub has no app in, will read the
+  // same way every time, so the session is passed over rather than retried.
+  const readFiling = async (issueId: string, workspace: string) => {
+    try {
+      const filing = await issueFiling(issueId, workspace);
+      if (filing === null)
+        console.error(
+          `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
+        );
+      return filing;
+    } catch (error) {
+      if (!(error instanceof HubResponseError && error.status === 404)) throw error;
+      console.error(
+        `[linear] ignored an agent session in workspace ${workspace}, which the hub has no app for: ${String(error)}`,
+      );
+      return null;
+    }
+  };
   return {
     provider: "linear",
     params: linearAgentSessionsParamsSchema,
@@ -88,7 +107,9 @@ export function linearAgentSessions(
       )
         return null;
       if (params.projects || params.labels) {
-        const { project, labels } = await issueFiling(issue.id, workspace);
+        const filing = await readFiling(issue.id, workspace);
+        if (filing === null) return null;
+        const { project, labels } = filing;
         if (
           params.projects &&
           !params.projects.some(

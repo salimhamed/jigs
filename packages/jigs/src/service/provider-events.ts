@@ -151,11 +151,12 @@ async function routeSlack({ payload }: ProviderEvent, deps: RouteDeps): Promise<
 
 // An answer that routing the event again would only get again: the hub has no
 // installation, or more than one, for the repository; or GitHub refused the
-// request itself rather than its credential or its rate.
+// request itself rather than its credential or its rate limit.
 function refusedForGood(error: unknown): boolean {
   if (error instanceof HubResponseError) return error.status === 404 || error.status === 409;
   return (
     error instanceof GitHubApiError &&
+    !error.rateLimited &&
     error.status >= 400 &&
     error.status < 500 &&
     error.status !== 401 &&

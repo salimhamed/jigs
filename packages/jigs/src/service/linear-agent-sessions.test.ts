@@ -1,6 +1,7 @@
 import { readFileSync } from "node:fs";
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
+import { HubResponseError } from "../providers/hub.ts";
 import type { LinearIssueFiling } from "../providers/linear.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { linear } from "../workflow/linear/source.ts";
@@ -128,6 +129,32 @@ test("projects and labels match what the issue is filed under, read in the sessi
 test("an issue in no project never matches a project filter", async () => {
   const source = linearAgentSessions({ issueFiling: filed({ project: null, labels: [] }) });
   expect(await source.fromPush({ projects: ["8f2c1a9b7e3d"] }, created())).toBeNull();
+});
+
+test("an issue the app cannot read, or a workspace the hub has no app for, is ignored loudly", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const gone = linearAgentSessions({ issueFiling: vi.fn(async () => null) });
+  expect(await gone.fromPush({ labels: ["agent"] }, created())).toBeNull();
+  const unassigned = linearAgentSessions({
+    issueFiling: vi.fn(async () => {
+      throw new HubResponseError(404, "no Linear app in this workspace");
+    }),
+  });
+  expect(await unassigned.fromPush({ labels: ["agent"] }, created())).toBeNull();
+  expect(errors.mock.calls.map(([line]) => String(line))).toEqual([
+    expect.stringContaining("which the app cannot read"),
+    expect.stringContaining("which the hub has no app for"),
+  ]);
+  errors.mockRestore();
+});
+
+test("a hub that cannot answer for the workspace fails the push, to be retried", async () => {
+  const source = linearAgentSessions({
+    issueFiling: vi.fn(async () => {
+      throw new HubResponseError(503, "unavailable");
+    }),
+  });
+  await expect(source.fromPush({ labels: ["agent"] }, created())).rejects.toThrow("unavailable");
 });
 
 test("empty filter lists are refused", () => {
