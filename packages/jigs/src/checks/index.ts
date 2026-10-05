@@ -5,12 +5,7 @@ import { JigsError } from "../errors.ts";
 import { githubChecks } from "../providers/github-checks.ts";
 import { fetchFactoryStatus } from "../providers/hub.ts";
 import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
-import {
-  pagerDutyChecks,
-  pagerDutyFromDoctorChecks,
-  pagerDutyWebhookProbes,
-} from "../providers/pagerduty-checks.ts";
-import { pagerDutyWebhookChecks } from "../providers/pagerduty-webhook-checks.ts";
+import { pagerDutyChecks, pagerDutyFromDoctorChecks } from "../providers/pagerduty-checks.ts";
 import { slackChecks } from "../providers/slack-checks.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/shared/drivers.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/shared/env.ts";
@@ -30,7 +25,7 @@ import {
 } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
 import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
-import { hubChecks, hubSlackChecks } from "./hub.ts";
+import { hubAppChecks, hubChecks } from "./hub.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
@@ -92,16 +87,16 @@ export function preflightChecks(
 }
 
 // Beyond what a workflow requires, the configuration can ask for a provider
-// itself: a binding needs GitHub, a Linear operator needs Linear, a PagerDuty
-// webhook needs PagerDuty, and a pagerduty or slack section is set up on
-// purpose. An unreadable config asks for nothing: the binding checks report it.
+// itself: a binding needs GitHub, a Linear operator needs Linear, and a
+// pagerduty or slack section is set up on purpose. An unreadable config asks
+// for nothing: the binding checks report it.
 function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
   try {
-    const { bindings, webhooks, linear, pagerduty, slack } = ctx.config;
+    const { bindings, linear, pagerduty, slack } = ctx.config;
     return {
       github: Object.keys(bindings).length > 0,
       linear: linear.operator !== undefined,
-      pagerduty: pagerduty !== undefined || (webhooks?.pagerduty.enabled ?? false),
+      pagerduty: pagerduty !== undefined,
       slack: slack !== undefined,
     };
   } catch {
@@ -248,7 +243,7 @@ export function doctorChecks(
       : [];
   };
   const aws = users.get("aws") ?? [];
-  // One read of the hub answers its own check, GitHub's and Slack's.
+  // One read of the hub answers its own check, GitHub's, Slack's and PagerDuty's.
   let hubStatus: Promise<FactoryStatus> | undefined;
   const status = () => {
     hubStatus ??= fetchFactoryStatus(ctx);
@@ -258,9 +253,12 @@ export function doctorChecks(
     ...hubChecks(ctx, status),
     ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
     ...provider("github", () => githubChecks(ctx, status)),
-    ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
-    ...provider("slack", () => [...hubSlackChecks(ctx, status), ...slackChecks(ctx)]),
-    ...pagerDutyWebhookChecks({ context: ctx, probes: pagerDutyWebhookProbes(ctx) }),
+    ...provider("pagerduty", () => [
+      ...hubAppChecks(ctx, "pagerduty", status),
+      ...pagerDutyChecks(ctx),
+      ...pagerDutyFromDoctorChecks(ctx),
+    ]),
+    ...provider("slack", () => [...hubAppChecks(ctx, "slack", status), ...slackChecks(ctx)]),
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),

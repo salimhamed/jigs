@@ -137,7 +137,6 @@ export {
   type SourceDescriptor,
   type TicketWorkflowInputs,
   ticketInputSchema,
-  type WebhooksDefinition,
   type WorkflowDefinition,
   type WorkflowInputs,
 } from "./workflow/factory.ts";

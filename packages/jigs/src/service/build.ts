@@ -35,7 +35,6 @@ export const factory = {
   workflows,
   schedules: definition.schedules,
   triggers: definition.triggers,
-  webhooks: definition.webhooks,
 } satisfies Factory;
 
 export default createApp(factory);

@@ -480,39 +480,25 @@ test("doctor checks each required harness and names the workflows that need it",
   });
 });
 
-const PAGERDUTY =
-  'pagerduty: { identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" } }';
+const PAGERDUTY = 'pagerduty: { from: "oncall@example.com" }';
 
-test("a workflow requiring PagerDuty in a factory without a pagerduty section fails preflight with the section to add", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  const report = await runChecks(preflightChecks({ integrations: ["pagerduty"] }));
-  expect(report.checks).toEqual([
-    expect.objectContaining({
-      id: "pagerduty.identity",
-      ok: false,
-      reason: "jigs.config.ts has no pagerduty section",
-      repair: expect.stringContaining('add pagerduty: { identity: { mode: "app"'),
-    }),
-  ]);
-});
-
-test("preflight checks the PagerDuty identity only, doctor adds the from user", async () => {
+test("preflight checks the PagerDuty app only, doctor adds its hub assignment and the from user", async () => {
   factoryWith(
     `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
   );
-  vi.stubEnv("PAGERDUTY_CLIENT_ID", "");
-  vi.stubEnv("PAGERDUTY_CLIENT_SECRET", "");
   const pagerduty = { integrations: ["pagerduty" as const] };
-  expect(preflightIds(pagerduty)).toEqual(["pagerduty.identity"]);
+  expect(preflightIds(pagerduty)).toEqual(["pagerduty.app"]);
   expect(doctorChecks({ triage: { requires: pagerduty } }).map((check) => check.id)).toEqual([
     "hub.connection",
-    "pagerduty.identity",
+    "hub.pagerduty",
+    "pagerduty.app",
     "pagerduty.from",
   ]);
   const report = await runChecks(preflightChecks(pagerduty));
   expect(report.checks[0]).toMatchObject({
     ok: false,
-    reason: "PAGERDUTY_CLIENT_ID and PAGERDUTY_CLIENT_SECRET are not set",
+    reason: "the hub has no PagerDuty token for this factory: JIGS_HUB_TOKEN is not set",
+    repair: expect.stringContaining("jigs hub connect"),
   });
 });
 
@@ -521,18 +507,31 @@ test("doctor checks PagerDuty when the factory configures it, and not otherwise"
   factoryWith(
     `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
   );
-  expect(ids()).toEqual(["hub.connection", "pagerduty.identity", "pagerduty.from"]);
+  expect(ids()).toEqual(["hub.connection", "hub.pagerduty", "pagerduty.app", "pagerduty.from"]);
   factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  expect(ids().filter((id) => id.startsWith("pagerduty."))).toEqual([]);
+  expect(ids().filter((id) => id.includes("pagerduty"))).toEqual([]);
+});
+
+test("a workflow requiring PagerDuty in a factory without a pagerduty section fails preflight with the section to add", async () => {
+  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
+  const report = await runChecks(preflightChecks({ integrations: ["pagerduty"] }));
+  expect(report.checks).toEqual([
+    expect.objectContaining({
+      id: "pagerduty.app",
+      ok: false,
+      reason: "jigs.config.ts has no pagerduty section",
+      repair: expect.stringContaining('add pagerduty: { from: "<email of a PagerDuty user>" }'),
+    }),
+  ]);
 });
 
 test("doctor checks PagerDuty for a trigger that polls it, naming the trigger", async () => {
   factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
   const checks = doctorChecks({ hello: {} }, { pages: "pagerduty" });
   expect(checks.map((check) => check.id).filter((id) => id.startsWith("pagerduty."))).toEqual([
-    "pagerduty.identity",
+    "pagerduty.app",
   ]);
-  const report = await runChecks(checks.filter((check) => check.id === "pagerduty.identity"));
+  const report = await runChecks(checks.filter((check) => check.id === "pagerduty.app"));
   expect(report.checks[0]).toMatchObject({
     ok: false,
     reason: expect.stringContaining("(needed by trigger pages)"),

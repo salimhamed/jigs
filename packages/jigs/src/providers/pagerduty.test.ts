@@ -1,8 +1,7 @@
 import { expect, test } from "vitest";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
 import { ProviderApiError } from "./http.ts";
-import { createPagerDutyClient, PAGERDUTY_API_URL } from "./pagerduty.ts";
-import type { PagerDutyAuth } from "./pagerduty-auth.ts";
+import { createPagerDutyClient, PAGERDUTY_API_URL, type PagerDutyTokens } from "./pagerduty.ts";
 import { type FetchCall, fakeFetch, fakeSleep, jsonResponse } from "./test-support.ts";
 
 async function rejection<E>(promise: Promise<unknown>): Promise<E> {
@@ -14,12 +13,7 @@ async function rejection<E>(promise: Promise<unknown>): Promise<E> {
   throw new Error("expected a rejection");
 }
 
-const IDENTITY: PagerDutyIdentity = {
-  mode: "app",
-  subdomain: "acme",
-  region: "us",
-  from: "oncall@example.com",
-};
+const context = testFactoryContext({ config: { pagerduty: { from: "oncall@example.com" } } });
 
 // Recorded shapes from api.pagerduty.com, trimmed to the fields jigs reads.
 const INCIDENT = {
@@ -39,35 +33,26 @@ const NOTE = {
   content: "jigs is looking",
   created_at: "2026-09-29T20:01:00Z",
 };
-const subscription = (id: string, url: string, filter: Record<string, string>) => ({
-  id,
-  type: "webhook_subscription",
-  active: true,
-  delivery_method: { type: "http_delivery_method", url, custom_headers: [] },
-  events: ["incident.triggered"],
-  filter,
-});
 const USER = { id: "PUSER01", type: "user", name: "On Call", email: "oncall@example.com" };
 
-function fakeAuth() {
+function fakeTokens() {
   let minted = 0;
-  const auth: PagerDutyAuth & { minted: () => number } = {
-    identity: IDENTITY,
+  const tokens: PagerDutyTokens & { minted: () => number } = {
     bearer: async () => `token-${minted === 0 ? ++minted : minted}`,
     invalidate: (stale) => {
       if (stale === `token-${minted}`) minted += 1;
     },
     minted: () => minted,
   };
-  return auth;
+  return tokens;
 }
 
-function server(handle: (call: FetchCall) => Response) {
+function server(handle: (call: FetchCall) => Response, ctx = context) {
   const { fetch, calls } = fakeFetch(handle);
   const { sleep, sleeps } = fakeSleep();
-  const auth = fakeAuth();
-  const client = createPagerDutyClient(IDENTITY, { auth, fetch, sleep });
-  return { client, calls, sleeps, auth };
+  const tokens = fakeTokens();
+  const client = createPagerDutyClient({ tokens, fetch, sleep, context: ctx });
+  return { client, calls, sleeps, tokens };
 }
 
 const json = jsonResponse;
@@ -120,9 +105,17 @@ test("every write names the from user, and a note comes back with its author", a
   expect(calls[0]?.url.pathname).toBe("/incidents/Q1ABCDEF/notes");
 });
 
+test("a write without a pagerduty section fails before reaching PagerDuty", async () => {
+  const { client, calls } = server(() => json({ note: NOTE }, 201), testFactoryContext());
+  await expect(client.createNote("Q1", "x")).rejects.toThrow(
+    "jigs.config.ts has no pagerduty section",
+  );
+  expect(calls).toEqual([]);
+});
+
 test("a 401 gets a new token and retries once", async () => {
   let first = true;
-  const { client, calls, auth } = server(() => {
+  const { client, calls, tokens } = server(() => {
     if (first) {
       first = false;
       return json({ error: { message: "Unauthorized", code: 2006 } }, 401);
@@ -130,7 +123,7 @@ test("a 401 gets a new token and retries once", async () => {
     return json({ note: NOTE }, 201);
   });
   expect(await client.createNote("Q1ABCDEF", "hello")).toEqual(NOTE);
-  expect(auth.minted()).toBe(2);
+  expect(tokens.minted()).toBe(2);
   expect(calls.map((call) => call.headers.authorization)).toEqual([
     "Bearer token-1",
     "Bearer token-2",
@@ -188,61 +181,6 @@ test("a 400 carries PagerDuty's error and the request", async () => {
   expect(err.message).toContain("POST /incidents/Q1/notes");
   expect(err.message).toContain("1027");
   expect(err.message).not.toContain("token-1");
-});
-
-test("webhook subscriptions are listed in full and filtered here", async () => {
-  const pages = [
-    {
-      webhook_subscriptions: [
-        subscription("S1", "https://factory.test/ingress/pagerduty", {
-          type: "service_reference",
-          id: "P48FPG2",
-        }),
-        subscription("S2", "https://elsewhere.test/hook", { type: "account_reference" }),
-      ],
-      limit: 2,
-      offset: 0,
-      more: true,
-    },
-    {
-      webhook_subscriptions: [
-        subscription("S3", "https://factory.test/ingress/pagerduty", {
-          type: "account_reference",
-        }),
-      ],
-      limit: 2,
-      offset: 2,
-      more: false,
-    },
-  ];
-  const { client, calls } = server(() => json(pages.shift()));
-  const found = await client.listWebhookSubscriptions({
-    url: "https://factory.test/ingress/pagerduty",
-  });
-  expect(found.map((entry) => entry.id)).toEqual(["S1", "S3"]);
-  // PagerDuty answers filter_type and filter_id with a 400.
-  for (const call of calls) {
-    expect(call.url.searchParams.has("filter_type")).toBe(false);
-    expect(call.url.searchParams.has("filter_id")).toBe(false);
-  }
-  expect(calls).toHaveLength(2);
-});
-
-test("webhook subscriptions can be narrowed to what they filter on", async () => {
-  const { client } = server(() =>
-    json({
-      webhook_subscriptions: [
-        subscription("S1", "https://a.test", { type: "service_reference", id: "P48FPG2" }),
-        subscription("S2", "https://a.test", { type: "service_reference", id: "POTHER" }),
-      ],
-      more: false,
-    }),
-  );
-  const found = await client.listWebhookSubscriptions({
-    filter: { type: "service_reference", id: "P48FPG2" },
-  });
-  expect(found.map((entry) => entry.id)).toEqual(["S1"]);
-  expect(found[0]).not.toHaveProperty("secret");
 });
 
 test("a user is found by exact email, case-insensitively", async () => {

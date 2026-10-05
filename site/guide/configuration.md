@@ -37,11 +37,12 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 ## `hub` {#hub}
 
-Every factory hears GitHub, Linear and Slack through a hub. The hub receives
-their events and holds them until the factory's service collects them, so
-nothing is lost while the service is down. The hub also hands the factory every
-GitHub, Linear and Slack token it uses: see [GitHub identity](#github-identity),
-[Linear identity](#linear-identity) and [Slack](#slack).
+Every factory hears GitHub, Linear, Slack and PagerDuty through a hub. The hub
+receives their events and holds them until the factory's service collects them,
+so nothing is lost while the service is down. The hub also hands the factory
+every GitHub, Linear, Slack and PagerDuty token it uses: see
+[GitHub identity](#github-identity), [Linear identity](#linear-identity),
+[PagerDuty](#pagerduty) and [Slack](#slack).
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -194,9 +195,7 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: {
-    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
-  },
+  pagerduty: { from: "oncall@example.com" },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
@@ -218,8 +217,8 @@ export default defineFactory({
 - An occurrence starts at most one run, ever, even if the run decides to do
   nothing or ends while the incident is still open.
 - The service polls each source on its provider's
-  [`pollIntervalSeconds`](#service). A PagerDuty [webhook](#webhooks) starts
-  runs sooner; the poll still finds anything a delivery missed.
+  [`pollIntervalSeconds`](#service). A PagerDuty event from the [hub](#hub)
+  starts runs sooner; the poll still finds anything an event missed.
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
@@ -512,10 +511,20 @@ When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
 out, logs a warning and posts the comment anyway. A mention never stops a run.
 
-## PagerDuty
+## PagerDuty {#pagerduty}
 
-The `pagerduty` section says which PagerDuty account jigs works on and which
-user its notes are attributed to. See [PagerDuty](/guide/pagerduty) for setup.
+jigs acts on PagerDuty as the PagerDuty app its [hub](#hub) assigns the
+factory. The `pagerduty` section names the user its notes are attributed to.
+See [PagerDuty](/guide/pagerduty) for setup.
+
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+pagerduty: { from: "oncall@example.com" },
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `from` | required | The email of a PagerDuty user. PagerDuty refuses a write that names no user, so every note jigs adds is attributed to them. `jigs doctor` checks a user has it. |
 
 ## Slack {#slack}
 
@@ -538,57 +547,18 @@ seconds.
 To start runs from Slack messages, see
 [Start runs from messages](/guide/slack#start-runs-from-messages).
 
-## Webhooks {#webhooks}
-
-GitHub, Linear and Slack events always arrive through the [hub](#hub). PagerDuty
-webhooks reach the service directly, and improve latency, not correctness.
-Without them, [event triggers](#triggers) on PagerDuty continue to poll at
-[`pollIntervalSeconds`](#service). A lost webhook delivery only delays the next
-check. See
-[Waiting and external events](/guide/waiting-and-events) for how runs wait.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-webhooks: {
-  url: "https://my-machine.my-tailnet.ts.net",
-  pagerduty: { enabled: true },
-},
-```
-
-Leave `pagerduty` out and it is off and keeps polling.
-
-1. **Expose the service port** with a tunnel, for example
-   `tailscale funnel --bg <servicePort>` or
-   `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is
-   `webhooks.url`.
-2. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
-   and add a subscription on the service or team your triggers watch, for the
-   `incident.triggered` event only, delivering to
-   `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
-   in `.env` as `PAGERDUTY_WEBHOOK_SECRET`, set `pagerduty: { enabled: true }`
-   and run `jigs up`. A new incident then starts its run within
-   seconds instead of at the next poll, and never starts a second one.
-
-PagerDuty enabled without its secret stops the service from starting.
-`jigs doctor` checks the secret, and whether the PagerDuty subscription
-exists and is active. PagerDuty
-switches a subscription off after repeated failed deliveries; enable it again
-on its page under **Integrations → Generic Webhooks (v3)**.
-
 ## `.env` {#env}
 
 `jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` stops if `.env`
-is missing, and lists the credentials still empty.
+is missing.
 
 | Variable | When you need it |
 | --- | --- |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear and Slack tokens come from the hub. |
-| `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
-| `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 
 Also set any variable your `jigs.config.ts` names, such as an MCP server's
 `bearerTokenEnv`. An empty value counts as unset, so a value exported in your

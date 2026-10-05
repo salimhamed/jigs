@@ -3,8 +3,10 @@
 
 import { slackBotScopes } from "@jigs-ai/hub-protocol";
 import { vi } from "vitest";
+import { testFactoryContext } from "../test-fixtures.ts";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
 import * as hub from "./hub.ts";
+import { createPagerDutyClient } from "./pagerduty.ts";
 import { createSlackClient, type SlackClientDeps, slackClient } from "./slack.ts";
 import { type FetchCall, fakeFetch } from "./test-support.ts";
 
@@ -96,5 +98,16 @@ export async function useLiveSlackToken(token: string): Promise<void> {
     app: { appId: auth.app_id ?? "A0LIVE", name: auth.user, botUserId: auth.user_id },
     team: auth.team_id,
     scopes,
+  });
+}
+
+/**
+ * A PagerDuty client for the live tests, sending `JIGS_TEST_PAGERDUTY_TOKEN` (a PagerDuty app's
+ * OAuth token, from the shell) as the hub would hand it out, and writing as `from`.
+ */
+export function livePagerDutyClient(token: string, from: string) {
+  return createPagerDutyClient({
+    tokens: { bearer: async () => token, invalidate: () => {} },
+    context: testFactoryContext({ config: { pagerduty: { from } } }),
   });
 }

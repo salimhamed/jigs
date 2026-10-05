@@ -1,6 +1,6 @@
 // The `pagerduty.incidents` source: every new incident is one occurrence,
 // keyed by its incident id, whatever its status by the time it is polled.
-// A webhook's `incident.triggered` event is the same occurrence, sooner.
+// An `incident.triggered` event from the hub is the same occurrence, sooner.
 
 import { z } from "zod";
 import { type PagerDutyClient, pagerDutyClientFor } from "../providers/pagerduty.ts";
@@ -37,8 +37,7 @@ const triggeredSchema = z.object({
 
 const eventTypeSchema = z.object({ event: z.object({ event_type: z.string() }) });
 
-/** A PagerDuty webhook payload's event type, if it names one. */
-export const pagerDutyEventType = (event: unknown): string | undefined =>
+const pagerDutyEventType = (event: unknown): string | undefined =>
   eventTypeSchema.safeParse(event).data?.event.event_type;
 
 export interface PagerDutyIncidentsDeps {
@@ -86,7 +85,7 @@ export function pagerDutyIncidents(
         cursor: through.toISOString(),
       };
     },
-    // The run gets the incident id either way, so the webhook's copy of the
+    // The run gets the incident id either way, so the event's copy of the
     // incident is read only to key it and to apply the same filters the poll
     // hands PagerDuty.
     async fromPush(params, event) {

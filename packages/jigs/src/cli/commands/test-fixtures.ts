@@ -24,7 +24,6 @@ export interface FactoryShape {
   env?: string;
   compose?: boolean;
   config?: boolean;
-  pagerduty?: boolean;
   bins?: string[];
 }
 
@@ -45,12 +44,9 @@ export function factory(tmp: string, shape: FactoryShape): string {
     );
   }
   if (shape.config !== false) {
-    const pagerduty = shape.pagerduty
-      ? `pagerduty: {identity: {mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com"}}, `
-      : "";
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {hub: {url: "https://hub.example.test"}, service: {port: ${shape.port}, dashboardPort: 9200}, ${pagerduty}workflows: {}};\n`,
+      `export default {hub: {url: "https://hub.example.test"}, service: {port: ${shape.port}, dashboardPort: 9200}, workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");

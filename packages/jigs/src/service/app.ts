@@ -1,7 +1,7 @@
-// Create the HTTP application that serves a factory's workflow and webhook endpoints.
+// Create the HTTP application that serves a factory's workflow endpoints.
 
 import type { World } from "@workflow/world";
-import { type Context, Hono } from "hono";
+import { Hono } from "hono";
 import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -11,7 +11,6 @@ import {
   type FactoryContext,
   processEnv,
 } from "../config/factory-context.ts";
-import { webhookSecret } from "../config/webhook-secret.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { listResources, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import { readRunState } from "../steps/runtime/run-state.ts";
@@ -19,13 +18,9 @@ import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
-import { pushEvent } from "./event-triggers/runner.ts";
 import { triggerStore } from "./event-triggers/store.ts";
 import { listTriggers, triggerChecks, triggerProviders } from "./event-triggers/view.ts";
-import { verifyPagerDutySignature } from "./ingress.ts";
 import { startRun } from "./launch.ts";
-import { pagerDutyEventType } from "./pagerduty-incidents.ts";
-import { type ProviderEvent, type RouteResult, routeProviderEvent } from "./provider-events.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
@@ -47,24 +42,18 @@ export interface AppDeps {
   world: () => Promise<{ hooks: Pick<World["hooks"], "list"> }>;
   /** The jigs registry. */
   registry: () => RegistrySql;
-  /** Where a PagerDuty delivery is handed to the event triggers. */
-  triggers: { push: typeof pushEvent };
 }
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
-/** Build the service HTTP application for one factory's workflows and webhooks. */
+/** Build the service HTTP application for one factory's workflows. */
 export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   const app = new Hono();
   const context = () => deps.context ?? currentFactoryContext();
   const registry = deps.registry ?? registrySql;
   const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });
   const triggers = () => triggerStore(registry(), context().slug);
-  const routes: IngressDeps = {
-    context,
-    world: deps.world ?? getWorld,
-    push: deps.triggers?.push ?? pushEvent,
-  };
+  const world = deps.world ?? getWorld;
 
   app.use(async (c, next) => {
     await next();
@@ -165,20 +154,13 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
     ),
   );
 
-  // The ingress is stateless: verify, reconstruct the token, resume. A
-  // delivery nobody is listening to is acknowledged and dropped — no mapping
-  // tables or persisted deliveries. Wakes are hints; consumers re-check the
-  // provider. A provider whose webhooks are off has no route at all, so a
-  // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app, routes);
-
-  // Manual wake on the same code path as the ingress: resume every token the
-  // run's suspensions are satisfied by. The fallback when a delivery was missed.
+  // Manual wake on the same code path as a provider event: resume every token
+  // the run's suspensions are satisfied by. The fallback when an event was missed.
   app.post("/api/runs/:runId/poke", async (c) => {
     const runId = c.req.param("runId");
     if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
     const run = getRun(runId);
-    const tokens = await runResourceTokens(routes, run.runId);
+    const tokens = await runResourceTokens(world, run.runId);
     if (tokens.length === 0) {
       return c.json({ error: "run has no suspensions to poke" }, 409);
     }
@@ -219,7 +201,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
       return c.json({ error: `run ${runId} is already ${status}`, status }, 409);
     }
-    const claimedTokens = await runResourceTokens(routes, runId);
+    const claimedTokens = await runResourceTokens(world, runId);
     if (status !== "cancelled") {
       try {
         await run.cancel();
@@ -237,7 +219,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         throw error;
       }
     }
-    const retainedTokens = await runResourceTokens(routes, runId);
+    const retainedTokens = await runResourceTokens(world, runId);
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
@@ -313,51 +295,6 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   return app;
 }
 
-interface IngressDeps {
-  context: () => FactoryContext;
-  world: AppDeps["world"];
-  push: typeof pushEvent;
-}
-
-// An event no trigger takes, of any type, is acknowledged.
-function mountPagerDutyIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/pagerduty", async (c) => {
-    const secret = webhookSecret("pagerduty", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("x-pagerduty-signature");
-    if (secret === undefined || !verifyPagerDutySignature(rawBody, signature, secret)) {
-      console.log("[ingress] pagerduty rejected reason=signature");
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    const name = pagerDutyEventType(payload) ?? "unknown";
-    const result = await route(deps, { provider: "pagerduty", name, payload });
-    // Still a 2xx: PagerDuty switches a subscription off after repeated
-    // failures, and the poll finds the incident anyway.
-    if (result.outcome === "failed") return c.json({ delivered: false });
-    return answer(c, result);
-  });
-}
-
-function route(deps: IngressDeps, event: ProviderEvent): Promise<RouteResult> {
-  return routeProviderEvent(event, { context: deps.context(), push: deps.push });
-}
-
-function answer(c: Context, result: RouteResult) {
-  switch (result.outcome) {
-    case "ignored":
-      return c.json({ ignored: true });
-    case "woken":
-      return c.json({ delivered: true });
-    case "dropped":
-      return c.json({ delivered: false });
-    case "failed":
-      return c.json({ delivered: false }, 404);
-    case "triggered":
-      return c.json({ triggers: result.triggers });
-  }
-}
-
 // Liveness must answer from anywhere, including a service started outside a
 // factory, so an unlocatable root is reported rather than thrown as a 500.
 function factoryRootOrNull(context: () => FactoryContext): string | null {
@@ -379,20 +316,11 @@ function dashboardPointer(ctx: FactoryContext, runId: string): string {
     : `http://localhost:${port}/run/${runId}`;
 }
 
-// A signed but unparseable body is unroutable, like an unknown event type.
-function parseJson(rawBody: string): unknown {
-  try {
-    return JSON.parse(rawBody);
-  } catch {
-    return null;
-  }
-}
-
 // The hooks that name an external resource: what another run can be blocked
 // on, and what a poke can wake. The needs-human marker is neither — the reply
 // that ends that halt lands on the ticket claim beside it.
-async function runResourceTokens(deps: IngressDeps, runId: string): Promise<string[]> {
-  const hooks = await (await deps.world()).hooks.list({ runId });
+async function runResourceTokens(world: AppDeps["world"], runId: string): Promise<string[]> {
+  const hooks = await (await world()).hooks.list({ runId });
   return hooks.data
     .map((hook) => hook.token)
     .filter((token) => parseHookToken(token)?.kind !== "needs-human");

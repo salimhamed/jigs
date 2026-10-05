@@ -1,36 +1,20 @@
 import { afterAll, describe, expect, test } from "vitest";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
-import { createPagerDutyClient, type PagerDutyIncident } from "./pagerduty.ts";
-import { createPagerDutyAuth } from "./pagerduty-auth.ts";
+import type { PagerDutyIncident } from "./pagerduty.ts";
+import { livePagerDutyClient } from "./test-fixtures.ts";
 
-// The live half of the PagerDuty client tests: a real scoped OAuth app on a
-// real account. Runs only with PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET
-// and PAGERDUTY_FROM set; PAGERDUTY_EVENTS_ROUTING_KEY also opens and resolves
-// a test incident on the sandbox service to add a note to.
+// The live half of the PagerDuty client tests: a real PagerDuty app's token on
+// a real account. Runs only with JIGS_TEST_PAGERDUTY_TOKEN and PAGERDUTY_FROM
+// set; PAGERDUTY_EVENTS_ROUTING_KEY also opens and resolves a test incident on
+// the sandbox service to add a note to.
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
+const token = env("JIGS_TEST_PAGERDUTY_TOKEN");
 const from = env("PAGERDUTY_FROM");
-const configured =
-  env("PAGERDUTY_CLIENT_ID") !== undefined &&
-  env("PAGERDUTY_CLIENT_SECRET") !== undefined &&
-  from !== undefined;
+const configured = token !== undefined && from !== undefined;
 const routingKey = env("PAGERDUTY_EVENTS_ROUTING_KEY");
 const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 
 describe.skipIf(!configured)("PagerDuty, live", () => {
-  const identity: PagerDutyIdentity = {
-    mode: "app",
-    subdomain: env("PAGERDUTY_SUBDOMAIN") ?? "junglescout",
-    region: env("PAGERDUTY_REGION") === "eu" ? "eu" : "us",
-    from: from ?? "",
-  };
-  const auth = createPagerDutyAuth(identity, { env });
-  const client = createPagerDutyClient(identity, { auth });
-
-  test("mints a token and reuses it", async () => {
-    const token = await auth.bearer();
-    expect(token).not.toBe("");
-    expect(await auth.bearer()).toBe(token);
-  });
+  const client = livePagerDutyClient(token ?? "", from ?? "");
 
   test("lists the sandbox service's incidents", async () => {
     const since = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
@@ -42,17 +26,9 @@ describe.skipIf(!configured)("PagerDuty, live", () => {
     for (const incident of incidents) expect(incident.service.id).toBe(SERVICE);
   });
 
-  test("lists webhook subscriptions without their secrets", async () => {
-    const subscriptions = await client.listWebhookSubscriptions();
-    for (const subscription of subscriptions) {
-      expect(typeof subscription.delivery_method.url).toBe("string");
-      expect(JSON.stringify(subscription)).not.toMatch(/"secret"\s*:\s*"[^"]/);
-    }
-  });
-
   test("finds the from user", async () => {
-    const user = await client.findUserByEmail(identity.from);
-    expect(user?.email.toLowerCase()).toBe(identity.from.toLowerCase());
+    const user = await client.findUserByEmail(from ?? "");
+    expect(user?.email.toLowerCase()).toBe(from?.toLowerCase());
   });
 
   describe.skipIf(routingKey === undefined)("a note on a test incident", () => {

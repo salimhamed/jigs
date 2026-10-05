@@ -125,14 +125,6 @@ test("a container compose cannot name is left out of the summary, not guessed", 
   expect(lines).toContain("  postgres   localhost:5555");
 });
 
-test("a pagerduty section names its client variables as empty slots", async () => {
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-  const port = await fakeService(io.procs);
-  const root = factory({ port, pagerduty: true });
-  expect((await up(root, io)).ok).toBe(true);
-  expect(lines.join("\n")).toContain("PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env");
-});
-
 test("bootstrap is handed the World URL from .env explicitly", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const port = await fakeService(io.procs);
@@ -376,19 +368,6 @@ test("a .env without the hub token stops at env, naming hub connect", async () =
   expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
   expect(result.steps[1]?.repair).toContain("pnpm exec jigs hub connect <url> <token>");
   expect(io.exec.calls).toHaveLength(0);
-});
-
-test("an existing .env is kept and its credentials are not reported when set", async () => {
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-  const port = await fakeService(io.procs);
-  const root = factory({
-    port,
-    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nGITHUB_TOKEN=ghp\n",
-  });
-
-  await up(root, io);
-
-  expect(lines.join("\n")).not.toContain("empty in .env");
 });
 
 test("a missing .env fails env with the copy as its repair, and copies nothing", async () => {

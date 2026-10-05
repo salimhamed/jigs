@@ -1,11 +1,13 @@
 # Resource-scoped hook tokens; webhooks are hints over polling
 
-Status: accepted; superseded for GitHub and Linear's ingress by [0015](./0015-hub.md)
+Status: accepted; ingress superseded by [0015](./0015-hub.md)
 
 GitHub events now reach a factory only through its hub, with no GitHub
 ingress, webhook secret or poll; Linear events also come through the hub, with
 no Linear ingress or webhook secret, though Linear's poll stays for now. The
-tokens below still name what they wake.
+factory now has no ingress at all: PagerDuty's events come through the hub too,
+and `/ingress/pagerduty`, `webhooks` and `PAGERDUTY_WEBHOOK_SECRET` are gone.
+The tokens below still name what they wake.
 
 A run that waits on GitHub or Linear holds a Workflow SDK hook whose token names
 the external resource, not the run: `github:pr:<owner>/<repo>#<number>` for a

@@ -13,7 +13,7 @@ test("preflight checks the identity of each provider a workflow's agents opt in 
   const ids = (harness: ReturnType<typeof harnesses.codex>) =>
     preflightChecks({ agents: { agent: harness } }).map((check) => check.id);
   expect(ids(harnesses.codex({ model: "m", linear: true }))).toContain("linear.identity");
-  expect(ids(harnesses.codex({ model: "m", pagerduty: true }))).toContain("pagerduty.identity");
+  expect(ids(harnesses.codex({ model: "m", pagerduty: true }))).toContain("pagerduty.app");
   expect(ids(harnesses.codex({ model: "m" }))).not.toContain("linear.identity");
   // Declared as an integration too, each identity is still checked once.
   const both = preflightChecks({
@@ -43,6 +43,6 @@ test("doctor leaves a hosted server reading an agent token to the step's own pro
   const ids = doctorChecks({ triage: { requires: { agents: { triager } } } }).map(
     (check) => check.id,
   );
-  expect(ids).toEqual(expect.arrayContaining(["linear.identity", "pagerduty.identity"]));
+  expect(ids).toEqual(expect.arrayContaining(["linear.identity", "pagerduty.app"]));
   expect(ids.filter((id) => id.startsWith("mcp."))).toEqual([]);
 });

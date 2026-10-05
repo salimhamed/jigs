@@ -1,6 +1,6 @@
 // A real incident on the PagerDuty sandbox service, found by a real poll and
 // started as a real run on a Postgres World of its own. Runs only with
-// PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET, PAGERDUTY_FROM and
+// JIGS_TEST_PAGERDUTY_TOKEN (a PagerDuty app's token), PAGERDUTY_FROM and
 // PAGERDUTY_EVENTS_ROUTING_KEY set. Other tests may open incidents on the same
 // service at the same time, so only this test's own incident is asserted on.
 import { execFileSync } from "node:child_process";
@@ -12,11 +12,10 @@ import { afterAll, beforeAll, describe, expect, test } from "vitest";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { databaseUrl, postgresAdminUrl } from "../db-test-fixtures.ts";
-import { createPagerDutyClient, type PagerDutyIncident } from "../providers/pagerduty.ts";
-import { createPagerDutyAuth } from "../providers/pagerduty-auth.ts";
+import type { PagerDutyIncident } from "../providers/pagerduty.ts";
+import { livePagerDutyClient } from "../providers/test-fixtures.ts";
 import { connectRegistry, ensureRegistry, type RegistrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import { triggerStore } from "./event-triggers/store.ts";
@@ -26,24 +25,13 @@ import { findRunsByAttribute } from "./runs.ts";
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
 const from = env("PAGERDUTY_FROM");
 const routingKey = env("PAGERDUTY_EVENTS_ROUTING_KEY");
-const configured =
-  env("PAGERDUTY_CLIENT_ID") !== undefined &&
-  env("PAGERDUTY_CLIENT_SECRET") !== undefined &&
-  from !== undefined &&
-  routingKey !== undefined;
+const token = env("JIGS_TEST_PAGERDUTY_TOKEN");
+const configured = token !== undefined && from !== undefined && routingKey !== undefined;
 const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 const SLUG = "pagerduty-live";
 
 describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
-  const identity: PagerDutyIdentity = {
-    mode: "app",
-    subdomain: env("PAGERDUTY_SUBDOMAIN") ?? "junglescout",
-    region: env("PAGERDUTY_REGION") === "eu" ? "eu" : "us",
-    from: from ?? "",
-  };
-  const client = createPagerDutyClient(identity, {
-    auth: createPagerDutyAuth(identity, { env }),
-  });
+  const client = livePagerDutyClient(token ?? "", from ?? "");
 
   const database = `jigs_pd_trigger_${crypto.randomUUID().replaceAll("-", "")}`;
   const testUrl = databaseUrl(database);

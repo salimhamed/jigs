@@ -1,5 +1,4 @@
-import { createHmac } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { SPEC_VERSION_CURRENT } from "@workflow/world";
@@ -15,9 +14,7 @@ import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
 import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
-import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
-import * as triggers from "./event-triggers/runner.ts";
 import * as queue from "./queue.ts";
 import { clearWakes, lastWake } from "./wake.ts";
 
@@ -35,8 +32,7 @@ const { createApp } = await import("./app.ts");
 // rather than the operator's database.
 const env: Record<string, string | undefined> = {};
 const context = testFactoryContext({ slug: "factory-test", env });
-const push = vi.fn(triggers.pushEvent);
-const deps = { context, registry: () => ({}) as never, triggers: { push } };
+const deps = { context, registry: () => ({}) as never };
 
 // The routes are exercised against workflows this file declares: what is under
 // test is the framework.
@@ -54,15 +50,11 @@ const fixture = {
       inputs: z.object({ when: z.date(), name: z.string() }),
     },
   },
-  webhooks: {
-    url: "https://factory.example.ts.net",
-    pagerduty: { enabled: false },
-  },
 } satisfies Factory;
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
-// The ingress hands every accepted delivery to the SDK's own resumeHook, and
+// A wake hands every accepted event to the SDK's own resumeHook, and
 // what a delivery is worth is what that call answers — so the SDK is what a
 // test stands in for here, never a seam of the app's.
 vi.mock("workflow/api", async (importActual) => ({
@@ -111,11 +103,7 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
-  Object.assign(env, {
-    GITHUB_TOKEN: "gh-service-token",
-    PAGERDUTY_WEBHOOK_SECRET: "pd-hook-secret",
-  });
-  push.mockReset().mockImplementation(triggers.pushEvent);
+  Object.assign(env, { GITHUB_TOKEN: "gh-service-token" });
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
 afterEach(() => {
@@ -124,26 +112,6 @@ afterEach(() => {
   // Clears the cached world too, so the next getWorld() opens the local one
   // again from the data dir above.
   setWorld(undefined);
-});
-
-const sign = (body: string, secret: string) =>
-  createHmac("sha256", secret).update(body).digest("hex");
-
-test.each([
-  ["no webhooks section", undefined],
-  [
-    "PagerDuty switched off",
-    { url: "https://factory.example.ts.net", pagerduty: { enabled: false } },
-  ],
-])("with %s, no ingress route exists", async (_name, webhooks) => {
-  const polling = createApp({ workflows: fixture.workflows, webhooks }, deps);
-  const pagerDuty = await polling.request("/ingress/pagerduty", {
-    method: "POST",
-    body: "{}",
-    headers: { "x-pagerduty-signature": `v1=${sign("{}", "pd-hook-secret")}` },
-  });
-  expect(pagerDuty.status).toBe(404);
-  expect(resumeHookMock).not.toHaveBeenCalled();
 });
 
 test("poke of an unknown run is a 404", async () => {
@@ -625,84 +593,4 @@ test("a factory with no schedules answers an empty listing", async () => {
   const res = await app.request("/api/schedules");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual([]);
-});
-
-// Each run starts from an incident on the one service the trigger watches.
-const paged = {
-  workflows: {
-    respond: { workflow: async () => undefined, inputs: z.object({ incident: z.string() }) },
-  },
-  triggers: {
-    pages: { workflow: "respond", source: pagerduty.incidents({ service_ids: ["PSVC001"] }) },
-  },
-  webhooks: {
-    url: "https://factory.example.ts.net",
-    pagerduty: { enabled: true },
-  },
-} satisfies Factory;
-const pagedApp = createApp(paged, deps);
-
-const incidentTriggered = () =>
-  readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8");
-const postPagerDuty = (body: string, headers: Record<string, string> = {}) =>
-  pagedApp.request("/ingress/pagerduty", { method: "POST", body, headers });
-const signPagerDuty = (body: string, secret = "pd-hook-secret") => `v1=${sign(body, secret)}`;
-
-test("PagerDuty's route exists only when its webhook is switched on", async () => {
-  const body = incidentTriggered();
-  const headers = { "x-pagerduty-signature": signPagerDuty(body) };
-  expect((await app.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
-    404,
-  );
-  const off = createApp(
-    {
-      ...paged,
-      webhooks: { ...paged.webhooks, pagerduty: { enabled: false } },
-    },
-    deps,
-  );
-  expect((await off.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
-    404,
-  );
-});
-
-test.each([
-  ["a forged signature", { "x-pagerduty-signature": "v1=00" }],
-  ["no signature", {}],
-])("POST /ingress/pagerduty with %s is a 401 that logs no signature", async (_name, headers) => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const res = await postPagerDuty(incidentTriggered(), headers);
-  expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] pagerduty rejected reason=signature");
-  expect(push).not.toHaveBeenCalled();
-});
-
-test("POST /ingress/pagerduty without a configured secret fails closed", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined);
-  env.PAGERDUTY_WEBHOOK_SECRET = "";
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body, "") });
-  expect(res.status).toBe(401);
-});
-
-test("a push that fails is still acknowledged, so PagerDuty keeps the subscription on", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  push.mockRejectedValueOnce(new Error("registry unreachable"));
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
-  );
-});
-
-test("a signed PagerDuty event a trigger takes answers with the triggers", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined);
-  push.mockResolvedValueOnce(["pages"]);
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ triggers: ["pages"] });
-  expect(push).toHaveBeenCalledExactlyOnceWith("pagerduty", JSON.parse(body));
 });

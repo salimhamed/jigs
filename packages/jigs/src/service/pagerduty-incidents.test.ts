@@ -2,9 +2,7 @@ import { readFileSync } from "node:fs";
 import { expect, test } from "vitest";
 import { z } from "zod";
 import { createPagerDutyClient, type PagerDutyIncident } from "../providers/pagerduty.ts";
-import type { PagerDutyAuth } from "../providers/pagerduty-auth.ts";
 import type { Factory } from "../workflow/factory.ts";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import { triggerChecks, triggerProviders } from "./event-triggers/view.ts";
@@ -16,17 +14,7 @@ import { memoryTriggerStore } from "./test-fixtures.ts";
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-const identity: PagerDutyIdentity = {
-  mode: "app",
-  subdomain: "acme",
-  region: "us",
-  from: "oncall@example.com",
-};
-const auth: PagerDutyAuth = {
-  identity,
-  bearer: async () => "token",
-  invalidate: () => {},
-};
+const tokens = { bearer: async () => "token", invalidate: () => {} };
 
 // A list-incidents record as PagerDuty returns it, trimmed to what the client reads.
 const incident = (
@@ -70,7 +58,7 @@ function recordedApi() {
       { status: 200, headers: { "content-type": "application/json" } },
     );
   }) as typeof globalThis.fetch;
-  return { replies, urls, client: createPagerDutyClient(identity, { auth, fetch }) };
+  return { replies, urls, client: createPagerDutyClient({ tokens, fetch }) };
 }
 
 test("a poll lists incidents of every status with the source's own filters, from just behind its cursor", async () => {

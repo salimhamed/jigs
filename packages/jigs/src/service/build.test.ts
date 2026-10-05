@@ -64,8 +64,7 @@ test("the entry resolves deferred modules only inside the service", () => {
   expect(source).toContain("(await load()).default");
 });
 
-test("the factory carries the triggers and webhook settings the service reads", () => {
+test("the factory carries the triggers the service reads", () => {
   const source = readFileSync(prepare(factory()), "utf8");
   expect(source).toContain("triggers: definition.triggers");
-  expect(source).toContain("webhooks: definition.webhooks");
 });

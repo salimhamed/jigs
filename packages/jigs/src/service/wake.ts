@@ -1,10 +1,10 @@
-// How the service wakes a parked run, and what last woke it. The ingress,
-// `jigs poke`, the nudge sweep and the Slack socket all wake through `wake`,
+// How the service wakes a parked run, and what last woke it. Provider events,
+// `jigs poke` and the nudge sweep all wake through `wake`,
 // so the note is written where the wake happens and nothing has to be
 // threaded through the workflow to carry it back.
 //
 // The note is in memory on purpose: a wake is disposable observability, and a
-// durable note would put a World write on the ingress path for every delivery.
+// durable note would put a World write on the path of every provider event.
 // A restarted service simply has no note until it wakes the run again, which
 // the nudge sweep does within its interval.
 

@@ -11,8 +11,7 @@ import type { RegistrySql } from "../steps/runtime/registry.ts";
 import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { WorkflowDefinition } from "../workflow/factory.ts";
-import type { WebhooksConfig } from "../workflow/factory-schema.ts";
-import { POLLED_PROVIDERS, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
+import { POLLED_PROVIDERS } from "../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
 import { installShutdown, onShutdown } from "./shutdown.ts";
 
@@ -91,51 +90,8 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   return true;
 }
 
-/** Injectable configuration and output used by the webhook startup gate. */
-export interface WebhookSecretGateDeps {
-  webhooks?: () => Promise<WebhooksConfig | undefined>;
-  env?: () => Promise<FactoryContext["env"]>;
-  exit?: (code: number) => void;
-  error?: (line: string) => void;
-}
-
-async function configuredWebhooks(): Promise<WebhooksConfig | undefined> {
-  return (await serviceContext()).config.webhooks;
-}
-
 async function serviceEnv(): Promise<FactoryContext["env"]> {
   return (await serviceContext()).env;
-}
-
-// A provider switched on without its secret would answer every delivery with
-// an error while its runs quietly fall back to polling; refusing the boot puts
-// the missing variable in front of the operator instead.
-/** Refuse service startup when an enabled webhook provider has no signing secret. */
-export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Promise<boolean> {
-  const error = deps.error ?? ((line: string) => console.error(line));
-  const exit = deps.exit ?? process.exit;
-  let webhooks: WebhooksConfig | undefined;
-  let env: FactoryContext["env"];
-  try {
-    webhooks = await (deps.webhooks ?? configuredWebhooks)();
-    env = await (deps.env ?? serviceEnv)();
-  } catch (err) {
-    error(`[service] could not read the webhook configuration: ${describe(err)}`);
-    exit(1);
-    return false;
-  }
-  const { webhookSecret, webhookSecretVariable } = await import("../config/webhook-secret.ts");
-  const missing = WEBHOOK_PROVIDERS.filter(
-    (provider) => webhooks?.[provider].enabled && webhookSecret(provider, { env }) === undefined,
-  ).map(webhookSecretVariable);
-  if (missing.length > 0) {
-    error(
-      `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
-    );
-    exit(1);
-    return false;
-  }
-  return true;
 }
 
 /** Injectable configuration and output used by the hub startup gate. */
@@ -145,8 +101,8 @@ export interface HubTokenGateDeps {
   error?: (line: string) => void;
 }
 
-// Without its token the factory hears nothing from GitHub, and every run that
-// waits on a pull request waits forever.
+// Without its token the factory hears nothing from its providers, and every run
+// that waits on one waits forever.
 /** Refuse service startup when `JIGS_HUB_TOKEN` is not set. */
 export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boolean> {
   const error = deps.error ?? ((line: string) => console.error(line));
@@ -370,9 +326,8 @@ export async function startWorld() {
   setBootPhase("harnesses");
   if (!(await gateOnHarnessRuntimes())) return;
 
-  setBootPhase("webhooks");
+  setBootPhase("hub");
   if (!(await gateOnHubToken())) return;
-  if (!(await gateOnWebhookSecrets())) return;
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.

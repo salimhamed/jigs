@@ -1,7 +1,7 @@
 import { expect, test } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { runChecks } from "./catalog.ts";
-import { hubSlackChecks } from "./hub.ts";
+import { hubAppChecks } from "./hub.ts";
 
 const status =
   (apps: Array<{ provider: string; name: string; accounts: string[] }>) => async () => ({
@@ -14,8 +14,10 @@ const status =
     })),
   });
 
-const outcome = async (apps: Parameters<typeof status>[0]) =>
-  (await runChecks(hubSlackChecks(testFactoryContext(), status(apps)))).checks[0];
+const outcome = async (
+  apps: Parameters<typeof status>[0],
+  provider: "slack" | "pagerduty" = "slack",
+) => (await runChecks(hubAppChecks(testFactoryContext(), provider, status(apps)))).checks[0];
 
 test("an assigned Slack app passes, naming its workspaces", async () => {
   expect(await outcome([{ provider: "slack", name: "jigs", accounts: ["Acme"] }])).toEqual({
@@ -31,5 +33,26 @@ test("no Slack app assigned fails with the repair", async () => {
     ok: false,
     reason: "no Slack app is assigned to this factory on the hub",
     repair: expect.stringContaining("assign this factory a Slack app"),
+  });
+});
+
+test("an assigned PagerDuty app passes, naming its account", async () => {
+  expect(
+    await outcome([{ provider: "pagerduty", name: "jigs-pd", accounts: ["acme"] }], "pagerduty"),
+  ).toEqual({
+    id: "hub.pagerduty",
+    label: "hub PagerDuty app",
+    ok: true,
+    detail: "jigs-pd in acme",
+  });
+});
+
+test("no PagerDuty app assigned fails with the repair", async () => {
+  expect(
+    await outcome([{ provider: "slack", name: "jigs", accounts: ["Acme"] }], "pagerduty"),
+  ).toMatchObject({
+    ok: false,
+    reason: "no PagerDuty app is assigned to this factory on the hub",
+    repair: expect.stringContaining("assign this factory a PagerDuty app"),
   });
 });

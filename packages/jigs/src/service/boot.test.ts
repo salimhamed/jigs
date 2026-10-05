@@ -11,7 +11,6 @@ import {
   gateOnHarnessRuntimes,
   gateOnHubToken,
   gateOnRegistry,
-  gateOnWebhookSecrets,
   gateOnWorldStart,
 } from "./boot.ts";
 
@@ -455,37 +454,6 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
   ).resolves.toBe(true);
 
   expect(checked).toEqual([["claude"]]);
-});
-
-const WEBHOOKS = {
-  url: "https://factory.example.ts.net",
-  pagerduty: { enabled: true },
-};
-
-test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  const error = vi.fn();
-  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit, error })).toBe(false);
-  expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(
-    expect.stringContaining("PAGERDUTY_WEBHOOK_SECRET is not set"),
-  );
-});
-
-test.each([
-  ["no webhooks section", undefined],
-  ["PagerDuty off", { ...WEBHOOKS, pagerduty: { enabled: false } }],
-])("%s needs no secret to boot", async (_name, webhooks) => {
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
-  expect(exit).not.toHaveBeenCalled();
-});
-
-test("an enabled provider with its secret boots", async () => {
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "signed");
-  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
 });
 
 test("without its hub token the service refuses the boot and says how to connect", async () => {
