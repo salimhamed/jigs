@@ -1147,35 +1147,6 @@ if (hub === undefined) {
       { cwd: packageRoot, stdio: "inherit" },
     );
     console.log(
-      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",
-    );
-    // The service runs on the configuration it was built with: a config on
-    // disk that throws when loaded must not stop it.
-    const configFile = path.join(factory, "jigs.config.ts");
-    const builtConfig = readFileSync(configFile, "utf8");
-    writeFileSync(configFile, 'throw new Error("the service read jigs.config.ts");\n');
-    const boot = await bootOutcome(postgresUrl, { whileReady: hub.seen }).finally(() =>
-      writeFileSync(configFile, builtConfig),
-    );
-    if (boot.problem === null && boot.observed?.error !== undefined) {
-      console.error(boot.output);
-      fail(
-        `the built service never reached its hub: ${boot.observed.error}`,
-        "the service starts its hub client once it is ready; the output above shows what it said",
-      );
-    }
-    if (boot.problem === null) {
-      console.log(
-        `ready after ${boot.readyMs}ms; reached the hub as jigs ${boot.observed}; exited 0 ${boot.exitMs}ms after SIGTERM`,
-      );
-    } else {
-      console.error(boot.output);
-      fail(
-        `the built service did not start and stop cleanly: ${boot.problem}`,
-        `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
-      );
-    }
-    console.log(
       "\n=== bare boot: with no harness CLI and no provider credential, the bare factory starts and doctor is clean",
     );
     const recipeFactory = factory;
@@ -1204,6 +1175,48 @@ if (hub === undefined) {
       `ready after ${bareBoot.readyMs}ms with no ${HARNESS_CLIS.join(", ")} on PATH; doctor clean (${bareBoot.observed.checks.length} checks)`,
     );
     console.log(
+      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",
+    );
+    // The service runs on the configuration it was built with: a config on
+    // disk that throws when loaded must not stop it.
+    const configFile = path.join(factory, "jigs.config.ts");
+    const builtConfig = readFileSync(configFile, "utf8");
+    writeFileSync(configFile, 'throw new Error("the service read jigs.config.ts");\n');
+    // The hub stops first, while the factory still long-polls it, as a hub
+    // restarted under a running factory does. Later checks need no hub.
+    const whileConnected = async () => {
+      const version = await hub.seen();
+      // Reported, not failed here, so bootOutcome still stops the factory.
+      const hubStop = await hub.stop().then(
+        () => undefined,
+        (err) => err.message,
+      );
+      return hubStop === undefined ? version : { hubStop };
+    };
+    const boot = await bootOutcome(postgresUrl, { whileReady: whileConnected }).finally(() =>
+      writeFileSync(configFile, builtConfig),
+    );
+    if (boot.observed?.hubStop !== undefined)
+      fail(boot.observed.hubStop, "the hub's output above shows what kept it running");
+    if (boot.problem === null && boot.observed?.error !== undefined) {
+      console.error(boot.output);
+      fail(
+        `the built service never reached its hub: ${boot.observed.error}`,
+        "the service starts its hub client once it is ready; the output above shows what it said",
+      );
+    }
+    if (boot.problem === null) {
+      console.log(
+        `ready after ${boot.readyMs}ms; reached the hub as jigs ${boot.observed}; the hub stopped while it was connected; exited 0 ${boot.exitMs}ms after SIGTERM`,
+      );
+    } else {
+      console.error(boot.output);
+      fail(
+        `the built service did not start and stop cleanly: ${boot.problem}`,
+        `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
+      );
+    }
+    console.log(
       `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
     );
     await runtimeScenario(postgresUrl);
@@ -1228,7 +1241,7 @@ if (hub === undefined) {
   });
 }
 
-await hub?.stop();
+await hub?.stop().catch((err) => fail(err.message, "see the hub's output above"));
 cleanup();
 
 // A real hub beside the test factories, on its own database, with one factory
@@ -1307,13 +1320,21 @@ async function startHub(adminUrl) {
       );
       return version;
     },
+    // Stops the hub once, whatever calls it again; a hub that will not leave fails the run.
     stop: async () => {
+      if (stopped) return;
       await db.end();
       const exited = once(child, "exit");
       child.kill("SIGTERM");
-      const [code] = await exited;
-      if (code !== 0)
-        fail(`the hub exited with code ${code} on SIGTERM, not 0`, "see its output above");
+      const [code] = await Promise.race([
+        exited,
+        new Promise((resolve) => setTimeout(() => resolve([undefined]), SHUTDOWN_TIMEOUT_MS)),
+      ]);
+      if (code === undefined)
+        throw new Error(
+          `the hub did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM while a factory was connected`,
+        );
+      if (code !== 0) throw new Error(`the hub exited with code ${code} on SIGTERM, not 0`);
       await admin.query(`DROP DATABASE "${database}"`);
       await admin.end();
       stopped = true;

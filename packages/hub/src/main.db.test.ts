@@ -2,9 +2,13 @@ import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import { fileURLToPath } from "node:url";
+import { messagesPath } from "@jigs-ai/hub-protocol";
 import { Client } from "pg";
 import { afterEach, expect } from "vitest";
+import { connectDatabase } from "./db/database.ts";
+import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
+import { addFactory } from "./factories.ts";
 
 const main = fileURLToPath(new URL("../dist/main.js", import.meta.url));
 const cleanups: (() => Promise<void> | void)[] = [];
@@ -12,7 +16,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async () => {
+async function startHub() {
   const database = await createTestDatabase();
   cleanups.push(database.drop);
   const child = spawn(process.execPath, [main], {
@@ -43,6 +47,11 @@ dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async
   const [line] = await once(child.stdout, "data");
   const url = /http:\/\/\S+/.exec(String(line))?.[0];
   expect(url).toBeDefined();
+  return { database, child, url: url as string, stderr: () => stderr };
+}
+
+dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async () => {
+  const { database, child, url, stderr } = await startHub();
 
   const health = await fetch(`${url}/health`);
   expect(health.status).toBe(200);
@@ -72,6 +81,50 @@ dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async
   child.kill("SIGTERM");
   const [code, signal] = await once(child, "close");
   expect({ code, signal }).toEqual({ code: 0, signal: null });
-  expect(stderr).not.toContain("No route matches");
-  expect(stderr).toContain('relation "invitation" does not exist');
+  expect(stderr()).not.toContain("No route matches");
+  expect(stderr()).toContain('relation "invitation" does not exist');
 });
+
+dbTest(
+  "exits promptly on SIGTERM while a factory long-polls on a keep-alive connection",
+  async () => {
+    const { database, child, url, stderr } = await startHub();
+    const db = connectDatabase(database.url);
+    await db
+      .insert(schema.organization)
+      .values({ id: "acme", name: "Acme", slug: "acme", createdAt: new Date() });
+    const { token } = await addFactory(db, "acme", "factory");
+    await db.$client.end();
+
+    // Polls again the moment an answer comes back, as eagerly as a factory could.
+    let polling = true;
+    let polls = 0;
+    const poller = (async () => {
+      while (polling) {
+        polls += 1;
+        try {
+          const response = await fetch(`${url}${messagesPath}?wait=30`, {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          await response.text();
+        } catch {
+          await new Promise((resolve) => setTimeout(resolve, 50));
+        }
+      }
+    })();
+    cleanups.push(async () => {
+      polling = false;
+      await poller;
+    });
+    while (polls === 0) await new Promise((resolve) => setTimeout(resolve, 10));
+    await new Promise((resolve) => setTimeout(resolve, 200));
+
+    const started = Date.now();
+    child.kill("SIGTERM");
+    const [code, signal] = await once(child, "close");
+    expect({ code, signal }).toEqual({ code: 0, signal: null });
+    expect(Date.now() - started).toBeLessThan(5_000);
+    expect(stderr()).not.toContain("Failed query");
+  },
+  15_000,
+);

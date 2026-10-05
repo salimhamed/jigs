@@ -51,7 +51,8 @@ export function createFactoryApi(options: {
     const gone = new AbortController();
     response.on("close", () => gone.abort());
     const factory = await authenticate(request, response);
-    if (!factory) return;
+    // A factory that hung up gets no more queries, which shutdown may have closed the pool for.
+    if (!factory || gone.signal.aborted) return;
     const wait = Math.min(Math.max(Number(request.query.wait) || 0, 0), maxWaitSeconds);
     // Wait before reading, so a message appended between the two still wakes it.
     const woken = wait > 0 ? waiters.wait(factory.id, wait * 1000, gone.signal) : null;
@@ -60,7 +61,7 @@ export function createFactoryApi(options: {
       await woken;
       if (gone.signal.aborted) return;
       // The token may have been re-issued or the factory removed while it waited.
-      if (!(await authenticate(request, response))) return;
+      if (!(await authenticate(request, response)) || gone.signal.aborted) return;
       messages = await readMessages(db, factory.id);
     }
     response.json({ messages } satisfies MessagesResponse);
