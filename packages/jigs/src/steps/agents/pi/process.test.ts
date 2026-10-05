@@ -248,8 +248,6 @@ test("a malformed line still fails the Pi result with a stdout observer", async 
   expect(chunks.join("")).toContain("{broken");
 });
 
-const ignoringTerm = `'${process.execPath}' -e 'process.on("SIGTERM", () => {}); setInterval(() => {}, 1000)'`;
-
 test("Pi execution settles only after a child that outlives Pi is gone", async () => {
   const childPidFile = path.join(tmp, "outliving.pid");
   const bin = writePi([
@@ -288,8 +286,8 @@ test("an aborted Pi that ignores SIGTERM is killed before execution settles", as
   const bin = writePi([
     "trap '' TERM",
     `printf '%s' "$$" > '${piPidFile}'`,
-    `${ignoringTerm} &`,
-    `printf '%s' "$!" > '${childPidFile}'`,
+    // Node resets the inherited ignore at startup, so the child names itself only once its handler is in.
+    `'${process.execPath}' -e 'process.on("SIGTERM", () => {}); require("node:fs").writeFileSync(${JSON.stringify(childPidFile)}, String(process.pid)); setInterval(() => {}, 1000)' &`,
     "wait",
   ]);
   const controller = new AbortController();

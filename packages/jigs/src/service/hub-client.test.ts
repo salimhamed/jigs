@@ -28,6 +28,8 @@ async function fakeHub(replies: (Message[] | number)[]) {
       body += chunk;
     });
     req.on("end", () => {
+      // Tools on the machine probe new ports; only the hub API is the client's.
+      if (!req.url?.startsWith("/api/factory/")) return void res.writeHead(404).end();
       seen.push({ method: req.method ?? "", url: req.url ?? "", headers: req.headers, body });
       if (req.method === "POST") return void res.writeHead(204).end();
       const reply = replies.shift();
