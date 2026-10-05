@@ -219,6 +219,31 @@ test("an unroutable Linear resource type is ignored", async () => {
   );
 });
 
+test("a Linear agent session goes to the triggers, not to waiting runs", async () => {
+  push.mockResolvedValueOnce(["mentions"]);
+  const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
+  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+    outcome: "triggered",
+    triggers: ["mentions"],
+  });
+  expect(push).toHaveBeenCalledExactlyOnceWith("linear", payload);
+  expect(resumeHookMock).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] linear accepted triggers=mentions event=AgentSessionEvent",
+  );
+});
+
+test("a Linear agent session no trigger could read is a failure, logged", async () => {
+  push.mockRejectedValueOnce(new Error("issue lookup failed"));
+  const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
+  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+    outcome: "failed",
+  });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] linear dropped reason=push-failed event=AgentSessionEvent: Error: issue lookup failed",
+  );
+});
+
 const incidentTriggered = () =>
   JSON.parse(
     readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
@@ -234,7 +259,7 @@ test("a PagerDuty event no trigger takes is ignored", async () => {
   payload.event.event_type = "incident.acknowledged";
   expect(await route(page(payload))).toEqual({ outcome: "ignored" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
+    "[events] pagerduty ignored reason=no-new-occurrence event=incident.acknowledged",
   );
 });
 

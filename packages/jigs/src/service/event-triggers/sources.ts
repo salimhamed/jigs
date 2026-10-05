@@ -3,8 +3,10 @@
 // registry, keyed by the descriptor's `kind`, is what the engine runs.
 
 import type { z } from "zod";
+import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
+import { linearAgentSessions } from "../linear-agent-sessions.ts";
 import { pagerDutyIncidents } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
@@ -48,4 +50,5 @@ export type SourceRegistry = Readonly<Record<string, Source<any, any>>>;
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
   [PAGERDUTY_INCIDENTS_SOURCE]: pagerDutyIncidents(),
+  [LINEAR_AGENT_SESSIONS_SOURCE]: linearAgentSessions(),
 };

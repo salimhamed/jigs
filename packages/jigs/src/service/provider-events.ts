@@ -37,9 +37,9 @@ export function routeProviderEvent(event: ProviderEvent, deps: RouteDeps): Promi
     case "github":
       return routeGithub(event, deps);
     case "linear":
-      return routeLinear(event);
+      return event.name === "AgentSessionEvent" ? routePush(event, deps) : routeLinear(event);
     case "pagerduty":
-      return routePagerDuty(event, deps);
+      return routePush(event, deps);
     case "slack":
       return routeSlack(event, deps);
   }
@@ -102,22 +102,22 @@ async function routeLinear({ name, payload }: ProviderEvent) {
   return wakeAndLog("linear", [token], event);
 }
 
-// PagerDuty events start runs rather than wake them. The push returns once the
-// occurrence is recorded, never waiting on the start.
-async function routePagerDuty({ name, payload }: ProviderEvent, deps: RouteDeps) {
+// PagerDuty events and Linear agent sessions start runs rather than wake them.
+// The push returns once the occurrence is recorded, never waiting on the start.
+async function routePush({ provider, name, payload }: ProviderEvent, deps: RouteDeps) {
   const event = `event=${sanitizeForLog(name)}`;
   let triggers: string[];
   try {
-    triggers = await deps.push("pagerduty", payload);
+    triggers = await deps.push(provider, payload);
   } catch (error) {
-    console.log(`[events] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
+    console.log(`[events] ${provider} dropped reason=push-failed ${event}: ${String(error)}`);
     return { outcome: "failed" } as const;
   }
   if (triggers.length === 0) {
-    console.log(`[events] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
+    console.log(`[events] ${provider} ignored reason=no-new-occurrence ${event}`);
     return { outcome: "ignored" } as const;
   }
-  console.log(`[events] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
+  console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} ${event}`);
   return { outcome: "triggered", triggers } as const;
 }
 

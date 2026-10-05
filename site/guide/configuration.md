@@ -233,13 +233,59 @@ export default defineFactory({
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
 | `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
+| `linear.agentSessions` | A mention of the factory's Linear app on an issue, or an issue assigned to it | `{ session, workspace, issue, comment, creator }` | `teams`, `projects`, `labels` |
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents`. `jigs doctor` checks that provider for every trigger
+for `pagerduty.incidents` and [Linear](#linear-identity) for
+`linear.agentSessions`. `jigs doctor` checks that provider for every trigger
 that uses it. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
 `slack C0123ABCD 1790723244.335019` or `pagerduty Q1ABCDEF`.
+
+### Linear mentions and assignments {#linear-agent-sessions}
+
+`linear.agentSessions` starts a run each time someone mentions the factory's
+Linear app on an issue or assigns an issue to it. Linear calls each of these an
+agent session. The hub posts the session's first reply at once, so Linear shows
+the app at work while the run starts. Each run gets:
+
+- `session`: the agent session's id, which is also the occurrence, so a
+  session starts at most one run even if Linear sends it twice.
+- `workspace`: the id of the Linear workspace the session is in.
+- `issue`: the issue's `id`, `identifier`, `title` and `url`.
+- `comment`: the body of the comment the session started from, or `null` for
+  an assignment.
+- `creator`: the `id`, `name` and `email` of who started it, or `null` for an
+  automation.
+
+`teams` takes team keys such as `ENG` or team ids, `projects` takes project
+ids or the id at the end of a project's URL, and `labels` takes label names.
+Sessions not on an issue start no run. Linear only sends sessions, so the
+service never polls for them; the hub keeps the ones that arrive while the
+service is down, and `lookbackMinutes` applies to them as to any occurrence.
+
+```ts
+import { linear } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "fix-on-mention": {
+    workflow: "fix",
+    source: linear.agentSessions({ teams: ["ENG"], labels: ["agent"] }),
+  },
+};
+```
+
+Every factory assigned the app hears every mention of it, and each trigger on
+this source in each of those factories starts its own run. jigs does not pick
+one for you: give each purpose its own Linear app, or split the issues between
+triggers with `teams`, `projects` and `labels`.
+
+The hub replies "Received — working on it." to every session before any
+factory reads it, so that reply appears even when this factory's filters skip
+the session and no run starts. Make the filters match what the app is for, so
+that a mention the app answers is one a run takes.
 
 ## `release` {#release}
 
@@ -431,7 +477,7 @@ token for the factory, and says when a workspace must be connected again in
 the hub.
 
 Use one Linear app per purpose: two factories assigned the same app both answer
-a mention of it.
+a mention of it; see [Linear mentions and assignments](#linear-agent-sessions).
 
 ### Who comments mention {#linear-operator}
 

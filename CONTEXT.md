@@ -149,6 +149,10 @@ _Avoid_: executor, injected dependencies
 harness session it holds, and starts fresh when that session is unusable.
 _Avoid_: role session, resumeOrRebuild
 
+**Linear agent session**: Linear's record of one mention of, or assignment to,
+a Linear app; the `linear.agentSessions` source's occurrence. Not an agent
+session.
+
 **Session reference**: The small plain data that lets a later step resume the
 same harness session.
 _Avoid_: session pointer, agent session (for the data)
@@ -199,8 +203,8 @@ such as a new incident or a top-level message. An event trigger starts at most
 one run per occurrence, ever.
 _Avoid_: event (for the deduplicated unit), delivery
 
-**Delivery kind**: How a source learns of occurrences: polling, which every
-source has, or a push kind such as a webhook or a socket.
+**Delivery kind**: How a source learns of occurrences: polling, or a push kind
+such as a webhook or a socket. A Linear agent session is pushed only.
 _Avoid_: transport, mode
 
 **Ingress**: The optional webhook routes that turn provider events into wakes
