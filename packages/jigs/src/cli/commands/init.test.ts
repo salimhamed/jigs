@@ -53,7 +53,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(pkg.dependencies.workflow).toBeDefined();
   expect(pkg.dependencies["@workflow/world-postgres"]).toBeDefined();
   expect(pkg.dependencies["@workflow/web"]).toBeDefined();
-  expect(pkg.dependencies.hono).toBeUndefined();
+  expect(pkg.dependencies.express).toBeUndefined();
   // The scaffolded ids test needs its runner.
   expect(pkg.devDependencies.vitest).toBeDefined();
   expect(pkg.scripts.test).toBe("vitest run");

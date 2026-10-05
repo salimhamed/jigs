@@ -1,7 +1,9 @@
 // Create the HTTP application that serves a factory's workflow endpoints.
 
+import type { RequestListener } from "node:http";
+import { json as readJson } from "node:stream/consumers";
 import type { World } from "@workflow/world";
-import { Hono } from "hono";
+import express, { type ErrorRequestHandler } from "express";
 import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -47,17 +49,18 @@ export interface AppDeps {
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
 /** Build the service HTTP application for one factory's workflows. */
-export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
-  const app = new Hono();
+export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): RequestListener {
+  const app = express();
+  app.disable("x-powered-by");
   const context = () => deps.context ?? currentFactoryContext();
   const registry = deps.registry ?? registrySql;
   const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });
   const triggers = () => triggerStore(registry(), context().slug);
   const world = deps.world ?? getWorld;
 
-  app.use(async (c, next) => {
-    await next();
-    c.header(VERSION_HEADER, JIGS_VERSION);
+  app.use((_request, response, next) => {
+    response.set(VERSION_HEADER, JIGS_VERSION);
+    next();
   });
 
   // Liveness, plus how far the boot has got; dependency verification is
@@ -65,8 +68,8 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // `ready` — not the 200 — is what `jigs service start` waits on. With a
   // service per factory repo, `factoryRoot` is the only thing that says which
   // factory answers here, and `pid` which process.
-  app.get("/health", (c) =>
-    c.json({
+  app.get("/health", (_request, response) =>
+    response.json({
       ok: true,
       ready: isReady(),
       phase: bootPhase(),
@@ -84,11 +87,14 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // `unrepresentable: "any"` keeps a schema holding a z.date()/z.bigint()/
   // z.custom() from throwing the whole route to a 500 — the member renders as
   // `{}` and entry.inputs.safeParse at the trigger stays its real authority.
-  app.get("/api/workflows/:name/inputs", (c) => {
-    const name = c.req.param("name");
+  app.get("/api/workflows/:name/inputs", (request, response) => {
+    const name = request.params.name;
     const entry = factory.workflows[name];
-    if (!entry) return c.json(unknownWorkflow(name), 404);
-    return c.json({
+    if (!entry) {
+      response.status(404).json(unknownWorkflow(name));
+      return;
+    }
+    response.json({
       name,
       inputs: z.toJSONSchema(entry.inputs, {
         io: "input",
@@ -99,8 +105,8 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // The launch registry itself is the authority for what this built service
   // can run. Expose its existing input schemas for read-only CLI discovery.
-  app.get("/api/workflows", (c) =>
-    c.json({
+  app.get("/api/workflows", (_request, response) =>
+    response.json({
       workflows: Object.entries(factory.workflows).map(([name, entry]) => ({
         name,
         inputs: z.toJSONSchema(entry.inputs, {
@@ -113,39 +119,45 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // The manual half of the trigger path; the schedule ticker fires the same
   // function, so preflight cannot differ between them.
-  app.post("/api/workflows/:name/runs", async (c) => {
-    const name = c.req.param("name");
-    const body = await c.req.json<{ inputs?: unknown }>().catch(() => ({}) as { inputs?: unknown });
+  app.post("/api/workflows/:name/runs", async (request, response) => {
+    const name = request.params.name;
+    // Not express.json(): any content type is read, and a malformed body is no inputs.
+    const body = (await readJson(request).catch(() => ({}))) as { inputs?: unknown };
     const result = await startRun(factory, name, body.inputs, crypto.randomUUID(), context());
     switch (result.kind) {
       case "unknown-workflow":
-        return c.json(unknownWorkflow(name), 404);
+        response.status(404).json(unknownWorkflow(name));
+        return;
       case "invalid-inputs":
-        return c.json({ error: "invalid inputs", issues: result.issues }, 400);
+        response.status(400).json({ error: "invalid inputs", issues: result.issues });
+        return;
       case "preflight-failed":
-        return c.json({ error: "preflight failed", failures: failedChecks(result.report) }, 424);
+        response
+          .status(424)
+          .json({ error: "preflight failed", failures: failedChecks(result.report) });
+        return;
       case "started":
-        return c.json(
-          {
-            runId: result.runId,
-            workflow: name,
-            dashboard: dashboardPointer(context(), result.runId),
-          },
-          201,
-        );
+        response.status(201).json({
+          runId: result.runId,
+          workflow: name,
+          dashboard: dashboardPointer(context(), result.runId),
+        });
+        return;
     }
   });
 
   // What this factory fires on its own, with the next occurrence of each and
   // the run it is already waiting on.
-  app.get("/api/schedules", async (c) =>
-    c.json(await listSchedules(factory, { listRuns: () => listRuns(factory, runRegistry()) })),
+  app.get("/api/schedules", async (_request, response) =>
+    response.json(
+      await listSchedules(factory, { listRuns: () => listRuns(factory, runRegistry()) }),
+    ),
   );
 
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
-  app.get("/api/doctor", async (c) =>
-    c.json(
+  app.get("/api/doctor", async (_request, response) =>
+    response.json(
       await runDoctorChecks([
         ...doctorChecks(factory.workflows, triggerProviders(factory), context()),
         ...scheduleChecks(factory),
@@ -156,23 +168,27 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // Manual wake on the same code path as a provider event: resume every token
   // the run's suspensions are satisfied by. The fallback when an event was missed.
-  app.post("/api/runs/:runId/poke", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.post("/api/runs/:runId/poke", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const run = getRun(runId);
     const tokens = await runResourceTokens(world, run.runId);
     if (tokens.length === 0) {
-      return c.json({ error: "run has no suspensions to poke" }, 409);
+      response.status(409).json({ error: "run has no suspensions to poke" });
+      return;
     }
     const poked = await Promise.all(
       tokens.map(async (token) => ({ token, ...(await wake(token, "poke")) })),
     );
-    return c.json({ runId: run.runId, poked });
+    response.json({ runId: run.runId, poked });
   });
 
   // Everything `jigs status` renders: each run's state, described as the
   // single-run route describes it, with the resources it recorded.
-  app.get("/api/runs", async (c) => {
+  app.get("/api/runs", async (_request, response) => {
     const runs = await listRuns(factory, runRegistry());
     // The schedules ride along on the same run listing the table above
     // renders, so status stays one round trip and the two tables can never
@@ -187,19 +203,23 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         (views) => ({ triggers: views }),
         (error: unknown) => ({ triggers: [], triggersError: String(error) }),
       );
-    return c.json({ runs, schedules, ...listed });
+    response.json({ runs, schedules, ...listed });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum
   // retention, so the World removes them on run_cancelled. Capture their names
   // before the public cancellation call so the response can say what changed.
-  app.post("/api/runs/:runId/cancel", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.post("/api/runs/:runId/cancel", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const run = getRun(runId);
     const status = await run.status;
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
-      return c.json({ error: `run ${runId} is already ${status}`, status }, 409);
+      response.status(409).json({ error: `run ${runId} is already ${status}`, status });
+      return;
     }
     const claimedTokens = await runResourceTokens(world, runId);
     if (status !== "cancelled") {
@@ -211,10 +231,10 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         // branch above instead of turning a healthy race into a 500.
         const settledStatus = await run.status;
         if (TERMINAL_RUN_STATUSES.has(settledStatus) && settledStatus !== "cancelled") {
-          return c.json(
-            { error: `run ${runId} is already ${settledStatus}`, status: settledStatus },
-            409,
-          );
+          response
+            .status(409)
+            .json({ error: `run ${runId} is already ${settledStatus}`, status: settledStatus });
+          return;
         }
         throw error;
       }
@@ -236,7 +256,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
     // cancel included — leaves the tree on disk for the operator's offline
     // resource prune. A cancelled run's dirty tree is diagnosis evidence that
     // prune surfaces but will not delete.
-    return c.json({
+    response.json({
       runId,
       cancelled: true,
       releasedTokens,
@@ -247,22 +267,28 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // What the run's own status cannot say: which steps ran, and whether a queue
   // job died holding its resume. `jigs status <run-id>` renders both.
-  app.get("/api/runs/:runId/steps", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.get("/api/runs/:runId/steps", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const [steps, deadJobs] = await Promise.all([
       listRunSteps(runId),
       listRunDeadJobs(registry(), runId),
     ]);
-    return c.json({ steps, deadJobs });
+    response.json({ steps, deadJobs });
   });
 
   // The run's state from the one reader release and prune also use. One run is
   // worth what the listing will not spend on every run: its steps, terminal or
   // not, and a round trip per halt to read the comment back from Linear.
-  app.get("/api/runs/:runId", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.get("/api/runs/:runId", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const state = await readRunState(registry(), context().slug, runId, (id) =>
       worldRunFacts(id, factory, runRegistry()),
     );
@@ -282,8 +308,18 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         (err: unknown) => String(err),
       );
     }
-    return c.json(body);
+    response.json(body);
   });
+
+  // Plain text rather than Express's HTML pages: the CLI prints a failed
+  // answer's body as it is.
+  app.use((_request, response) => {
+    response.status(404).type("text").send("404 Not Found");
+  });
+  app.use(((error, _request, response, _next) => {
+    console.error(error);
+    response.status(500).type("text").send("Internal Server Error");
+  }) satisfies ErrorRequestHandler);
 
   function unknownWorkflow(name: string) {
     return {
