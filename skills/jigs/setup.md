@@ -1,9 +1,11 @@
 # Set a factory up
 
 From nothing to a service that answers. The human-facing walkthrough is
-`https://salimhamed.github.io/jigs/guide/getting-started`; identity, merge
-settings, bindings and the hub are in
-`https://salimhamed.github.io/jigs/guide/configuration`.
+`https://salimhamed.github.io/jigs/guide/getting-started`; merge settings,
+bindings and the factory's hub settings are in
+`https://salimhamed.github.io/jigs/guide/configuration`. Running a hub, and
+creating each provider's app in it, is in
+`https://salimhamed.github.io/jigs/guide/hub`.
 
 Print each command for the human to run, or run it and show them the output.
 Nothing below is safe to run silently: every step can fail in a way only a
@@ -33,8 +35,8 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-jigs acts on GitHub, Linear and Slack as the apps the hub assigns the factory, so
-there is no identity to choose here. Add
+jigs acts on GitHub, Linear, Slack and PagerDuty as the apps the hub assigns
+the factory, so there is nothing to choose here. Add
 `linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
 comments mention the operator and the assignee rather than the ticket's
 creator.
@@ -52,12 +54,13 @@ cp .env.example .env
 pnpm exec jigs hub connect <hub-url> <token>
 ```
 
-Every factory hears GitHub, Linear and Slack through a hub. Ask the user for the hub URL and the
-factory token the hub showed when they added this factory; `hub connect` writes
+Every factory hears GitHub, Linear, Slack and PagerDuty through a hub. Ask the
+user for the hub URL and the factory token the hub showed when they added this
+factory (with no hub yet, they run one first: see the hub guide above). `hub connect` writes
 the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
 `jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` as written. GitHub, Linear and Slack tokens come from the
-hub; the configuration guide's `.env` table lists every other variable.
+`WORKFLOW_POSTGRES_URL` as written. GitHub, Linear, Slack and PagerDuty tokens come
+from the hub; the configuration guide's `.env` table lists every other variable.
 
 ## 3. `jigs up`
 
@@ -132,7 +135,7 @@ jigs up
 
 `jigs bind` adds the binding to `jigs.config.ts`, creates the factory's
 `bindings/<name>/` folder with a README when it is missing, and, with the
-configured identity, creates the `jigs:approved` label. The service clones each binding into
+factory's GitHub App, creates the `jigs:approved` label. The service clones each binding into
 `~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`
 above is what makes a new binding usable. That data folder is jigs's own and is
 separate from the factory's `bindings/<name>/`, whose files `copy` lists for

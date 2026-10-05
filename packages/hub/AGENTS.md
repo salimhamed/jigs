@@ -28,13 +28,9 @@ edit the schema, then run
 
 ## Running
 
-Set `HUB_PUBLIC_URL`, `HUB_DATABASE_URL`, `HUB_ENCRYPTION_KEY`
-(`openssl rand -base64 32`, which also derives the session secret),
-`HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET` (a GitHub OAuth app whose
-callback is `<HUB_PUBLIC_URL>/api/auth/callback/github`) and `HUB_ADMIN_EMAIL`
-(the GitHub email that may create the first Organization); `HOST`, `PORT` and
-`HUB_RETENTION_DAYS` (how long factory messages are kept, default 7) are
-optional. `dev` runs the
+The hub runs from its environment only; `src/config.ts` reads it, and the
+website's "Run a hub" page (`site/guide/hub.md` at the repo root) documents every setting,
+deployment and first sign-in. Change the page with the config. `dev` runs the
 server from source, serves the web app through Vite and reads
 `packages/hub/.env`. `build` bundles the server into `dist/main.js` with tsdown
 (Node will not strip types under `node_modules`) and the web app into `build/`;
@@ -86,6 +82,10 @@ rotates the refresh token, and a refused refresh marks the installation as
 needing a reconnect. Each Linear app has its own webhook URL, because Linear's
 payloads do not name the app. On a new agent session the hub posts the first
 activity itself, as Linear wants one within ten seconds.
+
+An app's page (`app/routes/app.tsx`) and its website page
+(`site/guide/hub-<provider>.md`) both say what to set on the provider; change
+them together.
 
 `src/app-oauth.ts` holds what Linear's and Slack's admin-started OAuth flows
 share: finding the admin's app and the state cookie.

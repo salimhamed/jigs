@@ -37,12 +37,12 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 ## `hub` {#hub}
 
-Every factory hears GitHub, Linear, Slack and PagerDuty through a hub. The hub
-receives their events and holds them until the factory's service collects them,
-so nothing is lost while the service is down. The hub also hands the factory
-every GitHub, Linear, Slack and PagerDuty token it uses: see
-[GitHub identity](#github-identity), [Linear identity](#linear-identity),
-[PagerDuty](#pagerduty) and [Slack](#slack).
+Every factory works through a [hub](/guide/hub). The hub receives the
+factory's GitHub, Linear, Slack and PagerDuty events and keeps them until the
+service collects them, so nothing is lost while the service is down. It also
+hands the factory every token it uses on those providers, for the
+[apps assigned](/guide/hub#apps) to it. The factory needs no public URL and
+holds no provider secret.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -53,8 +53,8 @@ hub: { url: "https://hub.example.com" },
 | --- | --- | --- |
 | `url` | required | The address the hub is reached at. |
 
-The hub shows a factory token once, when you add the factory to it. Set both
-with:
+The hub shows a factory token once, when you
+[add the factory](/guide/hub#factories) to it. Set both with:
 
 ```sh
 pnpm exec jigs hub connect https://hub.example.com <token>
@@ -62,7 +62,8 @@ pnpm exec jigs hub connect https://hub.example.com <token>
 
 It writes `url` here and the token to `.env` as `JIGS_HUB_TOKEN`. Then run
 `pnpm exec jigs up`. Without the token, `jigs up` stops and the service
-refuses to start.
+refuses to start. `jigs doctor` checks that the hub answers and takes the
+token.
 
 ## `workflows`
 
@@ -232,7 +233,7 @@ export default defineFactory({
 | `linear.agentSessions` | A mention of the factory's Linear app on an issue, or an issue assigned to it | `{ session, workspace, issue, comment, creator }` | `teams`, `projects`, `labels` |
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents` and [Linear](#linear-identity) for
+for `pagerduty.incidents` and [Linear](#linear-app) for
 `linear.agentSessions`. `jigs doctor` checks that provider for every trigger
 that uses it. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
@@ -326,17 +327,16 @@ user and can read any file you can.
 
 ## GitHub
 
-### Identity {#github-identity}
+### The factory's App {#github-app}
 
-jigs acts on GitHub as a GitHub App that your [hub](#hub) holds and assigns to
-the factory. For each repository owner, the factory asks the hub for a token of
+jigs acts on GitHub as a [GitHub App](/guide/hub-github) that your hub holds
+and assigns to the factory. For each repository owner, the factory asks the hub for a token of
 the assigned App installed on that owner. Pull requests come from
 `<app-slug>[bot]`, and you review them like anyone else's. Agents can act as the
 same bot: see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
 Every GitHub binding needs one of the factory's Apps installed on its owner, and
 only one. `jigs doctor` checks this against the hub.
-The hub's page for each GitHub App lists the permissions and events to set on it.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -411,7 +411,7 @@ recipe's `mergedBy: "human"` and merge those pull requests yourself.
 
 `callGitHub(method, path, options)` calls any
 [GitHub REST endpoint](https://docs.github.com/en/rest) as the factory's
-[identity](#github-identity) and returns GitHub's parsed JSON, or `undefined`
+[App](#github-app) and returns GitHub's parsed JSON, or `undefined`
 when GitHub answers with no content. Use it for anything jigs has no step for,
 such as requesting reviewers or finding a commit's author. Call it from your
 own `"use step"` function.
@@ -460,12 +460,13 @@ teams.
 
 ## Linear
 
-### Identity {#linear-identity}
+### The factory's Linear app {#linear-app}
 
-jigs acts on Linear as the Linear app the [hub](#hub) assigns the factory, so
-its comments and mentions reach you like anyone else's. Connect the app to your
-Linear workspace in the hub and assign it to the factory; the hub hands the
-factory its tokens and refreshes them. Nothing about the app goes in
+jigs acts on Linear as the [Linear app](/guide/hub-linear) the hub assigns the
+factory, so its comments and mentions reach you like anyone else's. Connect
+the app to your Linear workspace in the hub and assign it to the factory; the
+hub hands the factory its tokens and refreshes them. For now a factory takes
+one Linear app, connected to one workspace. Nothing about the app goes in
 `jigs.config.ts` or `.env`. `jigs doctor` checks that the hub has a Linear
 token for the factory, and says when a workspace must be connected again in
 the hub.
@@ -508,8 +509,8 @@ out, logs a warning and posts the comment anyway. A mention never stops a run.
 
 ## PagerDuty {#pagerduty}
 
-jigs acts on PagerDuty as the PagerDuty app its [hub](#hub) assigns the
-factory. The `pagerduty` section names the user its notes are attributed to.
+jigs acts on PagerDuty as the [PagerDuty app](/guide/hub-pagerduty) its hub
+assigns the factory. The `pagerduty` section names the user its notes are attributed to.
 See [PagerDuty](/guide/pagerduty) for setup.
 
 ```ts factory-options
@@ -523,8 +524,8 @@ pagerduty: { from: "oncall@example.com" },
 
 ## Slack {#slack}
 
-`slack` says the factory uses the Slack app its [hub](#hub) assigns it. Set
-it up by following [Slack](/guide/slack).
+`slack` says the factory uses the [Slack app](/guide/hub-slack) its hub
+assigns it. See [Slack](/guide/slack) for what workflows do with it.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -534,8 +535,6 @@ slack: { scopes: ["reactions:write"] },
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the workspace granted them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
-
-Slack events arrive through the hub.
 
 To start runs from Slack messages, see
 [Start runs from messages](/guide/slack#start-runs-from-messages).
