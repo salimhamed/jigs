@@ -322,7 +322,7 @@ const paged = {
     respond: { workflow: async () => undefined, inputs: z.object({ incident: z.string() }) },
   },
   triggers: {
-    pages: { workflow: "respond", source: pagerduty.incidents({ service_ids: ["PSVC001"] }) },
+    pages: { workflow: "respond", source: pagerduty.incidents({ services: ["PSVC001"] }) },
   },
 } satisfies Factory;
 

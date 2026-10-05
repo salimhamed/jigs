@@ -200,7 +200,7 @@ export default defineFactory({
   triggers: {
     "checkout-pages": {
       workflow: "respond",
-      source: pagerduty.incidents({ service_ids: ["PABC123"], urgencies: ["high"] }),
+      source: pagerduty.incidents({ services: ["PABC123"], urgencies: ["high"] }),
       inputs: { team: "payments" },
       maxActive: 2,
     },
@@ -229,7 +229,7 @@ export default defineFactory({
 
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
-| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
+| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `services`, `teams`, `urgencies` |
 | `linear.agentSessions` | A mention of the factory's Linear app on an issue, or an issue assigned to it | `{ session, workspace, issue, comment, creator }` | `teams`, `projects`, `labels` |
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)

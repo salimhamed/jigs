@@ -39,13 +39,9 @@ function fakeSource() {
     provider: "github",
     params: z.object({ service: z.string() }),
     sampleInputs: { page: "P0" },
-    occurrence: (inputs) => {
-      if (typeof inputs.page !== "string") throw new Error("no page id in the event");
-      return inputs.page;
-    },
     fromPush: async (_params, event) => {
-      const { page, at } = event as { page?: unknown; at?: Date };
-      return page === undefined ? null : { inputs: { page }, at: at ?? minutes(1) };
+      const { page, at } = event as { page?: string; at?: Date };
+      return page === undefined ? null : { key: page, inputs: { page }, at: at ?? minutes(1) };
     },
     describe: (inputs) => `page ${String(inputs.page)}`,
   };
@@ -261,7 +257,11 @@ const activeOf = async (h: ReturnType<typeof harness>) =>
     })
   )[0]?.active;
 
-const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({ inputs: { page }, at });
+const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({
+  key: page,
+  inputs: { page },
+  at,
+});
 
 test("an occurrence pushed twice starts one run", async () => {
   const h = harness();
@@ -1020,16 +1020,6 @@ test("a push whose occurrence could not be recorded rejects, and its redelivery 
   expect(await h.engine.push("github", { page: "P9", at: minutes(4) })).toEqual(["pages"]);
   await h.engine.drain();
   expect(memory.state("pages", "P9")?.state).toBe("started");
-});
-
-test("an event the source cannot key is passed over, not retried", async () => {
-  const h = harness();
-  await h.engine.arm();
-  expect(await h.engine.push("github", { page: 7 })).toEqual([]);
-  expect(h.lines).toContain(
-    "[trigger] pages passed over an event it could not key: Error: no page id in the event",
-  );
-  expect(h.memory.rows.size).toBe(0);
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {

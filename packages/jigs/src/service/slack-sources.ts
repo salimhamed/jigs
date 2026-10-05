@@ -43,6 +43,7 @@ function startsRun(message: SlackMessage, bot: SlackBot, mentionsOnly: boolean):
 }
 
 const occurred = (channel: string, ts: string): SourceOccurrence => ({
+  key: `${channel}:${ts}`,
   inputs: { channel, ts },
   at: new Date(Number(ts) * 1000),
 });
@@ -52,11 +53,6 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
     provider: "slack",
     params: paramsSchema,
     sampleInputs: { channel: "C0123ABCD", ts: "1790723244.335019" },
-    occurrence: ({ channel, ts }) => {
-      if (typeof channel !== "string" || typeof ts !== "string")
-        throw new Error("no channel and ts in the inputs");
-      return `${channel}:${ts}`;
-    },
     async fromPush({ channels }, body) {
       const callback = callbackSchema.safeParse(body).data;
       if (callback === undefined) return null;

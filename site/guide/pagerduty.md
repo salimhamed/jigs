@@ -77,15 +77,15 @@ export default defineFactory({
   triggers: {
     "checkout-pages": {
       workflow: "respond",
-      source: pagerduty.incidents({ service_ids: ["PABC123"], urgencies: ["high"] }),
+      source: pagerduty.incidents({ services: ["PABC123"], urgencies: ["high"] }),
     },
   },
 });
 ```
 
-- The parameters are PagerDuty's own list-incidents parameters: `service_ids`,
-  `team_ids` and `urgencies`. Each list matches any of its values, and one you
-  leave out does not filter.
+- `services` and `teams` take PagerDuty service and team IDs, and `urgencies`
+  takes `high` or `low`. Each list matches any of its values, and one you leave
+  out does not filter.
 - Each run gets `{ incident: "<id>" }`, merged over the trigger's `inputs`. The
   workflow reads the incident itself.
 - An incident starts at most one run, ever. One that is still triggered after

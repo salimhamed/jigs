@@ -13,13 +13,11 @@ import { memoryTriggerStore } from "./test-fixtures.ts";
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-test("the occurrence is the incident id, and params take PagerDuty's names only", async () => {
+test("params take services, teams and urgencies only", () => {
   const source = PAGERDUTY_INCIDENTS;
-  expect(source.occurrence({ incident: "Q7", team: "infra" })).toBe("Q7");
-  expect(() => source.occurrence({})).toThrow("no incident id");
-  expect(source.params.safeParse({ team_ids: ["PT1"], urgencies: ["low"] }).success).toBe(true);
+  expect(source.params.safeParse({ teams: ["PT1"], urgencies: ["low"] }).success).toBe(true);
   expect(source.params.safeParse({ urgencies: ["urgent"] }).success).toBe(false);
-  expect(source.params.safeParse({ service_ids: [] }).success).toBe(false);
+  expect(source.params.safeParse({ services: [] }).success).toBe(false);
   expect(source.params.safeParse({ statuses: ["acknowledged"] }).success).toBe(false);
 });
 
@@ -38,7 +36,7 @@ test("a pushed incident.triggered is the incident, as of when it was created", a
 
   const pushed = await source.fromPush({}, triggered());
 
-  expect(pushed).toEqual({ inputs: { incident: "Q1" }, at: minutes(1) });
+  expect(pushed).toEqual({ key: "Q1", inputs: { incident: "Q1" }, at: minutes(1) });
   expect(source.describe(pushed?.inputs ?? {})).toBe("pagerduty Q1");
 });
 
@@ -54,11 +52,11 @@ test("a pushed incident is filtered by the trigger's parameters", async () => {
   const source = PAGERDUTY_INCIDENTS;
   const push = (params: Parameters<typeof source.fromPush>[0], data = {}) =>
     source.fromPush(params, withEvent({}, data));
-  expect(await push({ service_ids: ["PSVC001", "PSVC002"] })).not.toBeNull();
-  expect(await push({ service_ids: ["PSVC002"] })).toBeNull();
-  expect(await push({ team_ids: ["PTEAM01"] })).not.toBeNull();
-  expect(await push({ team_ids: ["PTEAM02"] })).toBeNull();
-  expect(await push({ team_ids: ["PTEAM01"] }, { teams: [] })).toBeNull();
+  expect(await push({ services: ["PSVC001", "PSVC002"] })).not.toBeNull();
+  expect(await push({ services: ["PSVC002"] })).toBeNull();
+  expect(await push({ teams: ["PTEAM01"] })).not.toBeNull();
+  expect(await push({ teams: ["PTEAM02"] })).toBeNull();
+  expect(await push({ teams: ["PTEAM01"] }, { teams: [] })).toBeNull();
   expect(await push({ urgencies: ["high"] })).not.toBeNull();
   expect(await push({ urgencies: ["low"] })).toBeNull();
 });
@@ -82,7 +80,7 @@ const respond: Factory = {
   triggers: {
     pages: {
       workflow: "respond",
-      source: pagerduty.incidents({ service_ids: ["PSVC001"] }),
+      source: pagerduty.incidents({ services: ["PSVC001"] }),
       inputs: { team: "infra" },
     },
   },
