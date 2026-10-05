@@ -1,18 +1,16 @@
 // How the service wakes a parked run, and what last woke it. Provider events,
-// `jigs poke` and the nudge sweep all wake through `wake`,
-// so the note is written where the wake happens and nothing has to be
+// `jigs poke` and the hub's fell-behind pass all wake through `wake`, so the note is written where the wake happens and nothing has to be
 // threaded through the workflow to carry it back.
 //
 // The note is in memory on purpose: a wake is disposable observability, and a
 // durable note would put a World write on the path of every provider event.
-// A restarted service simply has no note until it wakes the run again, which
-// the nudge sweep does within its interval.
+// A restarted service simply has no note until it wakes the run again.
 
 import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 
 export interface WakeNote {
-  /** What resumed the hook: a provider event, a poke, a Slack reply, or the nudge sweep. */
+  /** What resumed the hook: a provider event, a poke, a Slack reply, or the hub falling behind. */
   kind: string;
   at: string;
 }

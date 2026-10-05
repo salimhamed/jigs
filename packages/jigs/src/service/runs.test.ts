@@ -145,9 +145,9 @@ test("a run reads the wake it was sent, and never another run's", async () => {
   recordWake(PARK_TOKEN, RUN_B, "github check_suite", new Date("2026-09-16T10:05:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toBeUndefined();
 
-  recordWake(PARK_TOKEN, RUN_A, "nudge sweep", new Date("2026-09-16T10:06:00Z"));
+  recordWake(PARK_TOKEN, RUN_A, "hub fell behind", new Date("2026-09-16T10:06:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
-    kind: "nudge sweep",
+    kind: "hub fell behind",
     at: "2026-09-16T10:06:00.000Z",
   });
 });

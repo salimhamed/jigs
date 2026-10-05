@@ -85,9 +85,12 @@ afterEach(async () => {
   vi.restoreAllMocks();
 });
 
-async function start(replies: (Message[] | number)[], nudge = {}) {
+async function start(
+  replies: (Message[] | number)[],
+  options: Partial<Parameters<typeof startHubClient>[0]> = {},
+) {
   hub = await fakeHub(replies);
-  stop = startHubClient({ url: hub.url, token: "fct_secret", route, nudge }).stop;
+  stop = startHubClient({ url: hub.url, token: "fct_secret", route, ...options }).stop;
   return hub;
 }
 
@@ -118,16 +121,67 @@ test("routes a batch in order, then confirms its last position", async () => {
   }
 });
 
-test("a message that fails to route is logged and still confirmed", async () => {
+test("a message that fails to route is routed again before the batch is confirmed", async () => {
   push.mockRejectedValueOnce(new Error("registry unreachable"));
-  const { seen } = await start([[event("3", "bad"), event("4", "good")]]);
+  const { seen } = await start([[event("3", "bad"), event("4", "good")]], {
+    routeRetryMs: [0, 0, 0],
+  });
   await vi.waitFor(() => expect(seen.some((r) => r.method === "POST")).toBe(true));
 
-  expect(push).toHaveBeenCalledTimes(2);
+  expect(push.mock.calls.map(([, payload]) => payload)).toEqual(["bad", "good", "bad"]);
   expect(JSON.parse(seen.find((r) => r.method === "POST")?.body ?? "")).toEqual({ position: "4" });
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining("could not route pagerduty event evt_3"),
   );
+  expect(errors).not.toHaveBeenCalledWith(expect.stringContaining("gave up"));
+});
+
+test("a message that keeps failing is retried on the backoff, then given up and confirmed", async () => {
+  vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
+  push.mockImplementation(async (_provider, payload) => {
+    if (payload === "bad") throw new Error("registry unreachable");
+    return [];
+  });
+  const { seen } = await start([[event("3", "bad"), event("4", "good")]]);
+  const confirmed = () => seen.filter((r) => r.method === "POST");
+  await until(() => push.mock.calls.length === 2);
+
+  for (const [wait, calls] of [
+    [5_000, 3],
+    [30_000, 4],
+    [120_000, 5],
+  ] as const) {
+    await vi.advanceTimersByTimeAsync(wait - 1);
+    expect(push).toHaveBeenCalledTimes(calls - 1);
+    expect(confirmed()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    await until(() => push.mock.calls.length === calls);
+  }
+  await until(() => confirmed().length === 1);
+  expect(JSON.parse(confirmed()[0]?.body ?? "")).toEqual({ position: "4" });
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("gave up routing pagerduty event evt_3"),
+  );
+});
+
+test("a routing outcome of failed is retried like a throw", async () => {
+  push.mockRejectedValueOnce(new Error("could not read")).mockResolvedValue(["triage"]);
+  const { seen } = await start([[event("8", "flaky")]], { routeRetryMs: [0] });
+  await vi.waitFor(() => expect(seen.some((r) => r.method === "POST")).toBe(true));
+  expect(push).toHaveBeenCalledTimes(2);
+});
+
+test("stopping while a failed message waits to be retried confirms nothing", async () => {
+  push.mockRejectedValue(new Error("registry unreachable"));
+  const { seen } = await start([[event("3", "bad")]], { routeRetryMs: [60_000] });
+  await vi.waitFor(() => expect(push).toHaveBeenCalledTimes(1));
+  await vi.waitFor(() =>
+    expect(errors).toHaveBeenCalledWith(expect.stringContaining("again in 60s")),
+  );
+
+  await stop?.();
+  expect(push).toHaveBeenCalledTimes(1);
+  expect(seen.filter((r) => r.method === "POST")).toHaveLength(0);
 });
 
 test("fell behind wakes every waiting run once, then confirms", async () => {
@@ -137,9 +191,7 @@ test("fell behind wakes every waiting run once, then confirms", async () => {
     { runId: "wrun_B", token: "slack:thread:C0C5EUZ7P9Q:1790723478.961719" },
   ];
   const { seen } = await start([[{ position: "12", kind: "fellBehind" }]], {
-    hooks,
-    busyRuns: async () => [],
-    log: () => undefined,
+    waiting: { hooks, busyRuns: async () => [], log: () => undefined },
   });
   await vi.waitFor(() => expect(seen.some((r) => r.method === "POST")).toBe(true));
 

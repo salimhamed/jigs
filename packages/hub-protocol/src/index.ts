@@ -3,7 +3,8 @@
  *
  * @remarks
  * A factory long-polls {@link messagesPath} for its messages, handles them in
- * order, then confirms the last one at {@link cursorPath}. Every request
+ * order, then confirms the last one at {@link cursorPath}. It retries an event
+ * it could not handle a few times before confirming past it. Every request
  * carries `Authorization: Bearer <factory token>` and `User-Agent:
  * jigs/<version>`; the hub answers 401 to a missing or unknown token.
  *

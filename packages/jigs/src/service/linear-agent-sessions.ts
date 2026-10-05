@@ -1,7 +1,6 @@
 // The `linear.agentSessions` source: every Linear agent session created on an
 // issue, by a mention of the factory's app or an assignment to it, is one
-// occurrence, keyed by the session's id. Linear sends these only as webhooks,
-// which reach the factory through its hub, so the poll finds nothing.
+// occurrence, keyed by the session's id, read off the webhook the hub passes on.
 
 import { z } from "zod";
 import { createLinearClient, type LinearIssueFiling } from "../providers/linear.ts";
@@ -55,7 +54,7 @@ const SAMPLE_INPUTS = {
 
 export function linearAgentSessions(
   deps: LinearAgentSessionsDeps = {},
-): Source<LinearAgentSessionsParams, null> {
+): Source<LinearAgentSessionsParams> {
   const issueFiling =
     deps.issueFiling ??
     ((issueId, workspace) =>
@@ -63,14 +62,12 @@ export function linearAgentSessions(
   return {
     provider: "linear",
     params: linearAgentSessionsParamsSchema,
-    cursor: z.null(),
     sampleInputs: SAMPLE_INPUTS,
     occurrence({ session }) {
       if (typeof session !== "string" || session === "")
         throw new Error("no agent session id in the occurrence");
       return session;
     },
-    poll: async () => ({ occurrences: [], cursor: null }),
     async fromPush(params, event) {
       const head = headSchema.safeParse(event).data;
       if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;

@@ -101,9 +101,7 @@ columns.
 Each suspension carries a kind:
 
 - **needs-human** — jigs asked a question on the run's Linear ticket. The
-  service re-reads the thread every `service.pollIntervalSeconds.linear`
-  seconds (default 300), and a reply found there wakes it; the reply's Linear
-  event from the hub wakes it at once.
+  reply's Linear event from the hub wakes it at once.
 - **pull-request** — the run holds a pull request and wants the factory's
   approval (a review of the current head, or the `jigs:approved` label), green
   CI and a mergeable branch. A review, a new commit, a CI result or a
@@ -145,12 +143,10 @@ its footer names the run, where it paused, and links its dashboard page.
 The answer goes **on the ticket**, in that comment thread — with option letters
 like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
 it is theirs to write: you do not answer for them, and you do not resume the run
-by hand. Once the reply lands, its Linear event from the hub (or the next
-poll) wakes the run, the reply is re-checked against Linear, and the run
+by hand. Once the reply lands, its Linear event from the hub wakes the run, the reply is re-checked against Linear, and the run
 continues.
 
-If the reply is there and the interval is too long to wait, or an event was
-missed:
+If the reply is there but the run did not wake, because an event was missed:
 
 ```sh
 jigs poke <run-id>

@@ -1,27 +1,11 @@
-// The event triggers' record of every occurrence they saw, and where each
-// trigger's polling has got to. The row, not the provider, is the dedupe
+// The event triggers' record of every occurrence they saw, and when each
+// trigger was first enabled. The row, not the provider, is the dedupe
 // record: a run that decides to do nothing leaves no trace anywhere else.
 
 import { and, asc, count, desc, eq, gte, inArray, isNotNull, isNull, max, sql } from "drizzle-orm";
-import {
-  customType,
-  index,
-  jsonb,
-  pgTable,
-  primaryKey,
-  text,
-  timestamp,
-} from "drizzle-orm/pg-core";
+import { index, jsonb, pgTable, primaryKey, text, timestamp } from "drizzle-orm/pg-core";
 import type { CheckReport } from "../../checks/index.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
-
-// pg already parses jsonb; drizzle's own jsonb parses a string value a second
-// time, which turns a cursor like "1790723244.335019" into a number.
-const cursorColumn = customType<{ data: unknown; driverData: unknown }>({
-  dataType: () => "jsonb",
-  toDriver: (value) => JSON.stringify(value),
-  fromDriver: (value) => value,
-});
 
 export type OccurrenceState = "pending" | "started" | "failed" | "skipped";
 
@@ -62,9 +46,6 @@ export const markers = pgTable(
     factory: text("factory").notNull(),
     trigger: text("trigger").notNull(),
     enabledAt: timestamp("enabled_at", { withTimezone: true }).notNull(),
-    // The source's own record of how far it has read, opaque here; null until
-    // the trigger's first poll.
-    cursor: cursorColumn("cursor"),
   },
   (table) => [primaryKey({ columns: [table.factory, table.trigger] })],
 );
@@ -86,8 +67,6 @@ export interface Occurrence {
 
 export interface TriggerMarker {
   enabledAt: Date;
-  /** The cursor the trigger's source returned from its last poll, or null before the first. */
-  cursor: unknown;
 }
 
 export interface TriggerSummary {
@@ -103,7 +82,6 @@ export interface TriggerSummary {
 export interface TriggerStore {
   /** The trigger's marker, written as `now` the first time it is asked for. */
   enable(trigger: string, now: Date): Promise<TriggerMarker>;
-  advance(trigger: string, cursor: unknown): Promise<void>;
   /** Insert the row unless the occurrence is already recorded; true when it was new. */
   record(
     row: Pick<
@@ -165,17 +143,11 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
     async enable(trigger, now) {
       await db.insert(markers).values({ factory, trigger, enabledAt: now }).onConflictDoNothing();
       const [marker] = await db
-        .select({ enabledAt: markers.enabledAt, cursor: markers.cursor })
+        .select({ enabledAt: markers.enabledAt })
         .from(markers)
         .where(and(eq(markers.factory, factory), eq(markers.trigger, trigger)));
       if (marker === undefined) throw new Error(`trigger ${trigger} has no marker after enabling`);
       return marker;
-    },
-    async advance(trigger, cursor) {
-      await db
-        .update(markers)
-        .set({ cursor })
-        .where(and(eq(markers.factory, factory), eq(markers.trigger, trigger)));
     },
     async record(occurrence) {
       const inserted = await db

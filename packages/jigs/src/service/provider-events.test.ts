@@ -293,10 +293,7 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
   triggers.startTriggers(paged, {
     store: memory.store,
     sources: {
-      "pagerduty.incidents": pagerDutyIncidents({
-        client: () => ({ listIncidents: async () => [] }) as never,
-        now: () => T0,
-      }),
+      "pagerduty.incidents": pagerDutyIncidents(),
     },
     now: () => T0,
     log: () => {},
@@ -315,14 +312,12 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
       },
     }),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
-    random: () => 0,
     setTimer: (_fire, ms) => {
       timers.push(ms);
       return () => {};
     },
   });
-  await vi.waitFor(() => expect(timers).toHaveLength(2));
+  await vi.waitFor(() => expect(timers).toHaveLength(1));
 
   expect(await route(page())).toEqual({ outcome: "triggered", triggers: ["pages"] });
   expect(log).toHaveBeenCalledWith(

@@ -93,29 +93,8 @@ test.each([
     },
     "typo",
   ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090, pollIntervalSeconds: { github: 300 } },
-    },
-    "github",
-  ],
   [{ service: { dashboardPort: 9090 } }, "hub"],
   [{ hub: { url: "hub.example.test" }, service: { dashboardPort: 9090 } }, "url"],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090, pollIntervalSeconds: { linear: 1.5 } },
-    },
-    "linear",
-  ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090, pollIntervalSeconds: { slack: 10 } },
-    },
-    "slack",
-  ],
   [
     {
       hub: { url: "https://hub.example.test" },
@@ -123,13 +102,6 @@ test.each([
       slack: { socketMode: true },
     },
     '"socketMode"',
-  ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090, pollIntervalSeconds: { pagerduty: 10 } },
-    },
-    "pagerduty",
   ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
@@ -141,20 +113,7 @@ test("service port defaults while dashboard port is explicit", () => {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 3456 },
     }).service,
-  ).toEqual({
-    port: 8990,
-    dashboardPort: 3456,
-    pollIntervalSeconds: { linear: 300, slack: 300, pagerduty: 300 },
-  });
-});
-
-test("each provider's poll interval defaults on its own and may sit at the floor", () => {
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } },
-    }).service.pollIntervalSeconds,
-  ).toEqual({ linear: 30, slack: 300, pagerduty: 300 });
+  ).toEqual({ port: 8990, dashboardPort: 3456 });
 });
 
 test("without a slack section the factory has no Slack app", () => {

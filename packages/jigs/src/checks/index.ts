@@ -222,7 +222,7 @@ export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
 }
 
 // Every check follows the factory: its workflows' manifests, the providers its
-// event triggers poll, and its configuration. A provider, harness or AWS
+// event triggers read, and its configuration. A provider, harness or AWS
 // profile nothing uses is not checked. `triggers` maps each trigger to the
 // provider its source reads.
 export function doctorChecks(
@@ -237,9 +237,9 @@ export function doctorChecks(
   const configured = configuredProviders(ctx);
   const provider = (name: Provider, checks: () => Check[]): Check[] => {
     const needing = users.get(name) ?? [];
-    const polling = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
-    return needing.length > 0 || polling.length > 0 || configured[name]
-      ? neededByUsers(checks(), needing, polling)
+    const watching = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
+    return needing.length > 0 || watching.length > 0 || configured[name]
+      ? neededByUsers(checks(), needing, watching)
       : [];
   };
   const aws = users.get("aws") ?? [];

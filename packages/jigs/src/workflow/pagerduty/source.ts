@@ -35,9 +35,8 @@ export const pagerduty = {
    * Watch for new incidents. Every new incident starts at most one run, ever,
    * with `{ incident: "<id>" }` as its inputs, even one acknowledged or
    * resolved before the service saw it; the workflow can check the status and
-   * skip one that is already handled. The service polls on
-   * `service.pollIntervalSeconds.pagerduty`, and starts the run as soon as
-   * the hub passes on PagerDuty's `incident.triggered` event.
+   * skip one that is already handled. The run starts as soon as the hub
+   * passes on PagerDuty's `incident.triggered` event.
    *
    * @example
    * ```ts

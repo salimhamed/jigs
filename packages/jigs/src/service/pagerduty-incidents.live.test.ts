@@ -1,5 +1,6 @@
-// A real incident on the PagerDuty sandbox service, found by a real poll and
-// started as a real run on a Postgres World of its own. Runs only with
+// A real incident on the PagerDuty sandbox service, pushed as the
+// `incident.triggered` event the hub would pass on and started as a real run on
+// a Postgres World of its own. Runs only with
 // JIGS_TEST_PAGERDUTY_TOKEN (a PagerDuty app's token), PAGERDUTY_FROM and
 // PAGERDUTY_EVENTS_ROUTING_KEY set. Other tests may open incidents on the same
 // service at the same time, so only this test's own incident is asserted on.
@@ -117,11 +118,11 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     },
   };
 
-  test("a triggered incident starts one run, and a second poll starts no other", async () => {
+  test("a triggered incident starts one run, and a second delivery starts no other", async () => {
     const store = triggerStore(db as RegistrySql, SLUG);
     const engine = createTriggerEngine(factory, {
       store,
-      sources: { "pagerduty.incidents": pagerDutyIncidents({ client: () => client }) },
+      sources: { "pagerduty.incidents": pagerDutyIncidents() },
       factorySlug: () => SLUG,
       log: () => {},
     });
@@ -135,6 +136,18 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     }
     if (mine === undefined) throw new Error("the test incident never appeared");
     const id = mine.id;
+    const triggered = {
+      event: {
+        event_type: "incident.triggered",
+        data: {
+          id,
+          created_at: mine.created_at,
+          service: { id: mine.service.id },
+          teams: [],
+          urgency: mine.urgency,
+        },
+      },
+    };
 
     const row = async () =>
       (
@@ -149,15 +162,17 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
         )
       ).rows[0];
 
+    expect(await engine.push("pagerduty", triggered)).toEqual(["pages"]);
     for (let attempt = 0; attempt < 20 && (await row())?.state !== "started"; attempt += 1) {
-      await engine.poll("pages");
+      await engine.drain();
       if ((await row())?.state !== "started")
         await new Promise((resolve) => setTimeout(resolve, 3_000));
     }
     const started = await row();
     expect(started).toMatchObject({ state: "started", inputs: { incident: id } });
 
-    await engine.poll("pages");
+    expect(await engine.push("pagerduty", triggered)).toEqual([]);
+    await engine.drain();
     const runs = await findRunsByAttribute({
       workflowName,
       key: "jigs.occurrence",

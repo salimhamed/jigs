@@ -2,7 +2,6 @@ import { beforeEach, expect, test, vi } from "vitest";
 import * as slackApi from "../providers/slack.ts";
 import { slack } from "../workflow/slack/sources.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
-import { slackSources } from "./slack-sources.ts";
 
 const BOT = {
   userId: "U0C59SU5V29",
@@ -108,7 +107,7 @@ const DELETE = {
   ts: "1790723440.000500",
   deleted_ts: TOP_LEVEL.ts,
 };
-const HISTORY_PAGE = [
+const RECORDED = [
   DELETE,
   EDIT,
   BROADCAST,
@@ -161,11 +160,12 @@ test("channels are IDs of public or private channels, never names or DMs", () =>
     expect(messages.params.safeParse({ channels }).success).toBe(false);
 });
 
-test("messages polls history from the floor on a first poll and keeps new top-level posts", async () => {
-  const history = vi.spyOn(slackApi, "slackHistory").mockResolvedValue(HISTORY_PAGE);
-  const floor = new Date(1790716000_000);
-  const { occurrences: found } = await messages.poll(params, undefined, floor);
-  expect(history).toHaveBeenCalledExactlyOnceWith(CHANNEL, { oldest: "1790716000.000000" });
+test("messages keeps new top-level posts", async () => {
+  const found = [];
+  for (const message of RECORDED) {
+    const occurrence = await messages.fromPush(params, pushed(message));
+    if (occurrence !== null) found.push(occurrence);
+  }
   expect(found).toEqual(
     [ME_POST, FILE_POST, APP_POST, OTHER_BOT, MENTION, THREAD_PARENT, TOP_LEVEL].map((m) => ({
       inputs: { channel: CHANNEL, ts: m.ts },
@@ -175,72 +175,16 @@ test("messages polls history from the floor on a first poll and keeps new top-le
 });
 
 test("mentions keeps only the top-level messages that tag the bot", async () => {
-  vi.spyOn(slackApi, "slackHistory").mockResolvedValue(HISTORY_PAGE);
-  const { occurrences: found } = await mentions.poll(params, undefined, new Date(0));
-  expect(found.map((seen) => seen.inputs)).toEqual([{ channel: CHANNEL, ts: MENTION.ts }]);
+  const found = [];
+  for (const message of RECORDED) {
+    const occurrence = await mentions.fromPush(params, pushed(message));
+    if (occurrence !== null) found.push(occurrence.inputs);
+  }
+  expect(found).toEqual([{ channel: CHANNEL, ts: MENTION.ts }]);
 });
 
-test("each channel reads from its own cursor, clamped to the floor, and moves it to the poll's start", async () => {
-  const pollAt = new Date(1790723500_000);
-  const source = slackSources(() => pollAt)["slack.messages"];
-  const history = vi.spyOn(slackApi, "slackHistory").mockResolvedValue([]);
-  const { cursor } = await source.poll(
-    { channels: ["C0AHEAD01", "C0BEHIND1", "C0NEW0001"] },
-    { C0AHEAD01: "1790723400.000100", C0BEHIND1: "1790000000.000000", C0GONE001: "1.000000" },
-    new Date(1790716000_000),
-  );
-  expect(history.mock.calls).toEqual([
-    ["C0AHEAD01", { oldest: "1790723400.000100" }],
-    ["C0BEHIND1", { oldest: "1790716000.000000" }],
-    ["C0NEW0001", { oldest: "1790716000.000000" }],
-  ]);
-  // A channel no longer watched is dropped.
-  expect(cursor).toEqual({
-    C0AHEAD01: "1790723500.000000",
-    C0BEHIND1: "1790723500.000000",
-    C0NEW0001: "1790723500.000000",
-  });
-});
-
-test("a failing channel is logged with its repair and keeps its cursor, and the rest are read", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => {});
-  const source = slackSources(() => new Date(1790723500_000))["slack.messages"];
-  const history = vi
-    .spyOn(slackApi, "slackHistory")
-    .mockRejectedValueOnce(new slackApi.SlackApiError("conversations.history", "not_in_channel"))
-    .mockRejectedValueOnce(new slackApi.SlackApiError("conversations.history", "ratelimited"))
-    .mockResolvedValueOnce([TOP_LEVEL]);
-  const polled = await source.poll(
-    { channels: ["C0SECOND1", "C0THIRD01", CHANNEL] },
-    { C0SECOND1: "1790716000.000000" },
-    new Date(0),
-  );
-  expect(history).toHaveBeenCalledTimes(3);
-  expect(polled).toEqual({
-    occurrences: [{ inputs: { channel: CHANNEL, ts: TOP_LEVEL.ts }, at: expect.any(Date) }],
-    // The channel with no cursor yet stays without one, so it reads from the floor again.
-    cursor: { C0SECOND1: "1790716000.000000", [CHANNEL]: "1790723500.000000" },
-  });
-  const lines = log.mock.calls.map(([line]) => String(line));
-  expect(lines[0]).toBe(
-    "[slack] could not poll channel C0SECOND1: Slack conversations.history: not_in_channel",
-  );
-  expect(lines[1]).toContain(`invite @${BOT.name} to C0SECOND1 again`);
-});
-
-test("a cursor is a map of channel to Slack timestamp", () => {
-  expect(messages.cursor.safeParse({ [CHANNEL]: TOP_LEVEL.ts }).success).toBe(true);
-  for (const bad of ["1790723244.335019", { [CHANNEL]: 1790723244 }, null])
-    expect(messages.cursor.safeParse(bad).success).toBe(false);
-});
-
-test("a pushed message is the same occurrence its poll finds", async () => {
-  vi.spyOn(slackApi, "slackHistory").mockResolvedValue([TOP_LEVEL]);
-  const {
-    occurrences: [polled],
-  } = await messages.poll(params, undefined, new Date(0));
+test("a pushed message is keyed and described by its channel and timestamp", async () => {
   const push = await messages.fromPush(params, pushed(TOP_LEVEL));
-  expect(push).toEqual(polled);
   expect(messages.occurrence(push?.inputs ?? {})).toBe(`${CHANNEL}:${TOP_LEVEL.ts}`);
   expect(messages.describe(push?.inputs ?? {})).toBe(`slack ${CHANNEL} ${TOP_LEVEL.ts}`);
 });
@@ -272,12 +216,11 @@ test.each([
   ["an app's post with no subtype", APP_POST],
   ["a post with a file", FILE_POST],
   ["a /me post", ME_POST],
-])("%s starts a run, polled or pushed", async (_name, message) => {
-  vi.spyOn(slackApi, "slackHistory").mockResolvedValue([message]);
-  const occurrence = { channel: CHANNEL, ts: message.ts };
-  const { occurrences } = await messages.poll(params, undefined, new Date(0));
-  expect(occurrences.map((seen) => seen.inputs)).toEqual([occurrence]);
-  expect((await messages.fromPush(params, pushed(message)))?.inputs).toEqual(occurrence);
+])("%s starts a run", async (_name, message) => {
+  expect((await messages.fromPush(params, pushed(message)))?.inputs).toEqual({
+    channel: CHANNEL,
+    ts: message.ts,
+  });
 });
 
 test("another bot's post that mentions the bot is a mention", async () => {
@@ -299,8 +242,6 @@ test("the bot's own post under a custom username, with no user, is skipped by it
     ts: "1790723390.000100",
     text: `<@${BOT.userId}> posted by the factory under another name`,
   };
-  vi.spyOn(slackApi, "slackHistory").mockResolvedValue([ownBotMessage]);
-  expect((await messages.poll(params, undefined, new Date(0))).occurrences).toEqual([]);
   expect(await messages.fromPush(params, pushed(ownBotMessage))).toBeNull();
   expect(await mentions.fromPush(params, pushed(ownBotMessage))).toBeNull();
 });

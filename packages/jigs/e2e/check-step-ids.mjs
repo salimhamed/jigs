@@ -418,10 +418,7 @@ const [
 const BOOT_TIMEOUT_MS = 90_000;
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 const READY_POLL_MS = 100;
-// The nudge line is in here because the startup sweep is what reconciles a
-// delivery lost while the service was down: if it stops running, nothing else
-// in this repo notices.
-const BOOT_MARKERS = ["Listening on:", "[service] dashboard:", "[nudge] tickets:"];
+const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
 const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 // A top-level import that cannot resolve exits the process; one behind a
 // plugin's dynamic import is caught by nitro and only costs the dashboard, so

@@ -125,11 +125,6 @@ test("an issue in no project never matches a project filter", async () => {
   expect(await source.fromPush({ projects: ["8f2c1a9b7e3d"] }, created())).toBeNull();
 });
 
-test("the poll finds nothing, since Linear only pushes sessions", async () => {
-  const source = linearAgentSessions({ issueFiling: unread() });
-  expect(await source.poll({}, undefined, new Date())).toEqual({ occurrences: [], cursor: null });
-});
-
 test("empty filter lists are refused", () => {
   const source = linearAgentSessions();
   expect(source.params.safeParse({ teams: [] }).success).toBe(false);

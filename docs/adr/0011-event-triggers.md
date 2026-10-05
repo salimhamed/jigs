@@ -1,6 +1,6 @@
 # Event triggers start runs; wakes stay separate
 
-Status: accepted
+Status: accepted; delivery kinds and the poll superseded by [0015](./0015-hub.md), where every occurrence arrives as a provider event through the hub
 
 A run used to start only from `jigs run` or a schedule, and provider events
 could only wake a run that already existed ([0003](./0003-webhook-ingress-resource-scoped-tokens.md)).

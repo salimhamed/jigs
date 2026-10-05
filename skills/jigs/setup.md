@@ -142,9 +142,7 @@ described in the configuration guide.
 ## 5. Events come through the hub
 
 GitHub, Linear, Slack and PagerDuty events all come through the hub, and wake
-a parked run at once. The service also re-reads each waiting ticket every
-`service.pollIntervalSeconds.linear` seconds (default 300), and
-`jigs poke <run-id>` wakes one sooner.
+a parked run at once. `jigs poke <run-id>` wakes one whose event was missed.
 
 ## Upgrading later
 

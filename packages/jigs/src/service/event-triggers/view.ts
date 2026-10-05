@@ -124,7 +124,7 @@ export function triggerChecks(
   });
 }
 
-/** Each declared trigger whose source this jigs version provides, with the provider it polls. */
+/** Each declared trigger whose source this jigs version provides, with the provider it reads. */
 export function triggerProviders(
   factory: Factory,
   sources: SourceRegistry = SOURCES,

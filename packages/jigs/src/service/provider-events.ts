@@ -25,7 +25,7 @@ export interface RouteDeps {
 
 /**
  * What routing did. `dropped` found nothing waiting; `failed` could not tell,
- * so a later redelivery may still land.
+ * so the event is worth routing again.
  */
 export type RouteResult =
   | { outcome: "ignored" | "woken" | "dropped" | "failed" }

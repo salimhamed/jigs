@@ -42,9 +42,7 @@ Add a `slack` section to `jigs.config.ts`:
 slack: {},
 ```
 
-The hub keeps the events that arrive while the service is down. The service
-also polls every
-[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds.
+The hub keeps the events that arrive while the service is down.
 
 A workflow that uses Slack declares it:
 
@@ -119,19 +117,12 @@ posts never start a run, and neither do thread replies (even one also sent to
 the channel), edits, deletes, joins, topic changes or other channel events.
 Direct messages are never read.
 
-Each message starts at most one run, whether it arrives through the hub, by
-polling or both, and however often Slack sends it again. A new trigger starts
+Each message starts at most one run, however often Slack sends it again. A new trigger starts
 with messages posted after the service first runs it. After the service was
 down, it starts runs only for messages from the last 60 minutes; set the
 trigger's `lookbackMinutes` to change that. At most 20 of a trigger's runs are
 active at once, and later messages wait their turn; set `maxActive` to change
 that.
-
-When a channel cannot be read, for example because the bot was removed from
-it, polling skips that channel and keeps reading the trigger's other channels.
-The service log names the channel and how to fix it: invite the bot back or
-remove the channel from the trigger. Messages posted there while it was skipped
-start runs only if the hub delivered them.
 
 ## Read a message
 
@@ -204,10 +195,8 @@ do. Without `until`, the wait has no time limit: it ends with a reply, or when
 you cancel the run with `jigs cancel`. With `until`, an ISO 8601 timestamp, it
 ends `timed-out` once that time passes with no reply. The thread is always
 read once first, so a reply already there still wins when `until` is in the
-past. A reply heard through the hub wakes the run within seconds.
-The service also re-reads the thread every
-[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
-and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
+past. A reply heard through the hub wakes the run within seconds, and
+`jigs poke` re-reads the thread at once. Only one run can wait on a thread at a
 time.
 
 ## Call other Slack methods
