@@ -16,7 +16,7 @@ the `hub` branch.
   organization plugin for Organizations, members and invites. It mounts at
   `/api/auth/*`. Loaders and actions call `context.auth.api` through
   `app/auth.server.ts`; pages under `routes/organization.tsx` need a member.
-- `src/secrets.ts` encrypts every secret the hub stores with
+- `src/secrets.ts` encrypts every secret the hub stores, as JSON, with
   `HUB_ENCRYPTION_KEY`. Store secrets only in that encrypted form.
 
 ## Database
@@ -59,14 +59,15 @@ appended for; `src/retention.ts` deletes expired messages hourly.
 
 ## Apps
 
-`src/apps.ts` holds what every provider's apps share: installations and
-assignments. A provider event goes only to the factories its app is assigned
+`src/apps.ts` holds what every provider's apps share: finding an app,
+installations, assignments, and the one assigned installation a factory's
+token request names. A provider event goes only to the factories its app is assigned
 to, so `fanOutProviderEvent` takes the app. `src/github.ts` adds GitHub Apps:
 an admin enters an App made by hand; each App's setup URL confirms an
 installation with the App's JWT before recording it; `/webhooks/github` finds
 the app by `X-GitHub-Hook-Installation-Target-ID`, checks its signature, and
 re-lists the App's installations from GitHub before dropping an event from one
-it does not know. `GitHubTokens` mints a fresh installation token for every
+it does not know. `issueGitHubToken` mints a fresh installation token for every
 factory request with the App's JWT and keeps none, so a factory asking again
 for a longer-lived or unrevoked token gets one; the bot
 user's id is looked up once and kept in the app's settings. Tests pass

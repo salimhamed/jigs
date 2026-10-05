@@ -11,7 +11,6 @@ import {
   maxWaitSeconds,
   messagesPath,
   pagerDutyTokenPath,
-  type SlackTokenRequest,
   slackTokenPath,
 } from "@jigs-ai/hub-protocol";
 import { asc, eq } from "drizzle-orm";
@@ -19,24 +18,34 @@ import express, { type Request, type Response, type Router } from "express";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations, organization } from "./db/schema.ts";
 import { authenticateFactory, type Factory } from "./factories.ts";
-import type { GitHubTokens } from "./github.ts";
+import { issueGitHubToken } from "./github.ts";
 import type { LinearTokens } from "./linear.ts";
 import { confirmCursor, type MessageWaiters, readMessages } from "./messages.ts";
-import type { PagerDutyTokens } from "./pagerduty.ts";
+import { issuePagerDutyToken } from "./pagerduty.ts";
 import { issueSlackToken } from "./slack.ts";
 
 const MAX_POSITION = 2n ** 63n - 1n;
+
+const answerToken = (
+  response: Response,
+  issued: { token: object } | { status: number; error: string },
+) => {
+  if ("error" in issued) response.status(issued.status).json({ error: issued.error });
+  else response.json(issued.token);
+};
 
 /** The routes a factory calls with its token: its messages, cursor, status and provider tokens. */
 export function createFactoryApi(options: {
   db: HubDatabase;
   waiters: MessageWaiters;
-  githubTokens: GitHubTokens;
-  linearTokens: LinearTokens;
-  pagerDutyTokens: PagerDutyTokens;
   encryptionKey: Buffer;
+  linearTokens: LinearTokens;
+  /** GitHub's REST API, replaced in tests. */
+  githubApiUrl?: string;
+  /** PagerDuty's identity service, replaced in tests. */
+  pagerDutyIdentityUrl?: string;
 }): Router {
-  const { db, waiters, githubTokens, linearTokens, pagerDutyTokens, encryptionKey } = options;
+  const { db, waiters, encryptionKey, linearTokens, githubApiUrl, pagerDutyIdentityUrl } = options;
   const router = express.Router();
 
   // The factory the request's token belongs to, or `null` once it has answered 401.
@@ -97,12 +106,10 @@ export function createFactoryApi(options: {
       response.status(400).json({ error: "owner must be a GitHub login." });
       return;
     }
-    const issued = await githubTokens.issue(factory.id, owner);
-    if ("error" in issued) {
-      response.status(issued.status).json({ error: issued.error });
-      return;
-    }
-    response.json(issued.token);
+    answerToken(
+      response,
+      await issueGitHubToken(db, encryptionKey, factory.id, owner, githubApiUrl),
+    );
   });
 
   router.post(linearTokenPath, express.json(), async (request, response) => {
@@ -115,44 +122,22 @@ export function createFactoryApi(options: {
         .json({ error: "organization must be a Linear organization id or URL key." });
       return;
     }
-    const issued = await linearTokens.issue(factory.id, organization);
-    if ("error" in issued) {
-      response.status(issued.status).json({ error: issued.error });
-      return;
-    }
-    response.json(issued.token);
+    answerToken(response, await linearTokens.issue(factory.id, organization));
   });
 
-  router.post(slackTokenPath, express.json(), async (request, response) => {
+  router.post(slackTokenPath, async (request, response) => {
     const factory = await authenticate(request, response);
     if (!factory) return;
-    const { appId, team } = (request.body ?? {}) as Partial<SlackTokenRequest>;
-    for (const [field, value] of [
-      ["appId", appId],
-      ["team", team],
-    ] as const) {
-      if (value !== undefined && (typeof value !== "string" || value === "")) {
-        response.status(400).json({ error: `${field} must be a Slack id.` });
-        return;
-      }
-    }
-    const issued = await issueSlackToken(db, encryptionKey, factory.id, { appId, team });
-    if ("error" in issued) {
-      response.status(issued.status).json({ error: issued.error });
-      return;
-    }
-    response.json(issued.token);
+    answerToken(response, await issueSlackToken(db, encryptionKey, factory.id));
   });
 
   router.post(pagerDutyTokenPath, async (request, response) => {
     const factory = await authenticate(request, response);
     if (!factory) return;
-    const issued = await pagerDutyTokens.issue(factory.id);
-    if ("error" in issued) {
-      response.status(issued.status).json({ error: issued.error });
-      return;
-    }
-    response.json(issued.token);
+    answerToken(
+      response,
+      await issuePagerDutyToken(db, encryptionKey, factory.id, pagerDutyIdentityUrl),
+    );
   });
 
   return router;

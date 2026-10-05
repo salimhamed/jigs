@@ -5,36 +5,8 @@
     {
       "idx": 0,
       "version": "7",
-      "when": 1791151650089,
-      "tag": "0000_auth",
-      "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1791153492331,
-      "tag": "0001_factories",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1791155181554,
-      "tag": "0002_apps",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1791158332583,
-      "tag": "0003_linear",
-      "breakpoints": true
-    },
-    {
-      "idx": 4,
-      "version": "7",
-      "when": 1791162878872,
-      "tag": "0004_provider_event_dedupe",
+      "when": 1791213349885,
+      "tag": "0000_init",
       "breakpoints": true
     }
   ]

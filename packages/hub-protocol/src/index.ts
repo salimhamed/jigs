@@ -142,20 +142,12 @@ export interface LinearTokenResponse {
 }
 
 /**
- * `POST` a {@link SlackTokenRequest} for a {@link SlackTokenResponse}: the bot
- * token of a Slack workspace where a Slack app assigned to the factory is
+ * `POST` an empty object for a {@link SlackTokenResponse}: the bot token of
+ * the one Slack workspace where a Slack app assigned to the factory is
  * installed. The hub answers 404 when there is no such installation and 409
- * when the request matches more than one.
+ * when there are several.
  */
 export const slackTokenPath = "/api/factory/tokens/slack";
-
-/** The body of a {@link slackTokenPath} request. Both fields are on every Slack event; either may be left out when only one installation matches. */
-export interface SlackTokenRequest {
-  /** The Slack app's id, an event's `api_app_id`. */
-  appId?: string;
-  /** The workspace's id, an event's `team_id`. */
-  team?: string;
-}
 
 /** The bot token scopes every factory's Slack app needs; a factory may need more. */
 export const slackBotScopes = [

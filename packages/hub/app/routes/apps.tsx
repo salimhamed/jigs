@@ -1,3 +1,4 @@
+import type { Provider } from "@jigs-ai/hub-protocol";
 import { Form, Link, redirect } from "react-router";
 import { addGitHubApp } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
@@ -20,8 +21,9 @@ export async function action({ context, request }: Route.ActionArgs) {
   const form = await request.formData();
   const field = (name: string) => String(form.get(name) ?? "").trim();
   const { db, config } = context;
+  const provider = field("provider") as Provider;
   const added = await (() => {
-    switch (form.get("provider")) {
+    switch (provider) {
       case "linear":
         return addLinearApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
@@ -45,7 +47,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           subdomain: field("subdomain"),
           region: field("region"),
         });
-      default:
+      case "github":
         return addGitHubApp(db, config.encryptionKey, organizationId, {
           appId: field("appId"),
           slug: field("slug"),
@@ -54,6 +56,8 @@ export async function action({ context, request }: Route.ActionArgs) {
           webhookSecret: field("webhookSecret"),
           privateKey: field("privateKey"),
         });
+      default:
+        return { error: `There is no provider ${provider satisfies never}.` };
     }
   })();
   if ("error" in added) return added;
@@ -142,6 +146,7 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
       )}
       {loaderData.isAdmin && (
         <Form method="post" className="max-w-xl space-y-3">
+          <input type="hidden" name="provider" value="github" />
           <h2 className="text-lg font-semibold">Add a GitHub App</h2>
           <p className="text-sm text-zinc-500">
             Create the App on GitHub first, under your organization's Developer settings, then copy

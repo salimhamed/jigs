@@ -3,11 +3,11 @@ import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
 import { and, eq, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
 import { appOAuth } from "./app-oauth.ts";
-import type { App } from "./apps.ts";
+import { type App, findAssignedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations } from "./db/schema.ts";
+import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
-import { decryptSecret, encryptSecret } from "./secrets.ts";
+import { decryptJson, encryptJson } from "./secrets.ts";
 
 /** Where Slack sends every Slack app's events, its Event Subscriptions "Request URL". */
 export const slackWebhookPath = "/webhooks/slack";
@@ -81,13 +81,10 @@ export async function addSlackApp(
         clientId: input.clientId,
         scopes: [...slackBotScopes],
       } satisfies SlackAppSettings,
-      secrets: encryptSecret(
-        encryptionKey,
-        JSON.stringify({
-          clientSecret: input.clientSecret,
-          signingSecret: input.signingSecret,
-        } satisfies SlackAppSecrets),
-      ),
+      secrets: encryptJson<SlackAppSecrets>(encryptionKey, {
+        clientSecret: input.clientSecret,
+        signingSecret: input.signingSecret,
+      }),
     })
     .onConflictDoNothing()
     .returning();
@@ -141,9 +138,6 @@ const verifySignature = (
   );
 };
 
-const readSecrets = <T>(encryptionKey: Buffer, stored: string): T =>
-  JSON.parse(decryptSecret(encryptionKey, stored));
-
 interface SlackEnvelope {
   type?: string;
   challenge?: string;
@@ -177,7 +171,7 @@ export function createSlackRoutes(options: {
   });
 
   const signingSecret = (app: App) =>
-    readSecrets<SlackAppSecrets>(encryptionKey, app.secrets).signingSecret;
+    decryptJson<SlackAppSecrets>(encryptionKey, app.secrets).signingSecret;
 
   router.post(
     slackWebhookPath,
@@ -270,7 +264,7 @@ export function createSlackRoutes(options: {
   router.get(slackCallbackPath(":appId"), async (request, response) => {
     const app = await oauth.adminsApp(request, response);
     if (!app || !oauth.checkCallback(request, response, app)) return;
-    const { clientSecret } = readSecrets<SlackAppSecrets>(encryptionKey, app.secrets);
+    const { clientSecret } = decryptJson<SlackAppSecrets>(encryptionKey, app.secrets);
     const exchanged = await fetch(`${apiUrl}/oauth.v2.access`, {
       method: "POST",
       headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -321,79 +315,41 @@ export function createSlackRoutes(options: {
         );
       return;
     }
-    const values = {
+    await recordInstallation(db, app.id, {
+      externalId: body.team.id,
       account: body.team.name,
       settings: {
         botUserId: body.bot_user_id,
         scopes: (body.scope ?? "").split(",").filter(Boolean),
       } satisfies SlackWorkspaceSettings,
-      secrets: encryptSecret(
-        encryptionKey,
-        JSON.stringify({ botToken: body.access_token } satisfies SlackWorkspaceSecrets),
-      ),
-      failure: null,
-    };
-    await db
-      .insert(installations)
-      .values({ appId: app.id, externalId: body.team.id, ...values })
-      .onConflictDoUpdate({ target: [installations.appId, installations.externalId], set: values });
+      secrets: encryptJson<SlackWorkspaceSecrets>(encryptionKey, { botToken: body.access_token }),
+    });
     response.redirect(303, `/apps/${app.id}`);
   });
 
   return router;
 }
 
-/** The bot token of the one installation, among the Slack apps assigned to the factory, that the request matches. */
+/** The bot token of the one workspace where a Slack app assigned to the factory is installed. */
 export async function issueSlackToken(
   db: HubDatabase,
   encryptionKey: Buffer,
   factoryId: string,
-  request: { appId?: string; team?: string },
 ): Promise<{ token: SlackTokenResponse } | { status: 404 | 409; error: string }> {
-  const found = await db
-    .select({ app: apps, installation: installations })
-    .from(installations)
-    .innerJoin(apps, eq(apps.id, installations.appId))
-    .innerJoin(assignments, eq(assignments.appId, apps.id))
-    .where(
-      and(
-        eq(assignments.factoryId, factoryId),
-        eq(apps.provider, "slack"),
-        request.appId === undefined ? undefined : eq(apps.externalId, request.appId),
-        request.team === undefined ? undefined : eq(installations.externalId, request.team),
-      ),
-    );
-  const [first] = found;
-  if (!first) {
-    const named = [
-      request.appId && `app ${request.appId}`,
-      request.team && `workspace ${request.team}`,
-    ]
-      .filter(Boolean)
-      .join(" and ");
-    return {
-      status: 404,
-      error: named
-        ? `No installation of a Slack app assigned to this factory matches ${named}.`
-        : "No Slack app assigned to this factory is installed in a workspace.",
-    };
-  }
-  if (found.length > 1) {
-    const names = found
-      .map((row) => `${row.app.name} in ${row.installation.account}`)
-      .sort()
-      .join(", ");
-    return {
-      status: 409,
-      error: `More than one Slack installation assigned to this factory matches, so name the app and workspace: ${names}.`,
-    };
-  }
-  const { app, installation } = first;
-  const secrets = readSecrets<SlackWorkspaceSecrets>(encryptionKey, installation.secrets ?? "");
+  const found = await findAssignedInstallation(db, factoryId, "slack", undefined, {
+    none: "No Slack app assigned to this factory is installed in a workspace.",
+    several: "More than one Slack installation is assigned to this factory, so leave one",
+  });
+  if ("error" in found) return found;
+  const { app, installation } = found;
+  const { botToken } = decryptJson<SlackWorkspaceSecrets>(
+    encryptionKey,
+    installation.secrets ?? "",
+  );
   const { botUserId, scopes } = installation.settings as SlackWorkspaceSettings;
   return {
     token: {
-      token: secrets.botToken,
+      token: botToken,
       scopes,
       app: { appId: app.externalId, name: app.name, botUserId },
       team: installation.externalId,

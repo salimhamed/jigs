@@ -16,7 +16,6 @@ import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { GitHubTokens } from "./github.ts";
 import {
   addLinearApp,
   createLinearRoutes,
@@ -27,7 +26,6 @@ import {
   linearWebhookPath,
 } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
-import { PagerDutyTokens } from "./pagerduty.ts";
 
 const encryptionKey = randomBytes(32);
 const organizationId = "acme";
@@ -167,9 +165,7 @@ beforeAll(async () => {
         createFactoryApi({
           db,
           waiters,
-          githubTokens: new GitHubTokens({ db, encryptionKey }),
           linearTokens,
-          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
           encryptionKey,
         }),
       ),

@@ -1,6 +1,6 @@
 import { Download, KeyRound, Link2, Trash2 } from "lucide-react";
 import { data, Form, redirect } from "react-router";
-import { removeApp, setAssignments } from "../../src/apps.ts";
+import { isUuid, removeApp, setAssignments } from "../../src/apps.ts";
 import { setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
 import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
@@ -10,13 +10,11 @@ import { CopyButton } from "../components/copy-button.tsx";
 import { button, input, quietButton, table } from "../components/ui.ts";
 import type { Route } from "./+types/app.ts";
 
-const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-
 const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { organizationId, role } = await requireMember(context, request);
-  const app = UUID.test(params.id) ? await readApp(context, organizationId, params.id) : null;
+  const app = isUuid(params.id) ? await readApp(context, organizationId, params.id) : null;
   if (!app) throw notFound();
   return { isAdmin: role === "admin", app };
 }
@@ -24,7 +22,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 export async function action({ context, request, params }: Route.ActionArgs) {
   const { organizationId, role } = await requireMember(context, request);
   if (role !== "admin") return { error: "Only an admin can change apps." };
-  if (!UUID.test(params.id)) throw notFound();
+  if (!isUuid(params.id)) throw notFound();
   const form = await request.formData();
   switch (form.get("intent")) {
     case "remove":
@@ -72,10 +70,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
   const { app, isAdmin } = loaderData;
   return (
     <div className="space-y-8">
-      {app.provider === "github" && <GitHubApp app={app} isAdmin={isAdmin} />}
-      {app.provider === "linear" && <LinearApp app={app} isAdmin={isAdmin} />}
-      {app.provider === "slack" && <SlackApp app={app} isAdmin={isAdmin} />}
-      {app.provider === "pagerduty" && <PagerDutyApp app={app} isAdmin={isAdmin} />}
+      <ProviderApp app={app} isAdmin={isAdmin} />
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Factories</h2>
@@ -130,6 +125,23 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
 }
 
 type Loaded = Route.ComponentProps["loaderData"]["app"];
+
+function ProviderApp({ app, isAdmin }: { app: Loaded; isAdmin: boolean }) {
+  switch (app.provider) {
+    case "github":
+      return <GitHubApp app={app} isAdmin={isAdmin} />;
+    case "linear":
+      return <LinearApp app={app} isAdmin={isAdmin} />;
+    case "slack":
+      return <SlackApp app={app} isAdmin={isAdmin} />;
+    case "pagerduty":
+      return <PagerDutyApp app={app} isAdmin={isAdmin} />;
+    default: {
+      const unknown: never = app;
+      throw new Error(`Unknown provider ${(unknown as Loaded).provider}`);
+    }
+  }
+}
 
 function GitHubApp({
   app,

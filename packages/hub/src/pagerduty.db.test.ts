@@ -12,14 +12,12 @@ import * as schema from "./db/schema.ts";
 import { createTestDatabase, dbTest } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { GitHubTokens } from "./github.ts";
 import { LinearTokens } from "./linear.ts";
 import { MessageWaiters, readMessages } from "./messages.ts";
 import {
   addPagerDutyApp,
   createPagerDutyRoutes,
   hasPagerDutyWebhookSecret,
-  PagerDutyTokens,
   pagerDutyWebhookPath,
   setPagerDutyWebhookSecret,
 } from "./pagerduty.ts";
@@ -88,9 +86,8 @@ beforeAll(async () => {
         createFactoryApi({
           db,
           waiters,
-          githubTokens: new GitHubTokens({ db, encryptionKey }),
           linearTokens: new LinearTokens({ db, encryptionKey }),
-          pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey, identityUrl: identity }),
+          pagerDutyIdentityUrl: identity,
           encryptionKey,
         }),
       ),

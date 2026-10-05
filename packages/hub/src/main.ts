@@ -5,10 +5,10 @@ import { adminOrganization, createAuth } from "./auth.ts";
 import { readConfig } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
-import { createGitHubRoutes, GitHubTokens } from "./github.ts";
+import { createGitHubRoutes } from "./github.ts";
 import { createLinearRoutes, LinearTokens } from "./linear.ts";
 import { MessageWaiters } from "./messages.ts";
-import { createPagerDutyRoutes, PagerDutyTokens } from "./pagerduty.ts";
+import { createPagerDutyRoutes } from "./pagerduty.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
 import { Shutdown } from "./shutdown.ts";
@@ -38,14 +38,7 @@ const { encryptionKey, publicUrl } = config;
 const linearTokens = new LinearTokens({ db, encryptionKey });
 const adminOf = (request: Request) => adminOrganization(auth, fromNodeHeaders(request.headers));
 const routers = [
-  createFactoryApi({
-    db,
-    waiters,
-    githubTokens: new GitHubTokens({ db, encryptionKey }),
-    linearTokens,
-    pagerDutyTokens: new PagerDutyTokens({ db, encryptionKey }),
-    encryptionKey,
-  }),
+  createFactoryApi({ db, waiters, encryptionKey, linearTokens }),
   createGitHubRoutes({ db, waiters, encryptionKey }),
   createLinearRoutes({
     db,

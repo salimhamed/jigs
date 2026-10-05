@@ -12,7 +12,6 @@ import {
   linearTokenPath,
   type PagerDutyTokenResponse,
   pagerDutyTokenPath,
-  type SlackTokenRequest,
   type SlackTokenResponse,
   slackTokenPath,
 } from "@jigs-ai/hub-protocol";
@@ -157,7 +156,7 @@ export async function fetchSlackToken(
   try {
     return await hubSend<SlackTokenResponse>(ctx, slackTokenPath, {
       method: "POST",
-      body: {} satisfies SlackTokenRequest,
+      body: {},
     });
   } catch (error) {
     if (error instanceof HubResponseError && (error.status === 404 || error.status === 409))
