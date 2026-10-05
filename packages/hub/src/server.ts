@@ -1,12 +1,19 @@
 import { toNodeHandler } from "better-auth/node";
 import express, { type Express, type Router } from "express";
 import type { HubAuth } from "./auth.ts";
+import type { Shutdown } from "./shutdown.ts";
 import type { WebApp } from "./web.ts";
 
 /** The hub's HTTP app. `/api/*` and `/webhooks/*` routes go here, ahead of the web app. */
-export function createHubApp(auth: HubAuth, routers: Router[], web: WebApp): Express {
+export function createHubApp(
+  auth: HubAuth,
+  routers: Router[],
+  web: WebApp,
+  shutdown: Shutdown,
+): Express {
   const app = express();
   app.disable("x-powered-by");
+  app.use(shutdown.gate);
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
   });

@@ -11,6 +11,7 @@ import { MessageWaiters } from "./messages.ts";
 import { createPagerDutyRoutes, PagerDutyTokens } from "./pagerduty.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
+import { Shutdown } from "./shutdown.ts";
 import { createSlackRoutes } from "./slack.ts";
 import { createWebApp } from "./web.ts";
 
@@ -57,17 +58,23 @@ const routers = [
   createSlackRoutes({ db, waiters, encryptionKey, publicUrl, adminOrganization: adminOf }),
   createPagerDutyRoutes({ db, waiters, encryptionKey }),
 ];
-const server = createHubApp(auth, routers, web).listen(config.port, config.host, () => {
+const shutdown = new Shutdown();
+const server = createHubApp(auth, routers, web, shutdown).listen(config.port, config.host, () => {
   const address = server.address() as AddressInfo;
   console.log(`hub listening on http://${address.address}:${address.port}`);
 });
 
-process.once("SIGTERM", () => {
+process.once("SIGTERM", async () => {
   waiters.close();
-  server.close(async (error) => {
-    await retention.stop();
-    await web.close();
-    await db.$client.end();
-    process.exit(error ? 1 : 0);
-  });
+  let code = 0;
+  try {
+    await shutdown.close(server);
+  } catch (error) {
+    console.error(`could not stop the hub: ${String(error)}`);
+    code = 1;
+  }
+  await retention.stop();
+  await web.close();
+  await db.$client.end();
+  process.exit(code);
 });
