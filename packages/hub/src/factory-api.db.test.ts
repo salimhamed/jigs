@@ -140,6 +140,7 @@ async function until(condition: () => boolean) {
 
 dbTest("refuses unknown tokens and records who called", async () => {
   const { factory, token } = await newFactory();
+  expect(token).toMatch(/^[0-9a-f]{64}$/);
   expect((await fetch(`${url}${messagesPath}`)).status).toBe(401);
   expect((await poll("nope")).status).toBe(401);
   expect(await confirm("nope", "1")).toBe(401);
@@ -150,6 +151,7 @@ dbTest("refuses unknown tokens and records who called", async () => {
 
   const reissued = await reissueToken(db, waiters, organizationId, factory.id);
   if (!reissued) throw new Error("expected a token");
+  expect(reissued).toMatch(/^[0-9a-f]{64}$/);
   expect((await poll(token)).status).toBe(401);
   expect((await poll(reissued)).status).toBe(200);
   expect(await reissueToken(db, waiters, "other", factory.id)).toBeNull();

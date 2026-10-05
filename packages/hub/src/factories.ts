@@ -9,8 +9,9 @@ export type Factory = typeof factories.$inferSelect;
 // A token is 256 random bits, so an unsalted hash is as hard to reverse as the token is to guess.
 const hashToken = (token: string) => createHash("sha256").update(token).digest("hex");
 
+// Hex, so a token never starts with "-" and reads as an option on the command line.
 const newToken = () => {
-  const token = randomBytes(32).toString("base64url");
+  const token = randomBytes(32).toString("hex");
   return { token, tokenHash: hashToken(token) };
 };
 

@@ -101,27 +101,30 @@ jobs:
             npm install -g npm@11
           fi
           npm -v
-      # The workspace root shares the version but never publishes; packages/jigs is
-      # the package npm trusts this workflow to publish.
+      # The workspace root shares the version but never publishes; packages/hub
+      # and packages/jigs are the packages npm trusts this workflow to publish.
+      # The hub goes first, as its publisher is the newer one: if it fails, no
+      # jigs release lands without its matching hub, and a re-run finishes both.
       - name: Publish to npm
-        working-directory: packages/jigs
         env:
           TAG: ${{ needs.release-please.outputs.tag_name }}
         run: |
           set -euo pipefail
-          name="$(node -p "require('./package.json').name")"
-          version="$(node -p "require('./package.json').version")"
-          if [ "$TAG" != "jigs-v$version" ]; then
-            echo "checked out $version but release-please tagged '$TAG'" >&2
-            exit 1
-          fi
-          # A version already on the registry is a re-run of this job, not a
-          # failure: the registry refuses to publish over it, so skip it.
-          if npm view "$name@$version" version >/dev/null 2>&1; then
-            echo "$name@$version is already published — skipping"
-          else
-            npm publish --access public
-          fi
+          for dir in packages/hub packages/jigs; do
+            name="$(node -p "require('./$dir/package.json').name")"
+            version="$(node -p "require('./$dir/package.json').version")"
+            if [ "$TAG" != "jigs-v$version" ]; then
+              echo "checked out $name@$version but release-please tagged '$TAG'" >&2
+              exit 1
+            fi
+            # A version already on the registry is a re-run of this job, not a
+            # failure: the registry refuses to publish over it, so skip it.
+            if npm view "$name@$version" version >/dev/null 2>&1; then
+              echo "$name@$version is already published — skipping"
+            else
+              (cd "$dir" && npm publish --access public)
+            fi
+          done
 
   # Publishes @jigs-ai/jigs and @jigs-ai/hub from the hub branch as
   # X.(Y+1).0-hub.N under the `hub` dist-tag, never `latest`. The version is

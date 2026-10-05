@@ -62,13 +62,13 @@ because its server test starts the built hub.
 
 ## Layout
 
-A pnpm workspace. Every package shares the version release-please cuts; only
-`@jigs-ai/jigs` publishes.
+A pnpm workspace. Every package shares the version release-please cuts;
+`@jigs-ai/jigs` and `@jigs-ai/hub` publish.
 
 ```
 packages/
   jigs/          @jigs-ai/jigs: the library, CLI and service (published)
-  hub/           @jigs-ai/hub: the hub server (private until it ships)
+  hub/           @jigs-ai/hub: the hub server (published)
   hub-protocol/  @jigs-ai/hub-protocol: hub messages, bundled into jigs (private)
 tools/api-docs/  TypeDoc and VitePress tooling for site/
 site/            the website
@@ -140,9 +140,10 @@ updates a release-please PR; it auto-merges once its checks pass, then the tag,
 GitHub release and npm publish follow. release-please bumps the root
 `package.json` and, through `extra-files`, every `packages/*/package.json`, so
 all share one version and one `jigs-vX` tag. The publish job builds and
-publishes `packages/jigs`, generating the Markdown API reference in
-`packages/jigs/docs/api/` from the tag; it ships in the package and is never
-committed.
+publishes `packages/hub`, then `packages/jigs`, generating the Markdown API
+reference in `packages/jigs/docs/api/` from the tag; it ships in the package
+and is never committed. The hub goes first so a failed hub publish never
+leaves a jigs release without its matching hub; re-running finishes both.
 
 Repository settings the release depends on:
 
@@ -152,8 +153,10 @@ Repository settings the release depends on:
 - A `RELEASE_PLEASE_TOKEN` secret: a fine-grained PAT on this repo with
   Contents, Pull requests and Issues read and write. `GITHUB_TOKEN` would not
   trigger checks on the release PR.
-- An npm trusted publisher for `@jigs-ai/jigs`: repository `salimhamed/jigs`,
-  workflow `release.yml`, no environment. Publishing uses OIDC, no npm token.
+- An npm trusted publisher for each of `@jigs-ai/jigs` and `@jigs-ai/hub`:
+  repository `salimhamed/jigs`, workflow `release.yml`, no environment.
+  Publishing uses OIDC, no npm token. The hub's first publish and its trusted
+  publisher are set up by the maintainer by hand (see Hub previews).
 
 What is easy to break:
 
@@ -172,8 +175,9 @@ What is easy to break:
   like no release.
 - **Publish is idempotent.** It checks out the tag, refuses a version that does
   not match it, and skips a version npm already holds, so re-running the
-  workflow repairs a failed publish. `repository.url` in `packages/jigs/package.json` must
-  name this repository exactly, or trusted publishing refuses.
+  workflow repairs a failed publish. `repository.url` in each published
+  `package.json` must name this repository exactly, or trusted publishing
+  refuses.
 - Automatic releases are safe only because step ids are factory-local paths: a
   version bump never renames a factory's durable addresses.
 
@@ -198,7 +202,8 @@ The hub publishes before jigs, so it must be publishable first: its first
 publish is by hand with an npm token, then add an npm trusted publisher for
 `@jigs-ai/hub` with the same repository and `release.yml` workflow as jigs.
 npm points `latest` at a package's first version whatever `--tag` says, so the
-hub's `latest` is that hand-published version until it ships for real.
+hub's `latest` is that hand-published version until the next release, which
+moves it like jigs's.
 
 ## Website
 
