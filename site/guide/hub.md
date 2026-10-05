@@ -92,6 +92,10 @@ npx @jigs-ai/hub@<version>
 It prints `hub listening on http://127.0.0.1:3000`. Open `HUB_PUBLIC_URL`
 to sign in.
 
+For a local trial, `HUB_PUBLIC_URL=http://127.0.0.1:3000` works, but
+providers cannot reach it, so no webhooks arrive until the hub has a public
+address.
+
 ### Tailscale Funnel {#tailscale-funnel}
 
 [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) publishes a port on
@@ -173,8 +177,14 @@ with the factory's token, once:
 jigs hub connect https://hub.example.com <token>
 ```
 
-Run it in the factory's directory as `pnpm exec jigs hub connect ...`. It
-writes the hub's URL to `jigs.config.ts` and the token to `.env` as
+Run it in the factory's directory, after creating its `.env`:
+
+```sh
+cp .env.example .env
+pnpm exec jigs hub connect https://hub.example.com <token>
+```
+
+It writes the hub's URL to `jigs.config.ts` and the token to `.env` as
 `JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`.
 
 If the token is lost, **Re-issue token** makes a new one and stops the old

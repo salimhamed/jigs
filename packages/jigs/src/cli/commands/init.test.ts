@@ -255,6 +255,7 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
+    "pnpm exec jigs hub connect <url> <token>",
     "pnpm exec jigs up",
     "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
