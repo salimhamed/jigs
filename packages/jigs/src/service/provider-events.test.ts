@@ -259,7 +259,7 @@ test("a PagerDuty event no trigger takes is ignored", async () => {
   payload.event.event_type = "incident.acknowledged";
   expect(await route(page(payload))).toEqual({ outcome: "ignored" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
+    "[events] pagerduty ignored reason=no-new-occurrence event=incident.acknowledged",
   );
 });
 

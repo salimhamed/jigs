@@ -114,7 +114,7 @@ async function routePush({ provider, name, payload }: ProviderEvent, deps: Route
     return { outcome: "failed" } as const;
   }
   if (triggers.length === 0) {
-    console.log(`[events] ${provider} ignored reason=no-new-occurrence-or-unreadable ${event}`);
+    console.log(`[events] ${provider} ignored reason=no-new-occurrence ${event}`);
     return { outcome: "ignored" } as const;
   }
   console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} ${event}`);
