@@ -1,7 +1,13 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
-import { fetchFactoryStatus, fetchGithubToken, fetchLinearToken, fetchSlackToken } from "./hub.ts";
+import {
+  fetchFactoryStatus,
+  fetchGithubToken,
+  fetchLinearToken,
+  fetchPagerDutyToken,
+  fetchSlackToken,
+} from "./hub.ts";
 import { fakeFetch, jsonResponse } from "./test-support.ts";
 
 afterEach(() => {
@@ -116,5 +122,25 @@ test("no Slack installation for the factory says so with the repair", async () =
   await expect(fetchSlackToken(ctx())).rejects.toMatchObject({
     status: 404,
     hint: expect.stringContaining("in the hub, install one of this factory's Slack apps"),
+  });
+});
+
+test("a PagerDuty token is asked for with an empty body", async () => {
+  const issued = { token: "pd_1", expiresAt: "2026-10-05T12:00:00Z" };
+  const { calls } = hubAnswering(jsonResponse(issued));
+  await expect(fetchPagerDutyToken(ctx())).resolves.toEqual(issued);
+  expect(calls[0]).toMatchObject({
+    method: "POST",
+    url: new URL("https://hub.example.test/api/factory/tokens/pagerduty"),
+    json: {},
+  });
+});
+
+test("PagerDuty refusing the hub's credentials says so", async () => {
+  hubAnswering(jsonResponse({ error: "PagerDuty refused pd's credentials for acme (401)." }, 503));
+  await expect(fetchPagerDutyToken(ctx())).rejects.toMatchObject({
+    status: 503,
+    message: expect.stringContaining("PagerDuty refused pd's credentials for acme"),
+    hint: expect.stringContaining("PagerDuty refused the hub's credentials"),
   });
 });

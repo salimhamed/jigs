@@ -403,9 +403,10 @@ token in its environment:
 - **`JIGS_LINEAR_TOKEN`** holds a token of the factory's
   [Linear app](/guide/configuration#linear-identity), from the hub, so the agent
   acts as that app.
-- **`JIGS_PAGERDUTY_TOKEN`** holds a token for the factory's
-  [PagerDuty](/guide/configuration#pagerduty) OAuth app, with the scopes jigs
-  itself uses: the agent can read and update incidents and read users.
+- **`JIGS_PAGERDUTY_TOKEN`** holds a token of the factory's
+  [PagerDuty app](/guide/configuration#pagerduty), from the hub, with the
+  scopes jigs itself uses: the agent can read and update incidents and read
+  users.
 
 A run whose workflow declares such an agent checks that identity in preflight,
 as it would for a workflow that requires the provider.

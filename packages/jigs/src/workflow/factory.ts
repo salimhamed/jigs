@@ -12,7 +12,6 @@ import {
   parseFactoryConfig,
   type slackSchema,
   type WorkflowImport,
-  type webhooksSchema,
 } from "./factory-schema.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
@@ -171,8 +170,6 @@ export interface Factory {
   workflows: Record<string, AnyWorkflowDefinition>;
   schedules?: Record<string, Schedule>;
   triggers?: Record<string, EventTrigger>;
-  /** Which provider webhook routes the service mounts. Absent, it mounts none. */
-  webhooks?: WebhooksDefinition;
 }
 
 /**
@@ -224,26 +221,21 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
 export type LinearDefinition = z.input<typeof linearSchema>;
 
 /**
- * Who jigs is on PagerDuty: a scoped OAuth application acting on one account.
+ * Who jigs' PagerDuty notes are attributed to.
  *
  * @remarks
- * `identity.mode` is `app`, the only mode: jigs mints its own token from
- * `PAGERDUTY_CLIENT_ID` and `PAGERDUTY_CLIENT_SECRET` in `.env`. `subdomain`
- * and `region` name the account, as in `acme.pagerduty.com` on the `us`
- * service region.
+ * jigs acts on PagerDuty as the PagerDuty app the hub assigns this factory.
  *
- * `from` is required: the email of a real PagerDuty user. PagerDuty refuses a
- * write that names no user, so every note jigs adds is attributed to them.
- * `jigs doctor` fails when no PagerDuty user has the email.
+ * `from` is the email of a real PagerDuty user. PagerDuty refuses a write that
+ * names no user, so every note jigs adds is attributed to them. `jigs doctor`
+ * fails when no PagerDuty user has the email.
  *
  * @example
  * Use this value for `pagerduty` in `jigs.config.ts`.
  * ```ts
  * import type { PagerDutyDefinition } from "@jigs-ai/jigs";
  *
- * const pagerduty = {
- *   identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
- * } satisfies PagerDutyDefinition;
+ * const pagerduty = { from: "oncall@example.com" } satisfies PagerDutyDefinition;
  * ```
  *
  * @group Factory and workflows
@@ -271,26 +263,6 @@ export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
  * @group Factory and workflows
  */
 export type SlackDefinition = z.input<typeof slackSchema>;
-
-/**
- * Where PagerDuty's webhooks reach the service, and whether PagerDuty sends them.
- * Left out, it sends none. Without this section the service still finds new
- * incidents by polling.
- *
- * @example
- * Use this value for `webhooks` in `jigs.config.ts`.
- * ```ts
- * import type { WebhooksDefinition } from "@jigs-ai/jigs";
- *
- * const webhooks = {
- *   url: "https://factory.example.ts.net",
- *   pagerduty: { enabled: true },
- * } satisfies WebhooksDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type WebhooksDefinition = z.input<typeof webhooksSchema>;
 
 /**
  * A repository this factory works in: its remote and how a worktree cut from

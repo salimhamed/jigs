@@ -1,16 +1,11 @@
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
-  // GitHub, Linear and Slack events and tokens reach this factory through its hub.
+  // GitHub, Linear, Slack and PagerDuty events and tokens reach this factory through its hub.
   // Set this and the token with: pnpm exec jigs hub connect <url> <token>
   hub: { url: "https://hub.example.com" },
   service: { port: {{SERVICE_PORT}}, dashboardPort: {{DASHBOARD_PORT}} },
   // Parked runs re-read Linear every 300 seconds by default.
-  // PagerDuty webhooks are optional: they start runs sooner, and need a public URL.
-  // webhooks: {
-  //   url: "https://<machine>.<tailnet>.ts.net",
-  //   pagerduty: { enabled: true },
-  // },
   bindings: {},
   // Agents get only a small base environment; name any other variable they need.
   // agents: { env: ["SSH_AUTH_SOCK"] },

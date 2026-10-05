@@ -1,5 +1,5 @@
 import { linearAuthFor } from "../../../providers/linear-auth.ts";
-import { pagerDutyAuthFor } from "../../../providers/pagerduty-auth.ts";
+import { pagerDutyTokens } from "../../../providers/pagerduty.ts";
 import { AGENT_TOKEN_ENV, assertAgentAccess } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentGithubEnv } from "./github-access.ts";
@@ -22,7 +22,7 @@ export interface AgentAccessDeps {
 const defaultDeps: AgentAccessDeps = {
   github: (target, env) => agentGithubEnv(target, env),
   linearToken: () => linearAuthFor().bearer(LINEAR_AGENT_TOKEN_MIN_LIFETIME_MS),
-  pagerdutyToken: () => pagerDutyAuthFor().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
+  pagerdutyToken: () => pagerDutyTokens().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
 };
 
 /**

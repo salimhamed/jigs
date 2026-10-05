@@ -140,14 +140,14 @@ routines write comments; they do not decide whether to retry, fix code or merge.
 `watchPullRequest` still reports all current facts, including your own comments.
 Your workflow decides which feedback needs a reply and what to do next.
 
-## Polling and webhooks
+## Polling and hub events
 
 GitHub, Linear and Slack waits wake on the events the factory's
 [hub](/guide/configuration#hub) passes on; the hub keeps them while the service
 is down. The built-in Linear and Slack waits also poll as a fallback. A poll,
 event or push wakes the run so it can read the current facts again. Custom SDK
 hooks need their own event delivery; jigs does not automatically poll them.
-See [Configuration](/guide/configuration#webhooks) for webhook setup and intervals.
+See [Configuration](/guide/configuration#service) for the poll intervals.
 
 ## Check now with `jigs poke`
 

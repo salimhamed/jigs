@@ -140,9 +140,7 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: {
-    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
-  },
+  pagerduty: { from: "oncall@example.com" },
   workflows: {
     "incident-triage": () => import("./workflows/incident-triage/incident-triage.ts"),
   },
@@ -160,12 +158,11 @@ even one acknowledged or resolved before the service saw it, which is why the
 workflow checks the status in its snapshot and skips one that is already
 resolved. Rebuild and start the service with `pnpm exec jigs up`.
 
-The service looks for new incidents every
+A run starts within seconds of PagerDuty's `incident.triggered` event, which
+reaches the service through the [hub](/guide/configuration#hub). The service
+also looks for new incidents every
 [`pollIntervalSeconds.pagerduty`](/guide/configuration#service), 300 seconds by
-default. To start runs within seconds, add a PagerDuty
-[webhook](/guide/configuration#webhooks) for `incident.triggered`. The poll
-keeps running underneath it, and an incident seen both ways still starts one
-run.
+default, and an incident seen both ways still starts one run.
 
 To try the workflow by hand, start a run with an incident's id, the part of its
 URL after `/incidents/`:

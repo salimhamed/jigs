@@ -4,7 +4,7 @@
 import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
-import { POLLED_PROVIDERS, perProvider, WEBHOOK_PROVIDERS } from "./providers.ts";
+import { POLLED_PROVIDERS, perProvider } from "./providers.ts";
 import { mergeApprovalSchema } from "./pull-requests/policy.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
@@ -78,20 +78,9 @@ const serviceSchema = z.strictObject({
    * of the interval is taken off at random so services do not all poll at
    * once.
    */
-  // With that provider's webhook on, this is only the floor under a lost delivery.
   pollIntervalSeconds: z
     .strictObject(perProvider(POLLED_PROVIDERS, pollIntervalSchema))
     .prefault({}),
-});
-
-// A provider that is on is stated outright rather than implied by a secret in
-// .env: a forgotten secret must be a boot error, not a factory that silently
-// polls.
-const webhookProviderSchema = z.strictObject({ enabled: z.boolean() }).default({ enabled: false });
-
-export const webhooksSchema = z.strictObject({
-  url: z.url(),
-  ...perProvider(WEBHOOK_PROVIDERS, webhookProviderSchema),
 });
 
 // jigs acts on GitHub as the App the hub assigns this factory, so pull requests
@@ -115,30 +104,12 @@ export const linearSchema = z.strictObject({
 });
 
 /**
- * Who jigs is on PagerDuty: a scoped OAuth application acting on one account,
- * which mints its own token from a client id and secret.
- *
- * @remarks
- * `subdomain` and `region` name the account, as in `acme.pagerduty.com` on the
- * `us` service region. `from` is the email of a real PagerDuty user: PagerDuty
- * refuses a write without one, and notes jigs adds are attributed to them. The
- * secrets live in the factory's `.env`: `PAGERDUTY_CLIENT_ID` and
- * `PAGERDUTY_CLIENT_SECRET`.
+ * A factory's PagerDuty settings. jigs acts on PagerDuty as the PagerDuty app
+ * the hub assigns the factory; `from` is the email of a real PagerDuty user,
+ * because PagerDuty refuses a write without one, and notes jigs adds are
+ * attributed to them.
  */
-export const pagerDutyIdentitySchema = z.strictObject({
-  mode: z.literal("app"),
-  subdomain: z
-    .string()
-    .regex(
-      /^[a-z0-9-]+$/,
-      "the account subdomain alone, in lowercase, such as acme for acme.pagerduty.com",
-    ),
-  region: z.enum(["us", "eu"]),
-  from: z.email(),
-});
-
-/** A factory's PagerDuty settings: exactly one PagerDuty identity. */
-export const pagerDutySchema = z.strictObject({ identity: pagerDutyIdentitySchema });
+export const pagerDutySchema = z.strictObject({ from: z.email() });
 
 /**
  * A factory's Slack app, which the hub assigns it and which always acts as
@@ -175,9 +146,6 @@ export const factoryConfigSchema = z
     // The hub this factory hears its providers through. Its token stays in
     // .env as JIGS_HUB_TOKEN.
     hub: z.strictObject({ url: z.url() }),
-    // Where provider webhooks reach this factory's service (the tunnel URL), and
-    // which providers send them. Absent, the service only polls.
-    webhooks: webhooksSchema.optional(),
     // One service per factory repo, so the addresses belong to the factory
     // rather than the machine. Only non-secret operating parameters live here —
     // the World the service writes is a credential-bearing URL, so it stays in
@@ -285,11 +253,7 @@ export interface Binding extends BindingEntry {
 }
 
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
-export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type SlackConfig = z.output<typeof slackSchema>;
-
-/** Who jigs is on PagerDuty: a scoped OAuth application acting on one account. */
-export type PagerDutyIdentity = z.output<typeof pagerDutyIdentitySchema>;
 
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);

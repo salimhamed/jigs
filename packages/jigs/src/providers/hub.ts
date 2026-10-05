@@ -10,6 +10,8 @@ import {
   type LinearTokenRequest,
   type LinearTokenResponse,
   linearTokenPath,
+  type PagerDutyTokenResponse,
+  pagerDutyTokenPath,
   type SlackTokenRequest,
   type SlackTokenResponse,
   slackTokenPath,
@@ -169,3 +171,29 @@ export async function fetchSlackToken(
     throw error;
   }
 }
+
+/** A token of the factory's one PagerDuty app, acting as the app in its account. */
+export async function fetchPagerDutyToken(
+  ctx: FactoryContext = currentFactoryContext(),
+): Promise<PagerDutyTokenResponse> {
+  try {
+    return await hubSend<PagerDutyTokenResponse>(ctx, pagerDutyTokenPath, {
+      method: "POST",
+      body: {},
+    });
+  } catch (error) {
+    if (error instanceof HubResponseError && error.status in PAGERDUTY_TOKEN_REPAIRS)
+      throw new HubResponseError(
+        error.status,
+        error.message,
+        PAGERDUTY_TOKEN_REPAIRS[error.status as keyof typeof PAGERDUTY_TOKEN_REPAIRS],
+      );
+    throw error;
+  }
+}
+
+const PAGERDUTY_TOKEN_REPAIRS = {
+  404: "in the hub, assign this factory a PagerDuty app",
+  409: "in the hub, leave this factory assigned only one PagerDuty app",
+  503: "PagerDuty refused the hub's credentials for this factory's PagerDuty app: in the hub, remove the app and add it again with its current client id and secret",
+};

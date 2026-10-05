@@ -2,7 +2,7 @@
 
 From nothing to a service that answers. The human-facing walkthrough is
 `https://salimhamed.github.io/jigs/guide/getting-started`; identity, merge
-settings, bindings and webhooks are in
+settings, bindings and the hub are in
 `https://salimhamed.github.io/jigs/guide/configuration`.
 
 Print each command for the human to run, or run it and show them the output.
@@ -139,14 +139,12 @@ separate from the factory's `bindings/<name>/`, whose files `copy` lists for
 each new worktree. Worktree provisioning (`copy`, `postCreate`) is a hand edit
 described in the configuration guide.
 
-## 5. Webhooks are optional
+## 5. Events come through the hub
 
-GitHub events always come through the hub. For the other providers, a parked
-run wakes without webhooks: the service re-reads each waiting ticket every
+GitHub, Linear, Slack and PagerDuty events all come through the hub, and wake
+a parked run at once. The service also re-reads each waiting ticket every
 `service.pollIntervalSeconds.linear` seconds (default 300), and
-`jigs poke <run-id>` wakes one sooner. Webhooks only make the wake immediate. They need a public tunnel URL, a
-`webhooks` section in `jigs.config.ts` and a secret per provider in `.env`; the
-configuration guide's webhooks section has the steps.
+`jigs poke <run-id>` wakes one sooner.
 
 ## Upgrading later
 

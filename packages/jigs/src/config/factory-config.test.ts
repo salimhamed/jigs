@@ -131,36 +131,6 @@ test.each([
     },
     "pagerduty",
   ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      webhooks: { pagerduty: { enabled: true } },
-    },
-    "url",
-  ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      webhooks: {
-        url: "https://f.test",
-        pagerduty: {},
-      },
-    },
-    "enabled",
-  ],
-  [
-    {
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      webhooks: {
-        url: "not a url",
-        pagerduty: { enabled: false },
-      },
-    },
-    "url",
-  ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
 });
@@ -201,25 +171,6 @@ test("without a slack section the factory has no Slack app", () => {
       slack: {},
     }).slack,
   ).toEqual({ scopes: [] });
-});
-
-test("without a webhooks section no provider sends webhooks", () => {
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
-    }).webhooks,
-  ).toBeUndefined();
-});
-
-test("a webhook provider left out of the webhooks section is disabled", () => {
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
-      webhooks: { url: "https://f.test" },
-    }).webhooks,
-  ).toEqual({ url: "https://f.test", pagerduty: { enabled: false } });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
@@ -528,58 +479,21 @@ test("a Linear operator is optional and must be an email", () => {
   expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");
 });
 
-const PAGERDUTY_IDENTITY = {
-  mode: "app",
-  subdomain: "acme",
-  region: "us",
-  from: "oncall@example.com",
-};
-
-test("a factory without a pagerduty section has no PagerDuty identity", () => {
+test("a factory without a pagerduty section has no PagerDuty settings", () => {
   expect(withSettings({}).pagerduty).toBeUndefined();
 });
 
-test("a PagerDuty identity is an app with a subdomain, a region and a from email", () => {
-  expect(withSettings({ pagerduty: { identity: PAGERDUTY_IDENTITY } }).pagerduty).toEqual({
-    identity: PAGERDUTY_IDENTITY,
+test("a PagerDuty section names the from user by email, and nothing else", () => {
+  expect(withSettings({ pagerduty: { from: "oncall@example.com" } }).pagerduty).toEqual({
+    from: "oncall@example.com",
   });
-  expect(
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "eu" } } }).pagerduty
-      ?.identity.region,
-  ).toBe("eu");
-  for (const missing of ["subdomain", "region", "from"]) {
-    const { [missing as keyof typeof PAGERDUTY_IDENTITY]: _dropped, ...rest } = PAGERDUTY_IDENTITY;
-    expect(() => withSettings({ pagerduty: { identity: rest } })).toThrow(
-      `pagerduty.identity.${missing}`,
-    );
-  }
-  expect(() => withSettings({ pagerduty: {} })).toThrow("pagerduty.identity");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, mode: "key" } } }),
-  ).toThrow("pagerduty.identity.mode");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "ap" } } }),
-  ).toThrow("pagerduty.identity.region");
-  expect(() =>
-    withSettings({
-      pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "acme.pagerduty.com" } },
-    }),
-  ).toThrow("pagerduty.identity.subdomain");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "Acme" } } }),
-  ).toThrow("pagerduty.identity.subdomain");
-  // Secrets live in .env, so a client id in config is refused, not ignored.
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, clientId: "abc" } } }),
-  ).toThrow("clientId");
-});
-
-test("a PagerDuty from must be an email", () => {
   for (const from of ["oncall", ""]) {
-    expect(() =>
-      withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, from } } }),
-    ).toThrow("pagerduty.identity.from");
+    expect(() => withSettings({ pagerduty: { from } })).toThrow("pagerduty.from");
   }
+  expect(() => withSettings({ pagerduty: {} })).toThrow("pagerduty.from");
+  expect(() =>
+    withSettings({ pagerduty: { from: "oncall@example.com", identity: { mode: "app" } } }),
+  ).toThrow("identity");
 });
 
 const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };

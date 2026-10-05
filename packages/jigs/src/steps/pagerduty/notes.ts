@@ -13,7 +13,7 @@ function renderIncidentNote(content: string, metadata: RunMetadata): string {
  * Add a plain-text note to the incident, ending in a line that names the run.
  *
  * @remarks
- * The note is attributed to the factory's `pagerduty.identity.from` user.
+ * The note is attributed to the factory's `pagerduty.from` user.
  * PagerDuty shows markup as literal text, so write plain sentences.
  *
  * @group Create and update

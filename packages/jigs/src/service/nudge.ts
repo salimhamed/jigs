@@ -1,8 +1,8 @@
-// How a parked run hears from its provider when no webhook tells it. On a
+// How a parked run hears from its provider when no event tells it. On a
 // timer per provider, the service wakes each held hook through the same
-// `wake` the ingress and `jigs poke` use, and the woken routine re-reads the provider
-// from scratch: the wake carries nothing, so a nudge and a delivery are the
-// same event. With webhooks on, this is the floor under a lost delivery.
+// `wake` provider events and `jigs poke` use, and the woken routine re-reads the provider
+// from scratch: the wake carries nothing, so a nudge and an event are the
+// same. It is the floor under a lost event.
 // GitHub has no timer: its events come through the hub, which sweeps its
 // waiting runs once when it says the factory fell behind.
 
