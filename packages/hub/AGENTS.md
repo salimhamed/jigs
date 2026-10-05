@@ -28,7 +28,10 @@ that appends messages calls `lockAppends` first.
 - A provider event goes only to the factories its app is assigned to.
 - Webhook routes take `webhookBody` and check the signature before trusting
   the payload.
-- Provider API URLs are replaced only in tests, through an `apiUrl` option.
+- Provider API URLs are replaced only in tests: an `apiUrl` option on a
+  provider's functions and routes, and `apiUrls` on `createFactoryApi`.
+- To add a provider, add it to `providers` in `@jigs-ai/hub-protocol`; the
+  compiler then names every exhaustive switch to extend.
 - An app's page (`app/routes/app.tsx`) and its website page
   (`site/guide/hub-<provider>.md`) both say what to set on the provider;
   change them together.
