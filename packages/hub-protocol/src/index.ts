@@ -115,3 +115,27 @@ export interface GitHubTokenResponse {
   /** The App the token acts as; it commits as `<slug>[bot]` with the bot's user id. */
   app: { slug: string; botUserId: number };
 }
+
+/**
+ * `POST` a {@link LinearTokenRequest} for a {@link LinearTokenResponse}: the
+ * access token of a Linear workspace connected to a Linear app assigned to the
+ * factory. The hub answers 404 when there is no such workspace, 409 when the
+ * request matches more than one, and 503 when the workspace must be connected
+ * again on the hub.
+ */
+export const linearTokenPath = "/api/factory/tokens/linear";
+
+/** The body of a {@link linearTokenPath} request. */
+export interface LinearTokenRequest {
+  /** The workspace's Linear organization id or URL key; may be left out when only one is connected. */
+  organization?: string;
+}
+
+/** The body of a {@link linearTokenPath} response. */
+export interface LinearTokenResponse {
+  token: string;
+  /** When the token stops working, as an ISO 8601 timestamp. */
+  expiresAt: string;
+  /** The app the token acts as, and the id of the user Linear made for it in that workspace. */
+  app: { name: string; userId: string };
+}

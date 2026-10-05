@@ -5,6 +5,8 @@ import {
   factoryStatusPath,
   type GitHubTokenRequest,
   githubTokenPath,
+  type LinearTokenRequest,
+  linearTokenPath,
   type MessagesResponse,
   maxWaitSeconds,
   messagesPath,
@@ -15,6 +17,7 @@ import type { HubDatabase } from "./db/database.ts";
 import { apps, assignments, installations, organization } from "./db/schema.ts";
 import { authenticateFactory, type Factory } from "./factories.ts";
 import type { GitHubTokens } from "./github.ts";
+import type { LinearTokens } from "./linear.ts";
 import { confirmCursor, type MessageWaiters, readMessages } from "./messages.ts";
 
 const MAX_POSITION = 2n ** 63n - 1n;
@@ -24,8 +27,9 @@ export function createFactoryApi(options: {
   db: HubDatabase;
   waiters: MessageWaiters;
   githubTokens: GitHubTokens;
+  linearTokens: LinearTokens;
 }): Router {
-  const { db, waiters, githubTokens } = options;
+  const { db, waiters, githubTokens, linearTokens } = options;
   const router = express.Router();
 
   // The factory the request's token belongs to, or `null` once it has answered 401.
@@ -86,6 +90,24 @@ export function createFactoryApi(options: {
       return;
     }
     const issued = await githubTokens.issue(factory.id, owner);
+    if ("error" in issued) {
+      response.status(issued.status).json({ error: issued.error });
+      return;
+    }
+    response.json(issued.token);
+  });
+
+  router.post(linearTokenPath, express.json(), async (request, response) => {
+    const factory = await authenticate(request, response);
+    if (!factory) return;
+    const { organization } = (request.body ?? {}) as Partial<LinearTokenRequest>;
+    if (organization !== undefined && (typeof organization !== "string" || organization === "")) {
+      response
+        .status(400)
+        .json({ error: "organization must be a Linear organization id or URL key." });
+      return;
+    }
+    const issued = await linearTokens.issue(factory.id, organization);
     if ("error" in issued) {
       response.status(issued.status).json({ error: issued.error });
       return;

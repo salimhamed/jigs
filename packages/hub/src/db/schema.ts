@@ -191,8 +191,14 @@ export const installations = pgTable(
       .references(() => apps.id, { onDelete: "cascade" }),
     /** The provider's id for the installation. */
     externalId: text("external_id").notNull(),
-    /** The account or workspace the app is installed on. */
+    /** The account or workspace the app is installed on, such as a GitHub login or a Linear URL key. */
     account: text("account").notNull(),
+    /** What the provider says about the installation, such as a Linear workspace's name. */
+    settings: jsonb("settings"),
+    /** The installation's own credentials as JSON, encrypted with `encryptSecret`, such as Linear's OAuth tokens. */
+    secrets: text("secrets"),
+    /** Why the installation stopped working, until it is connected again. */
+    failure: text("failure"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
   (table) => [unique("installations_app_external_id").on(table.appId, table.externalId)],
