@@ -117,16 +117,12 @@ test.each([
     "slack",
   ],
   [
-    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, slack: {} },
-    "socketMode",
-  ],
-  [
     {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      slack: { socketMode: true, mode: "app" },
+      slack: { socketMode: true },
     },
-    '"mode"',
+    '"socketMode"',
   ],
   [
     {
@@ -202,9 +198,9 @@ test("without a slack section the factory has no Slack app", () => {
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 3456 },
-      slack: { socketMode: true },
+      slack: {},
     }).slack,
-  ).toEqual({ socketMode: true, scopes: [] });
+  ).toEqual({ scopes: [] });
 });
 
 test("without a webhooks section no provider sends webhooks", () => {

@@ -33,7 +33,7 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-jigs acts on GitHub and Linear as the apps the hub assigns the factory, so
+jigs acts on GitHub, Linear and Slack as the apps the hub assigns the factory, so
 there is no identity to choose here. Add
 `linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
 comments mention the operator and the assignee rather than the ticket's
@@ -52,11 +52,11 @@ cp .env.example .env
 pnpm exec jigs hub connect <hub-url> <token>
 ```
 
-Every factory hears GitHub and Linear through a hub. Ask the user for the hub URL and the
+Every factory hears GitHub, Linear and Slack through a hub. Ask the user for the hub URL and the
 factory token the hub showed when they added this factory; `hub connect` writes
 the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
 `jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` as written. GitHub and Linear tokens come from the
+`WORKFLOW_POSTGRES_URL` as written. GitHub, Linear and Slack tokens come from the
 hub; the configuration guide's `.env` table lists every other variable.
 
 ## 3. `jigs up`

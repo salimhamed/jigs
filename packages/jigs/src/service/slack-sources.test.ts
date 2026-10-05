@@ -6,9 +6,8 @@ import { slackSources } from "./slack-sources.ts";
 
 const BOT = {
   userId: "U0C59SU5V29",
-  botId: "B0C5JPZUW1J",
-  user: "salims_jigs",
-  team: "Jungle Scout",
+  name: "salims_jigs",
+  team: "T0A7SCMC5",
   scopes: [],
 };
 const CHANNEL = "C0C5EUZ7P9Q";
@@ -52,7 +51,7 @@ const JOIN = {
 const OWN_POST = {
   type: "message",
   user: BOT.userId,
-  bot_id: BOT.botId,
+  bot_id: "B0C5JPZUW1J",
   ts: "1790723386.003159",
   text: "posted by the factory",
 };
@@ -124,13 +123,19 @@ const HISTORY_PAGE = [
   JOIN,
 ];
 
-// A Socket Mode `events_api` envelope's event, recorded from the test channel.
-const pushed = (message: object, channelType = "channel") => ({
-  ...message,
-  channel: CHANNEL,
-  channel_type: channelType,
-  event_ts: (message as { ts: string }).ts,
-  team: "T0A7SCMC5",
+// An Events API body as the hub sends it, its event recorded from the test channel.
+const pushed = (message: object, channelType = "channel", channel = CHANNEL) => ({
+  type: "event_callback",
+  api_app_id: "A0C5JPZUW1J",
+  team_id: "T0A7SCMC5",
+  event_id: "Ev0C5JPZUW1J",
+  event: {
+    ...message,
+    channel,
+    channel_type: channelType,
+    event_ts: (message as { ts: string }).ts,
+    team: "T0A7SCMC5",
+  },
 });
 
 const params = { channels: [CHANNEL] };
@@ -219,7 +224,7 @@ test("a failing channel is logged with its repair and keeps its cursor, and the 
   expect(lines[0]).toBe(
     "[slack] could not poll channel C0SECOND1: Slack conversations.history: not_in_channel",
   );
-  expect(lines[1]).toContain(`invite @${BOT.user} to C0SECOND1 again`);
+  expect(lines[1]).toContain(`invite @${BOT.name} to C0SECOND1 again`);
 });
 
 test("a cursor is a map of channel to Slack timestamp", () => {
@@ -246,7 +251,8 @@ test.each([
   ["an edit", pushed(EDIT)],
   ["a delete", pushed(DELETE)],
   ["the bot's own post", pushed(OWN_POST)],
-  ["another channel", { ...pushed(TOP_LEVEL), channel: "C0ELSEWHERE" }],
+  ["another channel", pushed(TOP_LEVEL, "channel", "C0ELSEWHERE")],
+  ["a body that is no event callback", { type: "url_verification", challenge: "c" }],
   ["a direct message", pushed(TOP_LEVEL, "im")],
 ])("a pushed %s is no occurrence", async (_name, event) => {
   expect(await messages.fromPush(params, event)).toBeNull();
@@ -282,7 +288,7 @@ test("another bot's post that mentions the bot is a mention", async () => {
   expect(await mentions.fromPush(params, pushed(OTHER_BOT))).toBeNull();
 });
 
-test("the bot's own post is skipped by its bot id alone", async () => {
-  const { user: _user, ...byBotId } = OWN_POST;
-  expect(await messages.fromPush(params, pushed(byBotId))).toBeNull();
+test("a pushed message reads the bot of the app and workspace it came from", async () => {
+  await messages.fromPush(params, pushed(TOP_LEVEL));
+  expect(slackApi.slackBot).toHaveBeenCalledWith({ appId: "A0C5JPZUW1J", team: "T0A7SCMC5" });
 });

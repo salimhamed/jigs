@@ -11,7 +11,7 @@ import {
   pagerDutyWebhookProbes,
 } from "../providers/pagerduty-checks.ts";
 import { pagerDutyWebhookChecks } from "../providers/pagerduty-webhook-checks.ts";
-import { slackChecks, slackDoctorChecks } from "../providers/slack-checks.ts";
+import { slackChecks } from "../providers/slack-checks.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/shared/drivers.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/shared/env.ts";
 import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
@@ -30,7 +30,7 @@ import {
 } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
 import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
-import { hubChecks } from "./hub.ts";
+import { hubChecks, hubSlackChecks } from "./hub.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
@@ -248,7 +248,7 @@ export function doctorChecks(
       : [];
   };
   const aws = users.get("aws") ?? [];
-  // One read of the hub answers both its own check and GitHub's.
+  // One read of the hub answers its own check, GitHub's and Slack's.
   let hubStatus: Promise<FactoryStatus> | undefined;
   const status = () => {
     hubStatus ??= fetchFactoryStatus(ctx);
@@ -259,7 +259,7 @@ export function doctorChecks(
     ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
     ...provider("github", () => githubChecks(ctx, status)),
     ...provider("pagerduty", () => [...pagerDutyChecks(ctx), ...pagerDutyFromDoctorChecks(ctx)]),
-    ...provider("slack", () => slackDoctorChecks(ctx)),
+    ...provider("slack", () => [...hubSlackChecks(ctx, status), ...slackChecks(ctx)]),
     ...pagerDutyWebhookChecks({ context: ctx, probes: pagerDutyWebhookProbes(ctx) }),
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),

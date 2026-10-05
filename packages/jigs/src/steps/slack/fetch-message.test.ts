@@ -85,7 +85,7 @@ beforeEach(() => {
   sent = fake.calls;
   useSlackClient({
     fetch: fake.fetch,
-    context: testFactoryContext({ env: { SLACK_BOT_TOKEN: "xoxb-test" } }),
+    context: testFactoryContext(),
   });
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/fetch-message-test-${factories}`);

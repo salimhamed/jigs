@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
+import * as hub from "./hub.ts";
 import {
   createSlackClient,
   SLACK_API_URL,
@@ -7,11 +8,8 @@ import {
   type SlackClient,
   slackBot,
 } from "./slack.ts";
-import { useSlackClient } from "./test-fixtures.ts";
+import { TEST_SLACK_BOT, TEST_SLACK_TOKEN, useSlackClient } from "./test-fixtures.ts";
 import { type FetchCall, fakeFetch, fakeSleep } from "./test-support.ts";
-
-const BOT_TOKEN = "xoxb-test-bot-token";
-const APP_TOKEN = "xapp-test-app-token";
 
 // Recorded from the salims_jigs app, trimmed to what jigs reads.
 const AUTH_OK = {
@@ -24,7 +22,6 @@ const AUTH_OK = {
   bot_id: "B0C5JPZUW1J",
   is_enterprise_install: false,
 };
-const SCOPES = "channels:history,groups:history,chat:write,users:read,users:read.email";
 
 function reply(body: unknown, init: { status?: number; headers?: Record<string, string> } = {}) {
   return new Response(JSON.stringify(body), {
@@ -33,7 +30,6 @@ function reply(body: unknown, init: { status?: number; headers?: Record<string, 
   });
 }
 
-let tokens: Record<string, string>;
 let factories = 0;
 let answers: Array<() => Response>;
 let calls: FetchCall[];
@@ -56,7 +52,6 @@ function sent(index: number): { url: string; auth: string; params: URLSearchPara
 }
 
 beforeEach(() => {
-  tokens = { SLACK_BOT_TOKEN: BOT_TOKEN, SLACK_APP_TOKEN: APP_TOKEN };
   answers = [];
   const fake = fakeFetch(() => {
     const next = answers.length > 1 ? answers.shift() : answers[0];
@@ -69,11 +64,10 @@ beforeEach(() => {
   const deps = {
     fetch: fake.fetch,
     sleep: sleep.sleep,
-    context: testFactoryContext({ env: tokens }),
+    context: testFactoryContext(),
   };
-  slack = createSlackClient(deps);
-  // slackBot caches on the process client, once per factory context.
   useSlackClient(deps);
+  slack = createSlackClient(deps);
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/slack-test-${factories}`);
 });
@@ -82,32 +76,51 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-test("auth.test names the bot and reads its scopes from the response header", async () => {
-  answer(() => reply(AUTH_OK, { headers: { "x-oauth-scopes": SCOPES } }));
-  expect(await slack.slackAuthTest()).toEqual({
-    userId: "U0C59SU5V29",
-    botId: "B0C5JPZUW1J",
-    user: "salims_jigs",
-    team: "Jungle Scout",
-    scopes: SCOPES.split(","),
-  });
+const authTest = async () =>
+  (await slack.slackCall<{ ok: true; user_id: string }>("auth.test")).body;
+
+test("a call sends the bot token the hub hands out", async () => {
+  answer(() => reply(AUTH_OK));
+  expect((await authTest()).user_id).toBe("U0C59SU5V29");
   expect(sent(0)).toMatchObject({
     url: `${SLACK_API_URL}/auth.test`,
-    auth: `Bearer ${BOT_TOKEN}`,
+    auth: `Bearer ${TEST_SLACK_TOKEN}`,
   });
-});
-
-test("a response without the scopes header reports no scopes", async () => {
-  answer(() => reply(AUTH_OK));
-  expect((await slack.slackAuthTest()).scopes).toEqual([]);
+  expect(hub.fetchSlackToken).toHaveBeenCalledWith({}, expect.anything());
 });
 
 test("a Slack error carries its code and never the token", async () => {
-  answer(() => reply({ ok: false, error: "invalid_auth" }));
-  const error = await slack.slackAuthTest().catch((err: unknown) => err);
+  answer(() => reply({ ok: false, error: "channel_not_found" }));
+  const error = await authTest().catch((err: unknown) => err);
   expect(error).toBeInstanceOf(SlackApiError);
-  expect(error).toMatchObject({ code: "invalid_auth", message: "Slack auth.test: invalid_auth" });
-  expect(String(error)).not.toContain(BOT_TOKEN);
+  expect(error).toMatchObject({
+    code: "channel_not_found",
+    message: "Slack auth.test: channel_not_found",
+  });
+  expect(String(error)).not.toContain(TEST_SLACK_TOKEN);
+});
+
+test.each(["invalid_auth", "token_revoked"])(
+  "a token Slack answers %s to is asked of the hub again, once",
+  async (code) => {
+    vi.mocked(hub.fetchSlackToken)
+      .mockResolvedValueOnce({ token: "xoxb-old", app: TEST_SLACK_BOT, team: "T0", scopes: [] })
+      .mockResolvedValueOnce({ token: "xoxb-new", app: TEST_SLACK_BOT, team: "T0", scopes: [] });
+    answer(
+      () => reply({ ok: false, error: code }),
+      () => reply(AUTH_OK),
+    );
+    expect((await authTest()).user_id).toBe("U0C59SU5V29");
+    expect([sent(0).auth, sent(1).auth]).toEqual(["Bearer xoxb-old", "Bearer xoxb-new"]);
+    await authTest();
+    expect(hub.fetchSlackToken).toHaveBeenCalledTimes(2);
+  },
+);
+
+test("a token Slack refuses twice fails", async () => {
+  answer(() => reply({ ok: false, error: "invalid_auth" }));
+  await expect(authTest()).rejects.toMatchObject({ code: "invalid_auth" });
+  expect(calls).toHaveLength(2);
 });
 
 test("a missing scope names the scope Slack asked for", async () => {
@@ -126,15 +139,9 @@ test("a missing scope names the scope Slack asked for", async () => {
   });
 });
 
-test("an unset bot token names the .env key before any request", async () => {
-  tokens.SLACK_BOT_TOKEN = "";
-  await expect(slack.slackAuthTest()).rejects.toThrow("SLACK_BOT_TOKEN is not set");
-  expect(calls).toHaveLength(0);
-});
-
 test("a non-JSON answer reports the HTTP status, not the body", async () => {
   answer(() => new Response("<html>bad gateway</html>", { status: 502 }));
-  const error = await slack.slackAuthTest().catch((err: unknown) => err);
+  const error = await authTest().catch((err: unknown) => err);
   expect(error).toMatchObject({
     provider: "slack",
     status: 502,
@@ -148,7 +155,7 @@ test("a rate-limited call waits out Retry-After and tries again", async () => {
       reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "7" } }),
     () => reply(AUTH_OK),
   );
-  expect((await slack.slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect((await authTest()).user_id).toBe("U0C59SU5V29");
   expect(sleeps).toEqual([7_000]);
   expect(calls).toHaveLength(2);
 });
@@ -162,7 +169,7 @@ test("an unreadable Retry-After waits one second", async () => {
       ),
     () => reply(AUTH_OK),
   );
-  expect((await slack.slackAuthTest()).userId).toBe("U0C59SU5V29");
+  expect((await authTest()).user_id).toBe("U0C59SU5V29");
   expect(sleeps).toEqual([1_000]);
 });
 
@@ -170,7 +177,7 @@ test("a Retry-After over a minute fails as ratelimited instead of waiting", asyn
   answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "61" } }),
   );
-  await expect(slack.slackAuthTest()).rejects.toMatchObject({ code: "ratelimited", status: 429 });
+  await expect(authTest()).rejects.toMatchObject({ code: "ratelimited", status: 429 });
   expect(calls).toHaveLength(1);
   expect(sleeps).toEqual([]);
 });
@@ -179,29 +186,36 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
   answer(() =>
     reply({ ok: false, error: "ratelimited" }, { status: 429, headers: { "retry-after": "1" } }),
   );
-  await expect(slack.slackAuthTest()).rejects.toMatchObject({ code: "ratelimited" });
+  await expect(authTest()).rejects.toMatchObject({ code: "ratelimited" });
   expect(calls).toHaveLength(4);
   expect(sleeps).toEqual([1_000, 1_000, 1_000]);
 });
 
-test("the bot's own identity is read once per factory context", async () => {
-  answer(() => reply(AUTH_OK));
+test("the bot is read from the hub once per installation and factory context", async () => {
   const [first, second] = await Promise.all([slackBot(), slackBot()]);
   expect(first).toEqual(second);
-  expect(await slackBot()).toMatchObject({ userId: "U0C59SU5V29", botId: "B0C5JPZUW1J" });
-  expect(calls).toHaveLength(1);
+  expect(first).toEqual({
+    userId: TEST_SLACK_BOT.botUserId,
+    name: TEST_SLACK_BOT.name,
+    team: "T0TEST",
+    scopes: expect.any(Array),
+  });
+  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(1);
+  await slackBot({ appId: "A0OTHER", team: "T0OTHER" });
+  expect(hub.fetchSlackToken).toHaveBeenLastCalledWith(
+    { appId: "A0OTHER", team: "T0OTHER" },
+    expect.anything(),
+  );
   vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
   await slackBot();
-  expect(calls).toHaveLength(2);
+  expect(hub.fetchSlackToken).toHaveBeenCalledTimes(3);
+  expect(calls).toHaveLength(0);
 });
 
-test("a failed identity read is not cached", async () => {
-  answer(
-    () => reply({ ok: false, error: "invalid_auth" }),
-    () => reply(AUTH_OK),
-  );
-  await expect(slackBot()).rejects.toThrow("invalid_auth");
-  expect((await slackBot()).userId).toBe("U0C59SU5V29");
+test("a failed token request is not cached", async () => {
+  vi.mocked(hub.fetchSlackToken).mockRejectedValueOnce(new Error("hub down"));
+  await expect(slackBot()).rejects.toThrow("hub down");
+  expect((await slackBot()).userId).toBe(TEST_SLACK_BOT.botUserId);
 });
 
 const message = (ts: string, extra: Record<string, unknown> = {}) => ({
@@ -328,20 +342,6 @@ test("a user reads as their display name and email, falling back to the real nam
     bot: true,
   });
   expect(Object.fromEntries(sent(0).params)).toEqual({ user: "U01PW925E6N" });
-});
-
-test("a Socket Mode connection is opened with the app-level token", async () => {
-  answer(() => reply({ ok: true, url: "wss://wss-primary.slack.com/link/?ticket=t" }));
-  expect(await slack.slackOpenConnection()).toBe("wss://wss-primary.slack.com/link/?ticket=t");
-  expect(sent(0)).toMatchObject({
-    url: `${SLACK_API_URL}/apps.connections.open`,
-    auth: `Bearer ${APP_TOKEN}`,
-  });
-});
-
-test("an unset app token names its .env key", async () => {
-  tokens.SLACK_APP_TOKEN = "";
-  await expect(slack.slackOpenConnection()).rejects.toThrow("SLACK_APP_TOKEN is not set");
 });
 
 test("history stops at a ceiling when every page claims another", async () => {

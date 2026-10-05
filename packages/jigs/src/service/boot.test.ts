@@ -6,13 +6,11 @@ import type { RegistrySql } from "../steps/runtime/registry.ts";
 import { inTestFactory } from "../test-fixtures.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import {
-  announceSlackApp,
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
   gateOnHubToken,
   gateOnRegistry,
-  gateOnSlackAppToken,
   gateOnWebhookSecrets,
   gateOnWorldStart,
 } from "./boot.ts";
@@ -504,74 +502,4 @@ test("a hub token lets the boot continue", async () => {
   const exit = vi.fn();
   expect(await gateOnHubToken({ env: async () => () => "token", exit })).toBe(true);
   expect(exit).not.toHaveBeenCalled();
-});
-
-test("Socket Mode without its app-level token refuses the boot and names the variable", async () => {
-  vi.stubEnv("SLACK_APP_TOKEN", "");
-  const exit = vi.fn();
-  const error = vi.fn();
-  expect(
-    await gateOnSlackAppToken({
-      slack: async () => ({ socketMode: true, scopes: [] }),
-      exit,
-      error,
-    }),
-  ).toBe(false);
-  expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("SLACK_APP_TOKEN"));
-});
-
-test.each([
-  ["no slack section", undefined],
-  ["Socket Mode off", { socketMode: false, scopes: [] }],
-])("%s needs no app-level token to boot", async (_name, slack) => {
-  vi.stubEnv("SLACK_APP_TOKEN", "");
-  const exit = vi.fn();
-  expect(await gateOnSlackAppToken({ slack: async () => slack, exit })).toBe(true);
-  expect(exit).not.toHaveBeenCalled();
-});
-
-test("Socket Mode with its app-level token boots", async () => {
-  vi.stubEnv("SLACK_APP_TOKEN", "xapp-set");
-  expect(
-    await gateOnSlackAppToken({
-      slack: async () => ({ socketMode: true, scopes: [] }),
-      exit: vi.fn(),
-    }),
-  ).toBe(true);
-});
-
-const holder = (slug: string) => ({ slug, pid: 1, startedAt: "2026-10-02T12:00:00.000Z" });
-
-test("a Slack app no other service holds is recorded without a warning", () => {
-  const log = vi.fn();
-  const hold = { others: [], forget: vi.fn() };
-  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
-  expect(log).not.toHaveBeenCalled();
-});
-
-test("a Slack app another service holds is warned about once, and the boot goes on", () => {
-  const log = vi.fn();
-  const hold = { others: [holder("jigs-factory-js-1a2b3c4d")], forget: vi.fn() };
-  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
-  expect(log.mock.calls).toEqual([
-    [
-      "[slack] the service jigs-factory-js-1a2b3c4d on this machine uses the same Slack app for Socket Mode; Slack splits its events between them, so each factory misses some until its poll catches up. Give each factory its own Slack app",
-    ],
-  ]);
-});
-
-test("a Slack app record that cannot be written is logged and does not stop the boot", () => {
-  const log = vi.fn();
-  expect(
-    announceSlackApp({
-      hold: () => {
-        throw new Error("EACCES: permission denied");
-      },
-      log,
-    }),
-  ).toBeUndefined();
-  expect(log).toHaveBeenCalledWith(
-    "[slack] could not record which Slack app this service uses: EACCES: permission denied",
-  );
 });

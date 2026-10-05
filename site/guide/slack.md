@@ -1,40 +1,20 @@
 # Slack
 
-A factory talks to Slack through its own Slack app, which always posts as its
-own bot. Each factory gets its own app, so one person's factory never posts as
-another's. This page sets the app up and connects it to the factory.
+A factory talks to Slack through a Slack app that its
+[hub](/guide/configuration#hub) holds and assigns to it. The app always posts
+as its own bot. The hub receives the app's events and hands the factory its bot
+token, so the factory's `.env` holds no Slack token. This page sets the app up
+and connects it to the factory.
 
-## 1. Create the app
+## 1. Set up the app in the hub
 
-In Slack, go to [api.slack.com/apps](https://api.slack.com/apps), choose
-**Create New App** → **From a manifest**, pick your workspace, and paste this
-manifest. Replace `<name>` with your own name, so colleagues can tell whose
-factory is talking:
+In the hub, add a Slack app and follow its page: it lists the Request URL,
+Redirect URL and bot events to set in the app's settings at
+[api.slack.com/apps](https://api.slack.com/apps), with Socket Mode and token
+rotation off. Install the app in your workspace with **Add to Slack**, then
+assign it to the factory.
 
-```yaml
-display_information:
-  name: "<name>'s jigs"
-features:
-  bot_user:
-    display_name: "<name>'s jigs"
-    always_online: true
-oauth_config:
-  scopes:
-    bot:
-      - channels:history
-      - groups:history
-      - chat:write
-      - users:read
-      - users:read.email
-settings:
-  event_subscriptions:
-    bot_events:
-      - message.channels
-      - message.groups
-  socket_mode_enabled: true
-  org_deploy_enabled: false
-  token_rotation_enabled: false
-```
+The hub asks the workspace for these bot scopes:
 
 | Bot scope | What jigs uses it for |
 | --- | --- |
@@ -44,60 +24,27 @@ settings:
 | `users:read` | Looking up the names of the people who wrote a message. |
 | `users:read.email` | Looking up their email addresses. |
 
-The bot events `message.channels` and `message.groups` are what Socket Mode
-delivers. Socket Mode needs no public URL: the factory's service opens the
-connection to Slack itself.
-
 Some workspaces require an admin to approve new apps. If yours does, Slack asks
 for approval when you install.
 
-## 2. Install it and create the tokens
-
-1. Under **OAuth & Permissions**, choose **Install to Workspace**. Copy the
-   **Bot User OAuth Token** (it starts with `xoxb-`).
-2. Under **Basic Information** → **App-Level Tokens**, choose
-   **Generate Token and Scopes**, add the `connections:write` scope, and
-   generate it. Copy the token (it starts with `xapp-`). You only need it with
-   Socket Mode on.
-3. Put both in the factory's `.env`:
-
-   ```sh
-   SLACK_BOT_TOKEN=xoxb-...
-   SLACK_APP_TOKEN=xapp-...
-   ```
-
-If you add a scope to the app later, reinstall it to the workspace for the
-scope to reach the bot token. An app-level token's scopes cannot be changed,
-so generate a new one instead.
-
-## 3. Invite the bot to channels
+## 2. Invite the bot to channels
 
 The bot only sees channels it is a member of. In each channel the factory
-should watch, public or private, type `/invite @<name>'s jigs`. jigs never reads
+should watch, public or private, type `/invite @<bot name>`. jigs never reads
 direct messages.
 
-## 4. Configure the factory
+## 3. Configure the factory
 
 Add a `slack` section to `jigs.config.ts`:
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
-slack: { socketMode: true },
+slack: {},
 ```
 
-With `socketMode: true`, the service holds a Socket Mode connection and sees a
-message within a second of it being posted. It still polls every
-[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds
-underneath, so a message posted while the service is down is still found. With
-`socketMode: false`, jigs only polls, and `SLACK_APP_TOKEN` is not needed.
-
-Each factory running Socket Mode needs its own Slack app. Slack spreads an app's
-events across every open Socket Mode connection, so two factories on one app
-each see only some of them. The poll is the fallback: a message one factory
-missed starts its trigger on the next poll, and a missed thread reply wakes its
-run on the next re-read. `jigs doctor` flags two factories on the same machine
-sharing an app; across machines, the only sign is a `too_many_websockets`
-warning in the service log.
+The hub keeps the events that arrive while the service is down. The service
+also polls every
+[`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds.
 
 A workflow that uses Slack declares it:
 
@@ -131,7 +78,7 @@ export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { dashboardPort: 3456 },
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
-  slack: { socketMode: true },
+  slack: {},
   triggers: {
     "answer-questions": {
       workflow: "answer",
@@ -172,7 +119,7 @@ posts never start a run, and neither do thread replies (even one also sent to
 the channel), edits, deletes, joins, topic changes or other channel events.
 Direct messages are never read.
 
-Each message starts at most one run, whether it arrives over Socket Mode, by
+Each message starts at most one run, whether it arrives through the hub, by
 polling or both, and however often Slack sends it again. A new trigger starts
 with messages posted after the service first runs it. After the service was
 down, it starts runs only for messages from the last 60 minutes; set the
@@ -184,7 +131,7 @@ When a channel cannot be read, for example because the bot was removed from
 it, polling skips that channel and keeps reading the trigger's other channels.
 The service log names the channel and how to fix it: invite the bot back or
 remove the channel from the trigger. Messages posted there while it was skipped
-start runs only if Socket Mode delivered them.
+start runs only if the hub delivered them.
 
 ## Read a message
 
@@ -257,7 +204,7 @@ do. Without `until`, the wait has no time limit: it ends with a reply, or when
 you cancel the run with `jigs cancel`. With `until`, an ISO 8601 timestamp, it
 ends `timed-out` once that time passes with no reply. The thread is always
 read once first, so a reply already there still wins when `until` is in the
-past. With Socket Mode on, a reply wakes the run within a second.
+past. A reply heard through the hub wakes the run within seconds.
 The service also re-reads the thread every
 [`service.pollIntervalSeconds.slack`](/guide/configuration#service) seconds,
 and `jigs poke` re-reads it at once. Only one run can wait on a thread at a
@@ -294,12 +241,12 @@ export async function addReaction(channel: string, timestamp: string, name: stri
 Workflow code calls it like any step: `await addReaction(channel, ts, "eyes")`.
 
 A method may need a bot scope jigs does not use, such as `reactions:write` for
-`reactions.add`. Add it to the manifest's `bot` scopes, reinstall the app, and
-list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
+`reactions.add`. Add it to the app's bot scopes in the hub, install the app
+again, and list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
-slack: { socketMode: true, scopes: ["reactions:write"] },
+slack: { scopes: ["reactions:write"] },
 ```
 
 ## Example: answer questions in a channel
@@ -376,15 +323,11 @@ Register it with the `slack.mentions` trigger from
 
 ## Checks
 
-`jigs doctor`, and `jigs up`, check that Slack accepts `SLACK_BOT_TOKEN` and
-that the bot holds every scope above, plus any listed in `slack.scopes`. With
-`socketMode` on, they also check that `SLACK_APP_TOKEN` can open a Socket Mode
-connection, and that no other factory's service on this machine uses the same
-Slack app. Each failure names the missing scope, the `.env` key or the other
-factory's service.
+`jigs doctor`, and `jigs up`, check that the hub has assigned the factory a
+Slack app, that it hands out the app's bot token, and that the workspace
+granted every scope above, plus any listed in `slack.scopes`. Each failure
+names what to fix in the hub.
 
 Before every run of a workflow that requires `slack`, preflight checks the bot
 token and the same scopes. If the bot lacks one, including one listed in
 `slack.scopes`, the run stops before it starts.
-
-With `socketMode` on and `SLACK_APP_TOKEN` empty, the service refuses to start.

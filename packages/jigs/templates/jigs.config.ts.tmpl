@@ -1,7 +1,7 @@
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
-  // GitHub and Linear events and tokens reach this factory through its hub.
+  // GitHub, Linear and Slack events and tokens reach this factory through its hub.
   // Set this and the token with: pnpm exec jigs hub connect <url> <token>
   hub: { url: "https://hub.example.com" },
   service: { port: {{SERVICE_PORT}}, dashboardPort: {{DASHBOARD_PORT}} },

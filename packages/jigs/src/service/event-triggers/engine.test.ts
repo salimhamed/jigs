@@ -1147,8 +1147,7 @@ test("a Slack channel that fails one poll holds back only itself, and its messag
   vi.spyOn(console, "log").mockImplementation(() => {});
   vi.spyOn(slackApi, "slackBot").mockResolvedValue({
     userId: "U0BOT0001",
-    botId: "B0BOT0001",
-    user: "jigs",
+    name: "jigs",
     team: "T",
     scopes: [],
   });
