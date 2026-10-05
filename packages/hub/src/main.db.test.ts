@@ -12,7 +12,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async () => {
+dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async () => {
   const database = await createTestDatabase();
   cleanups.push(database.drop);
   const child = spawn(process.execPath, [main], {
@@ -28,7 +28,11 @@ dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async 
       HUB_GITHUB_CLIENT_SECRET: "secret",
       HUB_ADMIN_EMAIL: "admin@example.com",
     },
-    stdio: ["ignore", "pipe", "inherit"],
+    stdio: ["ignore", "pipe", "pipe"],
+  });
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
   });
   cleanups.push(async () => {
     if (child.exitCode === null && child.signalCode === null) {
@@ -60,10 +64,14 @@ dbTest("migrates, serves the built web app and exits cleanly on SIGTERM", async 
   const client = new Client({ connectionString: database.url });
   await client.connect();
   const { rows } = await client.query("SELECT to_regclass('drizzle.__drizzle_migrations') AS t");
-  await client.end();
   expect(rows[0].t).not.toBeNull();
+  await client.query("ALTER TABLE invitation RENAME TO invitation_gone");
+  await client.end();
+  expect((await fetch(`${url}/invite/any`)).status).toBe(500);
 
   child.kill("SIGTERM");
   const [code, signal] = await once(child, "exit");
   expect({ code, signal }).toEqual({ code: 0, signal: null });
+  expect(stderr).not.toContain("No route matches");
+  expect(stderr.match(/relation "invitation" does not exist/g)).toHaveLength(1);
 });
