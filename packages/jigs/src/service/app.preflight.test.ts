@@ -13,6 +13,7 @@ import {
   removeTmpDir,
 } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
+import { appClient } from "./test-fixtures.ts";
 
 // File-scoped so it cannot disturb app.test.ts: the whole point of AC1 is
 // that a refused trigger never reaches start().
@@ -34,40 +35,46 @@ const { createApp } = await import("./app.ts");
 // A fixture rather than a demo: what preflight owes the trigger path is the
 // same whatever workflows a factory declares, and this one declares exactly
 // the requirement the assertions below are about.
-const app = createApp({
-  workflows: {
-    bound: {
-      workflow: async () => undefined,
-      inputs: z.object({}),
-      requires: {
-        bindings: ["api"],
-        agents: { builder: harnesses.claude({ model: "opus" }) },
-        integrations: ["linear", "github"],
+const app = appClient(
+  createApp({
+    workflows: {
+      bound: {
+        workflow: async () => undefined,
+        inputs: z.object({}),
+        requires: {
+          bindings: ["api"],
+          agents: { builder: harnesses.claude({ model: "opus" }) },
+          integrations: ["linear", "github"],
+        },
       },
     },
-  },
-});
+  }),
+);
 
-const inputBoundApp = createApp({
-  workflows: {
-    ship: {
-      workflow: async () => undefined,
-      inputs: z.object({ binding: z.string() }),
-      // Deliberately absent from the fixtures: the run input must replace it.
-      requires: { bindings: ["unrelated"] },
+const inputBoundApp = appClient(
+  createApp({
+    workflows: {
+      ship: {
+        workflow: async () => undefined,
+        inputs: z.object({ binding: z.string() }),
+        // Deliberately absent from the fixtures: the run input must replace it.
+        requires: { bindings: ["unrelated"] },
+      },
     },
-  },
-});
+  }),
+);
 
 // Doctor's schedule half needs a factory that declares one: those checks are
 // the factory's own, so they can only arrive through the app.
-const scheduledApp = createApp({
-  workflows: {
-    bound: { workflow: async () => undefined, inputs: z.object({}) },
-  },
-  schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
-  triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
-});
+const scheduledApp = appClient(
+  createApp({
+    workflows: {
+      bound: { workflow: async () => undefined, inputs: z.object({}) },
+    },
+    schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
+    triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
+  }),
+);
 
 let tmp: string;
 let claudeStub: string;

@@ -1,7 +1,31 @@
+import { once } from "node:events";
+import { createServer, type RequestListener } from "node:http";
+import type { AddressInfo } from "node:net";
+import type { Occurrence, TriggerMarker, TriggerStore } from "./event-triggers/store.ts";
+
+// Taken before any test stubs the global, so the app is always reached.
+const { fetch } = globalThis;
+
+/** Sends each request to the app over a socket of its own, and buffers the answer. */
+export function appClient(app: RequestListener) {
+  return {
+    async request(pathname: string, init?: RequestInit): Promise<Response> {
+      const server = createServer(app).listen(0, "127.0.0.1");
+      await once(server, "listening");
+      try {
+        const { port } = server.address() as AddressInfo;
+        const response = await fetch(`http://127.0.0.1:${port}${pathname}`, init);
+        return new Response(await response.arrayBuffer(), response);
+      } finally {
+        server.closeAllConnections();
+        server.close();
+      }
+    },
+  };
+}
+
 // An in-memory trigger store for engine tests: the Postgres store's contract,
 // checked against the real one by event-triggers/store.db.test.ts.
-
-import type { Occurrence, TriggerMarker, TriggerStore } from "./event-triggers/store.ts";
 
 export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
   const rows = new Map<string, Occurrence>();

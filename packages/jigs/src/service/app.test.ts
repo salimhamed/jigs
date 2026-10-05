@@ -16,6 +16,7 @@ import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import * as queue from "./queue.ts";
+import { appClient } from "./test-fixtures.ts";
 import { clearWakes, lastWake } from "./wake.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -65,7 +66,7 @@ const resumeHookMock = vi.mocked(resumeHook);
 // The wake is noted for the run the resumed hook names.
 const delivers = () => resumeHookMock.mockResolvedValueOnce({ runId: RUN } as never);
 
-const app = createApp(fixture, deps);
+const app = appClient(createApp(fixture, deps));
 
 // A second factory, because what the schedule routes answer is a property of
 // the config handed in. Nothing ticks here: the ticker is started by the
@@ -81,7 +82,7 @@ const scheduled = {
     "broken-cron": { workflow: "plain", cron: "always", inputs: {} },
   },
 } satisfies Factory;
-const scheduledApp = createApp(scheduled, deps);
+const scheduledApp = appClient(createApp(scheduled, deps));
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -209,11 +210,30 @@ test("every response names the jigs the service runs, misses included", async ()
   }
 });
 
+test("a miss and a crash answer plain text, never a stack", async () => {
+  const miss = await app.request("/api/nope");
+  expect(miss.status).toBe(404);
+  expect(await miss.text()).toBe("404 Not Found");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const crash = await appClient(
+    createApp(fixture, {
+      ...deps,
+      registry: () => {
+        throw new Error("registry down");
+      },
+    }),
+  ).request("/api/runs");
+  expect(crash.status).toBe(500);
+  expect(await crash.text()).toBe("Internal Server Error");
+});
+
 test("health names the factory and the process that answer here, and the injected workflows", async () => {
-  const res = await createApp(fixture, {
-    ...deps,
-    context: testFactoryContext({ root: "/factories/acme" }),
-  }).request("/health");
+  const res = await appClient(
+    createApp(fixture, {
+      ...deps,
+      context: testFactoryContext({ root: "/factories/acme" }),
+    }),
+  ).request("/health");
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     ok: true,
@@ -231,7 +251,7 @@ test("health outside a factory reports a null root rather than failing liveness"
   vi.stubEnv("JIGS_FACTORY_ROOT", "");
   const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
   try {
-    const res = await createApp(fixture).request("/health");
+    const res = await appClient(createApp(fixture)).request("/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, factoryRoot: null });
   } finally {
@@ -247,12 +267,14 @@ test("GET /api/runs answers with empty runs when nothing has launched", async ()
 
 test("GET /api/runs still answers with runs when the triggers cannot be read", async () => {
   // The registry the triggers live in is unusable here.
-  const triggered = createApp(
-    {
-      ...fixture,
-      triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
-    },
-    deps,
+  const triggered = appClient(
+    createApp(
+      {
+        ...fixture,
+        triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+      },
+      deps,
+    ),
   );
   const res = await triggered.request("/api/runs");
   expect(res.status).toBe(200);
