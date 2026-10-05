@@ -141,9 +141,9 @@ importers:
       drizzle-orm:
         specifier: 0.45.2
         version: 0.45.2(@types/pg@8.23.1)(kysely@0.29.6)(pg@8.20.0)(postgres@3.4.9)
-      hono:
-        specifier: ^4.13.4
-        version: 4.13.4
+      express:
+        specifier: ^5.2.1
+        version: 5.2.1(supports-color@8.1.1)
       pg:
         specifier: 8.20.0
         version: 8.20.0
@@ -175,6 +175,9 @@ importers:
       '@swc/core':
         specifier: 1.15.3
         version: 1.15.3
+      '@types/express':
+        specifier: ^5.0.6
+        version: 5.0.6
       '@types/node':
         specifier: ^26.2.0
         version: 26.2.0

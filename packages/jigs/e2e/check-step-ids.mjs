@@ -155,7 +155,7 @@ const unresolvedSpecifiers = (source) =>
 // The CLI half of a package that is now also the service (ADR 0006). `jigs
 // init` runs from `pnpm dlx` on a machine that has installed nothing, and the
 // four runtime peers are the factory's to supply, so `dist/cli.js` must reach
-// none of the service runtime — nitro, hono, postgres, croner, the
+// none of the service runtime — nitro, express, postgres, croner, the
 // SDK. Two packages used to make that the package manager's business; one
 // package makes it import discipline, and a static import that crosses the
 // line is silent: the bundle grows, and `jigs init` starts needing packages

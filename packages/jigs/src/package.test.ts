@@ -191,7 +191,7 @@ test("the factory template pins the same versions this package peers on", async 
     const section = FACTORY_SUPPLIED.includes(name) ? "dependencies" : "devDependencies";
     expect(template[section][name], name).toBe(range);
   }
-  for (const name of ["croner", "hono", "postgres"]) {
+  for (const name of ["croner", "express", "postgres"]) {
     expect(template.dependencies[name], name).toBeUndefined();
   }
   // Pinned to the exact version of the CLI that scaffolded it, never a range
