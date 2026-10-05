@@ -29,12 +29,6 @@ export type PullRequestRef = {
   number: number;
 };
 
-// The preflight probe for a personal access token. It does not answer for an
-// installation token, which is why the App identity names its operator.
-export async function getAuthenticatedUser(): Promise<{ login: string }> {
-  return githubGet<{ login: string }>("/user");
-}
-
 /** Resolve a commit-status delivery to every open PR currently headed by that commit. */
 export async function findOpenPullRequestsByHeadSha(
   repository: Pick<PullRequestRef, "owner" | "repo">,
@@ -192,7 +186,7 @@ function groupThreads(
 // Approval is left to the caller: reading it needs the factory's configured signal.
 export async function fetchPrSnapshot(
   pr: PullRequestRef,
-): Promise<Omit<PullRequestSnapshot, "approval">> {
+): Promise<Omit<PullRequestSnapshot, "approval" | "appBot">> {
   const repoPath = `/repos/${pr.owner}/${pr.repo}`;
   const prPath = `${repoPath}/pulls/${pr.number}`;
   const pull = await githubGet<{

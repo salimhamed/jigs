@@ -2,8 +2,6 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { useGithubClient } from "../providers/test-fixtures.ts";
-import { fakeFetch, jsonResponse } from "../providers/test-support.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
@@ -237,20 +235,21 @@ test("a green preflight lets the trigger call start()", async () => {
     remote: remoteDir,
   });
   vi.stubEnv("LINEAR_API_KEY", "lin_live");
-  vi.stubEnv("GITHUB_TOKEN", "ghp_live");
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.stubGlobal("fetch", async (input: unknown) => {
     const url = String(input);
     if (url.startsWith("https://api.linear.app/")) {
       return Response.json({ data: { viewer: { id: "u1", name: "Dev" } } });
     }
+    if (url === "https://hub.example.test/api/factory/status") {
+      return Response.json({
+        factory: { name: "dev" },
+        organization: { name: "Acme" },
+        apps: [{ provider: "github", name: "jigs-dev", installations: [{ account: "acme" }] }],
+      });
+    }
     throw new Error(`unexpected fetch: ${url}`);
   });
-  const github = fakeFetch((call) =>
-    call.url.pathname === "/user"
-      ? jsonResponse({ login: "dev" })
-      : jsonResponse({ message: `unexpected ${call.url.pathname}` }, 500),
-  );
-  useGithubClient({ fetch: github.fetch });
 
   const res = await trigger();
   expect(res.status).toBe(201);

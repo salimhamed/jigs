@@ -11,7 +11,6 @@ let factory: string;
 
 beforeEach(() => {
   factory = useTestFactory();
-  vi.stubEnv("GITHUB_TOKEN", "ghp-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
   const fake = fakeFetch(() => reply());
   calls = fake.calls;
@@ -35,7 +34,7 @@ test("any endpoint is called with the factory's token and returns GitHub's JSON"
   const call = calls[0] as FetchCall;
   expect(call.url.href).toBe("https://api.github.com/repos/acme/app/pulls/7/requested_reviewers");
   expect(call.method).toBe("POST");
-  expect(call.headers.authorization).toBe("Bearer ghp-test");
+  expect(call.headers.authorization).toBe("Bearer ghs_test");
   expect(call.json).toEqual({ reviewers: ["octocat"] });
 });
 

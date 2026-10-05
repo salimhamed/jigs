@@ -32,7 +32,7 @@ workflow: by default, jigs merges an approved pull request once CI is green.
 #### Requires
 
 - A [Linear identity](/guide/configuration#linear-identity).
-- A GitHub binding and a GitHub App [identity](/guide/configuration#github-identity).
+- A GitHub binding with the factory's GitHub App [installed on its owner](/guide/configuration#github-identity).
 - The configured builder and reviewer harnesses, installed and authenticated.
 - The [GitHub CLI](https://cli.github.com), `gh`.
 
@@ -40,10 +40,7 @@ The builder acts on GitHub as the factory's App, the same bot jigs posts as
 (`github: true`, see [GitHub access for agents](/guide/models-and-harnesses#github-access)).
 It reads discussions, posts replies and pushes fixes with `gh` and `git`, with
 no token of yours. Its replies show as the bot, which is how the recipe tells
-them apart from yours. With a personal access token, remove `github: true` from
-the builder and give it GitHub access yourself, for example a token named in
-[`agents.env`](/guide/configuration#agents-env); its replies then look like
-anyone else's, so each one wakes it once more. No Jev model is required.
+them apart from yours. No Jev model is required.
 
 #### Run
 

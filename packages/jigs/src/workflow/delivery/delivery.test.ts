@@ -405,6 +405,7 @@ test("a description the schema rejects throws from describePullRequest", async (
 });
 
 const snapshot: PullRequestSnapshot = {
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,

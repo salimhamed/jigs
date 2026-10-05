@@ -4,12 +4,14 @@
 // later one; a wake carries nothing, so a lost one costs what a lost webhook did.
 
 import {
+  type CursorRequest,
   cursorPath,
   type Message,
   type MessagesResponse,
   maxWaitSeconds,
   messagesPath,
 } from "@jigs-ai/hub-protocol";
+import { HubResponseError, hubRequest } from "../providers/hub.ts";
 import { PROVIDERS } from "../workflow/providers.ts";
 import { type NudgeDeps, nudgeProvider } from "./nudge.ts";
 import { type RouteDeps, routeProviderEvent } from "./provider-events.ts";
@@ -22,17 +24,8 @@ const GRACE_MS = 15_000;
 export interface HubClientOptions {
   url: string;
   token: string;
-  version: string;
   route: RouteDeps;
   nudge?: NudgeDeps;
-}
-
-class HubResponseError extends Error {
-  readonly status: number;
-  constructor(status: number) {
-    super(`the hub answered ${status}`);
-    this.status = status;
-  }
 }
 
 /** Milliseconds to wait after this many failures in a row: doubling from a second, capped at a minute. */
@@ -53,29 +46,14 @@ export function startHubClient(options: HubClientOptions): { stop: () => Promise
 }
 
 async function run(options: HubClientOptions, signal: AbortSignal): Promise<void> {
-  const request = async (path: string, init: RequestInit, timeoutMs: number) => {
-    const response = await fetch(new URL(path, options.url), {
-      ...init,
-      headers: {
-        ...init.headers,
-        authorization: `Bearer ${options.token}`,
-        "user-agent": `jigs/${options.version}`,
-      },
-      signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]),
-    });
-    if (!response.ok) throw new HubResponseError(response.status);
-    return response;
-  };
+  const hub = { url: options.url, token: options.token };
   const confirm = (position: string) =>
-    request(
-      cursorPath,
-      {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ position }),
-      },
-      GRACE_MS,
-    );
+    hubRequest(hub, cursorPath, {
+      method: "POST",
+      body: { position } satisfies CursorRequest,
+      signal,
+      timeoutMs: GRACE_MS,
+    });
 
   let unconfirmed: string | null = null;
   let failures = 0;
@@ -85,11 +63,10 @@ async function run(options: HubClientOptions, signal: AbortSignal): Promise<void
         await confirm(unconfirmed);
         unconfirmed = null;
       }
-      const response = await request(
-        `${messagesPath}?wait=${maxWaitSeconds}`,
-        {},
-        maxWaitSeconds * 1000 + GRACE_MS,
-      );
+      const response = await hubRequest(hub, `${messagesPath}?wait=${maxWaitSeconds}`, {
+        signal,
+        timeoutMs: maxWaitSeconds * 1000 + GRACE_MS,
+      });
       const { messages } = (await response.json()) as MessagesResponse;
       if (failures > 0) console.log("[hub] reconnected");
       failures = 0;

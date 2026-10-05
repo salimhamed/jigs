@@ -17,7 +17,6 @@ import {
 import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import type { ResolvedGithubIdentity } from "../../workflow/factory-schema.ts";
 import {
   createPullRequest,
   markPullRequestReady,
@@ -38,13 +37,7 @@ vi.mock("../../providers/github.ts", () => ({
   mergePr: vi.fn(),
   postPullRequestReview: vi.fn(),
 }));
-vi.mock("../../providers/github-auth.ts", () => ({
-  githubAuthFor: vi.fn(),
-  appBotFor: async () => ({ login: "jigs[bot]", id: 1 }),
-}));
-
-const asIdentity = (identity: ResolvedGithubIdentity) =>
-  vi.mocked(githubAuthFor).mockReturnValue({ identity, bearer: async () => "token" });
+vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 
 const pr = { owner: "owner", repo: "repo", number: 1 };
 const repo = { owner: "owner", repo: "repo" };
@@ -60,18 +53,23 @@ let root: string;
 const allowMethods = (...methods: MergeMethod[]) =>
   vi.mocked(fetchAllowedMergeMethods).mockResolvedValue(new Set(methods));
 
-const asApp = (coAuthor?: string) =>
-  asIdentity({
-    mode: "app",
-    appId: 1,
-    installationId: 2,
-    privateKeyPath: "/key.pem",
-    operator: "salimhamed",
-    ...(coAuthor === undefined ? {} : { coAuthor }),
-  });
+const writeConfig = (github: object = {}) =>
+  writeFileSync(
+    path.join(root, "jigs.config.ts"),
+    `export default {
+    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
+    github: ${JSON.stringify(github)},
+    bindings: {
+      app: { remote: "git@github.com:owner/repo.git" },
+    },
+  };`,
+  );
 
-// The provider reads facts; the step adds the approval, which is by label for a PAT factory.
-const snapshot: Omit<PullRequestSnapshot, "approval"> = {
+const withOperator = (coAuthor?: string) =>
+  writeConfig({ operator: "salimhamed", ...(coAuthor === undefined ? {} : { coAuthor }) });
+
+// The provider reads facts; the step adds the approval.
+const snapshot: Omit<PullRequestSnapshot, "approval" | "appBot"> = {
   state: "open",
   merged: false,
   draft: false,
@@ -90,18 +88,14 @@ const snapshot: Omit<PullRequestSnapshot, "approval"> = {
 
 beforeEach(() => {
   root = makeTmpDir();
-  writeFileSync(
-    path.join(root, "jigs.config.ts"),
-    `export default {
-    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
-    bindings: {
-      app: { remote: "git@github.com:owner/repo.git" },
-    },
-  };`,
-  );
+  writeConfig();
   vi.stubEnv("JIGS_FACTORY_ROOT", root);
   vi.resetAllMocks();
-  asIdentity({ mode: "pat" });
+  vi.mocked(githubAuthFor).mockReturnValue({
+    bearer: async () => "token",
+    invalidate: () => {},
+    bot: async () => ({ login: "jigs[bot]", id: 1 }),
+  });
   vi.mocked(fetchPrSnapshot).mockResolvedValue(snapshot);
   vi.mocked(fetchPrTitle).mockResolvedValue("fix: title");
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
@@ -253,7 +247,7 @@ test("any other GitHub error is a real failure", async () => {
 test("the co-author trailer follows preserved commit content", async () => {
   // `commit_message` replaces the body GitHub would generate, so jigs keeps
   // the commit content where the BREAKING CHANGE footer lives.
-  asApp("Salim Hamed <salim@example.com>");
+  withOperator("Salim Hamed <salim@example.com>");
   await mergePullRequest(pr, "head");
   expect(mergePr).toHaveBeenCalledWith(
     pr,
@@ -265,7 +259,7 @@ test("the co-author trailer follows preserved commit content", async () => {
 });
 
 test("the preservation policy keeps several commits in a bulleted list", async () => {
-  asApp("Salim Hamed <salim@example.com>");
+  withOperator("Salim Hamed <salim@example.com>");
   vi.mocked(fetchPrCommitMessages).mockResolvedValue([
     "feat: first\n\nWhy the first.",
     "fix: second",
@@ -277,20 +271,20 @@ test("the preservation policy keeps several commits in a bulleted list", async (
 });
 
 test("with no co-author configured GitHub writes its own body, unasked", async () => {
-  asApp();
+  withOperator();
   await mergePullRequest(pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
   expect(fetchPrCommitMessages).not.toHaveBeenCalled();
 });
 
 test("a rebase has no merge message to carry a trailer in", async () => {
-  asApp("Salim Hamed <salim@example.com>");
+  withOperator("Salim Hamed <salim@example.com>");
   allowMethods("rebase");
   await mergePullRequest(pr, "head");
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
-test("pat mode adds no trailer, no assignee and no requested-by line", async () => {
+test("with no operator or co-author, no trailer, no assignee and no requested-by line", async () => {
   expect(await createPullRequest({ worktree, title: "fix: search", body: "Body." })).toEqual({
     ...pr,
     url: "https://github.example/owner/repo/pull/1",
@@ -302,8 +296,8 @@ test("pat mode adds no trailer, no assignee and no requested-by line", async () 
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
-test("app mode names the operator and returns the provider's URL", async () => {
-  asApp();
+test("an operator is named and assigned, and the provider's URL returned", async () => {
+  withOperator();
   await expect(
     createPullRequest({ worktree, title: "fix: search", body: "Body." }),
   ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
@@ -335,7 +329,7 @@ test("createPullRequest forwards draft only when supplied", async () => {
 });
 
 test("an open pull request for the branch is adopted instead of created again", async () => {
-  asApp();
+  withOperator();
   vi.mocked(findOpenPullRequestByBranch).mockResolvedValue({
     ...pr,
     number: 7,
@@ -351,7 +345,7 @@ test("an open pull request for the branch is adopted instead of created again", 
 });
 
 test("a failed assignment is not swallowed", async () => {
-  asApp();
+  withOperator();
   vi.mocked(assignPullRequest).mockRejectedValue(new GitHubApiError(403, "/assignees", "no"));
 
   await expect(
@@ -408,7 +402,6 @@ test("opening a PR derives its repository, head and default branch from the supp
     "update-guide",
     "trunk",
   );
-  expect(githubAuthFor).toHaveBeenCalledWith("acme");
   expect(createPr).toHaveBeenCalledExactlyOnceWith({
     owner: "acme",
     repo: "docs",
@@ -425,14 +418,10 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
     path.join(root, "jigs.config.ts"),
     `export default {
     hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
-    github: {
-      identities: [{ mode: "app", appId: 1, installations: { owner: 2 }, privateKeyPath: "key.pem", operator: "salimhamed" }],
-      mergeApproval: "review",
-    },
+    github: { operator: "salimhamed", mergeApproval: "review" },
     bindings: { app: { remote: "git@github.com:owner/repo.git" } },
   };`,
   );
-  asApp();
   const approvedEarlier = (user: string) => ({
     ...snapshot,
     labels: [],

@@ -131,6 +131,19 @@ function GitHubApp({
           leave <strong>Request user authorization (OAuth) during installation</strong> off.
         </p>
         <p className="text-sm">
+          Under <strong>Repository permissions</strong>, grant <strong>Contents</strong>,{" "}
+          <strong>Pull requests</strong> and <strong>Issues</strong> read and write, and{" "}
+          <strong>Metadata</strong>, <strong>Checks</strong> and <strong>Commit statuses</strong>{" "}
+          read. Factories push, open, comment on and merge pull requests, create their labels, and
+          read CI with them.
+        </p>
+        <p className="text-sm">
+          Under <strong>Subscribe to events</strong>, choose <strong>Pull request</strong>,{" "}
+          <strong>Pull request review</strong>, <strong>Pull request review comment</strong>,{" "}
+          <strong>Issue comment</strong>, <strong>Check suite</strong> and <strong>Status</strong>.
+          These wake the factory runs waiting on a pull request.
+        </p>
+        <p className="text-sm">
           Under <strong>Where can this GitHub App be installed?</strong> choose{" "}
           <strong>Only on this account</strong>. Otherwise anyone can install it, and their events
           reach your factories.

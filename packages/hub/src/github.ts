@@ -317,16 +317,12 @@ export type GitHubTokenResult =
   | { token: GitHubTokenResponse }
   | { status: 404 | 409; error: string };
 
-// A cached token is handed out only while it has longer than this to live.
-const MIN_TOKEN_LIFE_MS = 5 * 60 * 1000;
-
 /**
- * Issues factories installation tokens of their GitHub Apps. Tokens stay in
- * this process's memory, never the database, and are reused until five
- * minutes before they expire.
+ * Issues factories installation tokens of their GitHub Apps, minting a fresh
+ * one for every request and keeping none: the factory caches its own, and asks
+ * again only when it needs a longer-lived token or GitHub rejected the last.
  */
 export class GitHubTokens {
-  readonly #cache = new Map<string, GitHubTokenResponse>();
   readonly #db: HubDatabase;
   readonly #encryptionKey: Buffer;
   readonly #apiUrl: string;
@@ -338,7 +334,7 @@ export class GitHubTokens {
   }
 
   /** A token of the one GitHub App assigned to the factory that is installed on `owner`. */
-  async issue(factoryId: string, owner: string, now = Date.now()): Promise<GitHubTokenResult> {
+  async issue(factoryId: string, owner: string): Promise<GitHubTokenResult> {
     const found = await this.#db
       .select({ app: apps, installationId: installations.externalId })
       .from(installations)
@@ -368,12 +364,7 @@ export class GitHubTokens {
         error: `More than one GitHub App assigned to this factory is installed on ${owner}: ${names}.`,
       };
     }
-    const key = `${first.app.id}:${first.installationId}`;
-    const cached = this.#cache.get(key);
-    if (cached && Date.parse(cached.expiresAt) - now > MIN_TOKEN_LIFE_MS) return { token: cached };
-    const token = await this.#mint(first.app, first.installationId);
-    this.#cache.set(key, token);
-    return { token };
+    return { token: await this.#mint(first.app, first.installationId) };
   }
 
   async #mint(app: App, installationId: string): Promise<GitHubTokenResponse> {

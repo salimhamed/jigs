@@ -3,12 +3,27 @@
 
 import { vi } from "vitest";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
+import * as hub from "./hub.ts";
 import { createSlackClient, type SlackClientDeps, slackClient } from "./slack.ts";
 import { type FetchCall, fakeFetch } from "./test-support.ts";
+
+/** The installation token and bot every faked GitHub call gets from the hub. */
+export const TEST_GITHUB_TOKEN = "ghs_test";
+export const TEST_APP_BOT = { login: "jigs-test[bot]", id: 4242 };
+
+/** Answer every GitHub token request with {@link TEST_GITHUB_TOKEN}, as the hub would. */
+export function useHubGithubTokens(): void {
+  vi.spyOn(hub, "fetchGithubToken").mockResolvedValue({
+    token: TEST_GITHUB_TOKEN,
+    expiresAt: "2999-01-01T00:00:00Z",
+    app: { slug: "jigs-test", botUserId: TEST_APP_BOT.id },
+  });
+}
 
 export function useGithubClient(deps: GithubClientDeps): void {
   const client = createGithubClient(deps);
   vi.spyOn(githubClient, "send").mockImplementation(client.send);
+  useHubGithubTokens();
 }
 
 export function useSlackClient(deps: SlackClientDeps): void {

@@ -236,8 +236,8 @@ afterEach(() => {
 
 const failLabel = (err: unknown) => deps({ ensureLabel: vi.fn().mockRejectedValue(err) });
 
-test("the label leg without GITHUB_TOKEN fails with the credential repair, after recording the binding", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "");
+test("the label leg without a hub token fails with the hub's repair, after recording the binding", async () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
 
   const failure = await bindRepo(API, { cwd: factory, out: (line) => lines.push(line) }).catch(
     (err: unknown) => err,
@@ -245,14 +245,14 @@ test("the label leg without GITHUB_TOKEN fails with the credential repair, after
 
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("jigs:approved label could not be ensured");
-  expect((failure as { hint?: string }).hint).toContain("set GITHUB_TOKEN in");
-  expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
+  expect((failure as { hint?: string }).hint).toContain("pnpm exec jigs hub connect");
+  expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
 });
 
 test("bind ensures every jigs label on every run, whatever the approval", async () => {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { identities: [{ mode: "pat" }], mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
   const ensureLabel = vi.fn().mockResolvedValueOnce("created").mockResolvedValueOnce("verified");
 
@@ -274,7 +274,7 @@ test("a factory approving by review still gets the jigs labels", async () => {
   const ensureLabel = vi.fn().mockResolvedValue("verified");
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { identities: [{ mode: "app", appId: 1, installations: { acme: 2 }, privateKeyPath: "key.pem", operator: "me" }] }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { operator: "me" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
   );
 
   await bindRepo(API, deps({ ensureLabel }));
@@ -283,7 +283,6 @@ test("a factory approving by review still gets the jigs labels", async () => {
 });
 
 test("a label permission failure preserves the binding, and the retry clones it", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   const failure = await bindRepo(
     API,
     failLabel(
@@ -297,7 +296,7 @@ test("a label permission failure preserves the binding, and the retry clones it"
 
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("jigs:approved label could not be ensured");
-  expect((failure as { hint?: string }).hint).toContain("repo (or public_repo");
+  expect((failure as { hint?: string }).hint).toContain('"Issues: read & write"');
   expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
 
   lines = [];
@@ -311,7 +310,6 @@ test("a label permission failure preserves the binding, and the retry clones it"
 });
 
 test("the repair carries --binding-name, so the retry lands on the same binding", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "");
   const failure = await bindRepo(API, failLabel(new Error("no token")), { name: "forge" }).catch(
     (err: unknown) => err,
   );
@@ -321,7 +319,6 @@ test("the repair carries --binding-name, so the retry lands on the same binding"
 });
 
 test("an alias match is named in the repair command", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "");
   writeConfig(`gambit: { remote: ${JSON.stringify(API)} }`);
 
   const failure = await bindRepo(API, failLabel(new Error("no token"))).catch(
@@ -334,28 +331,25 @@ test("an alias match is named in the repair command", async () => {
 });
 
 test("a failure GitHub did not lay on the token does not send the operator after one", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   const failure = await bindRepo(API, failLabel(new Error("fetch failed"))).catch(
     (err: unknown) => err,
   );
   expect(String(failure)).toContain("fetch failed");
   const { hint } = failure as { hint?: string };
-  expect(hint).not.toContain("GITHUB_TOKEN");
+  expect(hint).not.toContain("grant");
   expect(hint).toContain(`pnpm exec jigs bind ${API}`);
 });
 
 test("a token GitHub rejects fails with the credential repair", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   const failure = await bindRepo(
     API,
     failLabel(new GitHubApiError(401, "/repos/acme/Api/labels", "Bad credentials")),
   ).catch((err: unknown) => err);
   expect(String(failure)).toContain("401");
-  expect((failure as { hint?: string }).hint).toContain("set GITHUB_TOKEN in");
+  expect((failure as { hint?: string }).hint).toContain("grant the factory's GitHub App");
 });
 
 test("a rate-limited 403 does not send the operator after a new token", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   const failure = await bindRepo(
     API,
     failLabel(
@@ -363,18 +357,17 @@ test("a rate-limited 403 does not send the operator after a new token", async ()
     ),
   ).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
-  expect(hint).not.toContain("GITHUB_TOKEN");
+  expect(hint).not.toContain("grant");
   expect(hint).toContain(`once that clears, re-run: \`pnpm exec jigs bind ${API}`);
 });
 
 test("a 404 sends the operator to the remote, not to a new token", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   const failure = await bindRepo(
     API,
     failLabel(new GitHubApiError(404, "/repos/acme/Api/labels", "Not Found")),
   ).catch((err: unknown) => err);
   const { hint } = failure as { hint?: string };
-  expect(hint).not.toContain("GITHUB_TOKEN");
+  expect(hint).not.toContain("grant");
   expect(hint).toContain("check the remote");
   expect(hint).toContain("acme/Api");
 });
@@ -395,35 +388,6 @@ test("unsupported bindings fail before modifying files or ensuring labels", asyn
   );
   expect(jigsConfig()).toBe(text);
   expect(ensureLabel).not.toHaveBeenCalled();
-});
-
-test("bind refuses an uncovered account before editing config or provisioning furniture", async () => {
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    `export default ${JSON.stringify({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      bindings: {},
-      github: {
-        identities: [
-          {
-            mode: "app",
-            appId: 1,
-            privateKeyPath: "key.pem",
-            operator: "human",
-            installations: { other: 10 },
-          },
-        ],
-      },
-    })}`,
-  );
-  const before = jigsConfig();
-  await expect(bindRepo(API, deps())).rejects.toMatchObject({
-    message: "no GitHub App installation configured for account acme",
-    hint: expect.stringContaining('"acme": <installation-id>'),
-  });
-  expect(jigsConfig()).toBe(before);
-  expect(lines).toEqual([]);
 });
 
 const bindingFiles = (name: string) => path.join(factory, "bindings", name);

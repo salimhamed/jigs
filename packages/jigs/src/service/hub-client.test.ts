@@ -4,6 +4,7 @@ import type { Message } from "@jigs-ai/hub-protocol";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resumeHook } from "workflow/api";
 import { testFactoryContext } from "../test-fixtures.ts";
+import { JIGS_VERSION } from "../version.ts";
 import { hubBackoff, startHubClient } from "./hub-client.ts";
 
 vi.mock("workflow/api", () => ({ resumeHook: vi.fn() }));
@@ -84,7 +85,7 @@ afterEach(async () => {
 
 async function start(replies: (Message[] | number)[], nudge = {}) {
   hub = await fakeHub(replies);
-  stop = startHubClient({ url: hub.url, token: "fct_secret", version: "1.2.3", route, nudge }).stop;
+  stop = startHubClient({ url: hub.url, token: "fct_secret", route, nudge }).stop;
   return hub;
 }
 
@@ -111,7 +112,7 @@ test("routes a batch in order, then confirms its last position", async () => {
   expect(JSON.parse(confirm?.body ?? "")).toEqual({ position: "9" });
   for (const request of seen) {
     expect(request.headers.authorization).toBe("Bearer fct_secret");
-    expect(request.headers["user-agent"]).toBe("jigs/1.2.3");
+    expect(request.headers["user-agent"]).toBe(`jigs/${JIGS_VERSION}`);
   }
 });
 

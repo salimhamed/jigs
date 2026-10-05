@@ -18,7 +18,6 @@ import {
   postPullRequestReview,
   replyToReviewThread,
 } from "../../providers/github.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
@@ -66,11 +65,10 @@ export async function createPullRequest(request: {
   const { worktree, title, body, draft } = request;
   const repo = repositoryOf(worktree.binding);
   const { branch: head, defaultBranch: base } = worktree;
-  const { identity } = githubAuthFor(repo.owner);
-  // In App mode the pull request's author is the bot, which is what lets the
+  // The pull request's author is the App's bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
-  const operator = identity.mode === "app" ? identity.operator : null;
+  const operator = currentFactoryContext().config.github.operator ?? null;
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
     const { number, html_url } = await createPr({
@@ -245,8 +243,8 @@ async function allowedMergeMethod(pr: PullRequestRef): Promise<MergeMethod> {
 /**
  * The commit-message body jigs supplies, or nothing at all.
  *
- * GitHub makes a squash commit's author the pull request's author, which in App
- * mode is the bot, so the `Co-authored-by` trailer is how the operator keeps the
+ * GitHub makes a squash commit's author the pull request's author, which is the
+ * App's bot, so the `Co-authored-by` trailer is how the operator keeps the
  * credit. Sending `commit_message` *replaces* the body GitHub would generate,
  * so jigs applies its own preservation policy before adding the trailer: for a
  * one-commit branch it keeps that commit's body, and for several commits it
@@ -259,12 +257,10 @@ async function suppliedCommitMessageBody(
   pr: PullRequestRef,
   method: MergeMethod,
 ): Promise<undefined | string> {
-  const { identity } = githubAuthFor(pr.owner);
-  if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {
-    return undefined;
-  }
+  const { coAuthor } = currentFactoryContext().config.github;
+  if (method === "rebase" || coAuthor === undefined) return undefined;
   const body = preservedCommitMessageBody(await fetchPrCommitMessages(pr));
-  const trailer = `Co-authored-by: ${identity.coAuthor}`;
+  const trailer = `Co-authored-by: ${coAuthor}`;
   return body === "" ? trailer : `${body}\n\n${trailer}`;
 }
 

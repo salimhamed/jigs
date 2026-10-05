@@ -14,10 +14,8 @@ const ownNote = (comment: Comment, scope: string) =>
 
 // The builder acts on GitHub as the App's bot, and jigs marks every note it
 // posts, so an unmarked comment by the bot is one of the builder's own replies.
-const ownReply = (comment: Comment, appBot: string | undefined) =>
-  appBot !== undefined &&
-  comment.user.toLowerCase() === appBot.toLowerCase() &&
-  parseMarkers(comment.body).length === 0;
+const ownReply = (comment: Comment, appBot: string) =>
+  comment.user.toLowerCase() === appBot.toLowerCase() && parseMarkers(comment.body).length === 0;
 
 /** New or edited comments, one string each, leaving out the builder's own replies and notes. */
 function commentFacts(snapshot: PullRequestSnapshot, scope: string): string[] {

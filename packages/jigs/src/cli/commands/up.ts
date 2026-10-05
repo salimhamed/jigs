@@ -7,11 +7,7 @@ import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
-import type {
-  GithubIdentity,
-  LinearIdentity,
-  PagerDutyIdentity,
-} from "../../workflow/factory-schema.ts";
+import type { LinearIdentity, PagerDutyIdentity } from "../../workflow/factory-schema.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
@@ -80,11 +76,9 @@ export interface UpOptions {
 // freshly copied .env, so they are reported, not refused.
 const credentialSlots = (
   linear: LinearIdentity,
-  github: GithubIdentity[],
   pagerduty: PagerDutyIdentity | undefined,
 ): string[] => [
   ...LINEAR_IDENTITY_VARIABLES[linear.mode],
-  ...(github.some((identity) => identity.mode === "pat") ? ["GITHUB_TOKEN"] : []),
   ...(pagerduty !== undefined ? PAGERDUTY_IDENTITY_VARIABLES : []),
 ];
 
@@ -94,14 +88,11 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service, linear, github, pagerduty } = await runner.run(
-      "locate",
-      (note) => {
-        const located = locate(deps.cwd);
-        note(located.factoryRoot);
-        return located;
-      },
-    );
+    const { factoryRoot, service, linear, pagerduty } = await runner.run("locate", (note) => {
+      const located = locate(deps.cwd);
+      note(located.factoryRoot);
+      return located;
+    });
     result.factoryRoot = factoryRoot;
     result.serviceUrl = service.serviceUrl;
     result.dashboardUrl = service.dashboardUrl;
@@ -113,7 +104,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", () => ensureEnv(factoryRoot));
-    reportEmptyCredentials(env, credentialSlots(linear, github, pagerduty), deps.out);
+    reportEmptyCredentials(env, credentialSlots(linear, pagerduty), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -192,7 +183,6 @@ function locate(cwd: string): {
   factoryRoot: string;
   service: ResolvedService;
   linear: LinearIdentity;
-  github: GithubIdentity[];
   pagerduty: PagerDutyIdentity | undefined;
 } {
   const ctx = factoryContextAt(cwd);
@@ -202,7 +192,6 @@ function locate(cwd: string): {
     factoryRoot: ctx.root,
     service,
     linear: config.linear.identity,
-    github: config.github.identities,
     pagerduty: config.pagerduty?.identity,
   };
 }

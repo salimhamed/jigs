@@ -5,7 +5,7 @@ import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
 import { POLLED_PROVIDERS, perProvider, WEBHOOK_PROVIDERS } from "./providers.ts";
-import { type MergeApproval, mergeApprovalSchema } from "./pull-requests/policy.ts";
+import { mergeApprovalSchema } from "./pull-requests/policy.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
@@ -94,81 +94,16 @@ export const webhooksSchema = z.strictObject({
   ...perProvider(WEBHOOK_PROVIDERS, webhookProviderSchema),
 });
 
-// Who jigs is on GitHub. `pat` is the operator's own token, so every pull
-// request jigs opens is authored by the operator and GitHub refuses to let
-// them approve it. `app` mints an installation token, so pull requests come
-// from `<app-slug>[bot]` and the operator can review them normally; the
-// operator login is named here because `GET /user` does not answer for an
-// installation token.
-const appIdentitySchema = z.strictObject({
-  mode: z.literal("app"),
-  appId: z.int().positive(),
-  installations: z
-    .record(z.string().regex(/^[a-zA-Z0-9-]+$/), z.int().positive())
-    .refine((entries) => Object.keys(entries).length > 0, "installations must not be empty"),
-  // Relative paths resolve against the factory root.
-  privateKeyPath: z.string().min(1),
-  operator: z.string().min(1),
+// jigs acts on GitHub as the App the hub assigns this factory, so pull requests
+// come from `<app-slug>[bot]` and the operator can review them normally.
+export const githubSchema = z.strictObject({
+  /** The operator's GitHub login: assigned every pull request jigs opens, and named in its body. */
+  operator: z.string().min(1).optional(),
+  /** `Name <email>` added as a `Co-authored-by` trailer to the merge commits jigs makes. */
   coAuthor: z.string().min(1).optional(),
+  /** How the operator approves a pull request for merging. */
+  mergeApproval: mergeApprovalSchema.default("review"),
 });
-
-export const githubIdentitySchema = z.discriminatedUnion("mode", [
-  z.strictObject({ mode: z.literal("pat") }),
-  appIdentitySchema,
-]);
-
-export const githubSchema = z
-  .strictObject({
-    identities: z
-      .array(githubIdentitySchema)
-      .min(1)
-      .default([{ mode: "pat" }]),
-    /**
-     * How the operator approves a pull request for merging. Defaults to `label` with a personal
-     * access token and to `review` with a GitHub App.
-     */
-    mergeApproval: mergeApprovalSchema.optional(),
-  })
-  .superRefine(({ identities, mergeApproval }, ctx) => {
-    if (mergeApproval === "review" && identities.some((identity) => identity.mode === "pat"))
-      ctx.addIssue({
-        code: "custom",
-        path: ["mergeApproval"],
-        message:
-          'with a PAT, jigs opens pull requests as you, and GitHub does not let the author of a pull request approve it; use "label", or a GitHub App identity',
-      });
-    const accounts = new Set<string>();
-    for (const [index, identity] of identities.entries()) {
-      if (identity.mode === "pat") {
-        if (identities.length !== 1)
-          ctx.addIssue({
-            code: "custom",
-            path: ["identities", index],
-            message: "a PAT must be the only identity",
-          });
-        continue;
-      }
-      for (const account of Object.keys(identity.installations)) {
-        if (accounts.has(account.toLowerCase()))
-          ctx.addIssue({
-            code: "custom",
-            path: ["identities", index, "installations", account],
-            message: `account ${account} is claimed more than once`,
-          });
-        accounts.add(account.toLowerCase());
-      }
-    }
-  })
-  .transform(({ identities, mergeApproval }) => ({
-    identities,
-    mergeApproval: mergeApproval ?? defaultMergeApproval(identities),
-  }));
-
-// A PAT makes the operator the author of every pull request, and GitHub
-// refuses an author's own approving review.
-function defaultMergeApproval(identities: GithubIdentity[]): MergeApproval {
-  return identities.some((identity) => identity.mode === "pat") ? "label" : "review";
-}
 
 /**
  * Who jigs is on Linear. `key` is a personal API key, so jigs acts as that user.
@@ -236,25 +171,6 @@ export const slackSchema = z.strictObject({
   scopes: z.array(z.string().min(1)).default([]),
 });
 
-/** Resolve the credentials for one account. */
-export function installationFor(
-  identities: GithubIdentity[],
-  account: string,
-): ResolvedGithubIdentity {
-  for (const identity of identities) {
-    if (identity.mode === "pat") return identity;
-    const { installations, ...app } = identity;
-    const entry = Object.entries(installations).find(
-      ([login]) => login.toLowerCase() === account.toLowerCase(),
-    );
-    if (entry) return { ...app, installationId: entry[1] };
-  }
-  throw new JigsError(
-    `no GitHub App installation configured for account ${account}`,
-    `add "${account}": <installation-id> to the App's installations in github.identities in jigs.config.ts, then: \`pnpm exec jigs up\``,
-  );
-}
-
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per workflow
 export type WorkflowImport = () => Promise<{ default: WorkflowDefinition<any> }>;
 
@@ -293,7 +209,7 @@ export const factoryConfigSchema = z
       (section) => section ?? {},
       serviceSchema,
     ),
-    // Which GitHub credential jigs uses, and how the operator approves a merge.
+    // Who the operator is on GitHub, and how they approve a merge.
     github: githubSchema.prefault({}),
     linear: linearSchema.prefault({}),
     pagerduty: pagerDutySchema.optional(),
@@ -395,17 +311,10 @@ export type FactoryConfig = z.output<typeof factoryConfigSchema>;
 export type WebhooksConfig = z.output<typeof webhooksSchema>;
 export type SlackConfig = z.output<typeof slackSchema>;
 
-export type GithubIdentity = z.output<typeof githubIdentitySchema>;
 /** Who jigs is on Linear: a personal API key, or an OAuth application acting as itself. */
 export type LinearIdentity = z.output<typeof linearIdentitySchema>;
 /** Who jigs is on PagerDuty: a scoped OAuth application acting on one account. */
 export type PagerDutyIdentity = z.output<typeof pagerDutyIdentitySchema>;
-export type AppIdentity = Extract<GithubIdentity, { mode: "app" }>;
-/** Credentials selected for one installation, after resolving the configured account map. */
-export type ResolvedAppIdentity = Omit<AppIdentity, "installations"> & {
-  installationId: number;
-};
-export type ResolvedGithubIdentity = Extract<GithubIdentity, { mode: "pat" }> | ResolvedAppIdentity;
 
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);

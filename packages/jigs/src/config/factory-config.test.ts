@@ -512,29 +512,19 @@ const withSettings = (extra: Record<string, unknown>) =>
     ...extra,
   });
 
-test("a factory that states no identity gets a PAT, approved by label", () => {
-  const config = withSettings({});
-  expect(config.github).toEqual({ identities: [{ mode: "pat" }], mergeApproval: "label" });
+test("a factory that states no GitHub settings names no operator and approves by review", () => {
+  expect(withSettings({}).github).toEqual({ mergeApproval: "review" });
 });
 
-test("an app identity needs every fact a token cannot be minted without", () => {
-  const app = {
-    mode: "app",
-    appId: 4958325,
-    installations: { salimhamed: 162033982 },
-    privateKeyPath: "key.pem",
+test("the GitHub section holds the operator, co-author and approval, and no identity", () => {
+  const github = {
     operator: "salimhamed",
+    coAuthor: "Salim <s@example.com>",
+    mergeApproval: "label",
   };
-  expect(withSettings({ github: { identities: [app] } }).github.identities[0]).toEqual(app);
-  for (const missing of ["appId", "installations", "privateKeyPath", "operator"]) {
-    const { [missing as keyof typeof app]: _dropped, ...rest } = app;
-    expect(() => withSettings({ github: { identities: [rest] } })).toThrow(missing);
-  }
-  // A pat identity carries none of them, so a stray one is a mode that did
-  // not change with the fields under it.
-  expect(() => withSettings({ github: { identities: [{ mode: "pat", appId: 1 }] } })).toThrow(
-    "appId",
-  );
+  expect(withSettings({ github }).github).toEqual(github);
+  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
+  expect(() => withSettings({ github: { identities: [{ mode: "pat" }] } })).toThrow("identities");
 });
 
 test("a factory that states no Linear identity acts with a personal key", () => {
@@ -616,73 +606,6 @@ test("a PagerDuty from must be an email", () => {
       withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, from } } }),
     ).toThrow("pagerduty.identity.from");
   }
-});
-
-const APP_IDENTITY = {
-  mode: "app",
-  appId: 1,
-  installations: { owner: 2 },
-  privateKeyPath: "k.pem",
-  operator: "salimhamed",
-};
-
-test("merge approval defaults to review for an App, and an App may choose the label", () => {
-  expect(withSettings({ github: { identities: [APP_IDENTITY] } }).github.mergeApproval).toBe(
-    "review",
-  );
-  expect(
-    withSettings({ github: { identities: [APP_IDENTITY], mergeApproval: "label" } }).github
-      .mergeApproval,
-  ).toBe("label");
-  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
-});
-
-test("a PAT cannot approve by review, because GitHub refuses an author's own approval", () => {
-  expect(withSettings({ github: { mergeApproval: "label" } }).github.mergeApproval).toBe("label");
-  expect(() => withSettings({ github: { mergeApproval: "review" } })).toThrow(
-    "GitHub does not let the author of a pull request approve it",
-  );
-});
-
-test("App maps and lists normalize and reject ambiguous account ownership", async () => {
-  const { installationFor } = await import("../workflow/factory-schema.ts");
-  const app = {
-    mode: "app",
-    appId: 1,
-    privateKeyPath: "key.pem",
-    operator: "human",
-    installations: { Junglescout: 10 },
-  };
-  const config = withSettings({ github: { identities: [app] } });
-  expect(installationFor(config.github.identities, "junglescout")).toMatchObject({
-    appId: 1,
-    installationId: 10,
-  });
-  expect(installationFor(config.github.identities, "junglescout")).not.toHaveProperty(
-    "installations",
-  );
-  const identities = [app, { ...app, appId: 2, installations: { Other: 20 } }];
-  expect(withSettings({ github: { identities } }).github.identities).toEqual(identities);
-  expect(() =>
-    withSettings({ github: { identities: [app, { ...app, installations: { JUNGLESCOUT: 30 } }] } }),
-  ).toThrow("claimed more than once");
-  expect(() => withSettings({ github: { identities: [{ ...app, installations: {} }] } })).toThrow(
-    "must not be empty",
-  );
-  expect(() => withSettings({ github: { identities: [{ ...app, installationId: 20 }] } })).toThrow(
-    "installationId",
-  );
-  expect(() => withSettings({ github: { identity: app } })).toThrow("identity");
-  expect(withSettings({ github: { identities: [{ mode: "pat" }] } }).github.identities).toEqual([
-    { mode: "pat" },
-  ]);
-  expect(() => withSettings({ github: { identities: [{ mode: "pat" }, app] } })).toThrow(
-    "PAT must be the only identity",
-  );
-  expect(() =>
-    withSettings({ github: { identities: [{ mode: "pat" }, { mode: "pat" }] } }),
-  ).toThrow("PAT must be the only identity");
-  expect(() => withSettings({ github: { identities: [] } })).toThrow("github.identities");
 });
 
 const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };
