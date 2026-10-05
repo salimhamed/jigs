@@ -219,6 +219,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "harnesses",
     "interpolate",
     "isPullRequestMergeReady",
+    "linear",
     "linearMcp",
     "models",
     "pagerduty",

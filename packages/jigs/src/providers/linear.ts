@@ -95,6 +95,11 @@ export interface LinearIssueState {
   position: number;
 }
 
+export interface LinearIssueFiling {
+  project: { id: string; slugId: string } | null;
+  labels: string[];
+}
+
 export interface LinearIssueStates {
   state: { id: string; name: string };
   team: { name: string; states: { nodes: LinearIssueState[] } };
@@ -459,9 +464,29 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
     return data.issue.comments.nodes.filter((comment) => comment.createdAt > sinceIso);
   }
 
+  /** The project and labels an issue is filed under. */
+  async function fetchIssueFiling(issueId: string): Promise<LinearIssueFiling> {
+    const data = await linearGraphql<{
+      issue: {
+        project: { id: string; slugId: string } | null;
+        labels: { nodes: Array<{ name: string }> };
+      };
+    }>(
+      `query IssueFiling($id: String!) {
+        issue(id: $id) { project { id slugId } labels(first: 250) { nodes { name } } }
+      }`,
+      { id: issueId },
+    );
+    return {
+      project: data.issue.project,
+      labels: data.issue.labels.nodes.map((label) => label.name),
+    };
+  }
+
   return {
     appUser,
     findUserByEmail,
+    fetchIssueFiling,
     fetchIssueStates,
     updateIssueState,
     resolveIssueRef,

@@ -1,0 +1,54 @@
+{
+  "type": "AgentSessionEvent",
+  "action": "created",
+  "createdAt": "2026-10-04T12:00:00.512Z",
+  "organizationId": "5c1d9e0b-7d0a-4c61-9a3e-2f6f1b8d4a10",
+  "oauthClientId": "8e4b2c7a-1f3d-4e5a-9b6c-0d7e8f9a1b2c",
+  "appUserId": "3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c",
+  "webhookId": "a1b2c3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+  "webhookTimestamp": 1791115200600,
+  "agentSession": {
+    "id": "9b7e5c3a-1d2f-4e6a-8b0c-2d4f6a8c0e1b",
+    "createdAt": "2026-10-04T12:00:00.123Z",
+    "updatedAt": "2026-10-04T12:00:00.123Z",
+    "archivedAt": null,
+    "appUserId": "3f2a1b0c-9d8e-4f7a-8b6c-5d4e3f2a1b0c",
+    "organizationId": "5c1d9e0b-7d0a-4c61-9a3e-2f6f1b8d4a10",
+    "creatorId": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+    "creator": {
+      "id": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "name": "Ada Lovelace",
+      "email": "ada@example.com",
+      "avatarUrl": null,
+      "url": "https://linear.app/acme/profiles/ada"
+    },
+    "issueId": "1e2d3c4b-5a69-4788-9a0b-1c2d3e4f5a6b",
+    "issue": {
+      "id": "1e2d3c4b-5a69-4788-9a0b-1c2d3e4f5a6b",
+      "identifier": "ENG-42",
+      "title": "Checkout button does nothing on Safari",
+      "description": "Clicking checkout in Safari 18 does nothing.",
+      "url": "https://linear.app/acme/issue/ENG-42/checkout-button-does-nothing-on-safari",
+      "teamId": "c0ffee00-1111-4222-8333-444455556666",
+      "team": { "id": "c0ffee00-1111-4222-8333-444455556666", "key": "ENG", "name": "Engineering" }
+    },
+    "commentId": "4d3c2b1a-0f9e-4d8c-b7a6-5e4d3c2b1a0f",
+    "comment": {
+      "id": "4d3c2b1a-0f9e-4d8c-b7a6-5e4d3c2b1a0f",
+      "body": "@jigs can you fix this?",
+      "userId": "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
+      "issueId": "1e2d3c4b-5a69-4788-9a0b-1c2d3e4f5a6b"
+    },
+    "sourceCommentId": null,
+    "sourceMetadata": null,
+    "status": "pending",
+    "type": "commentThread",
+    "summary": null,
+    "startedAt": null,
+    "endedAt": null,
+    "url": "https://linear.app/acme/issue/ENG-42/checkout-button-does-nothing-on-safari#agent-session-9b7e5c3a"
+  },
+  "previousComments": [],
+  "guidance": [],
+  "promptContext": "<issue identifier=\"ENG-42\">\n<title>Checkout button does nothing on Safari</title>\n</issue>"
+}

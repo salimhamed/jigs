@@ -167,6 +167,11 @@ export {
   type TicketSnapshot,
 } from "./workflow/linear/snapshot.ts";
 export {
+  type LinearAgentSessionInputs,
+  type LinearAgentSessionsParams,
+  linear,
+} from "./workflow/linear/source.ts";
+export {
   type TicketReviewPrompt,
   type TicketReviewPromptInput,
   ticketReviewPrompt,

@@ -219,6 +219,20 @@ test("an unroutable Linear resource type is ignored", async () => {
   );
 });
 
+test("a Linear agent session goes to the triggers, not to waiting runs", async () => {
+  push.mockResolvedValueOnce(["mentions"]);
+  const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
+  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+    outcome: "triggered",
+    triggers: ["mentions"],
+  });
+  expect(push).toHaveBeenCalledExactlyOnceWith("linear", payload);
+  expect(resumeHookMock).not.toHaveBeenCalled();
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] linear accepted triggers=mentions event=AgentSessionEvent",
+  );
+});
+
 const incidentTriggered = () =>
   JSON.parse(
     readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
