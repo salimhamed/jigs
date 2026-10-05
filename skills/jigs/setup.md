@@ -33,17 +33,11 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-Choose the GitHub identity now; `jigs init --help` lists the flags.
-`--github-identity-mode pat` (the default) makes jigs act as the operator, with
-a `jigs:approved` label as the merge approval. `--github-identity-mode app`
-makes jigs act as a GitHub App and takes the App's id, installations, private
-key path and the operator's login; approval is then a GitHub review. An App
-factory may set `github.mergeApproval: "label"` instead; a PAT factory cannot
-use review. `--linear-identity-mode key|app` does the same for Linear. Both are
-written to `jigs.config.ts`, so changing one later is a config edit. Add
-`linear.operator: "<operator's Linear email>"` there so ticket comments mention
-the operator and the assignee rather than the ticket's creator; with `key`
-mode and the operator's own key, Linear will not notify them, so prefer `app`.
+jigs acts on GitHub and Linear as the apps the hub assigns the factory, so
+there is no identity to choose here. Add
+`linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
+comments mention the operator and the assignee rather than the ticket's
+creator.
 
 `jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
 `jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
@@ -58,13 +52,12 @@ cp .env.example .env
 pnpm exec jigs hub connect <hub-url> <token>
 ```
 
-Every factory hears GitHub through a hub. Ask the user for the hub URL and the
+Every factory hears GitHub and Linear through a hub. Ask the user for the hub URL and the
 factory token the hub showed when they added this factory; `hub connect` writes
 the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
 `jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
-before adding a workflow that declares those integrations; the configuration
-guide's `.env` table lists each variable.
+`WORKFLOW_POSTGRES_URL` as written. GitHub and Linear tokens come from the
+hub; the configuration guide's `.env` table lists every other variable.
 
 ## 3. `jigs up`
 

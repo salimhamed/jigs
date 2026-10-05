@@ -1,104 +1,97 @@
-// The one credential source behind every Linear call jigs makes. Two modes: a
-// personal API key, or an OAuth application token minted here with the
-// client-credentials grant. Reads the environment and the network, so it is
-// only reached from a step, a check or the CLI — never from workflow code.
+// The one credential source behind every Linear call jigs makes: an access
+// token of the factory's Linear app, handed out by the hub. Reads the
+// environment and the network, so it is only reached from a step, a check or
+// the CLI — never from workflow code.
 
-import type { LinearIdentity } from "../workflow/factory-schema.ts";
-import {
-  type EnvLookup,
-  perContext,
-  RESTART_SERVICE,
-  requireCredential,
-  SERVICE_ENV_FILE,
-} from "./credentials.ts";
-import { mintClientCredentials, type ProviderAuth } from "./http.ts";
+import type { FactoryContext } from "../config/factory-context.ts";
+import { perContext } from "./credentials.ts";
+import type { ProviderAuth } from "./http.ts";
+import { fetchLinearToken } from "./hub.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
-export const LINEAR_TOKEN_URL = "https://api.linear.app/oauth/token";
 
-// Minting with a different scope set revokes every live token for the app, so
-// a running factory hits one 401 after a release that changes this.
-const APP_SCOPE = "read,write";
+// The hub refreshes a token with less than five minutes left, so asking again
+// at the same margin gets a fresh one.
+const REFRESH_MARGIN_MS = 5 * 60 * 1000;
 
-/** The `.env` variables each Linear identity mode needs. */
-export const LINEAR_IDENTITY_VARIABLES = {
-  key: ["LINEAR_API_KEY"],
-  app: ["LINEAR_CLIENT_ID", "LINEAR_CLIENT_SECRET"],
-} as const satisfies Record<LinearIdentity["mode"], readonly string[]>;
-
-type FetchLike = typeof fetch;
-
-/** The variables the identity needs that are unset. */
-export function missingLinearVariables(identity: LinearIdentity, env: EnvLookup): string[] {
-  return LINEAR_IDENTITY_VARIABLES[identity.mode].filter((name) => !env(name));
+/** The user Linear made for the factory's app in a workspace: who jigs is there. */
+export interface LinearAppUser {
+  id: string;
+  name: string;
 }
 
-async function mintLinearAppToken(
-  clientId: string,
-  clientSecret: string,
-  doFetch: FetchLike | undefined,
-): Promise<string> {
-  const { accessToken } = await mintClientCredentials({
-    provider: "linear",
-    url: LINEAR_TOKEN_URL,
-    clientId,
-    clientSecret,
-    scope: APP_SCOPE,
-    hint: `check LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in ${SERVICE_ENV_FILE} against the Linear OAuth application, and that client credentials are enabled on it, then: \`${RESTART_SERVICE}\``,
-    quote: (body) => body,
-    fetch: doFetch,
-  });
-  return accessToken;
+interface IssuedToken {
+  token: string;
+  expiresAt: number;
+  user: LinearAppUser;
 }
 
 export interface LinearAuth extends ProviderAuth {
-  identity: LinearIdentity;
-  /** The bare credential: the API key, or the app's token, minted as needed. */
   bearer(): Promise<string>;
-  /** App mode only: forget `stale` if it is still the cached token, so the next call mints afresh. */
-  invalidate?(stale: string): void;
+  invalidate(stale: string): void;
+  /** The app's own user in the workspace. */
+  user(): Promise<LinearAppUser>;
 }
 
 export interface LinearAuthDeps {
-  fetch?: FetchLike;
-  env: EnvLookup;
+  now?: () => number;
+  issue(organization: string | undefined): Promise<{
+    token: string;
+    expiresAt: string;
+    app: { name: string; userId: string };
+  }>;
 }
 
-export function createLinearAuth(identity: LinearIdentity, deps: LinearAuthDeps): LinearAuth {
-  const env = deps.env;
-  const required = (name: string): string =>
-    requireCredential(name, `linear.identity mode "${identity.mode}"`, env);
-  if (identity.mode === "key") {
-    return { identity, bearer: async () => required("LINEAR_API_KEY") };
-  }
-  // The token Linear issues lasts 30 days; its expires_in is not trusted, and
-  // a rejection is what retires it.
-  let cached: string | null = null;
-  let minting: Promise<string> | null = null;
-  return {
-    identity,
-    async bearer(): Promise<string> {
-      if (cached !== null) return cached;
-      if (minting === null) {
-        minting = mintLinearAppToken(
-          required("LINEAR_CLIENT_ID"),
-          required("LINEAR_CLIENT_SECRET"),
-          deps.fetch,
-        ).finally(() => {
-          minting = null;
+/** The credential for one workspace, or for the only one when `organization` is left out. */
+export function createLinearAuth(
+  organization: string | undefined,
+  deps: LinearAuthDeps,
+): LinearAuth {
+  const now = deps.now ?? Date.now;
+  let cached: IssuedToken | null = null;
+  let issuing: Promise<IssuedToken> | null = null;
+  const fresh = async (): Promise<IssuedToken> => {
+    if (cached !== null && cached.expiresAt - now() > REFRESH_MARGIN_MS) return cached;
+    if (issuing === null) {
+      issuing = deps
+        .issue(organization)
+        .then(({ token, expiresAt, app }) => ({
+          token,
+          expiresAt: Date.parse(expiresAt),
+          user: { id: app.userId, name: app.name },
+        }))
+        .finally(() => {
+          issuing = null;
         });
-      }
-      cached = await minting;
-      return cached;
-    },
-    // A late rejection of an old token must not discard one minted since.
+    }
+    const pending = issuing;
+    cached = await pending;
+    return cached;
+  };
+  return {
+    bearer: async () => (await fresh()).token,
+    // A late rejection of an old token must not discard one issued since.
     invalidate(stale: string): void {
-      if (cached === stale) cached = null;
+      if (cached?.token === stale) cached = null;
     },
+    user: async () => (cached ?? (await fresh())).user,
   };
 }
 
-/** The factory's Linear credential, cached once per factory context. */
-export const linearAuthFor = perContext((ctx) =>
-  createLinearAuth(ctx.config.linear.identity, { env: ctx.env }),
-);
+const factoryLinear = perContext((ctx) => ({
+  ctx,
+  auths: new Map<string | undefined, LinearAuth>(),
+}));
+
+/** The factory's Linear credential for one workspace, created once per factory. */
+export function linearAuthFor(ctx?: FactoryContext, organization?: string): LinearAuth {
+  const linear = factoryLinear(ctx);
+  let auth = linear.auths.get(organization);
+  if (!auth) {
+    auth = createLinearAuth(organization, {
+      issue: (named) => fetchLinearToken(named, linear.ctx),
+    });
+    linear.auths.set(organization, auth);
+  }
+  return auth;
+}

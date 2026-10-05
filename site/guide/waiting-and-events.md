@@ -142,10 +142,11 @@ Your workflow decides which feedback needs a reply and what to do next.
 
 ## Polling and webhooks
 
-GitHub waits wake on the events the factory's [hub](/guide/configuration#hub)
-passes on; the hub keeps them while the service is down. The built-in Linear
-and Slack waits always have polling as a fallback. Webhooks, and Slack's Socket
-Mode, make them react sooner, but are not required for correctness. A poll,
+GitHub and Linear waits wake on the events the factory's
+[hub](/guide/configuration#hub) passes on; the hub keeps them while the service
+is down. The built-in Linear and Slack waits also poll as a fallback. Slack's
+Socket Mode makes Slack waits react sooner, but is not required for
+correctness. A poll,
 event or push wakes the run so it can read the current facts again. Custom SDK
 hooks need their own event delivery; jigs does not automatically poll them.
 See [Configuration](/guide/configuration#webhooks) for webhook setup and intervals.

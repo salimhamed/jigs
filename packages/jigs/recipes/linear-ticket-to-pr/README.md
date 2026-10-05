@@ -17,7 +17,7 @@ following the pull request, runs in four jigs routines the workflow calls.
 
 ## What it needs
 
-- **Linear credentials, and the factory's GitHub App installed on the repository's owner**. See
+- **A Linear app assigned to the factory, and the factory's GitHub App installed on the repository's owner**. See
   [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
   and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
@@ -45,10 +45,8 @@ following the pull request, runs in four jigs routines the workflow calls.
   The merge method is the first one the repository allows on GitHub: squash,
   then merge commit, then rebase.
 
-GitHub events reach the run through the factory's
-[hub](https://salimhamed.github.io/jigs/guide/configuration#hub). Linear
-[webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
-optional.
+GitHub and Linear events reach the run through the factory's
+[hub](https://salimhamed.github.io/jigs/guide/configuration#hub).
 
 ## Pull request titles
 

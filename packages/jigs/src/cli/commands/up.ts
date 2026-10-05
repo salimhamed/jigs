@@ -3,11 +3,10 @@ import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { JigsError } from "../../errors.ts";
-import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
 import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
 import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
-import type { LinearIdentity, PagerDutyIdentity } from "../../workflow/factory-schema.ts";
+import type { PagerDutyIdentity } from "../../workflow/factory-schema.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
@@ -74,13 +73,8 @@ export interface UpOptions {
 
 // Read by the suspension primitives; empty slots are the expected state of a
 // freshly copied .env, so they are reported, not refused.
-const credentialSlots = (
-  linear: LinearIdentity,
-  pagerduty: PagerDutyIdentity | undefined,
-): string[] => [
-  ...LINEAR_IDENTITY_VARIABLES[linear.mode],
-  ...(pagerduty !== undefined ? PAGERDUTY_IDENTITY_VARIABLES : []),
-];
+const credentialSlots = (pagerduty: PagerDutyIdentity | undefined): string[] =>
+  pagerduty !== undefined ? [...PAGERDUTY_IDENTITY_VARIABLES] : [];
 
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
   const execFile = deps.execFile ?? nodeExecFile;
@@ -88,7 +82,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service, linear, pagerduty } = await runner.run("locate", (note) => {
+    const { factoryRoot, service, pagerduty } = await runner.run("locate", (note) => {
       const located = locate(deps.cwd);
       note(located.factoryRoot);
       return located;
@@ -104,7 +98,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", () => ensureEnv(factoryRoot));
-    reportEmptyCredentials(env, credentialSlots(linear, pagerduty), deps.out);
+    reportEmptyCredentials(env, credentialSlots(pagerduty), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -182,7 +176,6 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
 function locate(cwd: string): {
   factoryRoot: string;
   service: ResolvedService;
-  linear: LinearIdentity;
   pagerduty: PagerDutyIdentity | undefined;
 } {
   const ctx = factoryContextAt(cwd);
@@ -191,7 +184,6 @@ function locate(cwd: string): {
   return {
     factoryRoot: ctx.root,
     service,
-    linear: config.linear.identity,
     pagerduty: config.pagerduty?.identity,
   };
 }

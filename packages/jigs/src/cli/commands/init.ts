@@ -3,7 +3,6 @@ import { readFileSync } from "node:fs";
 import path from "node:path";
 import { locateTemplates, packageRoot, TEMPLATE_SUFFIX } from "../../build/templates.ts";
 import { JigsError } from "../../errors.ts";
-import type { LinearIdentity } from "../../workflow/factory-schema.ts";
 import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { columns, command, heading, note } from "../output.ts";
@@ -15,8 +14,6 @@ import { columns, command, heading, note } from "../output.ts";
 export interface InitDeps {
   cwd: string;
   out: (line: string) => void;
-  /** Defaults to `{ mode: "key" }`: a personal Linear API key. */
-  linearIdentity?: LinearIdentity;
 }
 
 export interface InitResult {
@@ -31,17 +28,12 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const root = path.resolve(deps.cwd);
   const templates = locateTemplates();
   const ports = factoryPorts(root);
-  const linearIdentity = deps.linearIdentity ?? { mode: "key" };
   const values: Record<string, string> = {
     FACTORY_NAME: factoryName(root),
     JIGS_VERSION: jigsVersion(),
     SERVICE_PORT: String(ports.servicePort),
     DASHBOARD_PORT: String(ports.dashboardPort),
     POSTGRES_PORT: String(ports.postgresPort),
-    LINEAR_IDENTITY: `  linear: {\n${LINEAR_IDENTITY_COMMENT[linearIdentity.mode]}\n    identity: ${literal(linearIdentity, "    ")},\n  },`,
-    // The scaffolded test asserts what the scaffolded config declares, and both
-    // are written from the one value here, so neither mode can scaffold red.
-    LINEAR_EXPECTED: literal({ identity: linearIdentity }, "  "),
   };
 
   const { created, skipped } = copyFiles(templates, root, {
@@ -68,28 +60,6 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   }
 
   return { created, skipped, ...ports };
-}
-
-const LINEAR_IDENTITY_COMMENT: Record<LinearIdentity["mode"], string> = {
-  key: "    // jigs acts as the user whose LINEAR_API_KEY is in .env.",
-  app: "    // jigs acts as your Linear OAuth app, from LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET in .env.",
-};
-
-const literalKey = (key: string): string =>
-  /^[A-Za-z_$][\w$]*$/.test(key) ? key : JSON.stringify(key);
-
-// A TypeScript literal of a plain settings object, on one line while it fits.
-function literal(value: unknown, indent: string): string {
-  if (typeof value !== "object" || value === null) return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((entry) => literal(entry, indent)).join(", ")}]`;
-  const entries = Object.entries(value);
-  const flat = `{ ${entries.map(([key, nested]) => `${literalKey(key)}: ${JSON.stringify(nested)}`).join(", ")} }`;
-  const plain = entries.every(([, nested]) => typeof nested !== "object");
-  if (plain && flat.length <= 72) return flat;
-  const lines = entries.map(
-    ([key, nested]) => `${indent}  ${literalKey(key)}: ${literal(nested, `${indent}  `)},`,
-  );
-  return `{\n${lines.join("\n")}\n${indent}}`;
 }
 
 // A starting point a factory always gets back, since the offset is derived

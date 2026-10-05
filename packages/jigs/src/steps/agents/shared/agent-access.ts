@@ -5,7 +5,7 @@ import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentGithubEnv } from "./github-access.ts";
 
 // A PagerDuty token lasts a day and is not refreshed during an agent's turn,
-// which can last hours. Linear's lasts 30 days.
+// which can last hours.
 const PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS = 5 * 60 * 60 * 1000;
 
 export interface AgentAccessDeps {

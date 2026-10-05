@@ -31,7 +31,7 @@ workflow: by default, jigs merges an approved pull request once CI is green.
 
 #### Requires
 
-- A [Linear identity](/guide/configuration#linear-identity).
+- A Linear app assigned to the factory in the [hub](/guide/configuration#linear-identity).
 - A GitHub binding with the factory's GitHub App [installed on its owner](/guide/configuration#github-identity).
 - The configured builder and reviewer harnesses, installed and authenticated.
 - The [GitHub CLI](https://cli.github.com), `gh`.

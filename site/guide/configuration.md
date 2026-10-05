@@ -24,7 +24,7 @@ export default defineFactory({
     app: { remote: "git@github.com:owner/app.git" },
   },
   github: { operator: "your-github-login" },
-  linear: { identity: { mode: "key" } },
+  linear: { operator: "you@example.com" },
   workflows: {
     hello: () => import("./workflows/hello/hello.ts"),
   },
@@ -37,10 +37,11 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 ## `hub` {#hub}
 
-Every factory hears GitHub through a hub. The hub receives GitHub's events
-and holds them until the factory's service collects them, so nothing is lost
-while the service is down. The hub also hands the factory every GitHub token
-it uses: see [GitHub identity](#github-identity).
+Every factory hears GitHub and Linear through a hub. The hub receives their
+events and holds them until the factory's service collects them, so nothing is
+lost while the service is down. The hub also hands the factory every GitHub and
+Linear token it uses: see [GitHub identity](#github-identity) and
+[Linear identity](#linear-identity).
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -421,23 +422,16 @@ teams.
 
 ### Identity {#linear-identity}
 
-`linear.identity` says who jigs is on Linear. Choose it with
-`jigs init --linear-identity-mode key` (the default) or `app`.
+jigs acts on Linear as the Linear app the [hub](#hub) assigns the factory, so
+its comments and mentions reach you like anyone else's. Connect the app to your
+Linear workspace in the hub and assign it to the factory; the hub hands the
+factory its tokens and refreshes them. Nothing about the app goes in
+`jigs.config.ts` or `.env`. `jigs doctor` checks that the hub has a Linear
+token for the factory, and says when a workspace must be connected again in
+the hub.
 
-- **`key`: jigs acts as you.** Put a Linear personal API key in `.env` as
-  `LINEAR_API_KEY`. Linear does not notify you of your own comments, so when a
-  run asks you a question on a ticket, the mention may never reach your inbox.
-  A key for a separate Linear user, or the `app` identity, avoids this.
-- **`app`: jigs acts as an app.** Its comments and mentions reach you like
-  anyone else's. In Linear, go to Settings → API → OAuth applications and create
-  one with **Client credentials** on, Public off and Webhooks off (any redirect
-  URL will do). Put its ID and secret in `.env` as `LINEAR_CLIENT_ID` and
-  `LINEAR_CLIENT_SECRET`.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-linear: { identity: { mode: "app" } },
-```
+Use one Linear app per purpose: two factories assigned the same app both answer
+a mention of it.
 
 ### Who comments mention {#linear-operator}
 
@@ -453,7 +447,7 @@ it leaves, such as the assumptions a ticket review made.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
-linear: { identity: { mode: "app" }, operator: "you@example.com" },
+linear: { operator: "you@example.com" },
 ```
 
 Each person is mentioned once, even when the operator is also the assignee.
@@ -466,9 +460,7 @@ A step or routine that posts a comment, such as `haltForHuman` or
 alongside these people.
 
 `jigs doctor`, and `jigs up`, look the operator email up in Linear and fail
-when no active Linear user has it. With the `key` identity, jigs posts as the
-key's owner, so if that is also the operator, doctor warns that the mentions
-will not notify you and suggests the `app` identity.
+when no active Linear user has it.
 
 When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
@@ -503,33 +495,28 @@ To start runs from Slack messages, see
 
 ## Webhooks {#webhooks}
 
-GitHub events always arrive through the [hub](#hub). Linear and PagerDuty
+GitHub and Linear events always arrive through the [hub](#hub). PagerDuty
 webhooks reach the service directly, and improve latency, not correctness.
-Without them, the built-in Linear waits, and [event triggers](#triggers) on
-PagerDuty, continue to poll at [`pollIntervalSeconds`](#service). A lost
-webhook delivery only delays the next check. See
+Without them, [event triggers](#triggers) on PagerDuty continue to poll at
+[`pollIntervalSeconds`](#service). A lost webhook delivery only delays the next
+check. See
 [Waiting and external events](/guide/waiting-and-events) for how runs wait.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
 webhooks: {
   url: "https://my-machine.my-tailnet.ts.net",
-  linear: { enabled: true },
+  pagerduty: { enabled: true },
 },
 ```
 
-Name each provider that sends webhooks with `enabled: true`. A provider you
-leave out (here `pagerduty`) is off and keeps polling.
+Leave `pagerduty` out and it is off and keeps polling.
 
 1. **Expose the service port** with a tunnel, for example
    `tailscale funnel --bg <servicePort>` or
    `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is
    `webhooks.url`.
-2. **Linear**: create the webhook yourself in Linear under Settings → API →
-   Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
-   only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET`, set
-   `linear: { enabled: true }` and run `jigs up`.
-3. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
+2. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
    and add a subscription on the service or team your triggers watch, for the
    `incident.triggered` event only, delivering to
    `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
@@ -537,8 +524,8 @@ leave out (here `pagerduty`) is off and keeps polling.
    and run `jigs up`. A new incident then starts its run within
    seconds instead of at the next poll, and never starts a second one.
 
-A provider that is enabled without its secret stops the service from starting.
-`jigs doctor` checks the secrets, and whether the PagerDuty subscription
+PagerDuty enabled without its secret stops the service from starting.
+`jigs doctor` checks the secret, and whether the PagerDuty subscription
 exists and is active. PagerDuty
 switches a subscription off after repeated failed deliveries; enable it again
 on its page under **Integrations → Generic Webhooks (v3)**.
@@ -551,16 +538,13 @@ is missing, and lists the credentials still empty.
 | Variable | When you need it |
 | --- | --- |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub tokens come from the hub. |
-| `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
-| `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub and Linear tokens come from the hub. |
 | `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
 | `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
 | `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
-| `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
 | `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 
 Also set any variable your `jigs.config.ts` names, such as an MCP server's

@@ -99,7 +99,6 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   // The slots that stay empty are named, not refused.
   const printed = lines.join("\n");
   expect(printed).toMatch(/^ok {3}env \(\d+ms\)$/m);
-  expect(printed).toContain("LINEAR_API_KEY empty in .env");
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
@@ -126,22 +125,12 @@ test("a container compose cannot name is left out of the summary, not guessed", 
   expect(lines).toContain("  postgres   localhost:5555");
 });
 
-test("an app Linear identity names its client variables as the empty slots", async () => {
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-  const port = await fakeService(io.procs);
-  const root = factory({ port, linearIdentity: "app" });
-  expect((await up(root, io)).ok).toBe(true);
-  expect(lines.join("\n")).toContain("LINEAR_CLIENT_ID, LINEAR_CLIENT_SECRET empty in .env");
-});
-
 test("a pagerduty section names its client variables as empty slots", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const port = await fakeService(io.procs);
   const root = factory({ port, pagerduty: true });
   expect((await up(root, io)).ok).toBe(true);
-  expect(lines.join("\n")).toContain(
-    "LINEAR_API_KEY, PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env",
-  );
+  expect(lines.join("\n")).toContain("PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET empty in .env");
 });
 
 test("bootstrap is handed the World URL from .env explicitly", async () => {
@@ -300,9 +289,9 @@ test("a red doctor is the final failing line, with its checks indented above", a
       checks: [
         {
           id: "linear.identity",
-          label: "Linear identity",
+          label: "Linear app",
           ok: false,
-          reason: "LINEAR_API_KEY is empty",
+          reason: "the hub has no Linear token for this factory",
           repair: "set it in .env",
         },
       ],
@@ -314,7 +303,7 @@ test("a red doctor is the final failing line, with its checks indented above", a
 
   expect(result.ok).toBe(false);
   expect(statuses(result).at(-1)).toBe("doctor:failed");
-  expect(lines).toContain("  FAIL Linear identity: LINEAR_API_KEY is empty");
+  expect(lines).toContain("  FAIL Linear app: the hub has no Linear token for this factory");
   expect(lines.at(-2)).toBe("FAIL doctor: doctor found 1 problem(s)");
 });
 
@@ -394,7 +383,7 @@ test("an existing .env is kept and its credentials are not reported when set", a
   const port = await fakeService(io.procs);
   const root = factory({
     port,
-    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=lin\nGITHUB_TOKEN=ghp\n",
+    env: "JIGS_HUB_TOKEN=hub\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nGITHUB_TOKEN=ghp\n",
   });
 
   await up(root, io);
@@ -491,7 +480,7 @@ test("no docker-compose.yml fails compose before docker runs", async () => {
 });
 
 test("bootstrap refuses to run without a World URL in .env", async () => {
-  const root = factory({ port: 1, env: "JIGS_HUB_TOKEN=hub\nLINEAR_API_KEY=lin\n" });
+  const root = factory({ port: 1, env: "JIGS_HUB_TOKEN=hub\n" });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);

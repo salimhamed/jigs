@@ -276,18 +276,6 @@ test("the scaffold leaves GitHub to its hub and the approval to its default", as
   expect(config).not.toContain("merge");
 });
 
-// What the scaffolded jigs.config.test.ts asserts, evaluated here: the file
-// itself cannot run until the factory installs jigs, and a scaffold whose own
-// test is red on day one is the failure this guards.
-const scaffoldedExpectations = (dir: string) => {
-  const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const [, linear] = /expect\(factory\.linear\)\.toEqual\((.+?)\);/s.exec(text) ?? [];
-  if (linear === undefined) throw new Error("the scaffolded test no longer asserts the identity");
-  return { linear: evaluate(linear) };
-};
-
-// Both files carry settings objects rather than data formats, so both are read
-// the same way: as the literal they are.
 const evaluate = (literal: string): unknown => new Function(`return ${literal}`)();
 
 // The scaffolded config is TypeScript that imports jigs, so it is read the way
@@ -298,43 +286,17 @@ const scaffoldedConfig = (dir: string) => {
     text.indexOf("defineFactory({") + "defineFactory(".length,
     text.lastIndexOf(")"),
   );
-  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as { linear: unknown };
+  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as Record<string, unknown>;
 };
 
-test.each(["key", "app"] as const)(
-  "the %s scaffold's own test asserts what its config declares",
-  async (linearMode) => {
-    const dir = scaffold(`${linearMode}-agreement`);
-    await initFactory({ cwd: dir, out: () => {}, linearIdentity: { mode: linearMode } });
-    const expectations = scaffoldedExpectations(dir);
-    const config = scaffoldedConfig(dir);
-    expect(config.linear).toEqual({ identity: { mode: linearMode } });
-    expect(config.linear).toEqual(expectations.linear);
-    // And what it declares is what jigs accepts, so the first `jigs up` loads.
-    const parsed = parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
-      ...config,
-    });
-    expect(parsed.github).toEqual({ mergeApproval: "review" });
-    expect(parsed.linear).toEqual(expectations.linear);
-  },
-);
-
-test("the scaffold names its Linear identity and the variables that mode reads", async () => {
-  const keyFactory = scaffold("key-factory");
-  await init(keyFactory);
-  const key = readFileSync(path.join(keyFactory, "jigs.config.ts"), "utf8");
-  expect(key).toContain('identity: { mode: "key" }');
-  expect(key).toContain("LINEAR_API_KEY");
-
-  const appFactory = scaffold("linear-app-factory");
-  await initFactory({ cwd: appFactory, out: () => {}, linearIdentity: { mode: "app" } });
-  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
-  expect(app).toContain('identity: { mode: "app" }');
-  expect(app).toContain("LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET");
-  // Both modes' slots are scaffolded, so switching mode needs no new .env line.
-  const example = readFileSync(path.join(appFactory, ".env.example"), "utf8");
-  for (const name of ["LINEAR_API_KEY=", "LINEAR_CLIENT_ID=", "LINEAR_CLIENT_SECRET="])
-    expect(example).toContain(name);
+test("the scaffold's config is what jigs accepts, so the first `jigs up` loads", async () => {
+  const dir = scaffold("accepted");
+  await init(dir);
+  const parsed = parseFactoryConfig({
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 9090 },
+    ...scaffoldedConfig(dir),
+  });
+  expect(parsed.github).toEqual({ mergeApproval: "review" });
+  expect(parsed.linear).toEqual({});
 });

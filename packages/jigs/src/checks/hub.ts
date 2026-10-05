@@ -18,7 +18,7 @@ export function hubChecks(
           return {
             ok: false,
             reason:
-              "JIGS_HUB_TOKEN is not set, so this factory hears nothing and gets no GitHub token",
+              "JIGS_HUB_TOKEN is not set, so this factory hears nothing and gets no GitHub or Linear token",
             repair: HUB_CONNECT,
           };
         try {

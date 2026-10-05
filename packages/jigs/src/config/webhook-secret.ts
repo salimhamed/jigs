@@ -3,12 +3,10 @@ import type { WebhookProvider } from "../workflow/providers.ts";
 import type { FactoryContext } from "./factory-context.ts";
 
 const SECRET_VARIABLES: Record<WebhookProvider, string> = {
-  linear: "LINEAR_WEBHOOK_SECRET",
   pagerduty: "PAGERDUTY_WEBHOOK_SECRET",
 };
 
 const SECRET_SOURCES: Record<WebhookProvider, string> = {
-  linear: "copy the signing secret from the Linear webhook's settings page",
   // PagerDuty shows it once, when the subscription is created.
   pagerduty:
     "copy the signing secret PagerDuty showed when the webhook subscription was created, or create the subscription again for a new one",
