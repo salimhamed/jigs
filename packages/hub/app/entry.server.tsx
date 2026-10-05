@@ -14,7 +14,9 @@ export const streamTimeout = 5_000;
 // React Router's default handler logs a stack trace for every page not found.
 export const handleError: HandleErrorFunction = (error, { request }) => {
   if (request.signal.aborted || (isRouteErrorResponse(error) && error.status === 404)) return;
-  console.error(error);
+  // A route error response keeps the real error it wraps, with its stack, privately.
+  const cause = isRouteErrorResponse(error) && (error as { error?: unknown }).error;
+  console.error(cause || error);
 };
 
 export default function handleRequest(
