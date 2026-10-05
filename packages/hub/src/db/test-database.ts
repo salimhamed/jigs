@@ -27,14 +27,17 @@ const withoutPostgres = !process.env.WORKFLOW_POSTGRES_URL && !(await reachable(
 /** `test`, skipped when no URL is set and nothing listens on the compose container. */
 export const dbTest = test.skipIf(withoutPostgres);
 
-/** Create an empty database; `drop` removes it once its clients have gone. */
-export async function createTestDatabase(): Promise<{ url: string; drop(): Promise<void> }> {
+/**
+ * A database for one test file, named now so its pool can be opened at once;
+ * `create` makes it empty and `drop` removes it once its clients have gone.
+ */
+export function testDatabase(): { url: string; create(): Promise<void>; drop(): Promise<void> } {
   const name = `hub_test_${randomUUID().replaceAll("-", "")}`;
-  await withAdmin((admin) => admin.query(`CREATE DATABASE "${name}"`));
   const url = new URL(adminUrl);
   url.pathname = `/${name}`;
   return {
     url: url.href,
+    create: () => withAdmin(async (admin) => void (await admin.query(`CREATE DATABASE "${name}"`))),
     drop: () =>
       withAdmin(async (admin) => {
         const deadline = Date.now() + 8_000;
@@ -47,7 +50,7 @@ export async function createTestDatabase(): Promise<{ url: string; drop(): Promi
           if (Date.now() >= deadline) throw new Error(`${name} still has clients connected`);
           await new Promise((resolve) => setTimeout(resolve, 20));
         }
-        await admin.query(`DROP DATABASE "${name}"`);
+        await admin.query(`DROP DATABASE IF EXISTS "${name}"`);
       }),
   };
 }

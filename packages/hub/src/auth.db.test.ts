@@ -3,17 +3,16 @@ import { makeSignature } from "better-auth/crypto";
 import { afterAll, beforeAll, expect } from "vitest";
 import { createAuth, type HubAuth, NOT_INVITED } from "./auth.ts";
 import type { HubConfig } from "./config.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
+import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
+import { dbTest, testDatabase } from "./db/test-database.ts";
 
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
+const database = testDatabase();
+const db = connectDatabase(database.url);
 let auth: HubAuth;
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
+  await database.create();
   await migrateDatabase(db);
   const config: HubConfig = {
     host: "127.0.0.1",
@@ -30,8 +29,8 @@ beforeAll(async () => {
 });
 
 afterAll(async () => {
-  await db?.$client.end();
-  await database?.drop();
+  await db.$client.end();
+  await database.drop();
 });
 
 // What the GitHub callback does once GitHub names the account's email.

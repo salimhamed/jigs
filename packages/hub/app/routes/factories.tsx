@@ -1,7 +1,7 @@
 import { KeyRound, Trash2 } from "lucide-react";
 import { Form, Link } from "react-router";
 import { addFactory, reissueToken, removeFactory } from "../../src/factories.ts";
-import { requireMember } from "../auth.server.ts";
+import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { Time } from "../components/time.tsx";
@@ -18,8 +18,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { organizationId, role } = await requireMember(context, request);
-  if (role !== "admin") return { error: "Only an admin can change factories." };
+  const admin = await requireAdmin(context, request);
+  if ("error" in admin) return admin;
+  const { organizationId } = admin;
   const form = await request.formData();
   const factoryId = String(form.get("factoryId"));
   const name = String(form.get("name") ?? "").trim();

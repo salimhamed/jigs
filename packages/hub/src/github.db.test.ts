@@ -1,17 +1,11 @@
-import { createHmac, createVerify, generateKeyPairSync, randomBytes } from "node:crypto";
-import { once } from "node:events";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createHmac, createVerify, generateKeyPairSync } from "node:crypto";
 import { type GitHubTokenResponse, githubTokenPath } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { afterAll, beforeAll, expect } from "vitest";
+import { beforeAll, expect } from "vitest";
 import { type App, setAssignments } from "./apps.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
-import { addFactory } from "./factories.ts";
-import { createFactoryApi } from "./factory-api.ts";
+import { dbTest } from "./db/test-database.ts";
 import {
   addGitHubApp,
   createGitHubRoutes,
@@ -20,18 +14,14 @@ import {
   githubSetupPath,
   githubWebhookPath,
 } from "./github.ts";
-import { LinearTokens } from "./linear.ts";
-import { MessageWaiters, readMessages } from "./messages.ts";
+import { readMessages } from "./messages.ts";
+import { organizationId, setUpTestHub } from "./test-hub.ts";
 
-const encryptionKey = randomBytes(32);
 const { privateKey, publicKey } = generateKeyPairSync("rsa", { modulusLength: 2048 });
 const pem = privateKey.export({ type: "pkcs8", format: "pem" }).toString();
-const organizationId = "acme";
 
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
-const waiters = new MessageWaiters();
-const servers: Server[] = [];
+const { db, encryptionKey, waiters, listen, serveHub, newFactory, eventNames, requestToken } =
+  setUpTestHub();
 let hub: string;
 let github: string;
 // The fake GitHub's installations, by installation id: the App ID and account.
@@ -41,13 +31,6 @@ const githubBots = new Map<string, number>();
 const minted: { installationId: string; token: string }[] = [];
 let botLookups = 0;
 const tokenLifetimeMs = 60 * 60 * 1000;
-
-async function listen(app: express.Express) {
-  const server = app.listen(0, "127.0.0.1");
-  servers.push(server);
-  await once(server, "listening");
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 // GitHub's installation endpoints for an App, answering only an App JWT signed with its key.
 function fakeGitHub() {
@@ -122,37 +105,11 @@ function fakeGitHub() {
 }
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
-  await migrateDatabase(db);
-  await db.insert(schema.organization).values([
-    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
-    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
-  ]);
   github = await listen(fakeGitHub());
-  hub = await listen(
-    express()
-      .use(createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github }))
-      .use(
-        createFactoryApi({
-          db,
-          waiters,
-          encryptionKey,
-          linearTokens: new LinearTokens({ db, encryptionKey }),
-          githubApiUrl: github,
-        }),
-      ),
-  );
-});
-
-afterAll(async () => {
-  waiters.close();
-  for (const server of servers) {
-    server.closeAllConnections();
-    server.close();
-  }
-  await db?.$client.end();
-  await database?.drop();
+  hub = await serveHub({
+    routes: createGitHubRoutes({ db, waiters, encryptionKey, apiUrl: github }),
+    apiUrls: { github },
+  });
 });
 
 let appCount = 0;
@@ -171,20 +128,12 @@ async function newApp(organization = organizationId) {
       webhookSecret,
       privateKey: pem,
     },
-    github,
+    { apiUrl: github },
   );
   if ("error" in added) throw new Error(added.error);
   githubBots.set(`${added.app.name}[bot]`, 40000 + appCount);
   return { app: added.app, webhookSecret };
 }
-
-let factoryCount = 0;
-async function newFactoryWithToken(organization = organizationId) {
-  factoryCount += 1;
-  return addFactory(db, organization, `factory ${factoryCount}`);
-}
-const newFactory = async (organization = organizationId) =>
-  (await newFactoryWithToken(organization)).factory;
 
 let installationCount = 0;
 async function installed(app: App, login = "acme") {
@@ -262,11 +211,6 @@ async function deliver(
   return response.status;
 }
 
-const eventNames = async (factoryId: string) =>
-  (await readMessages(db, factoryId)).map((message) =>
-    message.kind === "event" ? message.event.name : message.kind,
-  );
-
 const providerEventsOf = (app: App) =>
   db.select().from(schema.providerEvents).where(eq(schema.providerEvents.appId, app.id));
 
@@ -274,9 +218,9 @@ dbTest("stores a signed event once and sends it only to the app's factories", as
   const github = await newApp();
   const otherApp = await newApp();
   const [assigned, alsoAssigned, unassigned] = [
-    await newFactory(),
-    await newFactory(),
-    await newFactory(),
+    (await newFactory()).factory,
+    (await newFactory()).factory,
+    (await newFactory()).factory,
   ];
   await setAssignments(db, organizationId, github.app.id, [assigned.id, alsoAssigned.id]);
   await setAssignments(db, organizationId, otherApp.app.id, [unassigned.id]);
@@ -299,7 +243,7 @@ dbTest("stores a signed event once and sends it only to the app's factories", as
 
 dbTest("answers ping without storing it", async () => {
   const github = await newApp();
-  const factory = await newFactory();
+  const { factory } = await newFactory();
   await setAssignments(db, organizationId, github.app.id, [factory.id]);
   expect(await deliver(github, "ping", { zen: "Keep it logically awesome.", hook_id: 1 })).toBe(
     200,
@@ -331,7 +275,7 @@ dbTest("refuses unknown apps and bad signatures", async () => {
 dbTest("drops events from installations that are not the app's", async () => {
   const github = await newApp();
   const other = await newApp();
-  const factory = await newFactory();
+  const { factory } = await newFactory();
   await setAssignments(db, organizationId, github.app.id, [factory.id]);
   const othersInstallation = await installed(other.app);
 
@@ -345,7 +289,7 @@ dbTest("drops events from installations that are not the app's", async () => {
 
 dbTest("keeps installations current from installation events", async () => {
   const github = await newApp();
-  const factory = await newFactory();
+  const { factory } = await newFactory();
   await setAssignments(db, organizationId, github.app.id, [factory.id]);
   const installationsOf = () =>
     db
@@ -428,11 +372,11 @@ dbTest("learns installations the hub missed, when added and when an event names 
       webhookSecret: "early secret",
       privateKey: pem,
     },
-    github,
+    { apiUrl: github },
   );
   if (!("app" in added)) throw new Error(added.error);
   const app = { app: added.app, webhookSecret: "early secret" };
-  const factory = await newFactory();
+  const { factory } = await newFactory();
   await setAssignments(db, organizationId, app.app.id, [factory.id]);
   expect(await deliver(app, "issues", issueOpened(61))).toBe(200);
 
@@ -456,7 +400,15 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
     privateKey: pem,
   };
   const add = (organization: string, changes: Partial<typeof input> = {}) =>
-    addGitHubApp(db, encryptionKey, organization, { ...input, ...changes }, github);
+    addGitHubApp(
+      db,
+      encryptionKey,
+      organization,
+      { ...input, ...changes },
+      {
+        apiUrl: github,
+      },
+    );
   expect(await add(organizationId, { appId: "x" })).toEqual({
     error: "The App ID is a number.",
   });
@@ -477,29 +429,19 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
   });
 });
 
-async function requestToken(token: string, owner: unknown) {
-  const response = await fetch(`${hub}${githubTokenPath}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "user-agent": "jigs/1.2.3",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify({ owner }),
-  });
-  return { status: response.status, body: await response.json() };
-}
+const requestGitHubToken = (token: string, owner: unknown) =>
+  requestToken(githubTokenPath, token, { owner });
 
 dbTest(
   "issues a fresh installation token of the assigned App for an owner on every request",
   async () => {
     const github = await newApp();
-    const { factory, token } = await newFactoryWithToken();
+    const { factory, token } = await newFactory();
     await setAssignments(db, organizationId, github.app.id, [factory.id]);
     const installationId = String(await installed(github.app, "Acme-Corp"));
     const before = { minted: minted.length, lookups: botLookups };
 
-    const first = await requestToken(token, "acme-corp");
+    const first = await requestGitHubToken(token, "acme-corp");
     expect(first.status).toBe(200);
     const issued = first.body as GitHubTokenResponse;
     expect(issued).toEqual({
@@ -518,7 +460,7 @@ dbTest(
 
     // The factory asks again for a longer-lived token, or after GitHub rejected one, so every
     // request mints anew; the bot's id is not looked up again.
-    const again = await requestToken(token, "ACME-CORP");
+    const again = await requestGitHubToken(token, "ACME-CORP");
     expect(again).toEqual({
       status: 200,
       body: { ...issued, token: minted.at(-1)?.token, expiresAt: expect.any(String) },
@@ -533,7 +475,7 @@ dbTest(
   "refuses a token for an owner no assigned App, or more than one, is installed on",
   async () => {
     const [first, second, unassigned] = [await newApp(), await newApp(), await newApp()];
-    const { factory, token } = await newFactoryWithToken();
+    const { factory, token } = await newFactory();
     await setAssignments(db, organizationId, first.app.id, [factory.id]);
     await setAssignments(db, organizationId, second.app.id, [factory.id]);
     await installed(first.app, "shared");
@@ -541,12 +483,12 @@ dbTest(
     await installed(unassigned.app, "elsewhere");
     const before = minted.length;
 
-    expect(await requestToken(token, "nobody")).toEqual({
+    expect(await requestGitHubToken(token, "nobody")).toEqual({
       status: 404,
       body: { error: "No GitHub App assigned to this factory is installed on nobody." },
     });
-    expect((await requestToken(token, "elsewhere")).status).toBe(404);
-    expect(await requestToken(token, "shared")).toEqual({
+    expect((await requestGitHubToken(token, "elsewhere")).status).toBe(404);
+    expect(await requestGitHubToken(token, "shared")).toEqual({
       status: 409,
       body: {
         error: `More than one GitHub App assigned to this factory is installed on shared: ${[
@@ -558,9 +500,9 @@ dbTest(
           .join(", ")}.`,
       },
     });
-    expect((await requestToken(token, "")).status).toBe(400);
-    expect((await requestToken(token, 7)).status).toBe(400);
-    expect((await requestToken("nope", "shared")).status).toBe(401);
+    expect((await requestGitHubToken(token, "")).status).toBe(400);
+    expect((await requestGitHubToken(token, 7)).status).toBe(400);
+    expect((await requestGitHubToken("nope", "shared")).status).toBe(401);
     expect(minted.length).toBe(before);
   },
 );

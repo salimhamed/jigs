@@ -1,7 +1,4 @@
-import { createHmac, randomBytes } from "node:crypto";
-import { once } from "node:events";
-import type { Server } from "node:http";
-import type { AddressInfo } from "node:net";
+import { createHmac } from "node:crypto";
 import {
   factoryStatusPath,
   type SlackTokenResponse,
@@ -10,15 +7,11 @@ import {
 } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express from "express";
-import { afterAll, beforeAll, expect, vi } from "vitest";
+import { beforeAll, expect, vi } from "vitest";
 import { type App, setAssignments } from "./apps.ts";
-import { connectDatabase, type HubDatabase, migrateDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
-import { createTestDatabase, dbTest } from "./db/test-database.ts";
-import { addFactory } from "./factories.ts";
-import { createFactoryApi } from "./factory-api.ts";
-import { LinearTokens } from "./linear.ts";
-import { MessageWaiters, readMessages } from "./messages.ts";
+import { dbTest } from "./db/test-database.ts";
+import { readMessages } from "./messages.ts";
 import {
   addSlackApp,
   createSlackRoutes,
@@ -27,15 +20,20 @@ import {
   slackInstallPath,
   slackWebhookPath,
 } from "./slack.ts";
+import {
+  adminFromHeader,
+  authorizeUrl,
+  finishOAuth,
+  organizationId,
+  setUpTestHub,
+  startOAuth,
+  stateCookie,
+} from "./test-hub.ts";
 
-const encryptionKey = randomBytes(32);
-const organizationId = "acme";
 const publicUrl = new URL("https://hub.example.test");
 
-let database: Awaited<ReturnType<typeof createTestDatabase>>;
-let db: HubDatabase;
-const waiters = new MessageWaiters();
-const servers: Server[] = [];
+const { db, encryptionKey, waiters, listen, serveHub, newFactory, eventNames, requestToken } =
+  setUpTestHub();
 let hub: string;
 
 interface Workspace {
@@ -51,13 +49,6 @@ const codes = new Map<
 >();
 const clientSecrets = new Map<string, string>();
 let issued = 0;
-
-async function listen(app: express.Express) {
-  const server = app.listen(0, "127.0.0.1");
-  servers.push(server);
-  await once(server, "listening");
-  return `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-}
 
 function fakeSlack() {
   return express().post("/oauth.v2.access", express.urlencoded(), (request, response) => {
@@ -91,46 +82,17 @@ function fakeSlack() {
 }
 
 beforeAll(async () => {
-  database = await createTestDatabase();
-  db = connectDatabase(database.url);
-  await migrateDatabase(db);
-  await db.insert(schema.organization).values([
-    { id: organizationId, name: "Acme", slug: "acme", createdAt: new Date() },
-    { id: "other", name: "Other", slug: "other", createdAt: new Date() },
-  ]);
   const slack = await listen(fakeSlack());
-  hub = await listen(
-    express()
-      .use(
-        createSlackRoutes({
-          db,
-          waiters,
-          encryptionKey,
-          publicUrl,
-          // Stands in for the session: the header names the Organization the caller administers.
-          adminOrganization: async (request) => request.get("x-admin-of") ?? null,
-          apiUrl: slack,
-        }),
-      )
-      .use(
-        createFactoryApi({
-          db,
-          waiters,
-          linearTokens: new LinearTokens({ db, encryptionKey }),
-          encryptionKey,
-        }),
-      ),
-  );
-});
-
-afterAll(async () => {
-  waiters.close();
-  for (const server of servers) {
-    server.closeAllConnections();
-    server.close();
-  }
-  await db?.$client.end();
-  await database?.drop();
+  hub = await serveHub({
+    routes: createSlackRoutes({
+      db,
+      waiters,
+      encryptionKey,
+      publicUrl,
+      adminOrganization: adminFromHeader,
+      apiUrl: slack,
+    }),
+  });
 });
 
 interface SlackApp {
@@ -166,29 +128,16 @@ function newWorkspace(): Workspace {
   };
 }
 
-let factoryCount = 0;
-async function newFactory() {
-  factoryCount += 1;
-  return addFactory(db, organizationId, `factory ${factoryCount}`);
-}
+const startInstall = (app: App, admin: string | null = app.organizationId) =>
+  startOAuth(`${hub}${slackInstallPath(app.id)}`, admin);
 
-const cookieOf = (response: Response) =>
-  (response.headers.get("set-cookie") ?? "").split(";")[0] ?? "";
-
-async function startInstall(app: App, admin: string | null = app.organizationId) {
-  return fetch(`${hub}${slackInstallPath(app.id)}`, {
-    redirect: "manual",
-    headers: admin ? { "x-admin-of": admin } : {},
-  });
-}
-
-async function callback(app: App, query: Record<string, string>, cookie: string, admin = true) {
-  const response = await fetch(`${hub}${slackCallbackPath(app.id)}?${new URLSearchParams(query)}`, {
-    redirect: "manual",
-    headers: { cookie, ...(admin ? { "x-admin-of": app.organizationId } : {}) },
-  });
-  return { status: response.status, location: response.headers.get("location") };
-}
+const callback = (app: App, query: Record<string, string>, cookie: string, admin = true) =>
+  finishOAuth(
+    `${hub}${slackCallbackPath(app.id)}`,
+    query,
+    cookie,
+    admin ? app.organizationId : null,
+  );
 
 /** Install an app the way an admin does: start, approve in Slack, come back. */
 async function install(
@@ -197,7 +146,7 @@ async function install(
   options: { appId?: string; expiresIn?: number } = {},
 ) {
   const started = await startInstall(slack.app);
-  const authorize = new URL(started.headers.get("location") ?? "").searchParams;
+  const authorize = authorizeUrl(started).searchParams;
   const state = authorize.get("state") ?? "";
   const code = `code-${crypto.randomUUID()}`;
   codes.set(code, {
@@ -207,7 +156,7 @@ async function install(
     scope: authorize.get("scope") ?? "",
     expiresIn: options.expiresIn,
   });
-  return callback(slack.app, { code, state }, cookieOf(started));
+  return callback(slack.app, { code, state }, stateCookie(started));
 }
 
 const messageEvent = (
@@ -255,23 +204,8 @@ async function deliver(
   });
 }
 
-const eventNames = async (factoryId: string) =>
-  (await readMessages(db, factoryId)).map((message) =>
-    message.kind === "event" ? message.event.name : message.kind,
-  );
-
-async function requestToken(token: string, body: unknown) {
-  const response = await fetch(`${hub}${slackTokenPath}`, {
-    method: "POST",
-    headers: {
-      authorization: `Bearer ${token}`,
-      "user-agent": "jigs/1.2.3",
-      "content-type": "application/json",
-    },
-    body: JSON.stringify(body),
-  });
-  return { status: response.status, body: await response.json() };
-}
+const requestSlackToken = (token: string, body: unknown) =>
+  requestToken(slackTokenPath, token, body);
 
 const installationsOf = (app: App) =>
   db.select().from(schema.installations).where(eq(schema.installations.appId, app.id));
@@ -281,7 +215,7 @@ dbTest("installs an app in a workspace through Slack's OAuth flow", async () => 
   const workspace = newWorkspace();
   const started = await startInstall(slack.app);
   expect(started.status).toBe(303);
-  const authorize = new URL(started.headers.get("location") ?? "");
+  const authorize = authorizeUrl(started);
   expect(`${authorize.origin}${authorize.pathname}`).toBe("https://slack.com/oauth/v2/authorize");
   expect(Object.fromEntries(authorize.searchParams)).toEqual({
     client_id: slack.clientId,
@@ -319,7 +253,7 @@ dbTest("installs an app in a workspace through Slack's OAuth flow", async () => 
   expect(
     await setSlackScopes(db, organizationId, slack.app.id, "chat:write, im:history\nchat:write"),
   ).toEqual({ scopes: ["chat:write", "im:history"] });
-  const asked = new URL((await startInstall(slack.app)).headers.get("location") ?? "");
+  const asked = authorizeUrl(await startInstall(slack.app));
   expect(asked.searchParams.get("scope")).toBe("chat:write,im:history");
   await install(slack, workspace);
   const [reinstalled] = await installationsOf(slack.app);
@@ -342,16 +276,20 @@ dbTest("refuses a callback whose state is not the admin's own", async () => {
   expect((await startInstall(slack.app, "other")).status).toBe(404);
 
   const started = await startInstall(slack.app);
-  const state = new URL(started.headers.get("location") ?? "").searchParams.get("state") ?? "";
+  const state = authorizeUrl(started).searchParams.get("state") ?? "";
   const code = "code-forged";
   codes.set(code, { clientId: slack.clientId, appId: slack.app.externalId, workspace });
   expect((await callback(slack.app, { code, state }, "")).status).toBe(400);
-  expect((await callback(slack.app, { code, state: "guess" }, cookieOf(started))).status).toBe(400);
-  expect((await callback(slack.app, { code, state }, cookieOf(started), false)).status).toBe(404);
+  expect((await callback(slack.app, { code, state: "guess" }, stateCookie(started))).status).toBe(
+    400,
+  );
+  expect((await callback(slack.app, { code, state }, stateCookie(started), false)).status).toBe(
+    404,
+  );
   expect(
-    (await callback(slack.app, { error: "access_denied", state }, cookieOf(started))).status,
+    (await callback(slack.app, { error: "access_denied", state }, stateCookie(started))).status,
   ).toBe(400);
-  expect((await callback(slack.app, { code: "unknown", state }, cookieOf(started))).status).toBe(
+  expect((await callback(slack.app, { code: "unknown", state }, stateCookie(started))).status).toBe(
     502,
   );
   expect(await installationsOf(slack.app)).toEqual([]);
@@ -429,7 +367,7 @@ dbTest("issues the bot token of the factory's one installation", async () => {
   const { factory, token } = await newFactory();
   await setAssignments(db, organizationId, slack.app.id, [factory.id]);
 
-  expect(await requestToken(token, {})).toEqual({
+  expect(await requestSlackToken(token, {})).toEqual({
     status: 200,
     body: {
       token: expect.stringMatching(/^xoxb-/),
@@ -438,7 +376,7 @@ dbTest("issues the bot token of the factory's one installation", async () => {
       team: workspace.id,
     } satisfies SlackTokenResponse,
   });
-  expect((await requestToken("nope", {})).status).toBe(401);
+  expect((await requestSlackToken("nope", {})).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
@@ -452,7 +390,7 @@ dbTest("refuses a token when there is no installation, or more than one", async 
   const [first, second] = [await newApp(), await newApp()];
   const [shared, own] = [newWorkspace(), newWorkspace()];
   const { factory, token } = await newFactory();
-  expect(await requestToken(token, {})).toEqual({
+  expect(await requestSlackToken(token, {})).toEqual({
     status: 404,
     body: { error: "No Slack app assigned to this factory is installed in a workspace." },
   });
@@ -460,7 +398,7 @@ dbTest("refuses a token when there is no installation, or more than one", async 
   await install(second, own);
   await setAssignments(db, organizationId, second.app.id, [factory.id]);
   const names = [`${second.app.name} (${shared.name})`, `${second.app.name} (${own.name})`];
-  expect(await requestToken(token, {})).toEqual({
+  expect(await requestSlackToken(token, {})).toEqual({
     status: 409,
     body: {
       error: `More than one Slack installation is assigned to this factory, so leave one: ${names.sort().join(", ")}.`,
@@ -470,7 +408,7 @@ dbTest("refuses a token when there is no installation, or more than one", async 
   await install(first, shared);
   await setAssignments(db, organizationId, first.app.id, [factory.id]);
   await setAssignments(db, organizationId, second.app.id, []);
-  expect((await requestToken(token, {})).status).toBe(200);
+  expect((await requestSlackToken(token, {})).status).toBe(200);
 });
 
 dbTest("validates a Slack app and adds it once per hub", async () => {

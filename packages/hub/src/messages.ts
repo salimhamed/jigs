@@ -42,11 +42,6 @@ export class MessageWaiters {
     this.#closed = true;
     this.wake([...this.#waiting.keys()]);
   }
-
-  /** How many long polls a factory holds open. */
-  waiting(factoryId: string): number {
-    return this.#waiting.get(factoryId)?.size ?? 0;
-  }
 }
 
 /**

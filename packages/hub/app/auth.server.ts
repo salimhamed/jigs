@@ -24,7 +24,20 @@ export async function getActiveMember(context: AppLoadContext, request: Request)
  * The signed-in member of an Organization. Sends anyone signed out to sign in,
  * and anyone outside an Organization to create one or learn they are not in one.
  */
-export async function requireMember(context: AppLoadContext, request: Request) {
+export function requireMember(context: AppLoadContext, request: Request) {
+  let member = members.get(request);
+  if (!member) {
+    member = findMember(context, request);
+    members.set(request, member);
+  }
+  return member;
+}
+
+// A page's loaders share one request, and the organization layout's loader
+// already looks the member up, so each request looks once.
+const members = new WeakMap<Request, ReturnType<typeof findMember>>();
+
+async function findMember(context: AppLoadContext, request: Request) {
   const { headers } = request;
   const session = await getSession(context, request);
   if (!session) throw redirect("/sign-in");
@@ -36,6 +49,12 @@ export async function requireMember(context: AppLoadContext, request: Request) {
     organizationId: member.organizationId,
     role: member.role as Role,
   };
+}
+
+/** {@link requireMember} for an action only an admin may take: anyone else gets `{ error }` to return. */
+export async function requireAdmin(context: AppLoadContext, request: Request) {
+  const member = await requireMember(context, request);
+  return member.role === "admin" ? member : { error: "Only an admin can do that." };
 }
 
 /** Run a Better Auth call for an action, returning its refusal as `{ error }`. */

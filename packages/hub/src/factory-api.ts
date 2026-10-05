@@ -40,12 +40,10 @@ export function createFactoryApi(options: {
   waiters: MessageWaiters;
   encryptionKey: Buffer;
   linearTokens: LinearTokens;
-  /** GitHub's REST API, replaced in tests. */
-  githubApiUrl?: string;
-  /** PagerDuty's identity service, replaced in tests. */
-  pagerDutyIdentityUrl?: string;
+  /** Providers' APIs, replaced in tests. */
+  apiUrls?: { github?: string; pagerduty?: string };
 }): Router {
-  const { db, waiters, encryptionKey, linearTokens, githubApiUrl, pagerDutyIdentityUrl } = options;
+  const { db, waiters, encryptionKey, linearTokens, apiUrls = {} } = options;
   const router = express.Router();
 
   // The factory the request's token belongs to, or `null` once it has answered 401.
@@ -108,7 +106,7 @@ export function createFactoryApi(options: {
     }
     answerToken(
       response,
-      await issueGitHubToken(db, encryptionKey, factory.id, owner, githubApiUrl),
+      await issueGitHubToken(db, encryptionKey, factory.id, owner, { apiUrl: apiUrls.github }),
     );
   });
 
@@ -136,7 +134,7 @@ export function createFactoryApi(options: {
     if (!factory) return;
     answerToken(
       response,
-      await issuePagerDutyToken(db, encryptionKey, factory.id, pagerDutyIdentityUrl),
+      await issuePagerDutyToken(db, encryptionKey, factory.id, { apiUrl: apiUrls.pagerduty }),
     );
   });
 

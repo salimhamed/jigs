@@ -21,6 +21,7 @@ import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
+import { parseWebhookJson, webhookBody } from "./webhooks.ts";
 
 /** Where GitHub sends every GitHub App's webhooks. */
 export const githubWebhookPath = "/webhooks/github";
@@ -60,7 +61,7 @@ export async function addGitHubApp(
   encryptionKey: Buffer,
   organizationId: string,
   input: GitHubAppInput,
-  apiUrl = defaultApiUrl,
+  { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ app: App } | { error: string }> {
   if (!/^\d+$/.test(input.appId)) return { error: "The App ID is a number." };
   if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the App's URL name." };
@@ -216,62 +217,57 @@ export function createGitHubRoutes(options: {
     return installed.installations.some((row) => row.externalId === String(installationId));
   };
 
-  router.post(
-    githubWebhookPath,
-    // GitHub sends at most 25 MB.
-    express.raw({ type: () => true, limit: "25mb" }),
-    async (request, response) => {
-      const app = await findAppByGitHubId(
-        request.get("x-github-hook-installation-target-id") ?? "",
-      );
-      const body = Buffer.isBuffer(request.body) ? request.body : Buffer.alloc(0);
-      if (
-        !app ||
-        !verifySignature(
-          decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets).webhookSecret,
-          body,
-          request.get("x-hub-signature-256"),
-        )
-      ) {
-        response.status(401).json({ error: "The hub does not know this GitHub App or signature." });
-        return;
-      }
-      const name = request.get("x-github-event") ?? "";
-      if (name === "ping") {
-        response.status(200).end();
-        return;
-      }
-      const payload = JSON.parse(body.toString("utf8")) as {
-        action?: string;
-        installation?: InstallationBody;
-      };
-      const installationId = payload.installation?.id;
-      if (name === "installation" && installationId !== undefined) {
-        if (payload.action === "deleted") {
-          await removeInstallation(db, app.id, String(installationId));
-        } else if (payload.action === "created") {
-          await recordInstallation(db, app.id, {
-            externalId: String(installationId),
-            account: accountName(payload.installation ?? {}),
-          });
-        }
-      } else if (installationId === undefined || !(await knowsInstallation(app, installationId))) {
-        console.warn(
-          `[github] dropped ${name} for ${app.name}: installation ${installationId ?? "(none)"} is not one of its installations`,
-        );
-        response.status(202).end();
-        return;
-      }
-      await fanOutProviderEvent(db, waiters, {
-        organizationId: app.organizationId,
-        appId: app.id,
-        provider: "github",
-        name,
-        payload,
-      });
+  router.post(githubWebhookPath, webhookBody, async (request, response) => {
+    const app = await findAppByGitHubId(request.get("x-github-hook-installation-target-id") ?? "");
+    const body = request.body as Buffer;
+    if (
+      !app ||
+      !verifySignature(
+        decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets).webhookSecret,
+        body,
+        request.get("x-hub-signature-256"),
+      )
+    ) {
+      response.status(401).json({ error: "The hub does not know this GitHub App or signature." });
+      return;
+    }
+    const name = request.get("x-github-event") ?? "";
+    if (name === "ping") {
       response.status(200).end();
-    },
-  );
+      return;
+    }
+    const payload = parseWebhookJson<{ action?: string; installation?: InstallationBody }>(
+      body,
+      response,
+    );
+    if (!payload) return;
+    const installationId = payload.installation?.id;
+    if (name === "installation" && installationId !== undefined) {
+      if (payload.action === "deleted") {
+        await removeInstallation(db, app.id, String(installationId));
+      } else if (payload.action === "created") {
+        await recordInstallation(db, app.id, {
+          externalId: String(installationId),
+          account: accountName(payload.installation ?? {}),
+        });
+      }
+    } else if (installationId === undefined || !(await knowsInstallation(app, installationId))) {
+      console.warn(
+        `[github] dropped ${name} for ${app.name}: installation ${installationId ?? "(none)"} is not one of its installations`,
+      );
+      // 202, unlike Slack's 200: still a success, but the delivery log shows nothing was kept.
+      response.status(202).end();
+      return;
+    }
+    await fanOutProviderEvent(db, waiters, {
+      organizationId: app.organizationId,
+      appId: app.id,
+      provider: "github",
+      name,
+      payload,
+    });
+    response.status(200).end();
+  });
 
   // GitHub's call proves the installation is this App's, and an App is one Organization's.
   router.get(githubSetupPath(":appId"), async (request, response) => {
@@ -312,7 +308,7 @@ export async function issueGitHubToken(
   encryptionKey: Buffer,
   factoryId: string,
   owner: string,
-  apiUrl = defaultApiUrl,
+  { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ token: GitHubTokenResponse } | { status: 404 | 409; error: string }> {
   const found = await findAssignedInstallation(
     db,

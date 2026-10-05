@@ -4,7 +4,7 @@ import { isUuid, removeApp, setAssignments } from "../../src/apps.ts";
 import { setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
 import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
-import { requireMember } from "../auth.server.ts";
+import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { button, input, quietButton, table } from "../components/ui.ts";
@@ -20,8 +20,9 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request, params }: Route.ActionArgs) {
-  const { organizationId, role } = await requireMember(context, request);
-  if (role !== "admin") return { error: "Only an admin can change apps." };
+  const admin = await requireAdmin(context, request);
+  if ("error" in admin) return admin;
+  const { organizationId } = admin;
   if (!isUuid(params.id)) throw notFound();
   const form = await request.formData();
   switch (form.get("intent")) {
