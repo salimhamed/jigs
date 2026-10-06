@@ -232,7 +232,7 @@ several.
 _Avoid_: integration, connection or bot (for the general term)
 
 **Sign-in app**: The GitHub OAuth App people sign in to a hub's web pages
-with. One per hub, set in the hub's environment; it is not an app, belongs to
+with. One per hub, set in the hub's environment; it is not an **App** in the sense above, belongs to
 no Organization, and no factory uses it.
 _Avoid_: OAuth app, login app, GitHub app (for this one)
 

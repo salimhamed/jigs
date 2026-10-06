@@ -33,8 +33,7 @@ your own account's, choose **New GitHub App**. The form's sections, in order:
   authorization tokens** doesn't matter.
 - **Post installation**: leave **Setup URL (optional)** empty for now; you set
   it in step 3, once the hub shows it. Turn on **Redirect on update**: it is
-  off by default and easy to miss. If GitHub won't save it without a Setup
-  URL, leave it off now and turn it on in step 3.
+  off by default and easy to miss.
 - **Webhook**: keep **Active** on. Set the **Webhook URL** to your hub's
   address followed by `/webhooks/github`, such as
   `https://hub.example.com/webhooks/github`. Set **Secret** to a long random
