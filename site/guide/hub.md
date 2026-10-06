@@ -201,8 +201,9 @@ one at once. **Remove** deletes the factory and every event waiting for it.
 
 The factories list shows when each factory last reached the hub, its jigs
 version and how many events it has not confirmed. A factory's own page lists
-its assigned apps with their installations' names, and its event log: every provider event the hub kept for
-it, with when it arrived and whether the factory has confirmed it.
+its assigned apps with their installations' names, and its event log: every
+provider event the hub kept for it, with when it arrived and whether the
+factory has confirmed it.
 
 ## Add apps and assign them {#apps}
 

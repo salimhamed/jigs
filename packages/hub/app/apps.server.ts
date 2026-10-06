@@ -177,35 +177,3 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       throw new Error(`Unknown provider ${app.provider satisfies never}`);
   }
 }
-
-/** The apps assigned to a factory, each with its installations. */
-export async function assignedApps(context: AppLoadContext, factoryId: string) {
-  const rows = await context.db
-    .select({
-      id: apps.id,
-      provider: apps.provider,
-      name: apps.name,
-      account: installations.account,
-      installationName: installations.installationName,
-    })
-    .from(assignments)
-    .innerJoin(apps, eq(apps.id, assignments.appId))
-    .leftJoin(installations, eq(installations.appId, apps.id))
-    .where(eq(assignments.factoryId, factoryId))
-    .orderBy(asc(apps.provider), asc(apps.name), asc(installations.account));
-  const assigned = new Map<
-    string,
-    {
-      id: string;
-      provider: (typeof rows)[number]["provider"];
-      name: string;
-      installations: { account: string; installationName: string | null }[];
-    }
-  >();
-  for (const { id, provider, name, account, installationName } of rows) {
-    const app = assigned.get(id) ?? { id, provider, name, installations: [] };
-    assigned.set(id, app);
-    if (account !== null) app.installations.push({ account, installationName });
-  }
-  return [...assigned.values()];
-}

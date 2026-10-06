@@ -1,5 +1,5 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
-import { and, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 
@@ -63,6 +63,38 @@ export async function setAssignments(
     }
     return true;
   });
+}
+
+/** The apps assigned to a factory, each with where it is installed. */
+export async function assignedApps(db: HubDatabase, factoryId: string) {
+  const rows = await db
+    .select({
+      id: apps.id,
+      provider: apps.provider,
+      name: apps.name,
+      account: installations.account,
+      installationName: installations.installationName,
+    })
+    .from(assignments)
+    .innerJoin(apps, eq(apps.id, assignments.appId))
+    .leftJoin(installations, eq(installations.appId, apps.id))
+    .where(eq(assignments.factoryId, factoryId))
+    .orderBy(asc(apps.provider), asc(apps.name), asc(installations.account));
+  const assigned = new Map<
+    string,
+    {
+      id: string;
+      provider: Provider;
+      name: string;
+      installations: { account: string; installationName: string | null }[];
+    }
+  >();
+  for (const { id, provider, name, account, installationName } of rows) {
+    const app = assigned.get(id) ?? { id, provider, name, installations: [] };
+    assigned.set(id, app);
+    if (account !== null) app.installations.push({ account, installationName });
+  }
+  return [...assigned.values()];
 }
 
 /** An installation as the hub records it. `secrets` are already encrypted. */

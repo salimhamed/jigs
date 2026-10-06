@@ -13,10 +13,11 @@ import {
   pagerDutyTokenPath,
   slackTokenPath,
 } from "@jigs-ai/hub-protocol";
-import { asc, eq } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import express, { type Request, type Response, type Router } from "express";
+import { assignedApps } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps, assignments, installations, organization } from "./db/schema.ts";
+import { organization } from "./db/schema.ts";
 import { authenticateFactory, type Factory } from "./factories.ts";
 import { issueGitHubToken } from "./github.ts";
 import type { LinearTokens } from "./linear.ts";
@@ -146,33 +147,9 @@ async function readStatus(db: HubDatabase, factory: Factory): Promise<FactorySta
     columns: { name: true },
     where: eq(organization.id, factory.organizationId),
   });
-  const rows = await db
-    .select({
-      id: apps.id,
-      provider: apps.provider,
-      name: apps.name,
-      account: installations.account,
-      installationName: installations.installationName,
-    })
-    .from(assignments)
-    .innerJoin(apps, eq(apps.id, assignments.appId))
-    .leftJoin(installations, eq(installations.appId, apps.id))
-    .where(eq(assignments.factoryId, factory.id))
-    .orderBy(asc(apps.name), asc(installations.account));
-  const assigned = new Map<string, FactoryStatus["apps"][number]>();
-  for (const row of rows) {
-    let app = assigned.get(row.id);
-    if (!app) {
-      app = { provider: row.provider, name: row.name, installations: [] };
-      assigned.set(row.id, app);
-    }
-    if (row.account !== null) {
-      app.installations.push({ account: row.account, installationName: row.installationName });
-    }
-  }
   return {
     factory: { name: factory.name },
     organization: { name: owner?.name ?? "" },
-    apps: [...assigned.values()],
+    apps: (await assignedApps(db, factory.id)).map(({ id: _, ...app }) => app),
   };
 }

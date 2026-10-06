@@ -1,7 +1,6 @@
 import { Check } from "lucide-react";
 import { data, Link } from "react-router";
-import { isUuid } from "../../src/apps.ts";
-import { assignedApps } from "../apps.server.ts";
+import { assignedApps, isUuid } from "../../src/apps.ts";
 import { requireMember } from "../auth.server.ts";
 import { Time } from "../components/time.tsx";
 import { table } from "../components/ui.ts";
@@ -20,7 +19,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
       )
     : null;
   if (!log) throw data(null, { status: 404, statusText: "Not Found" });
-  return { ...log, apps: await assignedApps(context, params.id), paged: before !== null };
+  return { ...log, apps: await assignedApps(context.db, params.id), paged: before !== null };
 }
 
 export default function Factory({ loaderData }: Route.ComponentProps) {
