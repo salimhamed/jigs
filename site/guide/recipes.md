@@ -31,13 +31,17 @@ workflow: by default, jigs merges an approved pull request once CI is green.
 
 #### Requires
 
-- A Linear app assigned to the factory in the [hub](/guide/configuration#linear-app).
-- A GitHub binding with the factory's GitHub App [installed on its owner](/guide/configuration#github-app).
+- A Linear app assigned to the factory in the [hub](/guide/configuration#linear-app),
+  with a named installation in the ticket's workspace.
+- A GitHub binding whose `installationName` names the factory's GitHub App
+  [installed on its owner](/guide/configuration#github-app).
 - The configured builder and reviewer harnesses, installed and authenticated.
 - The [GitHub CLI](https://cli.github.com), `gh`.
 
 The builder acts on GitHub as the factory's App, the same bot jigs posts as
-(`github: true`, see [GitHub access for agents](/guide/models-and-harnesses#github-access)).
+through the binding's installation, which the workflow adds to the builder's
+harness as `github: { installationName: worktree.installationName }` (see
+[GitHub access for agents](/guide/models-and-harnesses#github-access)).
 It reads discussions, posts replies and pushes fixes with `gh` and `git`, with
 no token of yours. Its replies show as the bot, which is how the recipe tells
 them apart from yours. No Jev model is required.
@@ -45,12 +49,13 @@ them apart from yours. No Jev model is required.
 #### Run
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
 ```
 
 | Input | Default | What it chooses |
 | --- | --- | --- |
 | `ticket` | | The Linear ticket, by identifier or ID. |
+| `linearInstallation` | | The [installation name](/guide/hub#installation-names) of the Linear workspace the ticket is in. |
 | `binding` | | The repository to change. |
 | `builder` | `builder` | The agent, by name, that builds the change. |
 | `reviewer` | `reviewer` | The agent, by name, that reviews the requirements and the change. |

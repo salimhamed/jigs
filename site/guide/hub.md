@@ -223,17 +223,10 @@ use it and save. That is an **assignment**: a factory receives events from,
 and gets tokens for, only the apps assigned to it. An app can be assigned to
 several factories, and every one of them receives its events.
 
-For now, a factory works with:
-
-- for each GitHub repository owner it binds, exactly one installation among
-  its GitHub Apps;
-- one Linear app, connected to one workspace;
-- one Slack app, installed in one workspace;
-- one PagerDuty app, in one account.
-
-Assigning a factory a second app of one of these providers, or connecting its
-Linear or Slack app to a second workspace, makes the hub refuse the factory's
-tokens for that provider until you remove the extra one.
+A factory may be assigned several installations of one provider, including
+several apps in one workspace or GitHub organization. It names the
+[installation](#installation-names) it means everywhere: in each binding, each
+trigger, each step and each agent. jigs never picks one for it.
 
 ### Name each installation {#installation-names}
 
@@ -250,6 +243,56 @@ The app's page shows it as **Needs a name**; enter one under **Installation
 name** and save. You can rename one later, but every factory that uses the
 old name then needs the new one.
 
-`pnpm exec jigs doctor`, in the factory, checks that it reaches the hub and
-that the hub assigned it what its configuration uses, and names what to fix
-in the hub when it did not.
+An unnamed installation gives no factory a token, and its events start and
+wake no runs. Once you name it, the events it received before then that a
+factory has not yet collected carry the new name.
+
+### Example: one Slack app per teammate {#example-per-person}
+
+Alice and Bob each run their own factory against the same Slack workspace,
+and each wants replies from their own bot. Each creates a
+[Slack app](/guide/hub-slack), adds it to the hub and installs it in the
+workspace. Alice names her installation `slack-alice` and assigns her app only
+to her factory; Bob does the same with `slack-bob`.
+
+Alice's factory uses that name in its triggers:
+
+```ts
+import { slack } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "answer-questions": {
+    workflow: "answer",
+    source: slack.mentions({ installationName: "slack-alice", channels: ["C0123ABCD"] }),
+  },
+};
+```
+
+and in its steps:
+
+```ts
+import { postSlackMessage } from "#jigs/steps";
+
+export async function reply(channel: string, threadTs: string, text: string) {
+  await postSlackMessage({ installationName: "slack-alice", channel, threadTs, text });
+}
+```
+
+Both bots see a message in a channel they share, but a trigger takes only
+events from its own installation, so a message mentioning Alice's bot starts
+one run, in Alice's factory.
+
+### Check the factory {#doctor}
+
+`pnpm exec jigs doctor`, in the factory, checks that it reaches the hub, then:
+
+- that each installation name the factory uses, in its bindings, triggers and
+  agents, is named and assigned to it;
+- that each binding's installation reaches its repository;
+- that every named installation assigned to it works: each Slack one granted
+  the scopes jigs uses, each PagerDuty one can read incidents, and each Linear
+  one has your [`linear.operator`](/guide/configuration#linear-operator) as a
+  user.
+
+It names what to fix in the hub when one fails.

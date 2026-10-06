@@ -47,7 +47,8 @@ for. It starts with every scope jigs uses:
 Every factory's Slack app needs these, so the hub refuses a list that leaves
 one out. Add any other scope a factory's own Slack calls need, such as
 `pins:write`, and save. Install the app again in each workspace after changing
-them.
+them. A call that needs a scope the workspace did not grant fails with
+Slack's `missing_scope` error.
 
 ## 5. Install the app
 
@@ -63,8 +64,8 @@ Invite the bot to each channel factories should hear, public or private, with
 ## 6. Assign it to factories
 
 Under **Factories** on the app's page, check each factory that should use
-this app, and save. For now, a factory takes one Slack app installed in one
-workspace. A second assigned Slack app, or a second workspace, makes the hub
-refuse the factory's Slack token.
+this app, and save. A factory may be assigned several Slack apps, even in one
+workspace, and names the installation it uses in each trigger and step; see
+[one Slack app per teammate](/guide/hub#example-per-person).
 
 To use Slack from a factory, see [Slack](/guide/slack).

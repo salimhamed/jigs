@@ -8,21 +8,17 @@ app to the factory and shows how workflows use it.
 
 ## 1. Set up the app in the hub
 
-Create the Slack app, install it in your workspace, invite its bot to the
-channels the factory should hear, and assign it to the factory: see
-[Slack app](/guide/hub-slack). The bot only sees channels it is a member of,
+Create the Slack app, install it in your workspace, name that installation,
+such as `slack-acme`, invite its bot to the channels the factory should hear,
+and assign the app to the factory: see [Slack app](/guide/hub-slack). The bot only sees channels it is a member of,
 and jigs never reads direct messages.
 
-## 2. Configure the factory
+## 2. Use it from the factory
 
-Add a `slack` section to `jigs.config.ts`:
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-slack: {},
-```
-
-The hub keeps the events that arrive while the service is down.
+Nothing about the app goes in `jigs.config.ts`. Every Slack trigger, step and
+routine takes the `installationName` it acts through, so a factory assigned
+several Slack apps, even in one workspace, always says which bot it means. The
+hub keeps the events that arrive while the service is down.
 
 A workflow that uses Slack declares it:
 
@@ -42,11 +38,12 @@ An event trigger starts one run per message. Pick one of two sources:
 
 | Source | Starts a run for |
 | --- | --- |
-| `slack.messages({ channels })` | Every top-level message in the channels. |
-| `slack.mentions({ channels })` | Only top-level messages that mention the bot, such as `@<name>'s jigs`. |
+| `slack.messages({ installationName, channels })` | Every top-level message in the channels. |
+| `slack.mentions({ installationName, channels })` | Only top-level messages that mention the bot, such as `@<name>'s jigs`. |
 
 List channels by ID, such as `C0123ABCD`, not by name. Slack shows a channel's
-ID at the bottom of its details. The bot must be a member of each one.
+ID at the bottom of its details. The installation's bot must be a member of
+each one.
 
 ```ts
 // jigs.config.ts
@@ -56,18 +53,18 @@ export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { dashboardPort: 3456 },
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
-  slack: {},
   triggers: {
     "answer-questions": {
       workflow: "answer",
-      source: slack.mentions({ channels: ["C0123ABCD"] }),
+      source: slack.mentions({ installationName: "slack-acme", channels: ["C0123ABCD"] }),
     },
   },
 });
 ```
 
-Each run gets the inputs `{ channel, ts }`, the message's channel and
-timestamp, merged over the trigger's own `inputs`. They are a reference: the
+Each run gets the inputs `{ installationName, channel, ts }`: the trigger's
+installation and the message's channel and timestamp, merged over the
+trigger's own `inputs`. They are a reference: the
 run reads the message itself. `jigs status` shows them as
 `slack <channel> <ts>` from the moment the run starts, so you can tell which
 post a run is for. The workflow's inputs must accept them:
@@ -77,7 +74,7 @@ post a run is for. The workflow's inputs must accept them:
 import { defineWorkflow, type WorkflowInputs } from "@jigs-ai/jigs";
 import { z } from "zod";
 
-const inputs = z.object({ channel: z.string(), ts: z.string() });
+const inputs = z.object({ installationName: z.string(), channel: z.string(), ts: z.string() });
 
 export async function answer(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
@@ -92,10 +89,16 @@ export default defineWorkflow({
 ```
 
 Every new top-level post counts: from a person, from another bot or app (such
-as a Workflow Builder announcement), with or without files. The factory's own
-posts never start a run, and neither do thread replies (even one also sent to
+as a Workflow Builder announcement), with or without files. The installation's
+own bot's posts never start a run, and neither do thread replies (even one also sent to
 the channel), edits, deletes, joins, topic changes or other channel events.
 Direct messages are never read.
+
+A trigger takes only events from its own installation. When two bots share a
+channel, each sees the same message, but only the trigger on the installation
+the event came through starts a run. An installation with no name on the hub
+starts no runs; once named, the events it received meanwhile that the factory
+has not yet collected start them.
 
 Each message starts at most one run, however often Slack sends it again. A new trigger starts
 with messages posted after the service first runs it. After the service was
@@ -106,17 +109,17 @@ that.
 
 ## Read a message
 
-`fetchSlackMessage({ channel, ts })` reads a message, its permalink and its
+`fetchSlackMessage({ installationName, channel, ts })` reads a message, its permalink and its
 thread's replies, oldest first. Each post names its author, with their display
-name, their email, whether they are a bot, and `isOwnBot` for the factory's own
-bot. `ts` must be a top-level message; a reply's `ts` reads as gone. A deleted
+name, their email, whether they are a bot, and `isOwnBot` for the
+installation's own bot. `ts` must be a top-level message; a reply's `ts` reads as gone. A deleted
 message reads as `{ gone: true }`, so the workflow can end quietly:
 
 ```ts
 import { fetchSlackMessage } from "#jigs/steps";
 
-export async function readMessage(channel: string, ts: string) {
-  const message = await fetchSlackMessage({ channel, ts });
+export async function readMessage(installationName: string, channel: string, ts: string) {
+  const message = await fetchSlackMessage({ installationName, channel, ts });
   if (message.gone) return null;
   return `${message.author.name}: ${message.text}`;
 }
@@ -127,8 +130,8 @@ saw before. Read again to see what changed.
 
 ## Post a message
 
-`postSlackMessage({ channel, text, threadTs })` posts plain Slack `mrkdwn`
-text as the factory's bot. With `threadTs` it replies in the thread under that
+`postSlackMessage({ installationName, channel, text, threadTs })` posts plain
+Slack `mrkdwn` text as the installation's bot. With `threadTs` it replies in the thread under that
 message; without it, it posts a new message in the channel. It returns the new
 message's `ts`.
 
@@ -137,7 +140,8 @@ risk posting twice.
 
 ## Wait for a reply
 
-`waitForSlackReply({ channel, threadTs, lastRead })` parks the run until someone
+`waitForSlackReply({ installationName, channel, threadTs, lastRead })` parks
+the run until someone
 replies in the thread under `threadTs`, and ends `replied` with every reply
 posted after `lastRead`, oldest first. `threadTs` must be the thread's top-level
 message, never a reply.
@@ -157,33 +161,44 @@ message was deleted, before or during the wait:
 import { waitForSlackReply } from "#jigs/routines";
 import { fetchSlackMessage, postSlackMessage } from "#jigs/steps";
 
-export async function askInThread(channel: string, ts: string, question: string) {
-  const thread = await fetchSlackMessage({ channel, ts });
+export async function askInThread(
+  installationName: string,
+  channel: string,
+  ts: string,
+  question: string,
+) {
+  const thread = await fetchSlackMessage({ installationName, channel, ts });
   if (thread.gone) return "the message was deleted";
   const lastRead = thread.replies.at(-1)?.ts ?? ts;
-  await postSlackMessage({ channel, threadTs: ts, text: question });
+  await postSlackMessage({ installationName, channel, threadTs: ts, text: question });
   const until = new Date(Date.now() + 24 * 60 * 60 * 1000).toISOString();
-  const result = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+  const result = await waitForSlackReply({
+    installationName,
+    channel,
+    threadTs: ts,
+    lastRead,
+    until,
+  });
   if (result.outcome === "timed-out") return "no reply within a day";
   if (result.outcome === "gone") return "the message was deleted";
   return result.replies.map((reply) => `${reply.author.name}: ${reply.text}`).join("\n");
 }
 ```
 
-Any person's reply counts. Replies from bots, including the factory's own, never
-do. Without `until`, the wait has no time limit: it ends with a reply, or when
+Any person's reply counts. Replies from bots, including the installation's own,
+never do. Without `until`, the wait has no time limit: it ends with a reply, or when
 you cancel the run with `jigs cancel`. With `until`, an ISO 8601 timestamp, it
 ends `timed-out` once that time passes with no reply. The thread is always
 read once first, so a reply already there still wins when `until` is in the
 past. A reply heard through the hub wakes the run within seconds, and
 `jigs poke` re-reads the thread at once. Only one run can wait on a thread at a
-time.
+time, per installation.
 
 ## Call other Slack methods
 
-`callSlack(method, params)` calls any
-[Slack Web API method](https://api.slack.com/methods) as the factory's bot and
-returns Slack's response. Use it to react to a message, update or pin one, or
+`callSlack(method, params, { installationName })` calls any
+[Slack Web API method](https://api.slack.com/methods) as the installation's bot
+and returns Slack's response. Use it to react to a message, update or pin one, or
 anything else jigs has no step for. Call it from your own `"use step"`
 function. Arguments that are not strings, such as `blocks`, are sent as JSON.
 
@@ -196,10 +211,15 @@ as success. Here a deleted message, `message_not_found`, is tolerated too:
 // workflows/deploys/steps.ts
 import { callSlack, SlackApiError } from "@jigs-ai/jigs/steps/slack";
 
-export async function addReaction(channel: string, timestamp: string, name: string) {
+export async function addReaction(
+  installationName: string,
+  channel: string,
+  timestamp: string,
+  name: string,
+) {
   "use step";
   try {
-    await callSlack("reactions.add", { channel, timestamp, name });
+    await callSlack("reactions.add", { channel, timestamp, name }, { installationName });
   } catch (error) {
     const tolerated = ["already_reacted", "message_not_found"];
     if (!(error instanceof SlackApiError && tolerated.includes(error.code))) throw error;
@@ -207,16 +227,13 @@ export async function addReaction(channel: string, timestamp: string, name: stri
 }
 ```
 
-Workflow code calls it like any step: `await addReaction(channel, ts, "eyes")`.
+Workflow code calls it like any step:
+`await addReaction(installationName, channel, ts, "eyes")`.
 
-A method may need a bot scope jigs does not use, such as `reactions:write` for
-`reactions.add`. Add it to the app's [bot scopes](/guide/hub-slack#bot-scopes)
-in the hub, install the app again, and list it in `slack.scopes` so `jigs doctor` checks the bot holds it:
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-slack: { scopes: ["reactions:write"] },
-```
+A method may need a bot scope jigs does not use, such as `pins:write` for
+`pins.add`. Add it to the app's [bot scopes](/guide/hub-slack#bot-scopes) in
+the hub and install the app again. Until then, the call fails with a
+`SlackApiError` whose `code` is `missing_scope`.
 
 ## Example: answer questions in a channel
 
@@ -232,14 +249,14 @@ import { z } from "zod";
 import { askJev, runAgent, waitForSlackReply } from "#jigs/routines";
 import { fetchSlackMessage, postSlackMessage, provisionWorktree } from "#jigs/steps";
 
-const inputs = z.object({ channel: z.string(), ts: z.string() });
+const inputs = z.object({ installationName: z.string(), channel: z.string(), ts: z.string() });
 const agents = { researcher: harnesses.claude({ model: "sonnet" }) };
 const decisionModel = models.openrouter("typesafe/jev-1.13");
 
 export async function answer(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const { channel, ts } = input;
-  const message = await fetchSlackMessage({ channel, ts });
+  const { installationName, channel, ts } = input;
+  const message = await fetchSlackMessage({ installationName, channel, ts });
   if (message.gone) return { answered: false };
 
   const { answers } = await askJev({
@@ -256,12 +273,19 @@ export async function answer(input: WorkflowInputs<typeof inputs>) {
   if (answers.clear.probability < 0.5) {
     const lastRead = message.replies.at(-1)?.ts ?? ts;
     await postSlackMessage({
+      installationName,
       channel,
       threadTs: ts,
       text: "Which part of the codebase do you mean?",
     });
     const until = new Date(Date.now() + 60 * 60 * 1000).toISOString();
-    const result = await waitForSlackReply({ channel, threadTs: ts, lastRead, until });
+    const result = await waitForSlackReply({
+      installationName,
+      channel,
+      threadTs: ts,
+      lastRead,
+      until,
+    });
     if (result.outcome !== "replied") return { answered: false };
     for (const reply of result.replies) {
       question += `\n\n${reply.author.name} added: ${reply.text}`;
@@ -274,7 +298,7 @@ export async function answer(input: WorkflowInputs<typeof inputs>) {
     cwd: worktree.path,
     prompt: `Answer this question about the code. Do not change files.\n\n${question}`,
   });
-  await postSlackMessage({ channel, threadTs: ts, text: research.text });
+  await postSlackMessage({ installationName, channel, threadTs: ts, text: research.text });
   return { answered: true };
 }
 
@@ -292,11 +316,10 @@ Register it with the `slack.mentions` trigger from
 
 ## Checks
 
-`jigs doctor`, and `jigs up`, check that the hub has assigned the factory a
-Slack app, that it hands out the app's bot token, and that the workspace
-granted every scope jigs uses, plus any listed in `slack.scopes`. Each failure
+`jigs doctor`, and `jigs up`, check that each Slack installation the factory's
+triggers name is named and assigned to it in the hub, and that every named
+Slack installation assigned to it granted every scope jigs uses. Each failure
 names what to fix in the hub.
 
-Before every run of a workflow that requires `slack`, preflight checks the bot
-token and the same scopes. If the bot lacks one, including one listed in
-`slack.scopes`, the run stops before it starts.
+Before every run of a workflow that requires `slack`, preflight runs the same
+checks. If a bot lacks a scope jigs uses, the run stops before it starts.
