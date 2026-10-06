@@ -273,13 +273,14 @@ function LinearApp({
         <h2 className="text-lg font-semibold">In Linear</h2>
         <p className="text-sm">In the app's settings in Linear, set:</p>
         <ul className="space-y-1 text-sm">
-          <Setting label="Callback URL" value={app.callbackUrl} />
+          <Setting label="Redirect URI" value={app.callbackUrl} />
           <Setting label="Webhook URL" value={app.webhookUrl} />
         </ul>
         <p className="text-sm">
-          Turn on <strong>Webhooks</strong> and choose <strong>Agent session events</strong> and{" "}
-          <strong>Comments</strong>. Leave the app private to your workspace unless other workspaces
-          should connect to it.
+          Turn on <strong>Webhooks</strong>, tick <strong>Comments</strong> under Data change events
+          and <strong>Agent session events</strong> under App events, and leave every other event
+          off. Leave <strong>Client credentials</strong> off, and <strong>Public</strong> off unless
+          other workspaces should connect to the app.
         </p>
       </section>
 

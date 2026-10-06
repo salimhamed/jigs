@@ -22,7 +22,7 @@ export const linearWebhookPath = (appId: string) => `/webhooks/linear/${appId}`;
 /** Where an admin starts connecting a Linear workspace to an app. */
 export const linearConnectPath = (appId: string) => `/oauth/linear/${appId}/connect`;
 
-/** Where Linear returns after a workspace admin approves an app, its "Callback URL". */
+/** Where Linear returns after a workspace admin approves an app, one of its "Redirect URIs". */
 export const linearCallbackPath = (appId: string) => `/oauth/linear/${appId}/callback`;
 
 /** The scopes every workspace grants: the factory reads and writes, and people mention and delegate to the app. */
