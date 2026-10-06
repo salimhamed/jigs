@@ -190,21 +190,23 @@ function GitHubApp({
           <Setting label="Setup URL" value={app.setupUrl} />
         </ul>
         <p className="text-sm">
-          Keep the webhook <strong>Active</strong>, turn on <strong>Redirect on update</strong> and
-          leave <strong>Request user authorization (OAuth) during installation</strong> off.
+          Keep the webhook <strong>Active</strong> and <strong>SSL verification</strong> enabled,
+          turn on <strong>Redirect on update</strong>, leave the <strong>Callback URL</strong> empty
+          and leave <strong>Request user authorization (OAuth) during installation</strong> off.
         </p>
         <p className="text-sm">
           Under <strong>Repository permissions</strong>, grant <strong>Contents</strong>,{" "}
           <strong>Pull requests</strong> and <strong>Issues</strong> read and write, and{" "}
           <strong>Metadata</strong>, <strong>Checks</strong> and <strong>Commit statuses</strong>{" "}
           read. Factories push, open, comment on and merge pull requests, create their labels, and
-          read CI with them.
+          read CI with them. Leave every other permission at <strong>No access</strong>.
         </p>
         <p className="text-sm">
           Under <strong>Subscribe to events</strong>, choose <strong>Pull request</strong>,{" "}
           <strong>Pull request review</strong>, <strong>Pull request review comment</strong>,{" "}
           <strong>Issue comment</strong>, <strong>Check suite</strong> and <strong>Status</strong>.
-          These wake the factory runs waiting on a pull request.
+          These wake the factory runs waiting on a pull request. <strong>Status</strong> is easy to
+          miss in the long list.
         </p>
         <p className="text-sm">
           Under <strong>Where can this GitHub App be installed?</strong> choose{" "}

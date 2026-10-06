@@ -20,8 +20,8 @@ beforeAll(async () => {
     publicUrl: new URL("http://hub.test"),
     databaseUrl: database.url,
     encryptionKey: randomBytes(32),
-    githubClientId: "client",
-    githubClientSecret: "secret",
+    signInGithubClientId: "client",
+    signInGithubClientSecret: "secret",
     adminEmail: "Admin@example.com",
     retentionDays: 7,
   };

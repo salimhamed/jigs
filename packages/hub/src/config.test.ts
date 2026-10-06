@@ -7,8 +7,8 @@ const env = {
   HUB_PUBLIC_URL: "https://hub.example.com",
   HUB_DATABASE_URL: "postgres://hub@localhost/hub",
   HUB_ENCRYPTION_KEY: key,
-  HUB_GITHUB_CLIENT_ID: "Iv1.abc",
-  HUB_GITHUB_CLIENT_SECRET: "github secret",
+  HUB_SIGN_IN_GITHUB_CLIENT_ID: "Iv1.abc",
+  HUB_SIGN_IN_GITHUB_CLIENT_SECRET: "github secret",
   HUB_ADMIN_EMAIL: "admin@example.com",
 };
 
@@ -19,8 +19,8 @@ test("reads the hub's environment", () => {
     publicUrl: new URL("https://hub.example.com"),
     databaseUrl: "postgres://hub@localhost/hub",
     encryptionKey: Buffer.from(key, "base64"),
-    githubClientId: "Iv1.abc",
-    githubClientSecret: "github secret",
+    signInGithubClientId: "Iv1.abc",
+    signInGithubClientSecret: "github secret",
     adminEmail: "admin@example.com",
     retentionDays: 3,
   });
@@ -34,8 +34,8 @@ test("names every missing or malformed value at once", () => {
       "  - HUB_PUBLIC_URL is not set",
       "  - HUB_DATABASE_URL is not set",
       "  - HUB_ENCRYPTION_KEY is not set",
-      "  - HUB_GITHUB_CLIENT_ID is not set",
-      "  - HUB_GITHUB_CLIENT_SECRET is not set",
+      "  - HUB_SIGN_IN_GITHUB_CLIENT_ID is not set",
+      "  - HUB_SIGN_IN_GITHUB_CLIENT_SECRET is not set",
       "  - HUB_ADMIN_EMAIL is not set",
     ].join("\n"),
   );
@@ -61,5 +61,19 @@ test("names every missing or malformed value at once", () => {
 test("serves the hub at the root of its public URL", () => {
   expect(() => readConfig({ ...env, HUB_PUBLIC_URL: "https://example.com/hub" })).toThrow(
     "HUB_PUBLIC_URL must be an origin with no path, not https://example.com/hub",
+  );
+});
+
+test("says what the sign-in app needs when its credentials are missing", () => {
+  const { HUB_SIGN_IN_GITHUB_CLIENT_ID: _, ...withoutSignIn } = env;
+  expect(() => readConfig(withoutSignIn)).toThrow(
+    [
+      "The hub cannot start:",
+      "  - HUB_SIGN_IN_GITHUB_CLIENT_ID is not set",
+      "",
+      "Create the sign-in app on GitHub under Developer settings → OAuth Apps, with:",
+      "  Homepage URL: https://hub.example.com",
+      "  Redirect URI: https://hub.example.com/api/auth/callback/github",
+    ].join("\n"),
   );
 });
