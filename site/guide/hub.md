@@ -42,7 +42,7 @@ to start with a message naming every missing or bad value.
 
 | Variable | Default | Meaning |
 | --- | --- | --- |
-| `HUB_PUBLIC_URL` | required | The one address people, providers and factories reach the hub at. It must be a bare origin, such as `https://hub.example.com`, with no path. |
+| `HUB_PUBLIC_URL` | required | The one address people, providers and factories reach the hub at. It must be a bare origin, such as `https://hub.example.com`, with no path. Open the web app at this address: it refuses forms sent from any other. |
 | `HUB_DATABASE_URL` | required | The Postgres connection URL of the hub's database. |
 | `HUB_ENCRYPTION_KEY` | required | 32 random bytes in base64, from `openssl rand -base64 32`. Every secret the hub stores is encrypted with it, and sign-in sessions are signed with a key made from it. |
 | `HUB_GITHUB_CLIENT_ID` | required | The client ID of the GitHub OAuth app people sign in with. |

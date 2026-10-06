@@ -68,6 +68,13 @@ dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async
   const asset = /href="(\/assets\/[^"]+\.js)"/.exec(html)?.[1];
   expect((await fetch(`${url}${asset}`)).status).toBe(200);
 
+  const submitSignIn = (origin: string) =>
+    fetch(`${url}/sign-in`, { method: "POST", headers: { origin }, redirect: "manual" });
+  const fromHub = await submitSignIn("https://hub.example.com");
+  expect(fromHub.status).toBe(302);
+  expect(fromHub.headers.get("location")).toMatch(/^https:\/\/github\.com\/login\/oauth/);
+  expect((await submitSignIn("https://elsewhere.example.com")).status).toBe(400);
+
   expect((await fetch(`${url}/missing`)).status).toBe(404);
   expect((await fetch(`${url}/api/auth/ok`)).status).toBe(200);
 
