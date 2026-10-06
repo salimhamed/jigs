@@ -17,8 +17,23 @@ export function createHubApp(
   app.get("/health", (_request, response) => {
     response.json({ status: "ok" });
   });
-  app.all("/api/auth/*splat", toNodeHandler(auth));
+  app.use(authApp(auth));
   for (const router of routers) app.use(router);
   app.use(web.handlers);
+  return app;
+}
+
+// Better Auth rate-limits sign-in by the client IP it reads from X-Forwarded-For. Trust that header
+// only from a proxy on this machine or a private network, such as Tailscale Funnel or a load
+// balancer, so a client reaching the hub directly cannot pick its own bucket.
+function authApp(auth: HubAuth): Express {
+  const app = express();
+  app.disable("x-powered-by");
+  app.set("trust proxy", "loopback, uniquelocal");
+  const handler = toNodeHandler(auth);
+  app.all("/api/auth/*splat", (request, response) => {
+    if (request.ip) request.headers["x-forwarded-for"] = request.ip;
+    return handler(request, response);
+  });
   return app;
 }

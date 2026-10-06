@@ -65,12 +65,14 @@ async function run(options: HubClientOptions, signal: AbortSignal): Promise<void
         await confirm(unconfirmed);
         unconfirmed = null;
       }
-      const response = await hubRequest(hub, `${messagesPath}?wait=${maxWaitSeconds}`, {
+      // After a failure, ask without waiting, so the log shows the hub is back right away.
+      const wait = failures > 0 ? 0 : maxWaitSeconds;
+      const response = await hubRequest(hub, `${messagesPath}?wait=${wait}`, {
         signal,
-        timeoutMs: maxWaitSeconds * 1000 + GRACE_MS,
+        timeoutMs: wait * 1000 + GRACE_MS,
       });
       const { messages } = (await response.json()) as MessagesResponse;
-      if (failures > 0) console.log("[hub] reconnected");
+      if (failures > 0) console.log("[hub] reached the hub again");
       failures = 0;
       const last = messages.at(-1);
       if (last === undefined) continue;
