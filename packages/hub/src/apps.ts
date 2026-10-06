@@ -232,7 +232,7 @@ export async function findNamedInstallation(
     .innerJoin(factories, eq(factories.id, assignments.factoryId))
     .where(
       and(
-        eq(factories.id, factoryId),
+        eq(assignments.factoryId, factoryId),
         eq(installations.organizationId, factories.organizationId),
         eq(apps.provider, provider),
         eq(installations.installationName, installationName),

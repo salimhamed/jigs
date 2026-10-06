@@ -18,8 +18,7 @@ function deps() {
   return fake;
 }
 
-const envFor = (harness: Harness, fake: AgentAccessDeps) =>
-  agentAccessEnv({ harness, cwd: "/w" }, {}, fake);
+const envFor = (harness: Harness, fake: AgentAccessDeps) => agentAccessEnv(harness, {}, fake);
 
 test("a harness that opts in to nothing gets nothing and mints nothing", async () => {
   const fake = deps();

@@ -21,11 +21,10 @@ const defaultDeps: AgentAccessDeps = {
  * names. Nothing for a harness that opts in to none.
  */
 export async function agentAccessEnv(
-  target: { harness: Harness; cwd: string },
+  harness: Harness,
   env: Record<string, string> = {},
   deps: AgentAccessDeps = defaultDeps,
 ): Promise<Record<string, string>> {
-  const { harness } = target;
   assertAgentAccess(harness);
   const { linear, pagerduty } = harness;
   return {

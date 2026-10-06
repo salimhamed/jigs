@@ -44,7 +44,7 @@ export async function routeProviderEvent(
 ): Promise<RouteResult> {
   if (!isNamed(event)) {
     console.log(
-      `[events] ${event.provider} ignored reason=unnamed-installation event=${sanitizeForLog(event.name)}`,
+      `[events] ${event.provider} ignored reason=no-installation-name event=${sanitizeForLog(event.name)}`,
     );
     return { outcome: "ignored" };
   }

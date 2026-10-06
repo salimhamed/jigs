@@ -138,6 +138,7 @@ export {
   type WorkflowDefinition,
   type WorkflowInputs,
 } from "./workflow/factory.ts";
+export { installationNameSchema } from "./workflow/factory-schema.ts";
 export {
   type ChangePatch,
   type ChangeStatus,

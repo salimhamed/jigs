@@ -7,6 +7,7 @@ import {
   type HubConnection,
   hubConnection,
   hubRefused,
+  PROVIDER_NAMES,
 } from "../providers/hub.ts";
 import type { Provider } from "../workflow/providers.ts";
 import type { Check, CheckResult } from "./check.ts";
@@ -42,13 +43,6 @@ export function hubChecks(
   ];
 }
 
-const LABELS: Record<Provider, string> = {
-  github: "GitHub",
-  linear: "Linear",
-  slack: "Slack",
-  pagerduty: "PagerDuty",
-};
-
 export interface InstallationsCheckOptions {
   /** The installations the factory names: in bindings, triggers and agent harnesses. */
   declared: readonly string[];
@@ -66,7 +60,7 @@ export function installationsCheck(
   provider: Provider,
   { declared, probe, status }: InstallationsCheckOptions,
 ): Check {
-  const label = LABELS[provider];
+  const label = PROVIDER_NAMES[provider];
   return {
     id: `${provider}.installations`,
     label: `${label} installations`,

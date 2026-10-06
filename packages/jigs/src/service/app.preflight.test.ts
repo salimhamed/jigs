@@ -43,7 +43,12 @@ const app = appClient(
         inputs: z.object({}),
         requires: {
           bindings: ["api"],
-          agents: { builder: harnesses.claude({ model: "opus" }) },
+          agents: {
+            builder: harnesses.claude({
+              model: "opus",
+              linear: { installationName: "linear-acme" },
+            }),
+          },
           integrations: ["linear", "github"],
         },
       },
@@ -116,7 +121,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function seedThreeFailures(): void {
+function seedFailures(): void {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
 }
@@ -142,8 +147,8 @@ interface Failure {
   repair: string;
 }
 
-test("a trigger with three seeded failures is refused with all three at once", async () => {
-  seedThreeFailures();
+test("a trigger with several seeded failures is refused with all of them at once", async () => {
+  seedFailures();
   const res = await trigger();
   expect(res.status).toBe(424);
 
@@ -155,7 +160,6 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "github.installations",
     "linear.installations",
   ]);
   for (const failure of body.failures) {
@@ -167,7 +171,7 @@ test("a trigger with three seeded failures is refused with all three at once", a
 });
 
 test("the undeclared-binding failure names the exact jigs bind invocation", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await trigger()).json()) as { failures: Failure[] };
   const binding = body.failures.find((failure) => failure.id === "binding.api");
   expect(binding?.repair).toContain("jigs bind");
@@ -203,7 +207,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
 });
 
 test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {
-  seedThreeFailures();
+  seedFailures();
   vi.stubEnv("GITHUB_TOKEN", "rejected-token");
   vi.stubGlobal("fetch", async () =>
     Response.json({ message: "Bad credentials" }, { status: 401 }),
@@ -290,7 +294,7 @@ test("a green preflight lets the trigger call start()", async () => {
 });
 
 test("doctor reports a malformed schedule and trigger beside the catalog's own checks", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await scheduledApp.request("/api/doctor")).json()) as {
     ok: boolean;
     checks: Failure[];

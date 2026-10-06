@@ -27,14 +27,22 @@ export async function agentGithubEnv(
   const token = await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS.github);
   const [bot, owner] = await Promise.all([auth.bot(), auth.account()]);
   // An App cannot push over SSH. Only the owner's repositories move to HTTPS:
-  // the token cannot reach anyone else's, such as an SSH dependency.
+  // the token cannot reach anyone else's, such as an SSH dependency. git
+  // matches these prefixes case-sensitively while GitHub does not, so a remote
+  // spelling the owner in lowercase is rewritten too, onto the one spelling
+  // the token's header names.
   const https = `url.https://github.com/${owner}/.insteadOf`;
+  const lower = owner.toLowerCase();
+  const spellings = lower === owner ? [owner] : [owner, lower];
   return {
     [AGENT_TOKEN_ENV.github]: token,
     ...gitConfigEnv(
       [
-        [https, `git@github.com:${owner}/`],
-        [https, `ssh://git@github.com/${owner}/`],
+        ...spellings.flatMap((spelling): [string, string][] => [
+          [https, `git@github.com:${spelling}/`],
+          [https, `ssh://git@github.com/${spelling}/`],
+        ]),
+        ...(lower === owner ? [] : [[https, `https://github.com/${lower}/`] as [string, string]]),
         githubAuthHeader(token, owner),
       ],
       env,

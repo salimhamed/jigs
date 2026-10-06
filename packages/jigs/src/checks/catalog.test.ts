@@ -305,13 +305,21 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
   expect((await runChecks(preflightChecks({}))).ok).toBe(true);
 });
 
-test("workflows check only explicitly declared integrations", async () => {
+test("preflight probes only the installations a workflow's agents name", async () => {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.installations"]);
-  expect(preflightIds({ integrations: ["github"] })).toEqual(["github.installations"]);
-  const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
+  expect(preflightIds({ integrations: ["linear", "github"] })).toEqual([]);
+  const named = {
+    integrations: ["linear" as const],
+    agents: {
+      triager: harnesses.claude({ model: "opus", linear: { installationName: "linear-a" } }),
+    },
+  };
+  expect(preflightIds(named)).toContain("linear.installations");
+  expect(preflightIds(named)).not.toContain("github.installations");
+  const report = await runChecks(
+    preflightChecks(named).filter((check) => check.id === "linear.installations"),
+  );
   expect(report.ok).toBe(false);
-  expect(report.checks).toHaveLength(2);
 });
 
 function factoryWith(config: string): string {
@@ -409,7 +417,12 @@ test("doctor looks up the factory's Linear operator, preflight never does", asyn
     detail: "acme: acting as jigs, mentions Salim",
   });
   expect(lookups).toEqual(["acme salim@example.com"]);
-  expect((await runChecks(preflightChecks(linear))).checks).toEqual([
+  const named = {
+    ...linear,
+    agents: { triager: harnesses.claude({ model: "opus", linear: { installationName: "acme" } }) },
+  };
+  const preflight = preflightChecks(named).filter((check) => check.id === "linear.installations");
+  expect((await runChecks(preflight)).checks).toEqual([
     {
       id: "linear.installations",
       label: "Linear installations",
@@ -437,16 +450,17 @@ test("doctor reads the hub once for the hub check and every provider's", async (
     } as never;
   });
   const report = await runChecks(doctorChecks({ hello: {} }));
+  // The binding's own installation is its binding check's to probe.
   expect(report.checks.filter((check) => check.id !== "binding.api")).toEqual([
     { id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" },
     {
       id: "github.installations",
       label: "GitHub installations",
       ok: true,
-      detail: "acme: jigs-dev[bot] on o; beta: jigs-dev[bot] on o",
+      detail: "beta: jigs-dev[bot] on o",
     },
   ]);
-  expect(asked).toEqual(["github acme", "github beta"]);
+  expect(asked).toContain("github beta");
   expect(status).toHaveBeenCalledTimes(1);
 });
 
@@ -477,11 +491,11 @@ test("a provider in use with no named installation fails with the repair on the 
   });
 });
 
-test("a workflow requiring slack preflights the hub's Slack installations", async () => {
+test("doctor sweeps the hub's Slack installations for a workflow requiring slack, preflight does not", async () => {
   factoryWith(`{ ${HUB} }`);
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const slack = { integrations: ["slack" as const] };
-  expect(preflightIds(slack)).toEqual(["slack.installations"]);
+  expect(preflightIds(slack)).toEqual([]);
   const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
   expect(report.checks.find((c) => c.id === "slack.installations")).toMatchObject({
     ok: false,
@@ -684,4 +698,12 @@ test("doctor shows a skill path once when no earlier entry could clash with it",
     .map((check) => check.id)
     .filter((id) => id.startsWith("skills."));
   expect(ids).toEqual(["skills.s/a", "skills.s/b"]);
+});
+
+test("an agent step checks gh when its harness acts on GitHub, even one named only at run time", () => {
+  const ids = (harness: Harness) => jitChecks({ harness, cwd: "/w" }, {}).map((check) => check.id);
+  expect(ids(harnesses.codex({ model: "m" }))).not.toContain("agent.gh");
+  expect(
+    ids(harnesses.codex({ model: "m", github: { installationName: "github-acme" } })),
+  ).toContain("agent.gh");
 });

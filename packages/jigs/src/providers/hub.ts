@@ -127,7 +127,8 @@ const TOKEN_PATHS: Record<Provider, string> = {
   pagerduty: pagerDutyTokenPath,
 };
 
-const PROVIDER_NAMES: Record<Provider, string> = {
+/** Each provider's name as people write it. */
+export const PROVIDER_NAMES: Record<Provider, string> = {
   github: "GitHub",
   linear: "Linear",
   slack: "Slack",

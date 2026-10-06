@@ -76,15 +76,12 @@ function agentInstallations(requires: WorkflowRequires, provider: Provider): str
   );
 }
 
-// An unreadable config names nothing: the binding checks report it.
-function bindingInstallations(ctx: FactoryContext, names?: readonly string[]): string[] {
+// An unreadable config binds nothing: the binding checks report it.
+function hasBindings(ctx: FactoryContext): boolean {
   try {
-    const { bindings } = ctx.config;
-    return (names ?? Object.keys(bindings)).flatMap(
-      (name) => bindings[name]?.installationName ?? [],
-    );
+    return Object.keys(ctx.config.bindings).length > 0;
   } catch {
-    return [];
+    return false;
   }
 }
 
@@ -127,20 +124,22 @@ export function preflightChecks(
   // binding list declared in their manifest.
   const bindings =
     typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
-  const installations = (provider: Provider): Check => {
-    const declared = [
-      ...agentInstallations(requires, provider),
-      ...(provider === "github" ? bindingInstallations(ctx, bindings) : []),
-    ];
-    return installationsCheck(provider, {
-      declared,
-      probe: installationProbe(provider, ctx, false),
-      // With none named ahead of the run, any the hub names may be the one it uses.
-      ...(declared.length === 0 ? { status: () => fetchFactoryStatus(ctx) } : {}),
-    });
+  // Only the names the run declares: another installation's trouble must not
+  // stop it, and a name only its inputs give fails at its first step with the
+  // hub's answer. A binding's installation is its binding check's to probe.
+  const installations = (provider: Provider): Check[] => {
+    const declared = agentInstallations(requires, provider);
+    return declared.length === 0
+      ? []
+      : [
+          installationsCheck(provider, {
+            declared,
+            probe: installationProbe(provider, ctx, false),
+          }),
+        ];
   };
   return [
-    ...PROVIDERS.filter((provider) => integrations.includes(provider)).map(installations),
+    ...PROVIDERS.filter((provider) => integrations.includes(provider)).flatMap(installations),
     ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
@@ -156,7 +155,7 @@ export function preflightChecks(
 // binding checks report it.
 function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
   return {
-    github: bindingInstallations(ctx).length > 0,
+    github: hasBindings(ctx),
     linear: linearOperator(ctx) !== undefined,
     pagerduty: false,
     slack: false,
@@ -312,7 +311,6 @@ export function doctorChecks(
         agentInstallations(requires ?? {}, provider),
       ),
       ...watching.flatMap(([, trigger]) => trigger.installationName ?? []),
-      ...(provider === "github" ? bindingInstallations(ctx) : []),
     ];
     const check = installationsCheck(provider, {
       declared,
@@ -354,6 +352,8 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
   const driver = driverFor(harness.kind);
   return [
     ...(driver.jitChecks?.(target) ?? []),
+    // A harness can name its GitHub installation only once the run knows it.
+    ...agentGithubChecks([harness]),
     ...skillChecks(harness.skills ?? []),
     ...mcpServerChecks(harness.mcpServers ?? {}, target.cwd, env, {
       inherit: driver.mcpInheritsEnv === true,

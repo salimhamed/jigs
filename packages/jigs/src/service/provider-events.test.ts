@@ -513,7 +513,7 @@ test.each([
       outcome: "ignored",
     });
     expect(log).toHaveBeenCalledExactlyOnceWith(
-      `[events] ${provider} ignored reason=unnamed-installation event=x`,
+      `[events] ${provider} ignored reason=no-installation-name event=x`,
     );
     expect(push).not.toHaveBeenCalled();
     expect(resumeHookMock).not.toHaveBeenCalled();

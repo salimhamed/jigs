@@ -15,6 +15,7 @@ import {
   runChecks,
 } from "../../../checks/index.ts";
 import { type RunStatusReader, worldRunStatus } from "../../../run-cancellation.ts";
+import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentAccessEnv } from "./agent-access.ts";
 import {
   type DriverDependencies,
@@ -48,7 +49,7 @@ export interface ExecutionSeams extends DriverDependencies {
   /** Names the factory declares under `agents.env` in `jigs.config.ts`. */
   factoryEnv(): readonly string[];
   /** What the providers a harness opts in to add to its agent's environment `env`. */
-  accessEnv(target: HarnessTarget, env: Record<string, string>): Promise<Record<string, string>>;
+  accessEnv(harness: Harness, env: Record<string, string>): Promise<Record<string, string>>;
   jitFailures(
     target: HarnessTarget,
     env: Record<string, string>,

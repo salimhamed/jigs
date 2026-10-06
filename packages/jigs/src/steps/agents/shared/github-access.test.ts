@@ -137,6 +137,20 @@ test("git setup covers the account the hub names for the installation", async ()
   );
 });
 
+test("a remote spelling the account in lowercase still goes over HTTPS with the token", async () => {
+  const run = gitUnder(await envFor(optedIn, deps("JungleScout").fake));
+  for (const remote of [
+    "git@github.com:junglescout/api.git",
+    "ssh://git@github.com/junglescout/api.git",
+    "https://github.com/junglescout/api.git",
+    "git@github.com:JungleScout/api.git",
+  ])
+    expect(run("ls-remote", "--get-url", remote)).toBe("https://github.com/JungleScout/api.git");
+  expect(
+    run("config", "--get-urlmatch", "http.extraheader", "https://github.com/JungleScout/api"),
+  ).not.toBeNull();
+});
+
 test("a failure after the token is minted never names it", async () => {
   const { fake } = deps(undefined, async () => {
     throw new Error("the hub answered 502");

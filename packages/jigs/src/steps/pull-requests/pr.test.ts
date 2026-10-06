@@ -386,16 +386,22 @@ test("preservedCommitMessageBody keeps useful commit-message content", () => {
   expect(preservedCommitMessageBody([])).toBe("");
 });
 
-test("opening a PR derives its repository, head and default branch from the supplied worktree", async () => {
+test("opening a PR takes its installation, head and default branch from the worktree, and its repository from the binding", async () => {
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
     hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
-    bindings: { docs: { remote: "git@github.com:acme/docs.git", installationName: "github-docs" } },
+    bindings: { docs: { remote: "git@github.com:acme/docs.git", installationName: "github-changed" } },
   };`,
   );
   await createPullRequest({
-    worktree: { ...worktree, binding: "docs", branch: "update-guide", defaultBranch: "trunk" },
+    worktree: {
+      ...worktree,
+      binding: "docs",
+      installationName: "github-docs",
+      branch: "update-guide",
+      defaultBranch: "trunk",
+    },
     title: "Update guide",
     body: "More examples.",
     draft: false,

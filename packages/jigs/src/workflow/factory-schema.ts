@@ -45,7 +45,12 @@ export const agentsSchema = z.strictObject({
   env: z.array(envName).default([]),
 });
 
-/** An installation's name on the hub: lowercase letters, digits and hyphens, starting with a letter. */
+/**
+ * An installation's name, as an admin set it on the hub: lowercase letters, digits and hyphens,
+ * starting with a letter. Use it for a workflow input that names an installation.
+ *
+ * @group Factory and workflows
+ */
 export const installationNameSchema = z
   .string()
   .regex(

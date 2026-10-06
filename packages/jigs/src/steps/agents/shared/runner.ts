@@ -87,7 +87,7 @@ export async function prepareAgentRun(
   try {
     // Built once, so the JIT checks probe exactly what the harness gets.
     const base = agentStepEnv(driver, target, seams.factoryEnv());
-    const env = { ...base, ...(await abortable(seams.accessEnv(target, base), signal)) };
+    const env = { ...base, ...(await abortable(seams.accessEnv(target.harness, base), signal)) };
     const requestReport = await runChecks(driver.descriptorChecks(harness));
     if (!requestReport.ok) throw new JigsError(formatFailures(requestReport));
     const jitFailure = await seams.jitFailures(target, env);

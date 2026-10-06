@@ -5,6 +5,7 @@ import {
   defaultPullRequestScope,
   defineWorkflow,
   harnesses,
+  installationNameSchema,
   JigsError,
   type NeedsHuman,
   renderTicketSnapshot,
@@ -50,7 +51,7 @@ const approvalCovers: ApprovalCoverage = "latest-commit";
 const inputs = z.object({
   ticket: z.string().min(1),
   // The Linear installation, as named on the hub, the ticket is in.
-  linearInstallation: z.string().min(1),
+  linearInstallation: installationNameSchema,
   binding: z.string().min(1),
   builder: agentName.default("builder"),
   reviewer: agentName.default("reviewer"),

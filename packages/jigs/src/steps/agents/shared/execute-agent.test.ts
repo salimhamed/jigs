@@ -1655,7 +1655,7 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
     streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => [],
-    accessEnv: async ({ harness }): Promise<Record<string, string>> =>
+    accessEnv: async (harness): Promise<Record<string, string>> =>
       harness.github === undefined ? {} : { GH_TOKEN: "ghs_bot", GIT_AUTHOR_NAME: "jigs[bot]" },
     jitFailures: async (_wire, env) => {
       jitEnvs.push(env);
