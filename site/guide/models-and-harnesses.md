@@ -429,8 +429,10 @@ environment:
   scopes jigs itself uses: the agent can read and update incidents and read
   users.
 
-A run whose workflow declares such an agent checks that identity in preflight,
-as it would for a workflow that requires the provider.
+A run whose workflow declares such an agent checks that installation in
+preflight. An agent step whose harness sets `github` also checks that `gh` is
+installed before the agent starts, even when the installation is added at run
+time.
 
 `linearMcp()` and `pagerdutyMcp()` add each service's own hosted MCP server
 with that token. Only a harness that opts in can use them:

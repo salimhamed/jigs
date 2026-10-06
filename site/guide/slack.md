@@ -321,5 +321,5 @@ triggers name is named and assigned to it in the hub, and that every named
 Slack installation assigned to it granted every scope jigs uses. Each failure
 names what to fix in the hub.
 
-Before every run of a workflow that requires `slack`, preflight runs the same
-checks. If a bot lacks a scope jigs uses, the run stops before it starts.
+Preflight does not sweep Slack installations: a step names its installation
+when it runs, and a missing scope fails that step with Slack's `missing_scope`.

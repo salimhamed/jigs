@@ -25,13 +25,18 @@ ticket identifier.
 
 ```ts
 // workflows/ask-scope/ask-scope.ts
-import { defineWorkflow, ticketInputSchema, type WorkflowInputs } from "@jigs-ai/jigs";
+import {
+  defineWorkflow,
+  installationNameSchema,
+  ticketInputSchema,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
 import { claimTicket, haltForHuman } from "#jigs/routines";
 import { resolveLinearIssue } from "#jigs/steps";
 
 const inputs = z.object({
-  linearInstallation: z.string().min(1),
+  linearInstallation: installationNameSchema,
   ticket: ticketInputSchema,
 });
 

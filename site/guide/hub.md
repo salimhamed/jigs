@@ -296,3 +296,7 @@ one run, in Alice's factory.
   user.
 
 It names what to fix in the hub when one fails.
+
+Before a run starts, preflight checks only the installations the workflow's
+agents name. One that a step names, or that comes from the run's inputs, is
+checked when the step first uses it: the hub refuses a name it does not know.
