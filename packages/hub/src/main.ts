@@ -52,12 +52,21 @@ const routers = [
   createPagerDutyRoutes({ db, waiters, encryptionKey }),
 ];
 const shutdown = new Shutdown();
-const server = createHubApp(auth, routers, web, shutdown).listen(config.port, config.host, () => {
-  const address = server.address() as AddressInfo;
-  console.log(`hub listening on http://${address.address}:${address.port}`);
-  console.log(`sign-in app Homepage URL: ${publicUrl.origin}`);
-  console.log(`sign-in app Redirect URI: ${signInRedirectUri(publicUrl)}`);
-});
+const server = createHubApp(auth, routers, web, shutdown).listen(
+  config.port,
+  config.host,
+  (error?: NodeJS.ErrnoException) => {
+    if (error) {
+      const reason = error.code === "EADDRINUSE" ? "address already in use" : error.message;
+      console.error(`hub could not listen on ${config.host}:${config.port}: ${reason}`);
+      process.exit(1);
+    }
+    const address = server.address() as AddressInfo;
+    console.log(`hub listening on http://${address.address}:${address.port}`);
+    console.log(`sign-in app Homepage URL: ${publicUrl.origin}`);
+    console.log(`sign-in app Redirect URI: ${signInRedirectUri(publicUrl)}`);
+  },
+);
 
 process.once("SIGTERM", async () => {
   waiters.close();

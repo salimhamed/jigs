@@ -1,6 +1,7 @@
 import { spawn } from "node:child_process";
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
+import { type AddressInfo, createServer } from "node:net";
 import { fileURLToPath } from "node:url";
 import { messagesPath } from "@jigs-ai/hub-protocol";
 import { Client } from "pg";
@@ -16,7 +17,7 @@ afterEach(async () => {
   for (const cleanup of cleanups.splice(0).reverse()) await cleanup();
 });
 
-async function startHub() {
+async function spawnHub(port: number) {
   const database = testDatabase();
   await database.create();
   cleanups.push(database.drop);
@@ -25,7 +26,7 @@ async function startHub() {
       ...process.env,
       NODE_ENV: "production",
       HOST: "127.0.0.1",
-      PORT: "0",
+      PORT: String(port),
       HUB_PUBLIC_URL: "https://hub.example.com",
       HUB_DATABASE_URL: database.url,
       HUB_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
@@ -35,6 +36,17 @@ async function startHub() {
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  cleanups.push(async () => {
+    if (child.exitCode === null && child.signalCode === null) {
+      child.kill("SIGKILL");
+      await once(child, "exit");
+    }
+  });
+  return { database, child };
+}
+
+async function startHub() {
+  const { database, child } = await spawnHub(0);
   let stdout = "";
   let stderr = "";
   child.stdout.on("data", (chunk) => {
@@ -42,12 +54,6 @@ async function startHub() {
   });
   child.stderr.on("data", (chunk) => {
     stderr += chunk;
-  });
-  cleanups.push(async () => {
-    if (child.exitCode === null && child.signalCode === null) {
-      child.kill("SIGKILL");
-      await once(child, "exit");
-    }
   });
   const [line] = await once(child.stdout, "data");
   const url = /http:\/\/\S+/.exec(String(line))?.[0];
@@ -99,6 +105,22 @@ dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async
   );
   expect(stderr()).not.toContain("No route matches");
   expect(stderr()).toContain('relation "invitation" does not exist');
+});
+
+dbTest("names the address and exits 1 when its port is taken", async () => {
+  const taken = createServer();
+  await new Promise<void>((resolve) => taken.listen(0, "127.0.0.1", resolve));
+  cleanups.push(() => new Promise<void>((resolve) => taken.close(() => resolve())));
+  const { port } = taken.address() as AddressInfo;
+
+  const { child } = await spawnHub(port);
+  let stderr = "";
+  child.stderr.on("data", (chunk) => {
+    stderr += chunk;
+  });
+  const [code] = await once(child, "close");
+  expect(code).toBe(1);
+  expect(stderr).toContain(`hub could not listen on 127.0.0.1:${port}: address already in use`);
 });
 
 dbTest(
