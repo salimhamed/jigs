@@ -97,6 +97,11 @@ in and adding factories, but providers cannot reach it: no webhooks arrive, and
 some providers refuse a plain `http` OAuth redirect, until the hub has a public
 `https` address.
 
+A proxy in front of the hub, such as Funnel or a load balancer, must connect
+from the same machine or a private network address. The hub limits sign-in
+attempts per client, and it reads the client's address from the proxy's
+`X-Forwarded-For` header only when the proxy connects from one of those.
+
 ### Tailscale Funnel {#tailscale-funnel}
 
 [Tailscale Funnel](https://tailscale.com/kb/1223/funnel) publishes a port on
@@ -143,9 +148,12 @@ separate from the GitHub Apps your factories act as. Create it on GitHub under
 organization's Developer settings:
 
 - **Homepage URL**: `HUB_PUBLIC_URL`.
-- **Authorization callback URL**: `HUB_PUBLIC_URL` followed by
+- **Redirect URI**, under **Redirect URIs**: `HUB_PUBLIC_URL` followed by
   `/api/auth/callback/github`, such as
   `https://hub.example.com/api/auth/callback/github`.
+- Leave **Allow wildcard matching** and **Enable Device Flow** off. **Expire
+  user access tokens** doesn't matter: the hub uses GitHub only to learn who
+  signs in.
 
 Generate a client secret, and set the client ID and secret as
 `HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET`.

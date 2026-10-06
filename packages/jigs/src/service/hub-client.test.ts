@@ -239,6 +239,17 @@ test("backs off on a server error, doubling up to a minute", async () => {
 
   await vi.advanceTimersByTimeAsync(2000);
   await until(() => push.mock.calls.length === 1);
+  const reached = () =>
+    vi.mocked(console.log).mock.calls.filter(([line]) => line === "[hub] reached the hub again");
+  expect(reached()).toHaveLength(1);
+  await until(() => polls() === 4);
+  expect(seen.filter((r) => r.method === "GET").map((r) => r.url.split("?")[1])).toEqual([
+    "wait=30",
+    "wait=0",
+    "wait=0",
+    "wait=30",
+  ]);
+  expect(reached()).toHaveLength(1);
 });
 
 test("a rejected token is reported and retried slowly", async () => {
