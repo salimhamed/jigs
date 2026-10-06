@@ -173,6 +173,8 @@ pnpm exec jigs run incident-triage --input installationName=pagerduty-acme --inp
 ```
 
 Before the run starts, preflight checks that Pi is installed. The installation
-comes from the run's inputs, so its first step is what checks it. The agent step checks that the token is set before the agent starts.
+comes from the run's inputs, so the run's first step checks it. The agent step
+checks that the token is set before the agent starts.
+
 Follow the run with `pnpm exec jigs watch`. When it finishes, the note is on the
 incident's timeline.
