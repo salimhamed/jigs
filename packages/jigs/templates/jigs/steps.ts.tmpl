@@ -95,12 +95,15 @@ export async function executeJev(request: AskJevOptions<JevQuestions>) {
  *
  * @group Linear and human input
  */
-export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
+export async function postTicketHumanInputRequest(request: {
+  installationName: string;
+  issueId: string;
+  halt: Halt;
+}) {
   "use step";
   const { default: definition } = await import("../jigs.config.ts");
   return linearOperations.postTicketHumanInputRequest(
-    issueId,
-    halt,
+    request,
     { ...getWorkflowMetadata(), stepId: getStepMetadata().stepId },
     definition,
   );
@@ -111,12 +114,15 @@ export async function postTicketHumanInputRequest(issueId: string, halt: Halt) {
  *
  * @group Linear and human input
  */
-export async function postTicketNote(issueId: string, note: TicketNote) {
+export async function postTicketNote(request: {
+  installationName: string;
+  issueId: string;
+  note: TicketNote;
+}) {
   "use step";
   const { default: definition } = await import("../jigs.config.ts");
   return linearOperations.postTicketNote(
-    issueId,
-    note,
+    request,
     { ...getWorkflowMetadata(), stepId: getStepMetadata().stepId },
     definition,
   );
@@ -127,13 +133,14 @@ export async function postTicketNote(issueId: string, note: TicketNote) {
  *
  * @group Linear and human input
  */
-export async function checkForTicketHumanReply(
-  issueId: string,
-  sinceIso: string,
-  postedCommentIds: readonly string[],
-) {
+export async function checkForTicketHumanReply(request: {
+  installationName: string;
+  issueId: string;
+  since: string;
+  postedCommentIds: readonly string[];
+}) {
   "use step";
-  return linearOperations.checkForTicketHumanReply(issueId, sinceIso, postedCommentIds);
+  return linearOperations.checkForTicketHumanReply(request);
 }
 
 /**
@@ -154,9 +161,9 @@ export async function fetchPullRequestState(
  *
  * @group Linear and human input
  */
-export async function fetchTicketSnapshot(issueId: string) {
+export async function fetchTicketSnapshot(ticket: { installationName: string; issueId: string }) {
   "use step";
-  return linearOperations.fetchTicketSnapshot(issueId);
+  return linearOperations.fetchTicketSnapshot(ticket);
 }
 
 /**
@@ -164,9 +171,13 @@ export async function fetchTicketSnapshot(issueId: string) {
  *
  * @group Linear and human input
  */
-export async function setTicketStatus(issueId: string, stateName: string) {
+export async function setTicketStatus(request: {
+  installationName: string;
+  issueId: string;
+  stateName: string;
+}) {
   "use step";
-  return linearOperations.setTicketStatus(issueId, stateName);
+  return linearOperations.setTicketStatus(request);
 }
 
 /**
@@ -174,9 +185,9 @@ export async function setTicketStatus(issueId: string, stateName: string) {
  *
  * @group Linear and human input
  */
-export async function resolveLinearIssue(reference: string) {
+export async function resolveLinearIssue(request: { installationName: string; reference: string }) {
   "use step";
-  return linearOperations.resolveLinearIssue(reference);
+  return linearOperations.resolveLinearIssue(request);
 }
 
 /**
@@ -184,9 +195,12 @@ export async function resolveLinearIssue(reference: string) {
  *
  * @group PagerDuty incidents
  */
-export async function fetchIncidentSnapshot(incidentId: string) {
+export async function fetchIncidentSnapshot(incident: {
+  installationName: string;
+  incidentId: string;
+}) {
   "use step";
-  return pagerDutyOperations.fetchIncidentSnapshot(incidentId);
+  return pagerDutyOperations.fetchIncidentSnapshot(incident);
 }
 
 /**
@@ -194,9 +208,13 @@ export async function fetchIncidentSnapshot(incidentId: string) {
  *
  * @group PagerDuty incidents
  */
-export async function postIncidentNote(incidentId: string, content: string) {
+export async function postIncidentNote(note: {
+  installationName: string;
+  incidentId: string;
+  content: string;
+}) {
   "use step";
-  return pagerDutyOperations.postIncidentNote(incidentId, content, getWorkflowMetadata());
+  return pagerDutyOperations.postIncidentNote(note, getWorkflowMetadata());
 }
 
 // One attempt: a lost POST response may already have added the note, and
@@ -208,7 +226,11 @@ postIncidentNote.maxRetries = 0;
  *
  * @group Slack messages
  */
-export async function fetchSlackMessage(message: { channel: string; ts: string }) {
+export async function fetchSlackMessage(message: {
+  installationName: string;
+  channel: string;
+  ts: string;
+}) {
   "use step";
   return slackOperations.fetchSlackMessage(message);
 }
@@ -219,6 +241,7 @@ export async function fetchSlackMessage(message: { channel: string; ts: string }
  * @group Slack messages
  */
 export async function postSlackMessage(message: {
+  installationName: string;
   channel: string;
   text: string;
   threadTs?: string;

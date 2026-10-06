@@ -216,18 +216,28 @@ export const codexPolicyKeys = [
 export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
 
 /**
- * Lets an agent act on GitHub as the factory's GitHub App: the same bot jigs posts as.
+ * Names the installation, as an admin named it on the hub, an agent acts through.
  *
  * @remarks
- * `true` acts on the account that owns the agent's worktree; `{ owner }` names the account, for
- * an agent with no worktree. The agent gets a fresh installation token in `GH_TOKEN`, so `gh`
- * works as the bot, and git reaches that account's repositories over HTTPS with that token. Its
- * commits are authored by the bot, while your own git configuration stays the committer and
- * signer.
+ * On `github`, the agent gets a fresh token of that GitHub App installation in `GH_TOKEN`, so
+ * `gh` works as the App's bot, and git reaches the installation account's repositories over
+ * HTTPS with that token. Its commits are authored by the bot, while your own git configuration
+ * stays the committer and signer. On `linear`, the workspace's token goes in
+ * `JIGS_LINEAR_TOKEN`; on `pagerduty`, the account's token goes in `JIGS_PAGERDUTY_TOKEN`.
+ *
+ * @example
+ * ```ts
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * const builder = harnesses.codex({
+ *   model: "gpt-5.6-sol",
+ *   github: { installationName: "github-acme" },
+ * });
+ * ```
  *
  * @group Harnesses and models
  */
-export type AgentGithub = true | { owner: string };
+export type AgentInstallation = { installationName: string };
 
 /**
  * Skill folders an agent loads, each holding a `SKILL.md` and any files it refers to.
@@ -255,11 +265,12 @@ export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> 
     kind: "claude";
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
-    github?: AgentGithub;
-    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-    linear?: true;
-    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-    pagerduty?: true;
+    /** Acts on GitHub as the factory's App, through this installation. */
+    github?: AgentInstallation;
+    /** Acts on Linear as the factory's app, through this installation. */
+    linear?: AgentInstallation;
+    /** Acts on PagerDuty as the factory's app, through this installation. */
+    pagerduty?: AgentInstallation;
   };
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
@@ -272,22 +283,24 @@ export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>
     kind: "codex";
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
-    github?: AgentGithub;
-    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-    linear?: true;
-    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-    pagerduty?: true;
+    /** Acts on GitHub as the factory's App, through this installation. */
+    github?: AgentInstallation;
+    /** Acts on Linear as the factory's app, through this installation. */
+    linear?: AgentInstallation;
+    /** Acts on PagerDuty as the factory's app, through this installation. */
+    pagerduty?: AgentInstallation;
   };
 type SharedPiHarness = HarnessSkills & {
   kind: "pi";
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
   mcpServers?: Record<string, PiMcpServerConfig>;
-  github?: AgentGithub;
-  /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-  linear?: true;
-  /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-  pagerduty?: true;
+  /** Acts on GitHub as the factory's App, through this installation. */
+  github?: AgentInstallation;
+  /** Acts on Linear as the factory's app, through this installation. */
+  linear?: AgentInstallation;
+  /** Acts on PagerDuty as the factory's app, through this installation. */
+  pagerduty?: AgentInstallation;
 };
 
 /**

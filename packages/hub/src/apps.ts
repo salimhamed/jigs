@@ -1,5 +1,5 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
-import { and, asc, eq, inArray, type SQL, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 
@@ -207,33 +207,41 @@ const isUniqueViolation = (error: unknown): boolean =>
   error instanceof Error &&
   ((error as { code?: string }).code === "23505" || isUniqueViolation(error.cause));
 
-/** The one installation of a provider's apps assigned to a factory that `where` matches, or the status and message to refuse with. */
-export async function findAssignedInstallation(
+const providerNames: Record<Provider, string> = {
+  github: "GitHub",
+  linear: "Linear",
+  slack: "Slack",
+  pagerduty: "PagerDuty",
+};
+
+/**
+ * The installation of the provider named `installationName`, of an app
+ * assigned to the factory, or the 404 to refuse with.
+ */
+export async function findNamedInstallation(
   db: HubDatabase,
   factoryId: string,
   provider: Provider,
-  where: SQL | undefined,
-  wording: {
-    /** The 404 message when nothing matches. */
-    none: string;
-    /** The 409 message when several match, before the list of them. */
-    several: string;
-  },
-): Promise<{ app: App; installation: Installation } | { status: 404 | 409; error: string }> {
-  const found = await db
+  installationName: string,
+): Promise<{ app: App; installation: Installation } | { status: 404; error: string }> {
+  const [found] = await db
     .select({ app: apps, installation: installations })
     .from(installations)
     .innerJoin(apps, eq(apps.id, installations.appId))
     .innerJoin(assignments, eq(assignments.appId, apps.id))
-    .where(and(eq(assignments.factoryId, factoryId), eq(apps.provider, provider), where));
-  const [first] = found;
-  if (!first) return { status: 404, error: wording.none };
-  if (found.length > 1) {
-    const names = found
-      .map((row) => `${row.app.name} (${row.installation.account})`)
-      .sort()
-      .join(", ");
-    return { status: 409, error: `${wording.several}: ${names}.` };
-  }
-  return first;
+    .innerJoin(factories, eq(factories.id, assignments.factoryId))
+    .where(
+      and(
+        eq(assignments.factoryId, factoryId),
+        eq(installations.organizationId, factories.organizationId),
+        eq(apps.provider, provider),
+        eq(installations.installationName, installationName),
+      ),
+    );
+  return (
+    found ?? {
+      status: 404,
+      error: `No ${providerNames[provider]} installation named ${installationName} is assigned to this factory.`,
+    }
+  );
 }

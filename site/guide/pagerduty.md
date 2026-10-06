@@ -8,38 +8,21 @@ factory's `.env` holds no PagerDuty secret.
 
 ## 1. Set up the app in the hub
 
-Register the PagerDuty app, add it to the hub with its webhook subscription,
-and assign it to the factory: see [PagerDuty app](/guide/hub-pagerduty).
+Register the PagerDuty app, add it to the hub with its webhook subscription
+and from email, name the account's installation, such as `pagerduty-acme`, and
+assign the app to the factory: see [PagerDuty app](/guide/hub-pagerduty).
+Every note jigs adds is attributed to that from user.
 
-## 2. Configure the `from` user
+Nothing about the app goes in `jigs.config.ts`. Every PagerDuty trigger, step
+and agent takes the `installationName` it acts through.
 
-Add a `pagerduty` section to `jigs.config.ts`:
+## 2. Check the setup
 
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-pagerduty: { from: "oncall@example.com" },
-```
+`pnpm exec jigs doctor` checks, whenever the factory uses PagerDuty, that each
+PagerDuty installation it names, and every named one assigned to it, gives the
+factory a token that can list incidents.
 
-`from` is the email of a real user on the account. PagerDuty refuses a change
-that names no user, so every note jigs adds is attributed to this person. Pick
-a user whose name reads well on an incident timeline, such as a shared on-call
-account. A factory that uses PagerDuty needs this section: preflight and
-`jigs doctor` fail without it.
-
-Then run `pnpm exec jigs up`, which rebuilds the factory and restarts the
-service.
-
-## 3. Check the setup
-
-`pnpm exec jigs doctor` checks, whenever the factory has a `pagerduty` section
-or a trigger on a PagerDuty source:
-
-- **hub PagerDuty app**: the hub has assigned the factory a PagerDuty app.
-- **PagerDuty app**: the hub hands out a token, and the token can list
-  incidents.
-- **PagerDuty from user**: a PagerDuty user has the `from` email.
-
-A workflow that lists `pagerduty` in `requires.integrations` gets the app
+A workflow that lists `pagerduty` in `requires.integrations` gets the same
 check before every run, and a run does not start while it fails:
 
 ```ts
@@ -48,7 +31,7 @@ import { defineWorkflow } from "@jigs-ai/jigs";
 import { z } from "zod";
 
 export default defineWorkflow({
-  inputs: z.object({ incident: z.string() }),
+  inputs: z.object({ installationName: z.string(), incident: z.string() }),
   requires: { integrations: ["pagerduty"] },
   workflow: async ({ incident }) => incident,
 });
@@ -57,7 +40,7 @@ export default defineWorkflow({
 Each failure ends with a repair line naming what to fix in the hub, in
 PagerDuty or in `jigs.config.ts`.
 
-## 4. Start a run for each new incident
+## 3. Start a run for each new incident
 
 An [event trigger](/guide/configuration#triggers) on the `pagerduty.incidents`
 source starts one run for each new incident. This one starts the
@@ -70,14 +53,17 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: { from: "oncall@example.com" },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
   triggers: {
     "checkout-pages": {
       workflow: "respond",
-      source: pagerduty.incidents({ services: ["PABC123"], urgencies: ["high"] }),
+      source: pagerduty.incidents({
+        installationName: "pagerduty-acme",
+        services: ["PABC123"],
+        urgencies: ["high"],
+      }),
     },
   },
 });
@@ -86,8 +72,10 @@ export default defineFactory({
 - `services` and `teams` take PagerDuty service and team IDs, and `urgencies`
   takes `high` or `low`. Each list matches any of its values, and one you leave
   out does not filter.
-- Each run gets `{ incident: "<id>" }`, merged over the trigger's `inputs`. The
-  workflow reads the incident itself.
+- Each run gets `{ installationName: "pagerduty-acme", incident: "<id>" }`,
+  merged over the trigger's `inputs`. The workflow reads the incident itself,
+  through that installation.
+- The trigger takes only incidents from its own installation.
 - An incident starts at most one run, ever. One that is still triggered after
   its run ends does not start another, and neither does acknowledging and
   re-triggering it.

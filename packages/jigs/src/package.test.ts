@@ -217,6 +217,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "haltQuestionSchema",
     "harnessKinds",
     "harnesses",
+    "installationNameSchema",
     "interpolate",
     "isPullRequestMergeReady",
     "linear",

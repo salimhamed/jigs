@@ -8,11 +8,13 @@ findings into a structured verdict. It assumes a running factory from
 ## 1. Connect a repository
 
 The agent needs a repository to work in. Binding one needs the factory's GitHub
-App installed on the repository's owner: see [The factory's App](/guide/configuration#github-app).
-Then bind the repository and bring the factory up so the service clones it:
+App installed on the repository's owner, with an
+[installation name](/guide/hub#installation-names) such as `github-acme`: see
+[The factory's App](/guide/configuration#github-app). Then bind the repository
+through that installation and bring the factory up so the service clones it:
 
 ```sh
-pnpm exec jigs bind git@github.com:owner/app.git
+pnpm exec jigs bind git@github.com:owner/app.git --installation github-acme
 pnpm exec jigs up
 ```
 
@@ -333,7 +335,7 @@ import { postSlackMessage, provisionWorktree } from "#jigs/steps";
 import { prompts } from "./prompts.ts";
 
 const agents = {
-  builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
+  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
 };
 
@@ -350,12 +352,13 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
   for (const binding of input.bindings) {
     const worktree = await provisionWorktree({ binding, branch: `bump/${input.dependency}` });
     const cwd = worktree.path;
+    const builder = { ...agents.builder, github: { installationName: worktree.installationName } };
     const delivery = {
       work: { dependency: input.dependency, version: input.version },
       key: `${binding}-${input.dependency}`,
       worktree,
       prompts,
-      builder: agentSession({ name: `${binding} builder`, harness: agents.builder, cwd }),
+      builder: agentSession({ name: `${binding} builder`, harness: builder, cwd }),
       reviewer: agentSession({ name: `${binding} reviewer`, harness: agents.reviewer, cwd }),
     };
 
@@ -380,6 +383,7 @@ export async function bump(input: WorkflowInputs<typeof inputs>) {
       approvalCovers: "latest-commit",
       onNeedsHuman: async ({ reason, detail }) => {
         await postSlackMessage({
+          installationName: "slack-acme",
           channel: "#upgrades",
           text: `${pr.url} needs a person (${reason}): ${detail}`,
         });
@@ -404,7 +408,8 @@ To deliver to every repository at once instead, map the bindings to the same
 steps and `await Promise.all(...)`; each repository already gets its own key and
 sessions. A delivery's next step can also depend on an earlier one's result,
 such as opening a pull request in a client only after the library merged. Each
-agent step acts in one GitHub owner, so give each repository its own delivery.
+agent step acts through one GitHub installation, so give each repository its
+own delivery, with its worktree's installation on the builder.
 
 The `linear-ticket-to-pr` [recipe](/guide/recipes) is a complete example: it
 claims a Linear ticket, moves its status between the phases, and writes its own

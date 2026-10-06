@@ -24,18 +24,22 @@ test("a malformed verdict object fails the schema", () => {
 });
 
 test("a note is recorded on the claim, so a later halt does not read it as a reply", async () => {
-  const claim = { issueId: "i1", postedCommentIds: [] as string[] } as TicketClaim;
+  const claim = {
+    installationName: "linear-acme",
+    issueId: "i1",
+    postedCommentIds: [] as string[],
+  } as TicketClaim;
   const posted: string[] = [];
   await noteOnTicket(
     claim,
     { headline: "h", notes: [], closing: "c" },
     {
-      postTicketNote: async (issueId) => {
-        posted.push(issueId);
+      postTicketNote: async ({ installationName, issueId }) => {
+        posted.push(`${installationName}:${issueId}`);
         return { commentId: "note-1" };
       },
     },
   );
-  expect(posted).toEqual(["i1"]);
+  expect(posted).toEqual(["linear-acme:i1"]);
   expect(claim.postedCommentIds).toEqual(["note-1"]);
 });

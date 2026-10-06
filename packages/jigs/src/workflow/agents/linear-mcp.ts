@@ -29,7 +29,7 @@ export type LinearMcpOptions = {
  *
  * const triager = harnesses.claude({
  *   model: "opus",
- *   linear: true,
+ *   linear: { installationName: "linear-acme" },
  *   mcpServers: { linear: linearMcp() },
  * });
  * ```

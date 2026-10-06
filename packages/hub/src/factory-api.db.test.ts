@@ -2,10 +2,14 @@ import {
   cursorPath,
   type FactoryStatus,
   factoryStatusPath,
+  githubTokenPath,
+  linearTokenPath,
   type Message,
   type MessagesResponse,
   maxMessagesPerResponse,
   messagesPath,
+  pagerDutyTokenPath,
+  slackTokenPath,
 } from "@jigs-ai/hub-protocol";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, expect } from "vitest";
@@ -17,7 +21,7 @@ import { fanOutProviderEvent } from "./messages.ts";
 import { deleteExpiredMessages } from "./retention.ts";
 import { CountingWaiters, organizationId, setUpTestHub } from "./test-hub.ts";
 
-const { db, waiters, serveHub, newFactory } = setUpTestHub();
+const { db, waiters, serveHub, newFactory, requestToken } = setUpTestHub();
 let url: string;
 
 beforeAll(async () => {
@@ -74,6 +78,7 @@ const send = async (factoryIds: string[], name = "issues") =>
     await fanOutProviderEvent(db, waiters, {
       organizationId,
       appId: await appFor(factoryIds),
+      installationId: null,
       provider: "github",
       name,
       payload: { action: name },
@@ -305,4 +310,54 @@ dbTest("fans an event out only to the factories its app is assigned to", async (
   expect((await poll(token)).body.messages).toMatchObject([{ event: { name: "shared" } }]);
   expect((await poll(unassigned.token)).body.messages).toEqual([]);
   expect((await poll(foreign.token)).body.messages).toEqual([]);
+});
+
+dbTest("names each event's installation as it is when the event is read", async () => {
+  const { factory, token } = await newFactory();
+  const appId = await appFor([factory.id]);
+  const [installation] = await db
+    .insert(schema.installations)
+    .values({ appId, organizationId, externalId: "named-later", account: "acme" })
+    .returning();
+  if (!installation) throw new Error("expected an installation");
+  await fanOutProviderEvent(db, waiters, {
+    organizationId,
+    appId,
+    installationId: installation.id,
+    provider: "github",
+    name: "issues",
+    payload: {},
+  });
+  const installationNames = async () =>
+    (await poll(token)).body.messages.map(
+      (message) => message.kind === "event" && message.event.installationName,
+    );
+
+  expect(await installationNames()).toEqual([null]);
+  const rename = (installationName: string) =>
+    db
+      .update(schema.installations)
+      .set({ installationName })
+      .where(eq(schema.installations.id, installation.id));
+  await rename("gh-later");
+  expect(await installationNames()).toEqual(["gh-later"]);
+  await rename("gh-renamed");
+  expect(await installationNames()).toEqual(["gh-renamed"]);
+  await db.delete(schema.installations).where(eq(schema.installations.id, installation.id));
+  expect(await installationNames()).toEqual([null]);
+});
+
+dbTest("refuses a token request that names no installation", async () => {
+  const { token } = await newFactory();
+  for (const path of [githubTokenPath, linearTokenPath, slackTokenPath, pagerDutyTokenPath]) {
+    for (const body of [{}, { installationName: "" }, { installationName: 7 }]) {
+      expect(await requestToken(path, token, body)).toEqual({
+        status: 400,
+        body: { error: "installationName must name an installation." },
+      });
+    }
+    expect(await requestToken(path, token, { installationName: "nothing" })).toMatchObject({
+      status: 404,
+    });
+  }
 });

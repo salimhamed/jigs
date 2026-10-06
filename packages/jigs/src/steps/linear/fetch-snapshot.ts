@@ -4,7 +4,7 @@
 // from the record and the new fetch is genuinely fresh, which is why a human's
 // unblocking reply appears in the later version without any special handling.
 
-import { fetchIssueSnapshot } from "../../providers/linear.ts";
+import { linearFor } from "../../providers/linear.ts";
 import { type TicketSnapshot, toTicketSnapshot } from "../../workflow/linear/snapshot.ts";
 
 /**
@@ -12,8 +12,14 @@ import { type TicketSnapshot, toTicketSnapshot } from "../../workflow/linear/sna
  *
  * @group Resolve and read
  */
-export async function fetchTicketSnapshot(issueId: string): Promise<TicketSnapshot> {
-  const raw = await fetchIssueSnapshot(issueId);
+export async function fetchTicketSnapshot({
+  installationName,
+  issueId,
+}: {
+  installationName: string;
+  issueId: string;
+}): Promise<TicketSnapshot> {
+  const raw = await linearFor(installationName).fetchIssueSnapshot(issueId);
   const snapshot = toTicketSnapshot(raw, new Date().toISOString());
   console.log(
     `[snapshot] fetched issue=${issueId} identifier=${raw.identifier} state=${snapshot.state} labels=${snapshot.labels.length === 0 ? "none" : snapshot.labels.join(",")} comments=${snapshot.comments.length}`,

@@ -38,13 +38,17 @@ test("any method is called as the bot, with non-string params JSON-encoded", asy
     return { ok: true, channel: CHANNEL, ts: TS, text: "Shipped" };
   };
   const blocks = [{ type: "section", text: { type: "mrkdwn", text: "*Shipped*" } }];
-  const body = await callSlack<{ ts: string; text: string }>("chat.update", {
-    channel: CHANNEL,
-    ts: TS,
-    blocks,
-    unfurl_links: false,
-    thread_ts: undefined,
-  });
+  const body = await callSlack<{ ts: string; text: string }>(
+    "chat.update",
+    {
+      channel: CHANNEL,
+      ts: TS,
+      blocks,
+      unfurl_links: false,
+      thread_ts: undefined,
+    },
+    { installationName: "slack-acme" },
+  );
   expect(body).toEqual({ ok: true, channel: CHANNEL, ts: TS, text: "Shipped" });
   expect(calls[0]?.headers.authorization).toBe("Bearer xoxb-test");
   expect(Object.fromEntries(sent ?? [])).toEqual({
@@ -57,11 +61,11 @@ test("any method is called as the bot, with non-string params JSON-encoded", asy
 
 test("a Slack error from any method carries Slack's code", async () => {
   routes["reactions.add"] = () => ({ ok: false, error: "already_reacted" });
-  const error = await callSlack("reactions.add", {
-    channel: CHANNEL,
-    timestamp: TS,
-    name: "eyes",
-  }).catch((e: unknown) => e);
+  const error = await callSlack(
+    "reactions.add",
+    { channel: CHANNEL, timestamp: TS, name: "eyes" },
+    { installationName: "slack-acme" },
+  ).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(SlackApiError);
   expect(error).toMatchObject({
     code: "already_reacted",

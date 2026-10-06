@@ -59,7 +59,7 @@ const parked = {
   status: "running",
   suspensions: [
     {
-      token: "github:pr:acme/api#41",
+      token: "github:pr:acme:acme/api#41",
       kind: "pull-request",
       reason: "waiting for an approving review and green CI on acme/api#41",
       url: "https://github.com/acme/api/pull/41",
@@ -75,7 +75,7 @@ const failure = (promise: Promise<unknown>) =>
 
 test("a parked run cancels with no confirmation prompt", async () => {
   respondLookup(parked);
-  respondCancel(["github:pr:acme/api#41"]);
+  respondCancel(["github:pr:acme:acme/api#41"]);
   const confirm = vi.fn();
   await cancelRun("AGE-317", deps({ confirm }));
   expect(confirm).not.toHaveBeenCalled();
@@ -94,7 +94,10 @@ test("released hooks are named by the ticket and pull request they held", async 
       },
     ],
   });
-  respondCancel(["linear:ticket:0643cabe-d6c1-4e93-9e12-f57e9e01369b", "github:pr:acme/api#41"]);
+  respondCancel([
+    "linear:ticket:acme:0643cabe-d6c1-4e93-9e12-f57e9e01369b",
+    "github:pr:acme:acme/api#41",
+  ]);
   await cancelRun("AGE-317", deps());
   expect(lines).toEqual([
     `${RUN}  cancelled`,
@@ -105,7 +108,7 @@ test("released hooks are named by the ticket and pull request they held", async 
 
 test("without a recorded ticket or pull request, the labels still avoid the tokens", async () => {
   respondLookup({ ...parked, ticket: null });
-  respondCancel(["linear:ticket:0643cabe", "github:pr:acme/api#41"]);
+  respondCancel(["linear:ticket:acme:0643cabe", "github:pr:acme:acme/api#41"]);
   await cancelRun(RUN, deps());
   expect(lines).toEqual([
     `${RUN}  cancelled`,
@@ -116,7 +119,7 @@ test("without a recorded ticket or pull request, the labels still avoid the toke
 
 test("a Slack thread wait is named by its thread, not its token", async () => {
   respondLookup({ ...parked, ticket: null });
-  respondCancel(["slack:thread:C0123ABCD:1790723244.335019"]);
+  respondCancel(["slack:thread:acme:C0123ABCD:1790723244.335019"]);
   await cancelRun(RUN, deps());
   expect(lines).toEqual([
     `${RUN}  cancelled`,
@@ -132,7 +135,7 @@ test("a minimum-retention hook is reported as still held", async () => {
         runId: RUN,
         cancelled: true,
         releasedTokens: [],
-        retainedTokens: ["linear:ticket:uuid-1"],
+        retainedTokens: ["linear:ticket:acme:uuid-1"],
         worktrees: [],
       }),
     ),

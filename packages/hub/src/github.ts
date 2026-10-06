@@ -6,12 +6,12 @@ import {
   timingSafeEqual,
 } from "node:crypto";
 import type { GitHubTokenResponse } from "@jigs-ai/hub-protocol";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
 import {
   type App,
   findApp,
-  findAssignedInstallation,
+  findNamedInstallation,
   type Installed,
   recordInstallation,
   recordInstallations,
@@ -195,26 +195,29 @@ export function createGitHubRoutes(options: {
       where: and(eq(apps.provider, "github"), eq(apps.externalId, appId)),
     })) ?? null;
 
-  const hasInstallation = async (appId: string, installationId: number) =>
-    (await db.query.installations.findFirst({
-      columns: { id: true },
-      where: and(
-        eq(installations.appId, appId),
-        eq(installations.externalId, String(installationId)),
-      ),
-    })) !== undefined;
+  const findInstallationId = async (appId: string, externalId: number) =>
+    (
+      await db.query.installations.findFirst({
+        columns: { id: true },
+        where: and(
+          eq(installations.appId, appId),
+          eq(installations.externalId, String(externalId)),
+        ),
+      })
+    )?.id ?? null;
 
   // An installation the hub missed, such as one made while the hub was down, is
   // learned from GitHub before its event is dropped.
-  const knowsInstallation = async (app: App, installationId: number) => {
-    if (await hasInstallation(app.id, installationId)) return true;
+  const learnInstallation = async (app: App, externalId: number) => {
+    const known = await findInstallationId(app.id, externalId);
+    if (known) return known;
     const { privateKey } = decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets);
     const installed = await listInstallations(apiUrl, app.externalId, privateKey);
     if ("status" in installed) {
       throw new Error(`GitHub answered ${installed.status} listing ${app.name}'s installations`);
     }
     await recordInstallations(db, app, installed.installations);
-    return installed.installations.some((row) => row.externalId === String(installationId));
+    return findInstallationId(app.id, externalId);
   };
 
   router.post(githubWebhookPath, webhookBody, async (request, response) => {
@@ -241,27 +244,33 @@ export function createGitHubRoutes(options: {
       response,
     );
     if (!payload) return;
-    const installationId = payload.installation?.id;
-    if (name === "installation" && installationId !== undefined) {
+    const externalId = payload.installation?.id;
+    let installationId: string | null;
+    if (name === "installation" && externalId !== undefined) {
       if (payload.action === "deleted") {
-        await removeInstallation(db, app.id, String(installationId));
+        await removeInstallation(db, app.id, String(externalId));
       } else if (payload.action === "created") {
         await recordInstallation(db, app, {
-          externalId: String(installationId),
+          externalId: String(externalId),
           account: accountName(payload.installation ?? {}),
         });
       }
-    } else if (installationId === undefined || !(await knowsInstallation(app, installationId))) {
-      console.warn(
-        `[github] dropped ${name} for ${app.name}: installation ${installationId ?? "(none)"} is not one of its installations`,
-      );
-      // 202, unlike Slack's 200: still a success, but the delivery log shows nothing was kept.
-      response.status(202).end();
-      return;
+      installationId = await findInstallationId(app.id, externalId);
+    } else {
+      installationId = externalId === undefined ? null : await learnInstallation(app, externalId);
+      if (installationId === null) {
+        console.warn(
+          `[github] dropped ${name} for ${app.name}: installation ${externalId ?? "(none)"} is not one of its installations`,
+        );
+        // 202, unlike Slack's 200: still a success, but the delivery log shows nothing was kept.
+        response.status(202).end();
+        return;
+      }
     }
     await fanOutProviderEvent(db, waiters, {
       organizationId: app.organizationId,
       appId: app.id,
+      installationId,
       provider: "github",
       name,
       payload,
@@ -298,28 +307,19 @@ export function createGitHubRoutes(options: {
 }
 
 /**
- * A token of the one GitHub App assigned to the factory that is installed on
- * `owner`, minted fresh for every request and kept nowhere: the factory caches
- * its own, and asks again only when it needs a longer-lived token or GitHub
- * rejected the last.
+ * A token of the named installation of a GitHub App assigned to the factory,
+ * minted fresh for every request and kept nowhere: the factory caches its own,
+ * and asks again only when it needs a longer-lived token or GitHub rejected
+ * the last.
  */
 export async function issueGitHubToken(
   db: HubDatabase,
   encryptionKey: Buffer,
   factoryId: string,
-  owner: string,
+  installationName: string,
   { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
-): Promise<{ token: GitHubTokenResponse } | { status: 404 | 409; error: string }> {
-  const found = await findAssignedInstallation(
-    db,
-    factoryId,
-    "github",
-    sql`lower(${installations.account}) = lower(${owner})`,
-    {
-      none: `No GitHub App assigned to this factory is installed on ${owner}.`,
-      several: `More than one GitHub App assigned to this factory is installed on ${owner}`,
-    },
-  );
+): Promise<{ token: GitHubTokenResponse } | { status: 404; error: string }> {
+  const found = await findNamedInstallation(db, factoryId, "github", installationName);
   if ("error" in found) return found;
   const { app, installation } = found;
   const { privateKey } = decryptJson<GitHubAppSecrets>(encryptionKey, app.secrets);
@@ -334,7 +334,14 @@ export async function issueGitHubToken(
   }
   const { token, expires_at } = (await response.json()) as { token: string; expires_at: string };
   const botUserId = await readBotUserId(db, apiUrl, app, token);
-  return { token: { token, expiresAt: expires_at, app: { slug: app.name, botUserId } } };
+  return {
+    token: {
+      token,
+      expiresAt: expires_at,
+      account: installation.account,
+      app: { slug: app.name, botUserId },
+    },
+  };
 }
 
 async function readBotUserId(

@@ -5,6 +5,7 @@ import {
   defaultPullRequestScope,
   defineWorkflow,
   harnesses,
+  installationNameSchema,
   JigsError,
   type NeedsHuman,
   renderTicketSnapshot,
@@ -30,9 +31,10 @@ import { reviewTicket, type TicketHandoff } from "./review-ticket.ts";
 
 // The agents this workflow can run, by the part they play. A run picks one per
 // part by name; edit a line here to change a default model or harness. The
-// builder acts on GitHub as the factory's App (`github: true`).
+// builder also acts on GitHub as the factory's App, through the binding's
+// installation, which the run adds once it has the worktree.
 const agents = {
-  builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
+  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
 };
 const agentName = z.enum(["builder", "reviewer"]);
@@ -48,6 +50,8 @@ const approvalCovers: ApprovalCoverage = "latest-commit";
 
 const inputs = z.object({
   ticket: z.string().min(1),
+  // The Linear installation, as named on the hub, the ticket is in.
+  linearInstallation: installationNameSchema,
   binding: z.string().min(1),
   builder: agentName.default("builder"),
   reviewer: agentName.default("reviewer"),
@@ -64,10 +68,17 @@ const inputs = z.object({
 export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
 
-  const { claim, snapshot } = await acquireTicket(input.ticket);
-  await setTicketStatus(snapshot.id, "In Progress");
+  const installationName = input.linearInstallation;
+  const { claim, snapshot } = await acquireTicket({ installationName, reference: input.ticket });
+  const setStatus = (stateName: string) =>
+    setTicketStatus({ installationName, issueId: snapshot.id, stateName });
+  await setStatus("In Progress");
 
   const worktree = await provisionWorktree({ binding: input.binding, branch: snapshot.branchName });
+  const builder = {
+    ...agents[input.builder],
+    github: { installationName: worktree.installationName },
+  };
   const handoff = await reviewTicket({
     claim,
     snapshot,
@@ -82,14 +93,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     key,
     worktree,
     prompts,
-    builder: agentSession({ name: "builder", harness: agents[input.builder], cwd }),
+    builder: agentSession({ name: "builder", harness: builder, cwd }),
     reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
   };
 
   // A stop leaves the work where it is, tells the ticket, and fails the run.
   const stop = async (note: TicketNote): Promise<never> => {
     await noteOnTicket(claim, note);
-    await setTicketStatus(snapshot.id, "Todo");
+    await setStatus("Todo");
     throw new JigsError(note.headline);
   };
 
@@ -123,7 +134,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     title: described.title,
     body: withReviewerNotes(described.body, built.notes),
   });
-  await setTicketStatus(snapshot.id, "In Review");
+  await setStatus("In Review");
 
   const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate,
@@ -146,7 +157,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   });
   if (followed.outcome === "closed") return stop(closedNote(key, worktree, pr.url));
 
-  await setTicketStatus(snapshot.id, "Done");
+  await setStatus("Done");
   return { pr: pr.url };
 }
 

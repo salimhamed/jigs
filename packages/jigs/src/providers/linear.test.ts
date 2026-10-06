@@ -1,4 +1,5 @@
 import { beforeEach, expect, test } from "vitest";
+import { createHubTokens } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
 import { createLinearClient, mention } from "./linear.ts";
 import { createLinearAuth, LINEAR_API_URL } from "./linear-auth.ts";
@@ -16,13 +17,14 @@ beforeEach(() => {
     return reply;
   });
   linear = createLinearClient({
-    auth: createLinearAuth(undefined, {
-      issue: async () => ({
+    installationName: "acme",
+    auth: createLinearAuth(
+      createHubTokens(async () => ({
         token: "lin_oauth",
         expiresAt: "2999-01-01T00:00:00Z",
         app: { name: "jigs", userId: "app-user" },
-      }),
-    }),
+      })),
+    ),
     fetch: server.fetch,
   });
 });

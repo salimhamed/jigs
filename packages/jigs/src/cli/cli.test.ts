@@ -32,12 +32,17 @@ test("init scaffolds through the CLI parser, and bind records its binding", () =
       "git@github.com:some-org/example.git",
       "--binding-name",
       "example-alias",
+      "--installation",
+      "github-some-org",
     );
     // With no hub behind it the label leg fails, after the binding is recorded.
     expect(bound.status).not.toBe(0);
     expect(bound.stderr).toContain("jigs:approved label could not be ensured");
     const config = readFactoryConfig(cwd);
-    expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
+    expect(config.bindings["example-alias"]).toMatchObject({
+      remote: "git@github.com:some-org/example.git",
+      installationName: "github-some-org",
+    });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -119,6 +124,7 @@ test("repository and recipe command help uses explicit placeholders", () => {
   const bind = run(cwd, "bind", "--help").stdout;
   expect(bind).toContain("<remote-url>");
   expect(bind).toContain("<binding-name>");
+  expect(bind).toContain("--installation <installation-name>");
   expect(run(cwd, "unbind", "--help").stdout).toContain("<binding-name>");
   expect(run(cwd, "recipe", "add", "--help").stdout).toContain("<recipe-name>");
 });

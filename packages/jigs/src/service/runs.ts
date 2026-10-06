@@ -7,7 +7,7 @@ import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import { currentFactoryContext } from "../config/factory-context.ts";
 import type { PullRequestRef } from "../providers/github.ts";
-import { getComment } from "../providers/linear.ts";
+import { linearFor } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
@@ -206,7 +206,9 @@ export async function enrichSuspensions(
         return await withPrState(suspension, parsed.pr);
       }
       if (parsed?.kind !== "needs-human" || parsed.halt === null) return suspension;
-      const comment = await getComment(parsed.halt.commentId).catch(() => null);
+      const comment = await linearFor(parsed.halt.installationName)
+        .getComment(parsed.halt.commentId)
+        .catch(() => null);
       if (comment === null) return suspension;
       return { ...suspension, url: comment.url, question: comment.body };
     }),

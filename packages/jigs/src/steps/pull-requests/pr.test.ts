@@ -39,10 +39,11 @@ vi.mock("../../providers/github.ts", () => ({
 }));
 vi.mock("../../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 
-const pr = { owner: "owner", repo: "repo", number: 1 };
-const repo = { owner: "owner", repo: "repo" };
+const pr = { installationName: "github-acme", owner: "owner", repo: "repo", number: 1 };
+const repo = { installationName: "github-acme", owner: "owner", repo: "repo" };
 const worktree = {
   binding: "app",
+  installationName: "github-acme",
   path: "/work",
   branch: "fix",
   defaultBranch: "main",
@@ -60,7 +61,7 @@ const writeConfig = (github: object = {}) =>
     hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
     github: ${JSON.stringify(github)},
     bindings: {
-      app: { remote: "git@github.com:owner/repo.git" },
+      app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" },
     },
   };`,
   );
@@ -95,6 +96,7 @@ beforeEach(() => {
     bearer: async () => "token",
     invalidate: () => {},
     bot: async () => ({ login: "jigs[bot]", id: 1 }),
+    account: async () => "owner",
   });
   vi.mocked(fetchPrSnapshot).mockResolvedValue(snapshot);
   vi.mocked(fetchPrTitle).mockResolvedValue("fix: title");
@@ -319,6 +321,7 @@ test("createPullRequest forwards draft only when supplied", async () => {
 
   await createPullRequest({ worktree, title: "fix: search", body: "Body." });
   expect(createPr).toHaveBeenLastCalledWith({
+    installationName: "github-acme",
     owner: "owner",
     repo: "repo",
     head: "fix",
@@ -383,26 +386,33 @@ test("preservedCommitMessageBody keeps useful commit-message content", () => {
   expect(preservedCommitMessageBody([])).toBe("");
 });
 
-test("opening a PR derives its repository, head and default branch from the supplied worktree", async () => {
+test("opening a PR takes its installation, head and default branch from the worktree, and its repository from the binding", async () => {
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
     hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
-    bindings: { docs: { remote: "git@github.com:acme/docs.git" } },
+    bindings: { docs: { remote: "git@github.com:acme/docs.git", installationName: "github-changed" } },
   };`,
   );
   await createPullRequest({
-    worktree: { ...worktree, binding: "docs", branch: "update-guide", defaultBranch: "trunk" },
+    worktree: {
+      ...worktree,
+      binding: "docs",
+      installationName: "github-docs",
+      branch: "update-guide",
+      defaultBranch: "trunk",
+    },
     title: "Update guide",
     body: "More examples.",
     draft: false,
   });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(
-    { owner: "acme", repo: "docs" },
+    { installationName: "github-docs", owner: "acme", repo: "docs" },
     "update-guide",
     "trunk",
   );
   expect(createPr).toHaveBeenCalledExactlyOnceWith({
+    installationName: "github-docs",
     owner: "acme",
     repo: "docs",
     head: "update-guide",
@@ -419,7 +429,7 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
     `export default {
     hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
     github: { operator: "salimhamed", mergeApproval: "review" },
-    bindings: { app: { remote: "git@github.com:owner/repo.git" } },
+    bindings: { app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" } },
   };`,
   );
   const approvedEarlier = (user: string) => ({

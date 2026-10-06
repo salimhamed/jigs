@@ -17,6 +17,7 @@ export const JIGS_LABELS: readonly JigsLabel[] = [
 ];
 
 export interface EnsureRepoLabelOptions {
+  installationName: string;
   owner: string;
   repo: string;
   label: JigsLabel;
@@ -25,6 +26,7 @@ export interface EnsureRepoLabelOptions {
 
 /** Create a repository label when absent, leaving an existing label untouched. */
 export async function ensureRepoLabel({
+  installationName,
   owner,
   repo,
   label,
@@ -32,12 +34,12 @@ export async function ensureRepoLabel({
 }: EnsureRepoLabelOptions): Promise<"created" | "verified"> {
   const labelPath = `/repos/${owner}/${repo}/labels/${encodeURIComponent(label.name)}`;
   try {
-    await githubGet(labelPath, context);
+    await githubGet(installationName, labelPath, context);
     return "verified";
   } catch (err) {
     if (!(err instanceof GitHubApiError) || err.status !== 404) throw err;
   }
 
-  await githubRequest("POST", `/repos/${owner}/${repo}/labels`, label, { context });
+  await githubRequest(installationName, "POST", `/repos/${owner}/${repo}/labels`, label, context);
   return "created";
 }

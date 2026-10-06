@@ -1,5 +1,5 @@
 {
-  "id": "5d537170-40de-456d-9789-f5ccf8542774",
+  "id": "e558de9f-e8b0-493d-a986-523a870acf7c",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -940,6 +940,12 @@
           "primaryKey": false,
           "notNull": false
         },
+        "installation_id": {
+          "name": "installation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
+        },
         "provider": {
           "name": "provider",
           "type": "text",
@@ -993,6 +999,19 @@
           "tableTo": "apps",
           "columnsFrom": [
             "app_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "provider_events_installation_id_installations_id_fk": {
+          "name": "provider_events_installation_id_installations_id_fk",
+          "tableFrom": "provider_events",
+          "tableTo": "installations",
+          "columnsFrom": [
+            "installation_id"
           ],
           "columnsTo": [
             "id"

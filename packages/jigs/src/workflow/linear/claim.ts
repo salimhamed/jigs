@@ -7,8 +7,8 @@ import { ticketToken } from "./ticket-token.ts";
 // cannot drift while they share the one constructor. Linear Comment payloads
 // carry issueId as a UUID, so the token does too.
 
-/** Derive a claimed ticket's hook token from a Linear comment event. */
-export function tokenFromLinearPayload(payload: unknown): string | null {
+/** Derive a claimed ticket's hook token from a Linear comment event from an installation. */
+export function tokenFromLinearPayload(installationName: string, payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { type, data } = payload as {
     type?: unknown;
@@ -17,7 +17,7 @@ export function tokenFromLinearPayload(payload: unknown): string | null {
   if (type !== "Comment") return null;
   const issueId = data?.issueId;
   if (typeof issueId !== "string" || issueId === "") return null;
-  return ticketToken(issueId);
+  return ticketToken(installationName, issueId);
 }
 
 /**
@@ -46,6 +46,8 @@ export class ClaimConflictError extends Error {
  * @group Linear tickets
  */
 export interface TicketClaim {
+  /** The Linear installation, as named on the hub, the ticket is reached through. */
+  installationName: string;
   issueId: string;
   identifier: string;
   token: string;
@@ -67,16 +69,25 @@ export interface TicketClaim {
 // identifier is resolved through Linear by the run-ref resolver, so a second
 // hook keyed on the identifier would index nothing.
 /**
- * Claim a Linear ticket for the lifetime of the current workflow run.
+ * Claim a Linear ticket, in the Linear installation `installationName` names, for the lifetime of
+ * the current workflow run. Only comments from that installation wake the claim.
  *
  * @group Linear tickets
  */
-export async function claimTicket(issueId: string, identifier: string): Promise<TicketClaim> {
-  const token = ticketToken(issueId);
+export async function claimTicket({
+  installationName,
+  issueId,
+  identifier,
+}: {
+  installationName: string;
+  issueId: string;
+  identifier: string;
+}): Promise<TicketClaim> {
+  const token = ticketToken(installationName, issueId);
   const hook = createHook<unknown>({ token });
   const conflict = await hook.getConflict();
   if (conflict !== null) {
     throw new ClaimConflictError(token, conflict.runId);
   }
-  return { issueId, identifier, token, hook, postedCommentIds: [] };
+  return { installationName, issueId, identifier, token, hook, postedCommentIds: [] };
 }

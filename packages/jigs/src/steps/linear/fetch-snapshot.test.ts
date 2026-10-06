@@ -86,8 +86,14 @@ test("a later fetch carries the new comment while the earlier copy keeps its own
     }),
   });
 
-  const launch = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const later = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const launch = await fetchTicketSnapshot({
+    installationName: "linear-acme",
+    issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  });
+  const later = await fetchTicketSnapshot({
+    installationName: "linear-acme",
+    issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  });
 
   expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
   expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);

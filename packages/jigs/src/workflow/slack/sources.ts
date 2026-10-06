@@ -4,9 +4,9 @@ import type { SourceDescriptor } from "../factory.ts";
  * Event-trigger sources for Slack, one per trigger in `jigs.config.ts`.
  *
  * @remarks
- * Both read top-level messages in the listed channels, which the factory's
- * bot must be a member of, and start one run per message with the inputs
- * `{ channel, ts }`. Posts from people, other bots and apps count, including
+ * Both read top-level messages in the listed channels of one Slack
+ * installation, named as on the hub, whose bot must be a member of them, and
+ * start one run per message with the inputs `{ installationName, channel, ts }`. Posts from people, other bots and apps count, including
  * posts with files. The factory's own posts never count, and neither do
  * thread replies, edits, deletes, joins or other channel events. Direct
  * messages are never read. Channels are listed by ID, such as `C0123ABCD`,
@@ -20,7 +20,7 @@ import type { SourceDescriptor } from "../factory.ts";
  * const triggers = {
  *   "answer-questions": {
  *     workflow: "answer",
- *     source: slack.mentions({ channels: ["C0123ABCD"] }),
+ *     source: slack.mentions({ installationName: "acme", channels: ["C0123ABCD"] }),
  *   },
  * };
  * ```
@@ -29,13 +29,25 @@ import type { SourceDescriptor } from "../factory.ts";
  */
 export const slack = {
   /** Every top-level message in the channels. */
-  messages: ({ channels }: { channels: string[] }): SourceDescriptor => ({
+  messages: ({
+    installationName,
+    channels,
+  }: {
+    installationName: string;
+    channels: string[];
+  }): SourceDescriptor => ({
     kind: "slack.messages",
-    params: { channels },
+    params: { installationName, channels },
   }),
   /** Only the top-level messages that mention the factory's bot. */
-  mentions: ({ channels }: { channels: string[] }): SourceDescriptor => ({
+  mentions: ({
+    installationName,
+    channels,
+  }: {
+    installationName: string;
+    channels: string[];
+  }): SourceDescriptor => ({
     kind: "slack.mentions",
-    params: { channels },
+    params: { installationName, channels },
   }),
 };

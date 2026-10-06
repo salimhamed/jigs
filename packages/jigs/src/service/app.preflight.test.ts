@@ -43,7 +43,12 @@ const app = appClient(
         inputs: z.object({}),
         requires: {
           bindings: ["api"],
-          agents: { builder: harnesses.claude({ model: "opus" }) },
+          agents: {
+            builder: harnesses.claude({
+              model: "opus",
+              linear: { installationName: "linear-acme" },
+            }),
+          },
           integrations: ["linear", "github"],
         },
       },
@@ -116,7 +121,7 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function seedThreeFailures(): void {
+function seedFailures(): void {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
 }
@@ -142,8 +147,8 @@ interface Failure {
   repair: string;
 }
 
-test("a trigger with three seeded failures is refused with all three at once", async () => {
-  seedThreeFailures();
+test("a trigger with several seeded failures is refused with all of them at once", async () => {
+  seedFailures();
   const res = await trigger();
   expect(res.status).toBe(424);
 
@@ -155,8 +160,7 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "github.identity",
-    "linear.identity",
+    "linear.installations",
   ]);
   for (const failure of body.failures) {
     expect(failure.reason).not.toBe("");
@@ -167,7 +171,7 @@ test("a trigger with three seeded failures is refused with all three at once", a
 });
 
 test("the undeclared-binding failure names the exact jigs bind invocation", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await trigger()).json()) as { failures: Failure[] };
   const binding = body.failures.find((failure) => failure.id === "binding.api");
   expect(binding?.repair).toContain("jigs bind");
@@ -188,7 +192,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
   const workspace = makeTmpDir();
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { playground: { remote: remoteDir } },
+    bindings: { playground: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   await ensureBindingClone({
@@ -203,7 +207,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
 });
 
 test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {
-  seedThreeFailures();
+  seedFailures();
   vi.stubEnv("GITHUB_TOKEN", "rejected-token");
   vi.stubGlobal("fetch", async () =>
     Response.json({ message: "Bad credentials" }, { status: 401 }),
@@ -217,7 +221,7 @@ test("GET /api/doctor reports rejected configured credentials without creating a
   };
   expect(body.ok).toBe(false);
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
-  expect(failed.map((check) => check.id)).toContain("github.identity");
+  expect(failed.map((check) => check.id)).toContain("github.installations");
   for (const failure of failed) expect(failure.repair).not.toBe("");
   // Doctor reads every workflow's manifest for the harnesses the factory uses.
   expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
@@ -231,7 +235,7 @@ test("a green preflight lets the trigger call start()", async () => {
   // ls-remote against the URL, and this one answers offline.
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { api: { remote: remoteDir } },
+    bindings: { api: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
@@ -250,6 +254,14 @@ test("a green preflight lets the trigger call start()", async () => {
         app: { name: "jigs", userId: "app-user" },
       });
     }
+    if (url === "https://hub.example.test/api/factory/tokens/github") {
+      return Response.json({
+        token: "ghs_test",
+        expiresAt: "2999-01-01T00:00:00Z",
+        account: "acme",
+        app: { slug: "jigs-dev", botUserId: 1 },
+      });
+    }
     if (url === "https://hub.example.test/api/factory/status") {
       return Response.json({
         factory: { name: "dev" },
@@ -258,7 +270,12 @@ test("a green preflight lets the trigger call start()", async () => {
           {
             provider: "github",
             name: "jigs-dev",
-            installations: [{ account: "acme", installationName: null }],
+            installations: [{ account: "acme", installationName: "acme" }],
+          },
+          {
+            provider: "linear",
+            name: "jigs",
+            installations: [{ account: "Acme", installationName: "acme-linear" }],
           },
         ],
       });
@@ -277,7 +294,7 @@ test("a green preflight lets the trigger call start()", async () => {
 });
 
 test("doctor reports a malformed schedule and trigger beside the catalog's own checks", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await scheduledApp.request("/api/doctor")).json()) as {
     ok: boolean;
     checks: Failure[];

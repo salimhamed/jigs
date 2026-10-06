@@ -2,7 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type PagerDutyTokenResponse, pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
-import { type App, findApp, findAssignedInstallation, recordInstallation } from "./apps.ts";
+import { type App, findApp, findNamedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
@@ -58,7 +58,7 @@ async function mintToken(
   apiUrl: string,
   credentials: { clientId: string; clientSecret: string; subdomain: string; region: string },
   now = Date.now(),
-): Promise<PagerDutyTokenResponse | { refused: number }> {
+): Promise<Omit<PagerDutyTokenResponse, "from"> | { refused: number }> {
   const response = await fetch(`${apiUrl}/oauth/token`, {
     method: "POST",
     headers: { "content-type": "application/x-www-form-urlencoded" },
@@ -285,9 +285,15 @@ export function createPagerDutyRoutes(options: {
     }
     const payload = parseWebhookJson<{ event?: { event_type?: string } }>(body, response);
     if (!payload) return;
+    // A PagerDuty app acts in the one account it was added with.
+    const installation = await db.query.installations.findFirst({
+      columns: { id: true },
+      where: eq(installations.appId, app.id),
+    });
     await fanOutProviderEvent(db, waiters, {
       organizationId: app.organizationId,
       appId: app.id,
+      installationId: installation?.id ?? null,
       provider: "pagerduty",
       name: payload.event?.event_type ?? "",
       payload,
@@ -298,24 +304,23 @@ export function createPagerDutyRoutes(options: {
   return router;
 }
 
-/** A fresh app token, minted on every request, of the one PagerDuty app assigned to a factory. */
+/** A fresh app token, minted on every request, of the named account of a PagerDuty app assigned to a factory. */
 export async function issuePagerDutyToken(
   db: HubDatabase,
   encryptionKey: Buffer,
   factoryId: string,
+  installationName: string,
   { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
-): Promise<{ token: PagerDutyTokenResponse } | { status: 404 | 409 | 503; error: string }> {
-  const found = await findAssignedInstallation(db, factoryId, "pagerduty", undefined, {
-    none: "No PagerDuty app is assigned to this factory.",
-    several: "More than one PagerDuty app is assigned to this factory, so assign one",
-  });
+): Promise<{ token: PagerDutyTokenResponse } | { status: 404 | 503; error: string }> {
+  const found = await findNamedInstallation(db, factoryId, "pagerduty", installationName);
   if ("error" in found) return found;
   const { app, installation } = found;
+  const { region, from } = installation.settings as PagerDutyAccountSettings;
   const minted = await mintToken(apiUrl, {
     clientId: app.externalId,
     clientSecret: readSecrets(encryptionKey, app).clientSecret,
     subdomain: installation.account,
-    region: (installation.settings as PagerDutyAccountSettings).region,
+    region,
   });
   if ("refused" in minted) {
     return {
@@ -323,5 +328,5 @@ export async function issuePagerDutyToken(
       error: `PagerDuty refused ${app.name}'s credentials for ${installation.account} (${minted.refused}); remove the app on the hub and add it with working ones.`,
     };
   }
-  return { token: minted };
+  return { token: { ...minted, from } };
 }

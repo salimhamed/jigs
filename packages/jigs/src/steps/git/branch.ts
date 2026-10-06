@@ -26,13 +26,13 @@ import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 // is redirected: the binding's clone and every fetch still use its own remote,
 // as the operator. A remote off GitHub has no installation token, so it is
 // pushed to as the operator too.
-async function pushTarget(worktreePath: string): Promise<PushTarget> {
+async function pushTarget({ path: worktreePath, installationName }: Worktree): Promise<PushTarget> {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
   if (ref === null) return DEFAULT_PUSH_TARGET;
   return {
     remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
-    token: await githubAuthFor(ref.owner).bearer(),
+    token: await githubAuthFor(installationName).bearer(),
   };
 }
 
@@ -87,7 +87,7 @@ export async function pushBranch(worktree: Worktree): Promise<{
 }> {
   const { path: worktreePath, branch } = worktree;
   await pushAndRecord(worktreePath, branch, async () =>
-    gitPushBranch(worktreePath, branch, await pushTarget(worktreePath)),
+    gitPushBranch(worktreePath, branch, await pushTarget(worktree)),
   );
   return { headSha: await headSha(worktreePath) };
 }
@@ -120,7 +120,7 @@ export async function pushApprovedChange(
     );
   }
   await pushAndRecord(worktreePath, branch, async () =>
-    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath)),
+    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktree)),
   );
   return { headSha: approvedCommit };
 }

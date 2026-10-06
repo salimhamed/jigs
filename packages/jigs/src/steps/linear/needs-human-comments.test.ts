@@ -44,14 +44,10 @@ const {
   })),
 }));
 
+const linearFor = vi.hoisted(() => vi.fn());
 vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/linear.ts")>()),
-  appUser,
-  createComment,
-  findComment,
-  findUserByEmail,
-  getIssueParticipants,
-  listCommentsSince,
+  linearFor,
 }));
 
 const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote, ticketCommentId } =
@@ -79,6 +75,14 @@ inTestFactory();
 
 beforeEach(() => {
   vi.stubEnv("JIGS_DASHBOARD_PORT", "9040");
+  linearFor.mockReturnValue({
+    appUser,
+    createComment,
+    findComment,
+    findUserByEmail,
+    getIssueParticipants,
+    listCommentsSince,
+  });
   createComment.mockClear();
   findComment.mockReset();
   findComment.mockResolvedValue(null);
@@ -125,7 +129,11 @@ const questions: Halt = {
 // the run and the work it paused — the four things the rendering this replaced
 // got wrong.
 test("a two-question halt renders as numbered questions with lettered options", async () => {
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
 
   expect(body()).toBe(
     `@[Salim](user-1) @[Dana](user-2) — jigs paused work on **AI-659** and needs your answers before it writes any code.
@@ -161,15 +169,18 @@ The ticket offers two, but they behave differently.
 
 test("a retry halt renders its notes and asks for any reply at all", async () => {
   await postTicketHumanInputRequest(
-    "issue-1",
     {
-      headline: "jigs could not start a step on **AI-659** because a check failed.",
-      where: "starting a step",
-      notes: [
-        "MCP server 'linear': did not start — fix the 'linear' server",
-        "AWS credentials: the session expired — run: aws sso login --profile prod",
-      ],
-      onReply: "retry",
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      halt: {
+        headline: "jigs could not start a step on **AI-659** because a check failed.",
+        where: "starting a step",
+        notes: [
+          "MCP server 'linear': did not start — fix the 'linear' server",
+          "AWS credentials: the session expired — run: aws sso login --profile prod",
+        ],
+        onReply: "retry",
+      },
     },
     { workflowRunId: "wrun_2", workflowName: "ship", stepId: "step_01" },
     definition,
@@ -197,7 +208,11 @@ test("the creator and the assignee are one mention when they are one person", as
     creator: { id: "user-1", name: "Salim" },
     assignee: { id: "user-1", name: "Salim" },
   });
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(body().split("\n")[0]).toBe(
     "@[Salim](user-1) — jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
@@ -208,7 +223,11 @@ test("an unassigned ticket greets its creator alone", async () => {
     creator: { id: "user-1", name: "Salim" },
     assignee: null,
   });
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(body().split("\n")[0]).toBe(
     "@[Salim](user-1) — jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
@@ -216,7 +235,11 @@ test("an unassigned ticket greets its creator alone", async () => {
 
 test("a ticket with nobody on it gets the headline without a dangling dash", async () => {
   getIssueParticipants.mockResolvedValue({ creator: null, assignee: null });
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(body().split("\n")[0]).toBe(
     "jigs paused work on **AI-659** and needs your answers before it writes any code.",
   );
@@ -224,16 +247,19 @@ test("a ticket with nobody on it gets the headline without a dangling dash", asy
 
 test("a note greets the participants, bullets its lines, and closes with what to do", async () => {
   await postTicketNote(
-    "issue-1",
     {
-      headline:
-        "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:",
-      notes: [
-        "Only the validate script changes.",
-        "The build folder is created before Docker starts.",
-      ],
-      closing:
-        "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      note: {
+        headline:
+          "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:",
+        notes: [
+          "Only the validate script changes.",
+          "The build folder is created before Docker starts.",
+        ],
+        closing:
+          "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
+      },
     },
     context,
     definition,
@@ -252,8 +278,7 @@ jigs is going ahead with these assumptions. To change one, comment on the pull r
 
 test("a factory's own renderer replaces the comment without replacing the step", async () => {
   await postTicketHumanInputRequest(
-    "issue-1",
-    questions,
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
     context,
     definition,
     (halt) => `just: ${halt.headline}`,
@@ -266,8 +291,11 @@ test("a factory's own renderer replaces the comment without replacing the step",
 test("a note returns the id of the comment it posted", async () => {
   expect(
     await postTicketNote(
-      "issue-1",
-      { headline: "Done.", notes: [], closing: "" },
+      {
+        installationName: "linear-acme",
+        issueId: "issue-1",
+        note: { headline: "Done.", notes: [], closing: "" },
+      },
       context,
       definition,
     ),
@@ -277,7 +305,11 @@ test("a note returns the id of the comment it posted", async () => {
 const done = { headline: "Done.", notes: [], closing: "" };
 
 test("a note is created under an id derived from the run, the step and the issue", async () => {
-  await postTicketNote("issue-1", done, context, definition);
+  await postTicketNote(
+    { installationName: "linear-acme", issueId: "issue-1", note: done },
+    context,
+    definition,
+  );
   const id = ticketCommentId(context, "issue-1");
   expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(findComment).toHaveBeenCalledWith(id);
@@ -287,22 +319,44 @@ test("a note is created under an id derived from the run, the step and the issue
 });
 
 test("a retry of the same step reuses the id, even when the mentions changed", async () => {
-  await postTicketNote("issue-1", done, context, definition);
-  await postTicketNote("issue-1", done, context, operator("op@example.com"));
+  await postTicketNote(
+    { installationName: "linear-acme", issueId: "issue-1", note: done },
+    context,
+    definition,
+  );
+  await postTicketNote(
+    { installationName: "linear-acme", issueId: "issue-1", note: done },
+    context,
+    operator("op@example.com"),
+  );
   const id = ticketCommentId(context, "issue-1");
   expect(findComment.mock.calls).toEqual([[id], [id]]);
 });
 
 test("the same text posted from two steps is two comments", async () => {
-  await postTicketNote("issue-1", done, context, definition);
-  await postTicketNote("issue-1", done, { ...context, stepId: "step_02" }, definition);
+  await postTicketNote(
+    { installationName: "linear-acme", issueId: "issue-1", note: done },
+    context,
+    definition,
+  );
+  await postTicketNote(
+    { installationName: "linear-acme", issueId: "issue-1", note: done },
+    { ...context, stepId: "step_02" },
+    definition,
+  );
   const [first, second] = createComment.mock.calls.map((call) => call[2]);
   expect(first).not.toBe(second);
 });
 
 test("a retried note that already landed is returned, not posted again", async () => {
   findComment.mockResolvedValueOnce({ id: "landed", createdAt: "2026-08-31T12:00:00.000Z" });
-  expect(await postTicketNote("issue-1", done, context, definition)).toEqual({
+  expect(
+    await postTicketNote(
+      { installationName: "linear-acme", issueId: "issue-1", note: done },
+      context,
+      definition,
+    ),
+  ).toEqual({
     commentId: "landed",
   });
   expect(createComment).not.toHaveBeenCalled();
@@ -315,21 +369,37 @@ test("a create that fails after the comment landed returns the comment", async (
   findComment
     .mockResolvedValueOnce(null)
     .mockResolvedValueOnce({ id: "landed", createdAt: "2026-08-31T12:00:00.000Z" });
-  expect(await postTicketNote("issue-1", done, context, definition)).toEqual({
+  expect(
+    await postTicketNote(
+      { installationName: "linear-acme", issueId: "issue-1", note: done },
+      context,
+      definition,
+    ),
+  ).toEqual({
     commentId: "landed",
   });
 });
 
 test("a create that fails without a comment rethrows, so the step retries", async () => {
   createComment.mockRejectedValueOnce(new Error("Linear API 503"));
-  await expect(postTicketNote("issue-1", done, context, definition)).rejects.toThrow(
-    "Linear API 503",
-  );
+  await expect(
+    postTicketNote(
+      { installationName: "linear-acme", issueId: "issue-1", note: done },
+      context,
+      definition,
+    ),
+  ).rejects.toThrow("Linear API 503");
 });
 
 test("a retried halt question is found under the same id instead of posted twice", async () => {
   findComment.mockResolvedValueOnce({ id: "asked", createdAt: "2026-08-31T12:05:00.000Z" });
-  expect(await postTicketHumanInputRequest("issue-1", questions, context, definition)).toEqual({
+  expect(
+    await postTicketHumanInputRequest(
+      { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+      context,
+      definition,
+    ),
+  ).toEqual({
     commentId: "asked",
     postedAt: "2026-08-31T12:05:00.000Z",
   });
@@ -348,7 +418,11 @@ const greeting = (): string => body().split(" — ")[0] ?? "";
 test("with an operator, a comment mentions the operator and the assignee, not the creator", async () => {
   const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(greeting()).toBe("@[Olu](user-9) @[Dana](user-2)");
 });
 
@@ -358,8 +432,11 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
   findUserByEmail.mockImplementation(byEmail);
   try {
     await postTicketNote(
-      "issue-1",
-      { headline: "Done.", notes: [], closing: "" },
+      {
+        installationName: "linear-acme",
+        issueId: "issue-1",
+        note: { headline: "Done.", notes: [], closing: "" },
+      },
       context,
       definition,
     );
@@ -371,8 +448,11 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
     );
     createComment.mockClear();
     await postTicketNote(
-      "issue-1",
-      { headline: "Done.", notes: [], closing: "" },
+      {
+        installationName: "linear-acme",
+        issueId: "issue-1",
+        note: { headline: "Done.", notes: [], closing: "" },
+      },
       context,
       operator("op@example.com"),
     );
@@ -386,7 +466,11 @@ test("the operator comes from the passed definition, never from jigs.config.ts o
 test("an operator who is also the assignee is mentioned once", async () => {
   const definition = operator("dana@example.com");
   findUserByEmail.mockImplementation(byEmail);
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(greeting()).toBe("@[Dana](user-2)");
 });
 
@@ -394,7 +478,11 @@ test("an operator Linear cannot find leaves the assignee alone, with a warning",
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
   const definition = operator("gone@example.com");
   findUserByEmail.mockImplementation(byEmail);
-  await postTicketHumanInputRequest("issue-1", questions, context, definition);
+  await postTicketHumanInputRequest(
+    { installationName: "linear-acme", issueId: "issue-1", halt: questions },
+    context,
+    definition,
+  );
   expect(greeting()).toBe("@[Dana](user-2)");
   expect(warn).toHaveBeenCalledWith(expect.stringContaining("gone@example.com"));
   warn.mockRestore();
@@ -405,8 +493,11 @@ test("a failed operator lookup still posts, mentioning the assignee", async () =
   const definition = operator("op@example.com");
   findUserByEmail.mockRejectedValue(new Error("Linear API 500"));
   const posted = await postTicketNote(
-    "issue-1",
-    { headline: "Done.", notes: [], closing: "" },
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      note: { headline: "Done.", notes: [], closing: "" },
+    },
     context,
     definition,
   );
@@ -421,12 +512,15 @@ test("extra mentions follow the operator and assignee, once each, skipping unkno
   const definition = operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketNote(
-    "issue-1",
     {
-      headline: "Done.",
-      notes: [],
-      closing: "",
-      mention: ["kim@example.com", "dana@example.com", "nobody@example.com", "kim@example.com"],
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      note: {
+        headline: "Done.",
+        notes: [],
+        closing: "",
+        mention: ["kim@example.com", "dana@example.com", "nobody@example.com", "kim@example.com"],
+      },
     },
     context,
     definition,
@@ -439,8 +533,11 @@ test("extra mentions follow the operator and assignee, once each, skipping unkno
 test("without an operator, extra mentions join the creator and assignee", async () => {
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest(
-    "issue-1",
-    { ...questions, mention: ["kim@example.com"] },
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      halt: { ...questions, mention: ["kim@example.com"] },
+    },
     context,
     definition,
   );
@@ -454,8 +551,11 @@ test("a ticket whose people cannot be read still posts, mentioning the operator 
   findUserByEmail.mockImplementation(byEmail);
   getIssueParticipants.mockRejectedValueOnce(new Error("Linear API 502"));
   await postTicketHumanInputRequest(
-    "issue-1",
-    { ...questions, mention: ["kim@example.com"] },
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      halt: { ...questions, mention: ["kim@example.com"] },
+    },
     context,
     definition,
   );
@@ -470,8 +570,11 @@ test("a custom renderer receives the resolved mentions", async () => {
   findUserByEmail.mockImplementation(byEmail);
   const render = vi.fn(() => "custom");
   await postTicketNote(
-    "issue-1",
-    { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      note: { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
+    },
     context,
     definition,
     render,
@@ -496,7 +599,12 @@ test("a reply check skips every comment the run posted and moves the cursor past
     { id: "answer", body: "left", createdAt: "2026-08-31T12:03:00.000Z", user: salim },
   ]);
   expect(
-    await checkForTicketHumanReply("issue-1", "2026-08-31T12:00:00.000Z", ["note", "question"]),
+    await checkForTicketHumanReply({
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      since: "2026-08-31T12:00:00.000Z",
+      postedCommentIds: ["note", "question"],
+    }),
   ).toEqual({
     reply: {
       commentId: "answer",
@@ -510,7 +618,14 @@ test("a reply check skips every comment the run posted and moves the cursor past
   listCommentsSince.mockResolvedValueOnce([
     { id: "note", body: "jigs note", createdAt: "2026-08-31T12:04:00.000Z", user: salim },
   ]);
-  expect(await checkForTicketHumanReply("issue-1", "2026-08-31T12:03:00.000Z", ["note"])).toEqual({
+  expect(
+    await checkForTicketHumanReply({
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      since: "2026-08-31T12:03:00.000Z",
+      postedCommentIds: ["note"],
+    }),
+  ).toEqual({
     reply: null,
     cursor: "2026-08-31T12:04:00.000Z",
   });
@@ -521,7 +636,14 @@ test("a reply check skips every comment the factory's app wrote, from any run", 
   listCommentsSince.mockResolvedValueOnce([
     { id: "other-run", body: "jigs halt", createdAt: "2026-08-31T12:01:00.000Z", user: app },
   ]);
-  expect(await checkForTicketHumanReply("issue-1", "2026-08-31T12:00:00.000Z", [])).toEqual({
+  expect(
+    await checkForTicketHumanReply({
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      since: "2026-08-31T12:00:00.000Z",
+      postedCommentIds: [],
+    }),
+  ).toEqual({
     reply: null,
     cursor: "2026-08-31T12:01:00.000Z",
   });

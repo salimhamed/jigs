@@ -18,7 +18,7 @@ An account admin or owner registers the app once per PagerDuty account.
    | --- | --- |
    | `incidents.read` | Reading incidents, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
-   | `users.read` | Checking the from user exists, on the hub and in `jigs doctor`. |
+   | `users.read` | Checking the from user exists when you save it on the hub. |
 
 3. Save, and note the app's **Client ID** and **Client Secret**.
 
@@ -56,8 +56,8 @@ app's webhooks.
 ## 4. Assign it to factories
 
 Under **Factories** on the app's page, check each factory that should use
-this app, and save. A factory takes one PagerDuty app; with a second assigned, the hub refuses its
-PagerDuty tokens.
+this app, and save. A factory may be assigned several PagerDuty accounts, and
+names the installation it uses in each trigger, step and agent.
 
 A missing scope does not stop the hub from getting a token. It shows up as a
 refused call, and `jigs doctor` names the scope to add. To use PagerDuty from

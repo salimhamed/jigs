@@ -4,7 +4,7 @@
 // re-reads its provider from scratch: the wake carries nothing, so it stands in
 // for whatever event was lost.
 
-import { parseHookToken } from "../workflow/hook-tokens.ts";
+import { parseHookToken, wakeToken } from "../workflow/hook-tokens.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
 import { wake } from "./wake.ts";
 
@@ -13,10 +13,11 @@ type HeldHook = { runId: string; token: string };
 /** The held hooks that a wake would actually reach a waiting run through. */
 function waitingOn(hooks: HeldHook[]): HeldHook[] {
   const parsed = hooks.map((hook) => ({ hook, token: parseHookToken(hook.token) }));
+  // A halt marker wakes through the claim on its ticket.
   const halted = new Set(
     parsed.flatMap(({ hook, token }) =>
       token?.kind === "needs-human" && token.halt !== null
-        ? [`${hook.runId} ${token.halt.issueId}`]
+        ? [`${hook.runId} ${wakeToken(hook.token)}`]
         : [],
     ),
   );
@@ -31,7 +32,7 @@ function waitingOn(hooks: HeldHook[]): HeldHook[] {
         // on a human is waiting on it. Waking the claim of a run parked anywhere
         // else would queue a replay and a stale hint.
         case "ticket-claim":
-          return halted.has(`${hook.runId} ${token.issueId}`);
+          return halted.has(`${hook.runId} ${hook.token}`);
         default:
           return true;
       }

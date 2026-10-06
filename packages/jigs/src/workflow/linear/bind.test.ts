@@ -22,7 +22,11 @@ const defaults: LinearSteps = {
 };
 
 test("custom comment steps receive only serializable halt data and no step-object receiver", async () => {
-  const claim = await claimTicket("issue-1", "AGE-1");
+  const claim = await claimTicket({
+    installationName: "linear-acme",
+    issueId: "issue-1",
+    identifier: "AGE-1",
+  });
   const halt = {
     headline: "Need a choice",
     where: "review",
@@ -35,11 +39,14 @@ test("custom comment steps receive only serializable halt data and no step-objec
     createdAt: "2026-09-11T00:00:01Z",
   };
   const postTicketHumanInputRequest = vi.fn<LinearSteps["postTicketHumanInputRequest"]>(
-    async function (this: unknown, issueId, received) {
+    async function (this: unknown, request) {
       expect(this).toBeUndefined();
-      expect(issueId).toBe("issue-1");
-      expect(received).toBe(halt);
-      expect(JSON.parse(JSON.stringify(received))).toEqual(halt);
+      expect(request.halt).toBe(halt);
+      expect(JSON.parse(JSON.stringify(request))).toEqual({
+        installationName: "linear-acme",
+        issueId: "issue-1",
+        halt,
+      });
       return { commentId: "posted", postedAt: "2026-09-11T00:00:00Z" };
     },
   );
@@ -53,16 +60,25 @@ test("custom comment steps receive only serializable halt data and no step-objec
     checkForTicketHumanReply,
   });
   expect(await linear.haltForHuman(claim, halt)).toEqual(reply);
-  expect(postTicketHumanInputRequest).toHaveBeenCalledExactlyOnceWith("issue-1", halt);
-  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith(
-    "issue-1",
-    "2026-09-11T00:00:00Z",
-    ["posted"],
-  );
+  expect(postTicketHumanInputRequest).toHaveBeenCalledExactlyOnceWith({
+    installationName: "linear-acme",
+    issueId: "issue-1",
+    halt,
+  });
+  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith({
+    installationName: "linear-acme",
+    issueId: "issue-1",
+    since: "2026-09-11T00:00:00Z",
+    postedCommentIds: ["posted"],
+  });
 });
 
 test("a note posted through the claim is skipped when a later halt looks for a reply", async () => {
-  const claim = await claimTicket("issue-1", "AGE-1");
+  const claim = await claimTicket({
+    installationName: "linear-acme",
+    issueId: "issue-1",
+    identifier: "AGE-1",
+  });
   const checkForTicketHumanReply = vi.fn<LinearSteps["checkForTicketHumanReply"]>(async () => ({
     reply: { commentId: "reply", body: "ok", author: { id: "u", name: "H" }, createdAt: "t2" },
     cursor: "t2",
@@ -75,8 +91,10 @@ test("a note posted through the claim is skipped when a later halt looks for a r
   });
   await linear.noteOnTicket(claim, { headline: "Starting.", notes: [], closing: "" });
   await linear.haltForHuman(claim, { headline: "Which?", where: "review", onReply: "continue" });
-  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith("issue-1", "t1", [
-    "note",
-    "question",
-  ]);
+  expect(checkForTicketHumanReply).toHaveBeenCalledExactlyOnceWith({
+    installationName: "linear-acme",
+    issueId: "issue-1",
+    since: "t1",
+    postedCommentIds: ["note", "question"],
+  });
 });

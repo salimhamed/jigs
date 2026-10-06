@@ -55,7 +55,7 @@ test("a parked run names its ticket and what it waits for", async () => {
         ticket: "AGE-317",
         suspensions: [
           {
-            token: "github:pr:acme/api#41",
+            token: "github:pr:acme:acme/api#41",
             kind: "pull-request",
             reason: "waiting for an approving review and green CI on acme/api#41",
             url: "https://github.com/acme/api/pull/41",

@@ -30,6 +30,7 @@ afterEach(() => {
 function binding(overrides: Partial<Binding> = {}): Binding {
   return {
     name: "api",
+    installationName: "github-acme",
     remote: "git@github.com:acme/api.git",
     copy: [],
     postCreate: [],

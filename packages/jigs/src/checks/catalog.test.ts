@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import * as hub from "../providers/hub.ts";
+import * as linearApi from "../providers/linear.ts";
 import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
@@ -304,13 +305,21 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
   expect((await runChecks(preflightChecks({}))).ok).toBe(true);
 });
 
-test("workflows check only explicitly declared integrations", async () => {
+test("preflight probes only the installations a workflow's agents name", async () => {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear"] })).toEqual(["linear.identity"]);
-  expect(preflightIds({ integrations: ["github"] })).toEqual(["github.identity"]);
-  const report = await runChecks(preflightChecks({ integrations: ["linear", "github"] }));
+  expect(preflightIds({ integrations: ["linear", "github"] })).toEqual([]);
+  const named = {
+    integrations: ["linear" as const],
+    agents: {
+      triager: harnesses.claude({ model: "opus", linear: { installationName: "linear-a" } }),
+    },
+  };
+  expect(preflightIds(named)).toContain("linear.installations");
+  expect(preflightIds(named)).not.toContain("github.installations");
+  const report = await runChecks(
+    preflightChecks(named).filter((check) => check.id === "linear.installations"),
+  );
   expect(report.ok).toBe(false);
-  expect(report.checks).toHaveLength(2);
 });
 
 function factoryWith(config: string): string {
@@ -356,98 +365,142 @@ test("doctor checks each provider a workflow requires and names the workflows", 
       ship: { requires: { integrations: ["linear", "github"] } },
     }),
   );
-  expect(report.checks.find((c) => c.id === "linear.identity")).toMatchObject({
+  expect(report.checks.find((c) => c.id === "linear.installations")).toMatchObject({
     ok: false,
     reason: expect.stringContaining("(needed by workflows triage, ship)"),
   });
-  expect(report.checks.find((c) => c.id === "github.identity")).toMatchObject({
+  expect(report.checks.find((c) => c.id === "github.installations")).toMatchObject({
     ok: false,
     reason: expect.stringContaining("(needed by workflow ship)"),
   });
 });
 
-test("doctor checks the factory's Linear operator, preflight never does", () => {
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
-  );
-  const linear = { integrations: ["linear" as const] };
-  expect(
-    doctorChecks({
-      ship: { requires: linear },
-    }).map((check) => check.id),
-  ).toEqual(["hub.connection", "linear.identity", "linear.operator"]);
-  expect(preflightIds(linear)).toEqual(["linear.identity"]);
-});
+const HUB = 'hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }';
 
-test("doctor checks a set Linear operator even when no workflow requires Linear", () => {
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
-  );
-  expect(doctorChecks({ hello: {} }).map((check) => check.id)).toEqual([
-    "hub.connection",
-    "linear.identity",
-    "linear.operator",
-  ]);
-});
-
-test("doctor reads the hub once for both the hub and GitHub checks", async () => {
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
-  );
-  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
-  const status = vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
+const hubStatus = (
+  apps: Array<{ provider: "github" | "linear" | "slack" | "pagerduty"; installationName: string }>,
+) =>
+  vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
     factory: { name: "personal" },
     organization: { name: "Acme" },
-    apps: [
-      {
-        provider: "github",
-        name: "jigs-dev",
-        installations: [{ account: "o", installationName: null }],
-      },
-    ],
+    apps: apps.map(({ provider, installationName }) => ({
+      provider,
+      name: "jigs-dev",
+      installations: [{ account: "o", installationName }],
+    })),
+  });
+
+test("doctor looks up the factory's Linear operator, preflight never does", async () => {
+  factoryWith(`{ ${HUB}, linear: { operator: "salim@example.com" } }`);
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  hubStatus([{ provider: "linear", installationName: "acme" }]);
+  vi.spyOn(hub, "hubToken").mockResolvedValue({
+    token: "t",
+    expiresAt: "2999-01-01T00:00:00Z",
+    app: { name: "jigs", userId: "app-user" },
+  } as never);
+  const lookups: string[] = [];
+  vi.spyOn(linearApi, "linearFor").mockImplementation(
+    (installationName) =>
+      ({
+        findUserByEmail: async (email: string) => {
+          lookups.push(`${installationName} ${email}`);
+          return { id: "u1", name: "Salim" };
+        },
+      }) as never,
+  );
+  const linear = { integrations: ["linear" as const] };
+  const doctor = doctorChecks({ ship: { requires: linear } });
+  expect(doctor.map((check) => check.id)).toEqual(["hub.connection", "linear.installations"]);
+  expect((await runChecks(doctor)).checks[1]).toMatchObject({
+    ok: true,
+    detail: "acme: acting as jigs, mentions Salim",
+  });
+  expect(lookups).toEqual(["acme salim@example.com"]);
+  const named = {
+    ...linear,
+    agents: { triager: harnesses.claude({ model: "opus", linear: { installationName: "acme" } }) },
+  };
+  const preflight = preflightChecks(named).filter((check) => check.id === "linear.installations");
+  expect((await runChecks(preflight)).checks).toEqual([
+    {
+      id: "linear.installations",
+      label: "Linear installations",
+      ok: true,
+      detail: "acme: acting as jigs",
+    },
+  ]);
+  expect(lookups).toHaveLength(1);
+});
+
+test("doctor reads the hub once for the hub check and every provider's", async () => {
+  factoryWith(
+    `{ ${HUB}, bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } } }`,
+  );
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  const status = hubStatus([{ provider: "github", installationName: "beta" }]);
+  const asked: string[] = [];
+  vi.spyOn(hub, "hubToken").mockImplementation(async (provider, installationName) => {
+    asked.push(`${provider} ${installationName}`);
+    return {
+      token: "t",
+      expiresAt: "2999-01-01T00:00:00Z",
+      account: "o",
+      app: { slug: "jigs-dev", botUserId: 1 },
+    } as never;
   });
   const report = await runChecks(doctorChecks({ hello: {} }));
+  // The binding's own installation is its binding check's to probe.
   expect(report.checks.filter((check) => check.id !== "binding.api")).toEqual([
     { id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" },
-    { id: "github.identity", label: "GitHub App", ok: true, detail: "jigs-dev on o" },
+    {
+      id: "github.installations",
+      label: "GitHub installations",
+      ok: true,
+      detail: "beta: jigs-dev[bot] on o",
+    },
   ]);
+  expect(asked).toContain("github beta");
   expect(status).toHaveBeenCalledTimes(1);
 });
 
 test("doctor checks a provider the factory configuration asks for", () => {
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings: { api: { remote: "https://github.com/o/api.git" } } }',
+    `{ ${HUB}, bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } } }`,
   );
-  expect(ids()).toContain("github.identity");
-  expect(ids()).not.toContain("linear.identity");
-  factoryWith(
-    '{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, linear: { operator: "salim@example.com" } }',
-  );
-  expect(ids()).toContain("linear.identity");
-  expect(ids()).not.toContain("github.identity");
+  expect(ids()).toContain("github.installations");
+  expect(ids()).not.toContain("linear.installations");
+  factoryWith(`{ ${HUB}, linear: { operator: "salim@example.com" } }`);
+  expect(ids()).toContain("linear.installations");
+  expect(ids()).not.toContain("github.installations");
 });
 
-test("a slack section asks doctor whether the hub assigned a Slack app, and for its token", () => {
-  const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  expect(ids()).not.toContain("slack.identity");
-  factoryWith(
-    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 }, slack: {} }",
+test("a provider in use with no named installation fails with the repair on the hub", async () => {
+  factoryWith(`{ ${HUB} }`);
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  hubStatus([{ provider: "github", installationName: "acme" }]);
+  const report = await runChecks(
+    doctorChecks({ answer: { requires: { integrations: ["slack"] } } }),
   );
-  expect(ids()).toEqual(["hub.connection", "hub.slack", "slack.identity"]);
-});
-
-test("a workflow requiring slack preflights the hub's Slack token", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
-  const slack = { integrations: ["slack" as const] };
-  expect(preflightIds(slack)).toEqual(["slack.identity"]);
-  const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
-  expect(report.checks.find((c) => c.id === "slack.identity")).toMatchObject({
+  expect(report.checks.find((c) => c.id === "slack.installations")).toMatchObject({
     ok: false,
     reason:
-      "the hub has no Slack token for this factory: JIGS_HUB_TOKEN is not set (needed by workflow answer)",
+      "no Slack installation is named and assigned to this factory on the hub (needed by workflow answer)",
+    repair: expect.stringContaining("in the hub, name an installation of a Slack app"),
+  });
+});
+
+test("doctor sweeps the hub's Slack installations for a workflow requiring slack, preflight does not", async () => {
+  factoryWith(`{ ${HUB} }`);
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  const slack = { integrations: ["slack" as const] };
+  expect(preflightIds(slack)).toEqual([]);
+  const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
+  expect(report.checks.find((c) => c.id === "slack.installations")).toMatchObject({
+    ok: false,
+    reason:
+      "could not read this factory's Slack installations from the hub: JIGS_HUB_TOKEN is not set (needed by workflow answer)",
   });
 });
 
@@ -486,61 +539,45 @@ test("doctor checks each required harness and names the workflows that need it",
   });
 });
 
-const PAGERDUTY = 'pagerduty: { from: "oncall@example.com" }';
-
-test("preflight checks the PagerDuty app only, doctor adds its hub assignment and the from user", async () => {
-  factoryWith(
-    `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
-  );
-  const pagerduty = { integrations: ["pagerduty" as const] };
-  expect(preflightIds(pagerduty)).toEqual(["pagerduty.app"]);
-  expect(doctorChecks({ triage: { requires: pagerduty } }).map((check) => check.id)).toEqual([
-    "hub.connection",
-    "hub.pagerduty",
-    "pagerduty.app",
-    "pagerduty.from",
-  ]);
+test("preflight probes the PagerDuty installations a workflow's agents name", async () => {
+  factoryWith(`{ ${HUB} }`);
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  const pagerduty = {
+    agents: {
+      triager: harnesses.claude({ model: "m", pagerduty: { installationName: "acme" } }),
+    },
+  };
+  expect(preflightIds(pagerduty)).toContain("pagerduty.installations");
   const report = await runChecks(preflightChecks(pagerduty));
-  expect(report.checks[0]).toMatchObject({
+  expect(report.checks.find((c) => c.id === "pagerduty.installations")).toMatchObject({
     ok: false,
-    reason: "the hub has no PagerDuty token for this factory: JIGS_HUB_TOKEN is not set",
+    reason: "acme: the hub gave no PagerDuty token: JIGS_HUB_TOKEN is not set",
     repair: expect.stringContaining("jigs hub connect"),
   });
 });
 
-test("doctor checks PagerDuty when the factory configures it, and not otherwise", () => {
-  const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
-  factoryWith(
-    `{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, ${PAGERDUTY} }`,
+test("doctor checks PagerDuty for a trigger that reads it, naming the trigger and its installation", async () => {
+  factoryWith(`{ ${HUB} }`);
+  expect(doctorChecks({ hello: {} }).map((check) => check.id)).not.toContain(
+    "pagerduty.installations",
   );
-  expect(ids()).toEqual(["hub.connection", "hub.pagerduty", "pagerduty.app", "pagerduty.from"]);
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  expect(ids().filter((id) => id.includes("pagerduty"))).toEqual([]);
-});
-
-test("a workflow requiring PagerDuty in a factory without a pagerduty section fails preflight with the section to add", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  const report = await runChecks(preflightChecks({ integrations: ["pagerduty"] }));
-  expect(report.checks).toEqual([
-    expect.objectContaining({
-      id: "pagerduty.app",
-      ok: false,
-      reason: "jigs.config.ts has no pagerduty section",
-      repair: expect.stringContaining('add pagerduty: { from: "<email of a PagerDuty user>" }'),
-    }),
-  ]);
-});
-
-test("doctor checks PagerDuty for a trigger that reads it, naming the trigger", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
-  const checks = doctorChecks({ hello: {} }, { pages: "pagerduty" });
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  hubStatus([]);
+  vi.spyOn(hub, "hubToken").mockRejectedValue(
+    new hub.HubResponseError(404, "the hub answered 404", "in the hub, name it"),
+  );
+  const checks = doctorChecks(
+    { hello: {} },
+    { pages: { provider: "pagerduty", installationName: "acme" } },
+  );
   expect(checks.map((check) => check.id).filter((id) => id.startsWith("pagerduty."))).toEqual([
-    "pagerduty.app",
+    "pagerduty.installations",
   ]);
-  const report = await runChecks(checks.filter((check) => check.id === "pagerduty.app"));
+  const report = await runChecks(checks.filter((check) => check.id === "pagerduty.installations"));
   expect(report.checks[0]).toMatchObject({
     ok: false,
-    reason: expect.stringContaining("(needed by trigger pages)"),
+    reason: "acme: the hub gave no PagerDuty token: the hub answered 404 (needed by trigger pages)",
+    repair: "in the hub, name it",
   });
 });
 
@@ -661,4 +698,12 @@ test("doctor shows a skill path once when no earlier entry could clash with it",
     .map((check) => check.id)
     .filter((id) => id.startsWith("skills."));
   expect(ids).toEqual(["skills.s/a", "skills.s/b"]);
+});
+
+test("an agent step checks gh when its harness acts on GitHub, even one named only at run time", () => {
+  const ids = (harness: Harness) => jitChecks({ harness, cwd: "/w" }, {}).map((check) => check.id);
+  expect(ids(harnesses.codex({ model: "m" }))).not.toContain("agent.gh");
+  expect(
+    ids(harnesses.codex({ model: "m", github: { installationName: "github-acme" } })),
+  ).toContain("agent.gh");
 });

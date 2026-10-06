@@ -84,8 +84,9 @@ _Avoid_: lock, lease
 
 ## Resources
 
-**Binding**: A named target repository in `jigs.config.ts`, with its remote and
-how jigs merges and provisions worktrees there.
+**Binding**: A named target repository in `jigs.config.ts`, with its remote,
+the GitHub installation name that reaches it, and how jigs merges and
+provisions worktrees there.
 
 **Binding clone**: The copy of a binding's repository jigs keeps and cuts
 worktrees from. Nobody edits it by hand.
@@ -193,9 +194,9 @@ source, with fixed inputs and a cap on its active runs. It only starts runs;
 later events on a run's resources are wakes.
 _Avoid_: webhook trigger, subscription, event router
 
-**Source**: What an event trigger watches, in the provider's own query
-parameters, such as a PagerDuty service's incidents or a Slack channel's
-messages.
+**Source**: What an event trigger watches: one installation, and the
+provider's own query parameters, such as a PagerDuty service's incidents or a
+Slack channel's messages. It takes only events from its installation.
 _Avoid_: filter, feed
 
 **Occurrence**: One provider event a source counts as a reason to start a run,
@@ -238,8 +239,11 @@ _Avoid_: workspace, connection (for the general term)
 **Installation name**: The name an admin gives an installation on the hub,
 such as `slack-js` or `linear-personal`, which factories use to say which
 installation they mean. Lowercase letters, digits and hyphens, starting with a
-letter, and unique in the Organization. `installationName` in code. An
-installation the hub learned of by itself has none until an admin sets it.
+letter, and unique in the Organization. `installationName` in code. Every token
+request, binding, step, harness, trigger and wait names one; nothing picks "the
+only one". An installation the hub learned of by itself has none until an
+admin sets it, and until then gets no tokens and its events reach no trigger
+or wait.
 _Avoid_: alias, label, account (the provider's own name for where it is installed)
 
 **Assignment**: An app allowed to a factory. A factory receives provider events
@@ -247,7 +251,9 @@ from, and gets tokens for, only its assigned apps.
 _Avoid_: subscription, grant
 
 **Provider event**: One notification a provider sent through an app, kept as
-received. In a factory it becomes a wake, an occurrence, or nothing.
+received. It carries its installation's name, read when the factory collects
+it, so naming an installation later labels its earlier uncollected events;
+`null` while unnamed. In a factory it becomes a wake, an occurrence, or nothing.
 _Avoid_: webhook (for the general term), delivery, message
 
 **Message**: One entry in a factory's ordered list on the hub, which the

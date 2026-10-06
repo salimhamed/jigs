@@ -47,9 +47,16 @@ vi.mock("#jigs/routines", async (importOriginal) => ({
   followPullRequestToOutcome: vi.fn(async () => ({ outcome: "merged" as const })),
 }));
 
-const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
+const pr = {
+  installationName: "github-acme",
+  owner: "acme",
+  repo: "app",
+  number: 7,
+  url: "https://github.com/acme/app/pull/7",
+};
 const worktree = {
   binding: "app",
+  installationName: "github-acme",
   path: "/tmp/wt",
   branch: "acme/abc-123",
   defaultBranch: "main",
@@ -71,15 +78,28 @@ const snapshot: TicketSnapshot = {
   links: [],
   subIssues: [],
 };
-const claim = { issueId: snapshot.id, identifier: snapshot.identifier } as TicketClaim;
+const claim = {
+  installationName: "linear-acme",
+  issueId: snapshot.id,
+  identifier: snapshot.identifier,
+} as TicketClaim;
 const handoff: TicketHandoff = { brief: "Use the flag.", snapshot, assumptions: [] };
 
 const run = (inputs: Record<string, unknown> = {}) =>
   linearTicketToPr({
-    ...entry.inputs.parse({ ticket: "ABC-123", binding: "app", ...inputs }),
+    ...entry.inputs.parse({
+      ticket: "ABC-123",
+      binding: "app",
+      linearInstallation: "linear-acme",
+      ...inputs,
+    }),
     triggerId: "test",
   });
-const statuses = () => vi.mocked(steps.setTicketStatus).mock.calls.map(([, status]) => status);
+const statuses = () =>
+  vi.mocked(steps.setTicketStatus).mock.calls.map(([request]) => {
+    expect(request).toMatchObject({ installationName: "linear-acme", issueId: snapshot.id });
+    return request.stateName;
+  });
 const handed = () =>
   vi.mocked(routines.buildAndReview).mock.calls[0]?.[0] as Delivery<Ticket> | undefined;
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
@@ -90,7 +110,10 @@ beforeEach(() => vi.clearAllMocks());
 test("a delivered ticket moves through In Progress, In Review and Done", async () => {
   await expect(run()).resolves.toEqual({ pr: pr.url });
 
-  expect(routines.acquireTicket).toHaveBeenCalledWith("ABC-123");
+  expect(routines.acquireTicket).toHaveBeenCalledWith({
+    installationName: "linear-acme",
+    reference: "ABC-123",
+  });
   expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
   expect(vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[1]).toBeGreaterThan(
     vi.mocked(routines.publishPullRequest).mock.invocationCallOrder[0] ?? Infinity,
@@ -167,17 +190,27 @@ test("the describe prompt asks for a conventional-commit title", () => {
 });
 
 test("a run picks its builder and reviewer by name, each in its own session", async () => {
+  // The builder acts on GitHub through the worktree's installation; the reviewer stays off it.
+  const actingAsApp = { github: { installationName: "github-acme" } };
   await run();
-  expect(handed()?.builder.harness).toBe(entry.requires?.agents?.builder);
+  expect(handed()?.builder.harness).toEqual({ ...entry.requires?.agents?.builder, ...actingAsApp });
   expect(handed()?.reviewer.harness).toBe(entry.requires?.agents?.reviewer);
   expect(handed()?.builder).not.toBe(handed()?.reviewer);
 
   vi.clearAllMocks();
   await run({ builder: "reviewer", reviewer: "builder" });
-  expect(handed()?.builder.harness).toBe(entry.requires?.agents?.reviewer);
+  expect(handed()?.builder.harness).toEqual({
+    ...entry.requires?.agents?.reviewer,
+    ...actingAsApp,
+  });
   expect(handed()?.reviewer.harness).toBe(entry.requires?.agents?.builder);
   expect(
-    entry.inputs.safeParse({ ticket: "ABC-123", binding: "app", builder: "opus" }).success,
+    entry.inputs.safeParse({
+      ticket: "ABC-123",
+      binding: "app",
+      linearInstallation: "linear-acme",
+      builder: "opus",
+    }).success,
   ).toBe(false);
 });
 
@@ -188,8 +221,12 @@ test("the chosen reviewer also reviews the requirements", async () => {
   );
 });
 
-test("a run needs a binding before it claims the ticket", () => {
-  expect(entry.inputs.safeParse({ ticket: "ABC-123", binding: "" }).success).toBe(false);
+test("a run needs a binding and a Linear installation before it claims the ticket", () => {
+  expect(
+    entry.inputs.safeParse({ ticket: "ABC-123", binding: "", linearInstallation: "linear-acme" })
+      .success,
+  ).toBe(false);
+  expect(entry.inputs.safeParse({ ticket: "ABC-123", binding: "app" }).success).toBe(false);
 });
 
 test("the reviewer's notes are appended to the pull request body", async () => {
@@ -392,20 +429,27 @@ test("the maintenance prompt says when to wait, when to ask for a person, and wh
   expect(prompt).toContain("Checks that queue, run or pass do not wake you");
 });
 
-test("the workflow requires its two agents, Linear and GitHub, and the builder acts as the App", () => {
+test("the workflow requires its two agents, Linear and GitHub", () => {
   expect(entry.requires).toEqual({
     agents: {
-      builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
+      builder: harnesses.codex({ model: "gpt-5.6-sol" }),
       reviewer: harnesses.claude({ model: "opus" }),
     },
     integrations: ["linear", "github"],
   });
-  expect(entry.inputs.safeParse({ ticket: "", binding: "app" }).success).toBe(false);
+  expect(
+    entry.inputs.safeParse({ ticket: "", binding: "app", linearInstallation: "linear-acme" })
+      .success,
+  ).toBe(false);
 });
 
 test("attempts per update must be positive", () => {
   expect(
-    entry.inputs.safeParse({ ticket: "ABC-123", binding: "app", budget: { attemptsPerUpdate: 0 } })
-      .success,
+    entry.inputs.safeParse({
+      ticket: "ABC-123",
+      binding: "app",
+      linearInstallation: "linear-acme",
+      budget: { attemptsPerUpdate: 0 },
+    }).success,
   ).toBe(false);
 });

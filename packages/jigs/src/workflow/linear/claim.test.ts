@@ -20,15 +20,18 @@ beforeEach(() => {
 
 test("a claim mints one hook, on the issue UUID, and carries the identifier", async () => {
   const issueId = "68bc9696-35d5-442d-ab56-214c8cfefbec";
-  await expect(claimTicket(issueId, "AGE-365")).resolves.toMatchObject({
+  await expect(
+    claimTicket({ installationName: "linear-acme", issueId, identifier: "AGE-365" }),
+  ).resolves.toMatchObject({
+    installationName: "linear-acme",
     issueId,
     identifier: "AGE-365",
-    token: `linear:ticket:${issueId}`,
+    token: `linear:ticket:linear-acme:${issueId}`,
   });
 
   expect(createHook).toHaveBeenCalledTimes(1);
   expect(createHook.mock.calls.map(([options]) => options.token)).toEqual([
-    `linear:ticket:${issueId}`,
+    `linear:ticket:linear-acme:${issueId}`,
   ]);
   expect(dispose).not.toHaveBeenCalled();
 });
@@ -37,15 +40,15 @@ test("a conflicting claim names the owning run and mints nothing further", async
   const issueId = "68bc9696-35d5-442d-ab56-214c8cfefbec";
   getConflict.mockResolvedValueOnce({ runId: "wrun_OWNER" });
 
-  await expect(claimTicket(issueId, "AGE-365")).rejects.toThrow(
-    `Linear issue ${issueId} is already claimed by run wrun_OWNER`,
-  );
+  await expect(
+    claimTicket({ installationName: "linear-acme", issueId, identifier: "AGE-365" }),
+  ).rejects.toThrow(`Linear issue ${issueId} is already claimed by run wrun_OWNER`);
   expect(createHook).toHaveBeenCalledTimes(1);
 });
 
-test("ticket token carries the UUID", () => {
+test("ticket token carries the installation name and the UUID", () => {
   const issueId = "68bc9696-35d5-442d-ab56-214c8cfefbec";
-  expect(ticketToken(issueId)).toBe(`linear:ticket:${issueId}`);
+  expect(ticketToken("linear-acme", issueId)).toBe(`linear:ticket:linear-acme:${issueId}`);
 });
 
 test("a linear Comment payload reconstructs the exact ticket token", () => {
@@ -55,17 +58,17 @@ test("a linear Comment payload reconstructs the exact ticket token", () => {
     type: "Comment",
     data: { id: "comment-1", body: "looks good", issueId },
   };
-  expect(tokenFromLinearPayload(payload)).toBe(ticketToken(issueId));
+  expect(tokenFromLinearPayload("acme", payload)).toBe(ticketToken("acme", issueId));
 });
 
 test("a non-Comment linear payload is unroutable", () => {
   expect(
-    tokenFromLinearPayload({
+    tokenFromLinearPayload("acme", {
       action: "update",
       type: "Issue",
       data: { id: "issue-1" },
     }),
   ).toBe(null);
-  expect(tokenFromLinearPayload({ type: "Comment", data: {} })).toBe(null);
-  expect(tokenFromLinearPayload(null)).toBe(null);
+  expect(tokenFromLinearPayload("acme", { type: "Comment", data: {} })).toBe(null);
+  expect(tokenFromLinearPayload("acme", null)).toBe(null);
 });

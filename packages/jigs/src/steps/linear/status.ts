@@ -1,5 +1,5 @@
 import { JigsError } from "../../errors.ts";
-import { fetchIssueStates, updateIssueState } from "../../providers/linear.ts";
+import { linearFor } from "../../providers/linear.ts";
 
 /**
  * The before-and-after state names from a ticket status update.
@@ -17,11 +17,17 @@ export interface TicketStatusResult {
  *
  * @group Create and update
  */
-export async function setTicketStatus(
-  issueId: string,
-  stateName: string,
-): Promise<TicketStatusResult> {
-  const issue = await fetchIssueStates(issueId);
+export async function setTicketStatus({
+  installationName,
+  issueId,
+  stateName,
+}: {
+  installationName: string;
+  issueId: string;
+  stateName: string;
+}): Promise<TicketStatusResult> {
+  const linear = linearFor(installationName);
+  const issue = await linear.fetchIssueStates(issueId);
   const target = issue.team.states.nodes.find(
     (state) => state.name.toLowerCase() === stateName.toLowerCase(),
   );
@@ -32,6 +38,6 @@ export async function setTicketStatus(
   }
   if (issue.state.id === target.id)
     return { from: issue.state.name, to: target.name, changed: false };
-  await updateIssueState(issueId, target.id);
+  await linear.updateIssueState(issueId, target.id);
   return { from: issue.state.name, to: target.name, changed: true };
 }

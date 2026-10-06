@@ -11,7 +11,9 @@ configuration file.
 
 The service reads `.env` when it starts. Here is a complete `jigs.config.ts`
 for a factory with the generated `hello` workflow and an `app` binding. Replace
-the repository URL with your own:
+the repository URL with your own, and `github-acme` with the
+[installation name](/guide/hub#installation-names) of your GitHub App's
+installation on its owner:
 
 ```ts
 // jigs.config.ts
@@ -21,7 +23,7 @@ export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
   bindings: {
-    app: { remote: "git@github.com:owner/app.git" },
+    app: { remote: "git@github.com:owner/app.git", installationName: "github-acme" },
   },
   github: { operator: "your-github-login" },
   linear: { operator: "you@example.com" },
@@ -95,6 +97,7 @@ factory's own `bindings/<name>/` folder described below.
 bindings: {
   app: {
     remote: "git@github.com:owner/app.git",
+    installationName: "github-acme",
     copy: [".env"],
     postCreate: ["pnpm install"],
     hookTimeoutMinutes: 20,
@@ -105,6 +108,7 @@ bindings: {
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `remote` | required | The GitHub repository's Git remote URL. |
+| `installationName` | required | The [installation name](/guide/hub#installation-names) of the GitHub App installation that reaches the repository. jigs acts on the repository through it. |
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
 | `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
@@ -116,7 +120,8 @@ scaffold's `.gitignore` already ignores every `.env`. An entry that matches noth
 `jigs doctor`, and stops a run of a workflow that needs the binding before it
 starts, with a message naming the missing path.
 
-`jigs bind <remote>` adds a binding with its `remote` and creates
+`jigs bind <remote> --installation <installation>` adds a binding with its `remote`
+and `installationName`, and creates
 `bindings/<name>/` with a short `README.md` when the folder is missing. It
 never touches a folder that already exists, and it does not add `copy`; list
 the files you put there yourself. `jigs unbind <name>` removes the binding and
@@ -178,7 +183,7 @@ import { defineWorkflow } from "@jigs-ai/jigs";
 import { z } from "zod";
 
 export default defineWorkflow({
-  inputs: z.object({ incident: z.string(), team: z.string() }),
+  inputs: z.object({ installationName: z.string(), incident: z.string(), team: z.string() }),
   requires: { integrations: ["pagerduty"] },
   workflow: async ({ incident, team }) => `${team} takes ${incident}`,
 });
@@ -193,14 +198,17 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: { from: "oncall@example.com" },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
   triggers: {
     "checkout-pages": {
       workflow: "respond",
-      source: pagerduty.incidents({ services: ["PABC123"], urgencies: ["high"] }),
+      source: pagerduty.incidents({
+        installationName: "pagerduty-acme",
+        services: ["PABC123"],
+        urgencies: ["high"],
+      }),
       inputs: { team: "payments" },
       maxActive: 2,
     },
@@ -208,15 +216,23 @@ export default defineFactory({
 });
 ```
 
-- `source` takes the provider's own query parameters under the provider's own
+- `source` takes the [installation name](/guide/hub#installation-names) it
+  listens to, and the provider's own query parameters under the provider's own
   names. jigs adds no filter syntax; any finer judgement belongs in the run.
-- Each run's inputs are the source's reference, such as `{ incident: "Q1ABC" }`,
-  merged over the fixed `inputs`. The run reads the rest itself.
+- A source takes only events from its own installation. Another installation
+  assigned to the factory, even a second app in the same workspace that sees
+  the same message, never starts or wakes its runs.
+- Each run's inputs are the source's reference, such as
+  `{ installationName: "pagerduty-acme", incident: "Q1ABC" }`, merged over the
+  fixed `inputs`. The run reads the rest itself, through that installation.
 - An occurrence starts at most one run, ever, even if the run decides to do
   nothing or ends while the incident is still open.
 - Occurrences arrive as provider events through the [hub](#hub). The hub
   keeps the events that arrive while the service is down and hands them over
   when it is back.
+- An event from an installation with no name reaches no trigger, and wakes no
+  run. Name the installation on the hub: events it received before then, but
+  has not yet handed over, carry the name once it is set.
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
@@ -229,27 +245,32 @@ export default defineFactory({
 
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
-| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `services`, `teams`, `urgencies` |
-| `linear.agentSessions` | A mention of the factory's Linear app on an issue, or an issue assigned to it | `{ session, workspace, issue, comment, creator }` | `teams`, `projects`, `labels` |
+| `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
+| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, creator }` | `installationName`, `teams`, `projects`, `labels` |
+| `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
+
+`installationName` is required on every source.
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents` and [Linear](#linear-app) for
-`linear.agentSessions`. `jigs doctor` checks that provider for every trigger
-that uses it. `jigs status` lists each trigger with its waiting, active and
+for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`
+and [Slack](/guide/slack) for `slack.messages` and `slack.mentions`.
+`jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
 `slack C0123ABCD 1790723244.335019` or `pagerduty Q1ABCDEF`.
 
 ### Linear mentions and assignments {#linear-agent-sessions}
 
-`linear.agentSessions` starts a run each time someone mentions the factory's
-Linear app on an issue or assigns an issue to it. Linear calls each of these an
+`linear.agentSessions` starts a run each time someone mentions the Linear app
+on an issue or assigns an issue to it, in the workspace its `installationName`
+names. Linear calls each of these an
 agent session. The hub posts the session's first reply at once, so Linear shows
 the app at work while the run starts. Each run gets:
 
 - `session`: the agent session's id, which is also the occurrence, so a
   session starts at most one run even if Linear sends it twice.
-- `workspace`: the id of the Linear workspace the session is in.
+- `installationName`: the trigger's Linear installation. Pass it to the Linear
+  steps and routines the run calls.
 - `issue`: the issue's `id`, `identifier`, `title` and `url`.
 - `comment`: the body of the comment the session started from, or `null` for
   an assignment.
@@ -267,7 +288,11 @@ import { linear } from "@jigs-ai/jigs";
 const triggers = {
   "fix-on-mention": {
     workflow: "fix",
-    source: linear.agentSessions({ teams: ["ENG"], labels: ["agent"] }),
+    source: linear.agentSessions({
+      installationName: "linear-acme",
+      teams: ["ENG"],
+      labels: ["agent"],
+    }),
   },
 };
 ```
@@ -330,13 +355,14 @@ user and can read any file you can.
 ### The factory's App {#github-app}
 
 jigs acts on GitHub as a [GitHub App](/guide/hub-github) that your hub holds
-and assigns to the factory. For each repository owner, the factory asks the hub for a token of
-the assigned App installed on that owner. Pull requests come from
-`<app-slug>[bot]`, and you review them like anyone else's. Agents can act as the
-same bot: see [GitHub access for agents](/guide/models-and-harnesses#github-access).
+and assigns to the factory. Each binding's `installationName` names the App
+installation that reaches its repository, and the factory asks the hub for that
+installation's tokens. Pull requests come from `<app-slug>[bot]`, and you review
+them like anyone else's. Agents can act as the same bot: see
+[GitHub access for agents](/guide/models-and-harnesses#github-access).
 
-Every GitHub binding needs one of the factory's Apps installed on its owner, and
-only one. `jigs doctor` checks this against the hub.
+`jigs doctor` checks that each binding's installation is named and assigned to
+the factory in the hub, and that it reaches the binding's repository.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -409,15 +435,14 @@ recipe's `mergedBy: "human"` and merge those pull requests yourself.
 
 ### Call other GitHub endpoints {#call-github}
 
-`callGitHub(method, path, options)` calls any
+`callGitHub(method, path, { installationName, body })` calls any
 [GitHub REST endpoint](https://docs.github.com/en/rest) as the factory's
-[App](#github-app) and returns GitHub's parsed JSON, or `undefined`
+[App](#github-app), through the installation `installationName` names, and returns GitHub's parsed JSON, or `undefined`
 when GitHub answers with no content. Use it for anything jigs has no step for,
 such as requesting reviewers or finding a commit's author. Call it from your
 own `"use step"` function.
 
-A path under `/repos/{owner}/{repo}` uses that owner's installation. For any
-other path, such as `/orgs/acme/teams`, pass `account` to name the owner.
+A worktree carries its binding's installation as `worktree.installationName`.
 `body` is sent as JSON, and the query string goes in the path.
 
 When GitHub answers with an error, `callGitHub` throws a `GitHubApiError` with
@@ -430,11 +455,17 @@ import { callGitHub, GitHubApiError } from "@jigs-ai/jigs/steps/pull-requests";
 
 // GitHub refuses the whole request if any one login cannot review, so ask for
 // each login on its own and skip the ones GitHub refuses with a 422.
-export async function requestReviewers(repo: string, pr: number, logins: string[]) {
+export async function requestReviewers(
+  installationName: string,
+  repo: string,
+  pr: number,
+  logins: string[],
+) {
   "use step";
   for (const login of logins) {
     try {
       await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
+        installationName,
         body: { reviewers: [login] },
       });
     } catch (error) {
@@ -444,11 +475,12 @@ export async function requestReviewers(repo: string, pr: number, logins: string[
   }
 }
 
-export async function commitAuthorLogin(repo: string, email: string) {
+export async function commitAuthorLogin(installationName: string, repo: string, email: string) {
   "use step";
   const commits = await callGitHub<{ author: { login: string } | null }[]>(
     "GET",
     `/repos/${repo}/commits?author=${encodeURIComponent(email)}&per_page=1`,
+    { installationName },
   );
   return commits[0]?.author?.login ?? null;
 }
@@ -462,14 +494,14 @@ teams.
 
 ### The factory's Linear app {#linear-app}
 
-jigs acts on Linear as the [Linear app](/guide/hub-linear) the hub assigns the
+jigs acts on Linear as a [Linear app](/guide/hub-linear) the hub assigns the
 factory, so its comments and mentions reach you like anyone else's. Connect
-the app to your Linear workspace in the hub and assign it to the factory; the
-hub hands the factory its tokens and refreshes them. For now a factory takes
-one Linear app, connected to one workspace. Nothing about the app goes in
-`jigs.config.ts` or `.env`. `jigs doctor` checks that the hub has a Linear
-token for the factory, and says when a workspace must be connected again in
-the hub.
+the app to your Linear workspace in the hub, name that installation, such as
+`linear-acme`, and assign the app to the factory; the hub hands the factory its
+tokens and refreshes them. Every Linear step, routine, trigger and agent takes
+the `installationName` it acts through. Nothing about the app goes in
+`jigs.config.ts` or `.env`. `jigs doctor` checks each Linear installation the
+factory names, and says when a workspace must be connected again in the hub.
 
 Use one Linear app per purpose: two factories assigned the same app both answer
 a mention of it; see [Linear mentions and assignments](#linear-agent-sessions).
@@ -500,8 +532,8 @@ A step or routine that posts a comment, such as `haltForHuman` or
 `noteOnTicket`, also takes a `mention` list of extra emails to mention
 alongside these people.
 
-`jigs doctor`, and `jigs up`, look the operator email up in Linear and fail
-when no active Linear user has it.
+`jigs doctor`, and `jigs up`, look the operator email up in each Linear
+installation the factory uses and fail when no active Linear user there has it.
 
 When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
@@ -509,35 +541,20 @@ out, logs a warning and posts the comment anyway. A mention never stops a run.
 
 ## PagerDuty {#pagerduty}
 
-jigs acts on PagerDuty as the [PagerDuty app](/guide/hub-pagerduty) its hub
-assigns the factory. The `pagerduty` section names the user its notes are attributed to.
-See [PagerDuty](/guide/pagerduty) for setup.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-pagerduty: { from: "oncall@example.com" },
-```
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `from` | required | The email of a PagerDuty user. PagerDuty refuses a write that names no user, so every note jigs adds is attributed to them. `jigs doctor` checks a user has it. |
+jigs acts on PagerDuty as a [PagerDuty app](/guide/hub-pagerduty) its hub
+assigns the factory. Every PagerDuty step, trigger and agent takes the
+`installationName` of the account it acts in. Notes are attributed to the from
+user set on that installation in the hub. Nothing about the app goes in
+`jigs.config.ts`. See [PagerDuty](/guide/pagerduty) for setup.
 
 ## Slack {#slack}
 
-`slack` says the factory uses the [Slack app](/guide/hub-slack) its hub
-assigns it. See [Slack](/guide/slack) for what workflows do with it.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-slack: { scopes: ["reactions:write"] },
-```
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the workspace granted them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
-
-To start runs from Slack messages, see
-[Start runs from messages](/guide/slack#start-runs-from-messages).
+jigs talks to Slack as a [Slack app](/guide/hub-slack) its hub assigns the
+factory. Every Slack step, routine and trigger takes the `installationName` of
+the workspace it acts in. Nothing about the app goes in `jigs.config.ts`. See
+[Slack](/guide/slack) for what workflows do with it, and
+[Start runs from messages](/guide/slack#start-runs-from-messages) to start runs
+from Slack.
 
 ## `.env` {#env}
 

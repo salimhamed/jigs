@@ -8,13 +8,18 @@ import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { GitHubApiError } from "../providers/github-http.ts";
 import { HubResponseError } from "../providers/hub.ts";
 import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
-import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
+import {
+  pullRequestToken,
+  tokenFromGitHubPayload,
+} from "../workflow/pull-requests/pull-request.ts";
 import { slackThreadTokenFromEvent } from "../workflow/slack/thread-token.ts";
 import type { pushEvent } from "./event-triggers/runner.ts";
 import { wake } from "./wake.ts";
 
 /** What routing reads of an event the hub received. */
-export type RoutedEvent = Pick<ProviderEvent, "provider" | "name" | "payload">;
+export type RoutedEvent = Pick<ProviderEvent, "provider" | "installationName" | "name" | "payload">;
+
+type NamedEvent = RoutedEvent & { installationName: string };
 
 export interface RouteDeps {
   context: FactoryContext;
@@ -29,8 +34,20 @@ export type RouteResult =
   | { outcome: "ignored" | "woken" | "dropped" | "failed" }
   | { outcome: "triggered"; triggers: string[] };
 
-/** Wake the runs a provider event concerns, or start the ones its triggers take. */
-export function routeProviderEvent(event: RoutedEvent, deps: RouteDeps): Promise<RouteResult> {
+/**
+ * Wake the runs a provider event concerns, or start the ones its triggers take.
+ * An event from an installation with no name on the hub concerns none of them.
+ */
+export async function routeProviderEvent(
+  event: RoutedEvent,
+  deps: RouteDeps,
+): Promise<RouteResult> {
+  if (!isNamed(event)) {
+    console.log(
+      `[events] ${event.provider} ignored reason=no-installation-name event=${sanitizeForLog(event.name)}`,
+    );
+    return { outcome: "ignored" };
+  }
   switch (event.provider) {
     case "github":
       return routeGithub(event, deps);
@@ -43,7 +60,9 @@ export function routeProviderEvent(event: RoutedEvent, deps: RouteDeps): Promise
   }
 }
 
-async function routeGithub({ name, payload }: RoutedEvent, deps: RouteDeps) {
+const isNamed = (event: RoutedEvent): event is NamedEvent => event.installationName !== null;
+
+async function routeGithub({ installationName, name, payload }: NamedEvent, deps: RouteDeps) {
   const event = sanitizeForLog(name);
   if (event === "status") {
     const status = githubStatus(payload);
@@ -57,7 +76,11 @@ async function routeGithub({ name, payload }: RoutedEvent, deps: RouteDeps) {
     }
     let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
     try {
-      prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context);
+      prs = await findOpenPullRequestsByHeadSha(
+        { installationName, ...status.repository },
+        status.sha,
+        deps.context,
+      );
     } catch (error) {
       if (refusedForGood(error)) {
         console.error(
@@ -72,17 +95,9 @@ async function routeGithub({ name, payload }: RoutedEvent, deps: RouteDeps) {
       console.log(`[events] github dropped reason=no-open-pull-request event=${event}`);
       return { outcome: "dropped" } as const;
     }
-    const tokens = prs
-      .map((pr) =>
-        tokenFromGitHubPayload({
-          pull_request: { number: pr.number },
-          repository: { name: pr.repo, owner: { login: pr.owner } },
-        }),
-      )
-      .filter((token): token is string => token !== null);
-    return wakeAndLog("github", tokens, event);
+    return wakeAndLog("github", prs.map(pullRequestToken), event);
   }
-  const token = tokenFromGitHubPayload(payload);
+  const token = tokenFromGitHubPayload(installationName, payload);
   if (token === null) {
     console.log(`[events] github ignored reason=unrecognized-event event=${event}`);
     return { outcome: "ignored" } as const;
@@ -90,13 +105,13 @@ async function routeGithub({ name, payload }: RoutedEvent, deps: RouteDeps) {
   return wakeAndLog("github", [token], event);
 }
 
-async function routeLinear({ name, payload }: RoutedEvent) {
+async function routeLinear({ installationName, name, payload }: NamedEvent) {
   if (payload === null) {
     console.log("[events] linear ignored reason=unrecognized-shape");
     return { outcome: "ignored" } as const;
   }
   const event = name === "" ? null : sanitizeForLog(name);
-  const token = tokenFromLinearPayload(payload);
+  const token = tokenFromLinearPayload(installationName, payload);
   if (token === null) {
     console.log(
       `[events] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
@@ -108,11 +123,14 @@ async function routeLinear({ name, payload }: RoutedEvent) {
 
 // PagerDuty events and Linear agent sessions start runs rather than wake them.
 // The push returns once the occurrence is recorded, never waiting on the start.
-async function routePush({ provider, name, payload }: RoutedEvent, deps: RouteDeps) {
+async function routePush(
+  { provider, installationName, name, payload }: NamedEvent,
+  deps: RouteDeps,
+) {
   const event = `event=${sanitizeForLog(name)}`;
   let triggers: string[];
   try {
-    triggers = await deps.push(provider, payload);
+    triggers = await deps.push(provider, { installationName, payload });
   } catch (error) {
     console.log(`[events] ${provider} dropped reason=push-failed ${event}: ${String(error)}`);
     return { outcome: "failed" } as const;
@@ -129,11 +147,14 @@ async function routePush({ provider, name, payload }: RoutedEvent, deps: RouteDe
 // both start runs and answer a thread a run waits on. A wake that landed stands
 // even when a trigger could not read the event; a wake that failed routes the
 // message again, which starts no run twice.
-async function routeSlack({ name, payload }: RoutedEvent, deps: RouteDeps): Promise<RouteResult> {
+async function routeSlack(
+  { installationName, name, payload }: NamedEvent,
+  deps: RouteDeps,
+): Promise<RouteResult> {
   const message = (payload as { event?: unknown } | null)?.event;
-  const token = slackThreadTokenFromEvent(message);
+  const token = slackThreadTokenFromEvent(installationName, message);
   const [triggers, woke] = await Promise.all([
-    deps.push("slack", payload).catch((error: unknown) => {
+    deps.push("slack", { installationName, payload }).catch((error: unknown) => {
       const { channel, ts } = (message ?? {}) as { channel?: unknown; ts?: unknown };
       console.log(
         `[events] slack dropped reason=push-failed channel=${String(channel)} ts=${String(ts)}: ${String(error)}`,
@@ -148,11 +169,11 @@ async function routeSlack({ name, payload }: RoutedEvent, deps: RouteDeps): Prom
   return woke ?? { outcome: "ignored" };
 }
 
-// An answer that routing the event again would only get again: the hub has no
-// installation, or more than one, for the repository; or GitHub refused the
-// request itself rather than its credential or its rate limit.
+// An answer that routing the event again would only get again: the hub does
+// not give this factory the installation; or GitHub refused the request itself
+// rather than its credential or its rate limit.
 function refusedForGood(error: unknown): boolean {
-  if (error instanceof HubResponseError) return error.status === 404 || error.status === 409;
+  if (error instanceof HubResponseError) return error.status === 404;
   return (
     error instanceof GitHubApiError &&
     !error.rateLimited &&

@@ -46,7 +46,11 @@ export type TicketNote = {
  * Declared here rather than written as `typeof postTicketNote` for the same
  * reason the halt's step contracts are: the routine that calls the step owns the contract.
  */
-export type PostTicketNote = (issueId: string, note: TicketNote) => Promise<{ commentId: string }>;
+export type PostTicketNote = (request: {
+  installationName: string;
+  issueId: string;
+  note: TicketNote;
+}) => Promise<{ commentId: string }>;
 
 /**
  * Post a note on a claimed ticket and record its comment on the claim, so a
@@ -59,6 +63,7 @@ export async function noteOnTicket(
 ): Promise<void> {
   // Destructured for the same reason haltForHuman destructures its steps.
   const { postTicketNote } = deps;
-  const { commentId } = await postTicketNote(claim.issueId, note);
+  const { installationName, issueId } = claim;
+  const { commentId } = await postTicketNote({ installationName, issueId, note });
   claim.postedCommentIds.push(commentId);
 }

@@ -8,12 +8,13 @@ what the agent found to the incident as a note. It needs the factory's
 
 `#jigs/steps` has two PagerDuty steps:
 
-- `fetchIncidentSnapshot(incidentId)` reads the incident: its number, title,
+- `fetchIncidentSnapshot({ installationName, incidentId })` reads the incident: its number, title,
   status, urgency, creation time and URL, and its service, assignees and
   escalation policy, each with an id, a name and a link. Later steps in the run
   work from this copy; a run that resumes reads the incident afresh.
-- `postIncidentNote(incidentId, content)` adds a note and returns its
-  `noteId`. The note is attributed to your `from` user and ends in a line such
+- `postIncidentNote({ installationName, incidentId, content })` adds a note and
+  returns its `noteId`. The note is attributed to the from user set on the
+  installation in the hub, and ends in a line such
   as `jigs run wrun_01K…`, so a responder can find the run with `jigs status`.
   PagerDuty shows markup as literal text, so write plain sentences.
 
@@ -21,7 +22,7 @@ what the agent found to the incident as a note. It needs the factory's
 may already have been added, and a retry could add it twice. So a failed post
 fails the step, and the run with it unless the workflow catches the error.
 
-The steps read and write through the factory's PagerDuty app. The app does not
+The steps read and write through the PagerDuty installation they name. The app does not
 give an agent access to PagerDuty: an agent that needs more than the snapshot,
 such as alerts, log entries or past incidents, gets it from the PagerDuty MCP
 server.
@@ -38,7 +39,7 @@ import { z } from "zod";
 import { runAgent } from "#jigs/routines";
 import { createRunDirectory, fetchIncidentSnapshot, postIncidentNote } from "#jigs/steps";
 
-const inputs = z.object({ incident: z.string().min(1) });
+const inputs = z.object({ installationName: z.string().min(1), incident: z.string().min(1) });
 
 const agents = {
   triager: harnesses.pi(models.openaiCodex("gpt-5.5"), {
@@ -70,7 +71,8 @@ const findings = z.object({
 export async function incidentTriage(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
 
-  const incident = await fetchIncidentSnapshot(input.incident);
+  const { installationName } = input;
+  const incident = await fetchIncidentSnapshot({ installationName, incidentId: input.incident });
   if (incident.status === "resolved") return { skipped: "already resolved" };
 
   const directory = await createRunDirectory();
@@ -86,14 +88,15 @@ export async function incidentTriage(input: WorkflowInputs<typeof inputs>) {
     output: findings,
   });
 
-  const note = await postIncidentNote(
-    incident.id,
-    [
+  const note = await postIncidentNote({
+    installationName,
+    incidentId: incident.id,
+    content: [
       `Summary: ${triage.output.summary}`,
       `Likely cause: ${triage.output.likelyCause}`,
       `Suggested next step: ${triage.output.nextStep}`,
     ].join("\n"),
-  );
+  });
   return { noteId: note.noteId, ...triage.output };
 }
 
@@ -140,20 +143,20 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: { from: "oncall@example.com" },
   workflows: {
     "incident-triage": () => import("./workflows/incident-triage/incident-triage.ts"),
   },
   triggers: {
     "triage-checkout": {
       workflow: "incident-triage",
-      source: pagerduty.incidents({ services: ["PABC123"] }),
+      source: pagerduty.incidents({ installationName: "pagerduty-acme", services: ["PABC123"] }),
     },
   },
 });
 ```
 
-Each run gets the incident's id as `incident`. Every new incident starts a run,
+Each run gets the incident's id as `incident`, and the trigger's installation
+as `installationName`. Every new incident starts a run,
 even one acknowledged or resolved before the service saw it, which is why the
 workflow checks the status in its snapshot and skips one that is already
 resolved. Rebuild and start the service with `pnpm exec jigs up`.
@@ -166,10 +169,12 @@ To try the workflow by hand, start a run with an incident's id, the part of its
 URL after `/incidents/`:
 
 ```sh
-pnpm exec jigs run incident-triage --input incident=Q1ABCDEFGHIJKL
+pnpm exec jigs run incident-triage --input installationName=pagerduty-acme --input incident=Q1ABCDEFGHIJKL
 ```
 
-Before the run starts, preflight checks the PagerDuty app and that Pi is
-installed. The agent step checks that the token is set before the agent starts.
+Before the run starts, preflight checks that Pi is installed. The installation
+comes from the run's inputs, so the run's first step checks it. The agent step
+checks that the token is set before the agent starts.
+
 Follow the run with `pnpm exec jigs watch`. When it finishes, the note is on the
 incident's timeline.

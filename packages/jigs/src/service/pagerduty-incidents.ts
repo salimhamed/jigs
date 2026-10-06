@@ -31,10 +31,11 @@ const pagerDutyEventType = (event: unknown): string | undefined =>
 export const PAGERDUTY_INCIDENTS: Source<PagerDutyIncidentsParams> = {
   provider: "pagerduty",
   params: pagerDutyIncidentsParamsSchema,
-  sampleInputs: { incident: "P000000" },
+  sampleInputs: { installationName: "acme", incident: "P000000" },
   // The run gets only the incident id, so the event's copy of the incident
   // is read only to key it and to apply the trigger's filters.
-  async fromPush(params, event) {
+  async fromPush(params, { installationName, payload: event }) {
+    if (installationName !== params.installationName) return null;
     if (pagerDutyEventType(event) !== "incident.triggered") return null;
     // A shape PagerDuty will send the same way every time is no reason to retry.
     const triggered = triggeredSchema.safeParse(event);
@@ -53,7 +54,11 @@ export const PAGERDUTY_INCIDENTS: Source<PagerDutyIncidentsParams> = {
       !matches(params.urgencies, data.urgency)
     )
       return null;
-    return { key: data.id, inputs: { incident: data.id }, at: new Date(data.created_at) };
+    return {
+      key: data.id,
+      inputs: { installationName, incident: data.id },
+      at: new Date(data.created_at),
+    };
   },
   describe: ({ incident }) => `pagerduty ${String(incident)}`,
 };

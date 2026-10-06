@@ -5,6 +5,7 @@ import type { Provider } from "../../workflow/providers.ts";
 import { whenReady } from "../readiness.ts";
 import { onShutdown } from "../shutdown.ts";
 import { createTriggerEngine, type TriggerDeps, type TriggerEngine } from "./engine.ts";
+import type { PushedEvent } from "./sources.ts";
 
 // How soon an occurrence waiting on the cap notices a run finishing. While
 // nothing waits, each check is one read of the pending rows.
@@ -79,6 +80,6 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
  * with the names of the triggers that took it. Rejects when a trigger could not
  * read the event, after the others have taken it.
  */
-export async function pushEvent(provider: Provider, event: unknown): Promise<string[]> {
+export async function pushEvent(provider: Provider, event: PushedEvent): Promise<string[]> {
   return running === undefined ? [] : running.push(provider, event);
 }

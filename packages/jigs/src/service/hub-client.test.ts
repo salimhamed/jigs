@@ -58,6 +58,7 @@ const event = (position: string, payload: unknown): Message => ({
   event: {
     id: `evt_${position}`,
     provider: "pagerduty",
+    installationName: "acme",
     name: "incident.triggered",
     receivedAt: "2026-10-04T00:00:00.000Z",
     payload,
@@ -107,8 +108,8 @@ test("routes a batch in order, then confirms its last position", async () => {
   await vi.waitFor(() => expect(seen.filter((r) => r.method === "POST")).toHaveLength(1));
 
   expect(push.mock.calls).toEqual([
-    ["pagerduty", "first"],
-    ["pagerduty", "second"],
+    ["pagerduty", { installationName: "acme", payload: "first" }],
+    ["pagerduty", { installationName: "acme", payload: "second" }],
   ]);
   const [poll, confirm] = seen;
   expect(poll?.method).toBe("GET");
@@ -131,7 +132,11 @@ test("a message that fails to route is routed again before the batch is confirme
 
   await vi.advanceTimersByTimeAsync(5_000);
   await until(() => confirmed().length === 1);
-  expect(push.mock.calls.map(([, payload]) => payload)).toEqual(["bad", "good", "bad"]);
+  expect(push.mock.calls.map(([, pushed]) => (pushed as { payload: unknown }).payload)).toEqual([
+    "bad",
+    "good",
+    "bad",
+  ]);
   expect(JSON.parse(confirmed()[0]?.body ?? "")).toEqual({ position: "4" });
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining("could not route pagerduty event evt_3"),
@@ -141,8 +146,8 @@ test("a message that fails to route is routed again before the batch is confirme
 
 test("a message that keeps failing is retried on the backoff, then given up and confirmed", async () => {
   vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
-  push.mockImplementation(async (_provider, payload) => {
-    if (payload === "bad") throw new Error("registry unreachable");
+  push.mockImplementation(async (_provider, pushed) => {
+    if ((pushed as { payload: unknown }).payload === "bad") throw new Error("registry unreachable");
     return [];
   });
   const { seen } = await start([[event("3", "bad"), event("4", "good")]]);

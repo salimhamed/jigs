@@ -45,11 +45,27 @@ export const agentsSchema = z.strictObject({
   env: z.array(envName).default([]),
 });
 
+/**
+ * An installation's name, as an admin set it on the hub: lowercase letters, digits and hyphens,
+ * starting with a letter. Use it for a workflow input that names an installation.
+ *
+ * @group Factory and workflows
+ */
+export const installationNameSchema = z
+  .string()
+  .regex(
+    /^[a-z][a-z0-9-]*$/,
+    "must be an installation name from the hub: lowercase letters, digits and hyphens, starting with a letter",
+  );
+
 // A binding is a name, a remote URL, and how a worktree cut from that remote
 // is provisioned — the single place that story is told. Where the clone lives
 // is jigs' business, and every other fact is derived from git at each activation.
 export const bindingSchema = z.strictObject({
   remote: z.string().min(1),
+  // The GitHub App installation, as named on the hub, that reaches the
+  // remote's repository: pushes, pull requests and their wakes go through it.
+  installationName: installationNameSchema,
   // Paths, or globs, relative to this binding's own `bindings/<name>/`
   // directory in the factory repo; each lands at that same relative path in
   // the worktree. For what git does not carry.
@@ -86,23 +102,6 @@ export const githubSchema = z.strictObject({
  */
 export const linearSchema = z.strictObject({
   operator: z.email().optional(),
-});
-
-/**
- * A factory's PagerDuty settings. jigs acts on PagerDuty as the PagerDuty app
- * the hub assigns the factory; `from` is the email of a real PagerDuty user,
- * because PagerDuty refuses a write without one, and notes jigs adds are
- * attributed to them.
- */
-export const pagerDutySchema = z.strictObject({ from: z.email() });
-
-/**
- * A factory's Slack app, which the hub assigns it and which always acts as
- * itself. `scopes` names the bot scopes the factory's own Slack calls need
- * beyond jigs' own; doctor checks the workspace granted them.
- */
-export const slackSchema = z.strictObject({
-  scopes: z.array(z.string().min(1)).default([]),
 });
 
 // biome-ignore lint/suspicious/noExplicitAny: heterogeneous schemas per workflow
@@ -143,9 +142,6 @@ export const factoryConfigSchema = z
     // Who the operator is on GitHub, and how they approve a merge.
     github: githubSchema.prefault({}),
     linear: linearSchema.prefault({}),
-    pagerduty: pagerDutySchema.optional(),
-    // Absent, the factory uses Slack only if a workflow requires it.
-    slack: slackSchema.optional(),
     release: releaseSchema.optional(),
     // Service variables every agent harness receives beyond jigs' base set.
     agents: agentsSchema.prefault({}),
@@ -238,7 +234,6 @@ export interface Binding extends BindingEntry {
 }
 
 export type FactoryConfig = z.output<typeof factoryConfigSchema>;
-export type SlackConfig = z.output<typeof slackSchema>;
 
 export function parseFactoryConfig(value: unknown): FactoryConfig {
   const result = factoryConfigSchema.safeParse(value);

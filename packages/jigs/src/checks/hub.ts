@@ -7,8 +7,10 @@ import {
   type HubConnection,
   hubConnection,
   hubRefused,
+  PROVIDER_NAMES,
 } from "../providers/hub.ts";
-import type { Check } from "./check.ts";
+import type { Provider } from "../workflow/providers.ts";
+import type { Check, CheckResult } from "./check.ts";
 
 /** Whether the hub answers and takes this factory's token. */
 export function hubChecks(
@@ -41,54 +43,68 @@ export function hubChecks(
   ];
 }
 
-const APP_CHECKS = {
-  slack: {
-    label: "Slack",
-    where: "no workspace",
-    repair: "in the hub, assign this factory a Slack app installed in your workspace",
-  },
-  pagerduty: {
-    label: "PagerDuty",
-    where: "no account",
-    repair: "in the hub, assign this factory a PagerDuty app installed on your account",
-  },
-};
+export interface InstallationsCheckOptions {
+  /** The installations the factory names: in bindings, triggers and agent harnesses. */
+  declared: readonly string[];
+  /** Mints the installation's token through the hub and makes the provider's cheapest call. */
+  probe(installationName: string): Promise<CheckResult>;
+  /** The hub's view of the factory; given, every named installation assigned to it is checked too. */
+  status?: () => Promise<FactoryStatus>;
+}
 
-/** Whether the hub has assigned this factory an app of `provider`, and where it is installed. */
-export function hubAppChecks(
-  ctx: FactoryContext,
-  provider: keyof typeof APP_CHECKS,
-  status: (ctx: FactoryContext) => Promise<FactoryStatus> = fetchFactoryStatus,
-): Check[] {
-  const { label, where, repair } = APP_CHECKS[provider];
-  return [
-    {
-      id: `hub.${provider}`,
-      label: `hub ${label} app`,
-      run: async () => {
+/**
+ * Whether every installation of `provider` the factory uses is named on the
+ * hub, assigned to the factory and answers.
+ */
+export function installationsCheck(
+  provider: Provider,
+  { declared, probe, status }: InstallationsCheckOptions,
+): Check {
+  const label = PROVIDER_NAMES[provider];
+  return {
+    id: `${provider}.installations`,
+    label: `${label} installations`,
+    run: async (): Promise<CheckResult> => {
+      const names = new Set(declared);
+      if (status !== undefined) {
         let apps: FactoryStatus["apps"];
         try {
-          ({ apps } = await status(ctx));
+          ({ apps } = await status());
         } catch (err) {
-          return hubRefused(`could not read this factory's ${label} apps from the hub`, err);
+          return hubRefused(
+            `could not read this factory's ${label} installations from the hub`,
+            err,
+          );
         }
-        const assigned = apps.filter((app) => app.provider === provider);
-        if (assigned.length === 0)
-          return {
-            ok: false,
-            reason: `no ${label} app is assigned to this factory on the hub`,
-            repair,
-          };
+        for (const app of apps)
+          if (app.provider === provider)
+            for (const { installationName } of app.installations)
+              if (installationName !== null) names.add(installationName);
+      }
+      if (names.size === 0)
         return {
-          ok: true,
-          detail: assigned
-            .map(
-              (app) =>
-                `${app.name} in ${app.installations.map(({ account }) => account).join(", ") || where}`,
-            )
-            .join("; "),
+          ok: false,
+          reason: `no ${label} installation is named and assigned to this factory on the hub`,
+          repair: `in the hub, name an installation of a ${label} app and assign the app to this factory, then: \`pnpm exec jigs doctor\``,
         };
-      },
+      const results = await Promise.all(
+        [...names].map(async (name) => ({ name, result: await probe(name) })),
+      );
+      const failed = results.flatMap(({ name, result }) => (result.ok ? [] : [{ name, result }]));
+      if (failed.length > 0)
+        return {
+          ok: false,
+          reason: failed.map(({ name, result }) => `${name}: ${result.reason}`).join("; "),
+          repair: [...new Set(failed.map(({ result }) => result.repair))].join("\n"),
+        };
+      return {
+        ok: true,
+        detail: results
+          .map(({ name, result }) =>
+            result.ok && result.detail !== undefined ? `${name}: ${result.detail}` : name,
+          )
+          .join("; "),
+      };
     },
-  ];
+  };
 }

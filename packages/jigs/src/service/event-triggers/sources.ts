@@ -19,6 +19,12 @@ export interface SourceOccurrence {
   at: Date;
 }
 
+/** A provider event the hub passed on, with the named installation it came through. */
+export interface PushedEvent {
+  installationName: string;
+  payload: unknown;
+}
+
 export interface Source<P = unknown> {
   provider: Provider;
   /** Validates the descriptor's `params`. */
@@ -28,9 +34,10 @@ export interface Source<P = unknown> {
   sampleInputs: Record<string, unknown>;
   /**
    * The occurrence a pushed provider event is, or null when the event is not
-   * one. Throws only when it could not tell, so the event is routed again.
+   * one, such as an event from another installation. Throws only when it could
+   * not tell, so the event is routed again.
    */
-  fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
+  fromPush(params: P, event: PushedEvent): Promise<SourceOccurrence | null>;
   /** What a run this source started was started for, in an operator's words, read off its inputs. */
   describe(inputs: Record<string, unknown>): string;
 }

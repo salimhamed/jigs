@@ -3,7 +3,7 @@ import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
 import { and, eq, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
 import { appOAuth } from "./app-oauth.ts";
-import { type App, findAssignedInstallation, recordInstallation } from "./apps.ts";
+import { type App, findNamedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
@@ -238,6 +238,7 @@ export function createSlackRoutes(options: {
     await fanOutProviderEvent(db, waiters, {
       organizationId: app.organizationId,
       appId: app.id,
+      installationId: installation.id,
       provider: "slack",
       name,
       payload,
@@ -329,16 +330,14 @@ export function createSlackRoutes(options: {
   return router;
 }
 
-/** The bot token of the one workspace where a Slack app assigned to the factory is installed. */
+/** The bot token of the named installation of a Slack app assigned to the factory. */
 export async function issueSlackToken(
   db: HubDatabase,
   encryptionKey: Buffer,
   factoryId: string,
-): Promise<{ token: SlackTokenResponse } | { status: 404 | 409; error: string }> {
-  const found = await findAssignedInstallation(db, factoryId, "slack", undefined, {
-    none: "No Slack app assigned to this factory is installed in a workspace.",
-    several: "More than one Slack installation is assigned to this factory, so leave one",
-  });
+  installationName: string,
+): Promise<{ token: SlackTokenResponse } | { status: 404; error: string }> {
+  const found = await findNamedInstallation(db, factoryId, "slack", installationName);
   if ("error" in found) return found;
   const { app, installation } = found;
   const { botToken } = decryptJson<SlackWorkspaceSecrets>(

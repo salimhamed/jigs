@@ -30,6 +30,7 @@ async function repo() {
 async function worktreeAt(dir: string): Promise<Worktree> {
   return {
     binding: "app",
+    installationName: "github-acme",
     path: dir,
     branch: "main",
     defaultBranch: "main",

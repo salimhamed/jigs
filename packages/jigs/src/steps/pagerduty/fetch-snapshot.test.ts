@@ -1,19 +1,22 @@
 import { expect, test, vi } from "vitest";
-import { pagerDutyClientFor } from "../../providers/pagerduty.ts";
+import { pagerDutyFor } from "../../providers/pagerduty.ts";
 import { fetchIncidentSnapshot } from "./fetch-snapshot.ts";
 import { recorded, recordedClient } from "./test-fixtures.ts";
 
 vi.mock("../../providers/pagerduty.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/pagerduty.ts")>()),
-  pagerDutyClientFor: vi.fn(),
+  pagerDutyFor: vi.fn(),
 }));
 
 test("reads the incident once and keeps the fields a triage orients on", async () => {
   const incident = recorded("incident");
   const { client, calls } = recordedClient(() => ({ incident }));
-  vi.mocked(pagerDutyClientFor).mockReturnValue(client);
+  vi.mocked(pagerDutyFor).mockReturnValue(client);
 
-  const snapshot = await fetchIncidentSnapshot(incident.id);
+  const snapshot = await fetchIncidentSnapshot({
+    installationName: "pagerduty-acme",
+    incidentId: incident.id,
+  });
 
   expect(calls.map((call) => `${call.method} ${call.url.pathname}`)).toEqual([
     `GET /incidents/${incident.id}`,
@@ -54,9 +57,12 @@ test("an unassigned incident has no assignees, and a reference without a summary
     assignments: [],
     escalation_policy: { id: "PWRV0RR", type: "escalation_policy_reference" },
   };
-  vi.mocked(pagerDutyClientFor).mockReturnValue(recordedClient(() => ({ incident })).client);
+  vi.mocked(pagerDutyFor).mockReturnValue(recordedClient(() => ({ incident })).client);
 
-  const snapshot = await fetchIncidentSnapshot(incident.id);
+  const snapshot = await fetchIncidentSnapshot({
+    installationName: "pagerduty-acme",
+    incidentId: incident.id,
+  });
 
   expect(snapshot.assignees).toEqual([]);
   expect(snapshot.escalationPolicy).toEqual({ id: "PWRV0RR", name: "PWRV0RR", url: null });

@@ -10,10 +10,9 @@ import {
   runSignal,
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { FACTORY_CONFIG_FILE } from "../workflow/factory-schema.ts";
-import { createHubTokens, type HubTokens, perContext } from "./credentials.ts";
+import type { HubTokens } from "./credentials.ts";
 import { MAX_RATE_LIMIT_WAIT_SECONDS, ProviderApiError, rateLimitWaits } from "./http.ts";
-import { hubToken } from "./hub.ts";
+import { installationTokens } from "./installation-tokens.ts";
 
 export const PAGERDUTY_API_URL = "https://api.pagerduty.com";
 
@@ -58,22 +57,22 @@ export interface PagerDutyUser {
 
 export interface PagerDutyClient {
   getIncident(id: string): Promise<PagerDutyIncident>;
-  /** Add a note to an incident, attributed to the factory's `pagerduty.from` user. */
+  /** Add a note to an incident, attributed to the installation's from user. */
   createNote(incidentId: string, content: string): Promise<PagerDutyNote>;
   findUserByEmail(email: string): Promise<PagerDutyUser | null>;
   /** The cheapest read that proves the token works: one incident, if any. */
   verifyAccess(): Promise<void>;
 }
 
-/** The factory's PagerDuty app tokens, as the hub hands them out. */
-export type PagerDutyTokens = Pick<HubTokens<{ token: string }>, "bearer" | "invalidate">;
-
-/** The factory's PagerDuty tokens, cached once per factory context. */
-export const pagerDutyTokens: (ctx?: FactoryContext) => PagerDutyTokens = perContext((ctx) =>
-  createHubTokens(() => hubToken("pagerduty", {}, ctx)),
-);
+/** The tokens of one of the factory's PagerDuty installations, as the hub hands them out. */
+export type PagerDutyTokens = Pick<
+  HubTokens<{ token: string; from: string }>,
+  "issued" | "invalidate"
+>;
 
 export interface PagerDutyClientDeps {
+  /** The PagerDuty installation, as named on the hub, the client acts through. */
+  installationName: string;
   tokens?: PagerDutyTokens;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -93,41 +92,30 @@ function rateLimitResetSeconds(res: Response): number {
   return Number.isFinite(reset) && reset > 0 ? Math.ceil(reset) : DEFAULT_RATE_LIMIT_WAIT_SECONDS;
 }
 
-// PagerDuty refuses a write that names no user (error 1027).
-function fromUser(ctx: FactoryContext): string {
-  const from = ctx.config.pagerduty?.from;
-  if (from === undefined)
-    throw new JigsError(
-      `${FACTORY_CONFIG_FILE} has no pagerduty section, and PagerDuty refuses a write that names no user`,
-      `add pagerduty: { from: "<email of a PagerDuty user>" } to ${FACTORY_CONFIG_FILE}, then: \`pnpm exec jigs up\``,
-    );
-  return from;
-}
-
-export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDutyClient {
+export function createPagerDutyClient(deps: PagerDutyClientDeps): PagerDutyClient {
   const ctx = () => deps.context ?? currentFactoryContext();
 
   async function request<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
     const url = `${PAGERDUTY_API_URL}${apiPath}`;
-    const callAuth = deps.tokens ?? pagerDutyTokens(ctx());
-    const from = method === "GET" ? undefined : fromUser(ctx());
+    const tokens = deps.tokens ?? installationTokens("pagerduty", deps.installationName, ctx());
     let reauthorized = false;
     const rateLimit = rateLimitWaits("pagerduty", runSignal, deps.sleep);
     for (;;) {
-      const credential = await callAuth.bearer();
+      const { token: credential, from } = await tokens.issued();
       const res = await (deps.fetch ?? fetch)(url, {
         method,
         headers: {
           authorization: `Bearer ${credential}`,
           ...(body === undefined ? {} : { "content-type": "application/json" }),
           accept: "application/vnd.pagerduty+json;version=2",
-          ...(from === undefined ? {} : { from }),
+          // PagerDuty refuses a write that names no user (error 1027).
+          ...(method === "GET" ? {} : { from }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const text = await res.text();
       if (res.status === 401 && !reauthorized) {
-        callAuth.invalidate(credential);
+        tokens.invalidate(credential);
         reauthorized = true;
         continue;
       }
@@ -200,5 +188,6 @@ export function createPagerDutyClient(deps: PagerDutyClientDeps = {}): PagerDuty
   };
 }
 
-/** The factory's PagerDuty client. */
-export const pagerDutyClientFor = perContext((ctx) => createPagerDutyClient({ context: ctx }));
+/** The factory's PagerDuty client for one installation. */
+export const pagerDutyFor = (installationName: string, context?: FactoryContext): PagerDutyClient =>
+  createPagerDutyClient({ installationName, ...(context === undefined ? {} : { context }) });

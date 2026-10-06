@@ -397,7 +397,7 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
     updatedAt: new Date("2026-09-04T10:00:00.000Z"),
   };
   const listed = vi.spyOn(sql, "listResources").mockResolvedValue([row]);
-  const claim = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const claim = ticketToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     runs: {
@@ -431,9 +431,9 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
   ]);
 });
 
-const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
-const MARKER = needsHumanToken("68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
-const PR = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+const CLAIM = ticketToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
+const MARKER = needsHumanToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
+const PR = pullRequestToken({ installationName: "acme", owner: "acme", repo: "api", number: 41 });
 
 // A running run holding exactly these hooks. The routes below read no other
 // world surface, so anything they touch beyond `hooks.list` rejects and is
@@ -460,10 +460,19 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
   runHolding(CLAIM, MARKER, PR);
   // The halt's comment is read back from Linear; a Linear nobody can ask
   // leaves the suspension as the token alone describes it.
-  vi.spyOn(linear, "getComment").mockResolvedValue({
-    url: "https://linear.app/acme/issue/AGE-317#comment-c1",
-    body: "Which binding?",
-  });
+  const asked: string[] = [];
+  vi.spyOn(linear, "linearFor").mockImplementation(
+    (installationName) =>
+      ({
+        getComment: async (commentId: string) => {
+          asked.push(`${installationName} ${commentId}`);
+          return {
+            url: "https://linear.app/acme/issue/AGE-317#comment-c1",
+            body: "Which binding?",
+          };
+        },
+      }) as unknown as linear.LinearClient,
+  );
 
   const res = await app.request(`/api/runs/${RUN}`);
 
@@ -488,11 +497,16 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
       },
     ],
   });
+  expect(asked).toEqual(["acme c1"]);
 });
 
 test("a halt whose comment Linear will not hand back keeps the park it can state", async () => {
   runHolding(CLAIM, MARKER);
-  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear API key is not set"));
+  vi.spyOn(linear, "linearFor").mockReturnValue({
+    getComment: async () => {
+      throw new Error("the hub answered 404");
+    },
+  } as unknown as linear.LinearClient);
 
   const res = await app.request(`/api/runs/${RUN}`);
 

@@ -2,6 +2,7 @@ import { randomBytes } from "node:crypto";
 import { once } from "node:events";
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
+import { and, eq } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
 import { afterAll, beforeAll } from "vitest";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
@@ -114,6 +115,19 @@ export function setUpTestHub() {
       return (await readMessages(db, factoryId)).map((message) =>
         message.kind === "event" ? message.event.name : message.kind,
       );
+    },
+
+    /** Name an app's installation with this external id, as an admin does on its page. */
+    async nameInstallation(appId: string, externalId: string, installationName: string) {
+      await db
+        .update(schema.installations)
+        .set({ installationName })
+        .where(
+          and(
+            eq(schema.installations.appId, appId),
+            eq(schema.installations.externalId, externalId),
+          ),
+        );
     },
 
     /** POST a provider token request to the hub as the factory with `token`. */

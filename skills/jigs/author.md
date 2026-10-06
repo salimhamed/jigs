@@ -105,8 +105,8 @@ declaration next to its input schema.
 Resolve the ticket, then claim it, then do everything else. The claim is the
 one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
 before claiming can collide with the run that already holds the ticket. Use
-`acquireTicket` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
-starting protected work.
+`acquireTicket({ installationName, reference })` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
+starting protected work. The claim carries `installationName`, so `noteOnTicket` and `haltForHuman` take only the claim.
 
 Post ticket notes through the claim with `noteOnTicket(claim, note)` rather
 than the `postTicketNote` step. The claim records every comment the run posts,
@@ -226,10 +226,19 @@ schema. An active prior run causes a tick to be skipped; downtime isn't replayed
 Agent harnesses don't inherit `.env`: each gets a small base set (`PATH`, `HOME`,
 locale, proxies and similar) plus its driver's own variables. Give agents any
 other variable by listing its name in `agents: { env: [...] }`; names only.
-For GitHub, give a harness `github: true` instead of a token: the agent then acts as the App's bot through `gh` and HTTPS pushes,
-and `githubMcp()` adds GitHub's MCP server for it. Likewise `linear: true` and
-`pagerduty: true` hand the agent the factory's Linear and PagerDuty tokens, and
+For GitHub, give a harness `github: { installationName }` instead of a token: the agent then acts as the App's bot through `gh` and HTTPS pushes,
+and `githubMcp()` adds GitHub's MCP server for it. An agent in a worktree takes
+`github: { installationName: worktree.installationName }`, spread onto its harness once the worktree exists. Likewise
+`linear: { installationName }` and `pagerduty: { installationName }` hand the agent that installation's Linear and PagerDuty tokens, and
 `linearMcp()` and `pagerdutyMcp()` add those services' hosted MCP servers.
+
+### Installation names
+
+Every provider call names the installation it acts through, by its installation name on the hub; jigs never picks one.
+Linear, Slack and PagerDuty steps take one options object with `installationName`, such as
+`postSlackMessage({ installationName, channel, text })`; `callGitHub` and `callSlack` take it in their last argument.
+A binding declares its GitHub `installationName`, and `Worktree` and `PullRequestRef` carry it into the pull request steps and routines.
+Each trigger source takes one, and passes it to the run as the `installationName` input; thread it from there into every call the run makes.
 
 Use `jigs bind` and `jigs unbind` for literal binding declarations. Unsupported
 computed expressions fail with guidance before any file or label changes.

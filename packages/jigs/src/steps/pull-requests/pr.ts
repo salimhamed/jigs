@@ -16,6 +16,7 @@ import {
   type PullRequestSnapshot,
   postPrComment,
   postPullRequestReview,
+  type RepositoryRef,
   replyToReviewThread,
 } from "../../providers/github.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
@@ -35,7 +36,8 @@ export type OpenedPullRequest = PullRequestRef & {
   url: string;
 };
 
-function repositoryOf(binding: string) {
+// The installation is the worktree's, the one its pushes went through.
+function repositoryOf({ binding, installationName }: Worktree): RepositoryRef {
   const { remote } = resolveBinding(currentFactoryContext().config, binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
@@ -43,7 +45,7 @@ function repositoryOf(binding: string) {
       `binding ${binding} points at ${remote}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
     );
   }
-  return ref;
+  return { installationName, ...ref };
 }
 
 /**
@@ -63,7 +65,7 @@ export async function createPullRequest(request: {
   draft?: boolean | undefined;
 }): Promise<OpenedPullRequest> {
   const { worktree, title, body, draft } = request;
-  const repo = repositoryOf(worktree.binding);
+  const repo = repositoryOf(worktree);
   const { branch: head, defaultBranch: base } = worktree;
   // The pull request's author is the App's bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
@@ -72,17 +74,16 @@ export async function createPullRequest(request: {
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
     const { number, html_url } = await createPr({
-      owner: repo.owner,
-      repo: repo.repo,
+      ...repo,
       head,
       base,
       title,
       body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
       ...(draft === undefined ? {} : { draft }),
     });
-    opened = { owner: repo.owner, repo: repo.repo, number, url: html_url };
+    opened = { ...repo, number, url: html_url };
   }
-  const pr = { owner: opened.owner, repo: opened.repo, number: opened.number };
+  const { url: _, ...pr } = opened;
   if (operator !== null) await assignPullRequest(pr, [operator]);
   return opened;
 }

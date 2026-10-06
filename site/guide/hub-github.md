@@ -78,8 +78,9 @@ Enter it under **Installation name** and save.
 Under **Factories** on the App's page, check each factory that should act as
 this App, and save.
 
-Each repository a factory binds needs exactly one of the factory's GitHub
-Apps installed on its owner. `pnpm exec jigs doctor` in the factory checks
-each binding against the hub. A protected branch that restricts who can push
+Each binding in a factory names the installation that reaches its repository
+by its installation name. A factory may be assigned several Apps installed on
+the same account, and uses the one each binding names.
+`pnpm exec jigs doctor` in the factory checks each binding against the hub. A protected branch that restricts who can push
 must list the App, or GitHub refuses its merges: see
 [Merging](/guide/configuration#merging).

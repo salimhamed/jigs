@@ -2,12 +2,16 @@
 // effort: a mention decides only who gets notified, so a person Linear cannot
 // find is left out with a warning and the comment still posts.
 
-import { findUserByEmail, getIssueParticipants, type LinearUser } from "../../providers/linear.ts";
+import type { LinearClient, LinearUser } from "../../providers/linear.ts";
 import type { TicketParticipants } from "./render-comment.ts";
 
-async function lookup(email: string, role: "operator" | "mention"): Promise<LinearUser | null> {
+async function lookup(
+  linear: LinearClient,
+  email: string,
+  role: "operator" | "mention",
+): Promise<LinearUser | null> {
   try {
-    const user = await findUserByEmail(email);
+    const user = await linear.findUserByEmail(email);
     if (user === null) {
       console.warn(`[mentions] no active Linear user has the ${role} email ${email}; skipping`);
     }
@@ -19,10 +23,11 @@ async function lookup(email: string, role: "operator" | "mention"): Promise<Line
 }
 
 async function ticketPeople(
+  linear: LinearClient,
   issueId: string,
 ): Promise<{ creator: LinearUser | null; assignee: LinearUser | null }> {
   try {
-    return await getIssueParticipants(issueId);
+    return await linear.getIssueParticipants(issueId);
   } catch (err) {
     console.warn(
       `[mentions] could not read the creator and assignee of ${issueId}; skipping: ${err}`,
@@ -47,13 +52,14 @@ function once(users: Array<LinearUser | null>): LinearUser[] {
  * a ticket whose people cannot be read leaves the rest.
  */
 export async function resolveParticipants(
+  linear: LinearClient,
   issueId: string,
   who: { operator?: string | undefined; mention?: readonly string[] | undefined },
 ): Promise<TicketParticipants> {
   const [{ creator, assignee }, operator, ...extra] = await Promise.all([
-    ticketPeople(issueId),
-    who.operator === undefined ? null : lookup(who.operator, "operator"),
-    ...(who.mention ?? []).map((email) => lookup(email, "mention")),
+    ticketPeople(linear, issueId),
+    who.operator === undefined ? null : lookup(linear, who.operator, "operator"),
+    ...(who.mention ?? []).map((email) => lookup(linear, email, "mention")),
   ]);
   const lead = who.operator === undefined ? creator : operator;
   return {

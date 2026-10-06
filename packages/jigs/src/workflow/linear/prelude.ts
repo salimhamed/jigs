@@ -14,15 +14,20 @@ export interface AcquireTicketSteps {
 }
 
 /**
- * Resolve a ticket reference, claim it, and read its current requirements.
+ * Resolve a ticket reference in the Linear installation `installationName` names, claim it, and
+ * read its current requirements.
  * Provisioning and all other protected work deliberately happen after this routine.
  */
 export async function acquireTicket(
-  reference: string,
+  { installationName, reference }: { installationName: string; reference: string },
   steps: AcquireTicketSteps,
 ): Promise<{ claim: TicketClaim; snapshot: TicketSnapshot }> {
-  const issue = await steps.resolveLinearIssue(reference);
-  const claim = await claimTicket(issue.id, issue.identifier);
-  const snapshot = await steps.fetchTicketSnapshot(issue.id);
+  const issue = await steps.resolveLinearIssue({ installationName, reference });
+  const claim = await claimTicket({
+    installationName,
+    issueId: issue.id,
+    identifier: issue.identifier,
+  });
+  const snapshot = await steps.fetchTicketSnapshot({ installationName, issueId: issue.id });
   return { claim, snapshot };
 }

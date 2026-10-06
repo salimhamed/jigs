@@ -5,6 +5,7 @@ import { type BranchState, bindGitSteps } from "./committed-work.ts";
 
 const worktree: Worktree = {
   binding: "app",
+  installationName: "github-acme",
   path: "/tmp/wt",
   branch: "acme/abc-1",
   defaultBranch: "main",

@@ -17,7 +17,8 @@ following the pull request, runs in four jigs routines the workflow calls.
 
 ## What it needs
 
-- **A Linear app assigned to the factory, and the factory's GitHub App installed on the repository's owner**. See
+- **A Linear app assigned to the factory, and the factory's GitHub App installed on the repository's owner**,
+  each installation named on the hub. See
   [The factory's App](https://salimhamed.github.io/jigs/guide/configuration#github-app)
   and [The factory's Linear app](https://salimhamed.github.io/jigs/guide/configuration#linear-app).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
@@ -25,13 +26,16 @@ following the pull request, runs in four jigs routines the workflow calls.
   missing one.
 - **Claude Code and Codex**, installed and logged in. Both are declared in
   `requires.agents` and checked when the service starts.
-- **The GitHub CLI, `gh`.** The builder sets `github: true`, so it acts on
-  GitHub as the factory's App, the same bot jigs posts as: `gh` and its pushes
+- **The GitHub CLI, `gh`.** Once the worktree exists, the workflow gives the
+  builder `github: { installationName: worktree.installationName }`, so it acts
+  on GitHub as the factory's App through the binding's installation, the same
+  bot jigs posts as: `gh` and its pushes
   use a token jigs gives it, and its commits are authored by the bot. See
   [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access).
   Missing access makes maintenance ask for help.
-- **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
-  `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
+- **A binding** for the repository to change, naming the GitHub installation
+  that reaches it: `pnpm exec jigs bind <remote> --installation <installation>`,
+  then `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
   `"jigs"`, so jigs merges once the pull request is approved and CI is green.
   Set it to `"human"` to have the run wait for you to merge. jigs never merges
@@ -65,16 +69,19 @@ To allow any title, delete the `check` passed to `describePullRequest` in
 ## Launch a run
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
 pnpm exec jigs watch
 ```
+
+`linearInstallation` is the installation name of the Linear workspace the
+ticket is in.
 
 A run picks its builder and reviewer by name. By default the `builder` agent
 builds and the `reviewer` agent reviews both the ticket's requirements and the
 change. To have Claude Code build too:
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input builder=reviewer
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input builder=reviewer
 ```
 
 A run cannot type a model name. To change a model, edit its line in `agents`.
@@ -87,7 +94,7 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 | `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3 |
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input 'budget={"reviewRounds":5}'
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input 'budget={"reviewRounds":5}'
 ```
 
 Budget settings belong to this recipe and are fixed when the run starts.
@@ -171,6 +178,7 @@ export async function deliverTicket(
   claim: TicketClaim,
   snapshot: TicketSnapshot,
 ) {
+  const { installationName } = claim;
   const built = await buildAndReview(delivery, { rounds: 3 });
   if (built.outcome === "stopped") {
     await noteOnTicket(claim, {
@@ -178,12 +186,12 @@ export async function deliverTicket(
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
     });
-    await setTicketStatus(snapshot.id, "Todo");
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
   }
   const { title, body } = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
-  await setTicketStatus(snapshot.id, "In Review");
+  await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "In Review" });
   const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
@@ -197,7 +205,7 @@ export async function deliverTicket(
       }),
   });
   if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
-  await setTicketStatus(snapshot.id, "Done");
+  await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
   return { pr: pr.url };
 }
 ```

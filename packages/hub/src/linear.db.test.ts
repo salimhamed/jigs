@@ -32,8 +32,17 @@ import {
 
 const publicUrl = new URL("https://hub.example.test");
 
-const { db, encryptionKey, waiters, listen, serveHub, newFactory, eventNames, requestToken } =
-  setUpTestHub();
+const {
+  db,
+  encryptionKey,
+  waiters,
+  listen,
+  serveHub,
+  newFactory,
+  eventNames,
+  requestToken,
+  nameInstallation,
+} = setUpTestHub();
 let hub: string;
 let linearTokens: LinearTokens;
 
@@ -249,8 +258,8 @@ async function deliver(
   return response.status;
 }
 
-const requestLinearToken = (token: string, body: unknown) =>
-  requestToken(linearTokenPath, token, body);
+const requestLinearToken = (token: string, installationName: string) =>
+  requestToken(linearTokenPath, token, { installationName });
 
 dbTest("connects a workspace through Linear's OAuth flow as the app", async () => {
   const linear = await newApp();
@@ -336,10 +345,11 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
 
   const payload = commentCreated(workspace);
   expect(await deliver(linear, payload)).toBe(200);
+  await nameInstallation(linear.app.id, workspace.id, "lin-events");
   const [message] = await readMessages(db, assigned.id);
   expect(message).toMatchObject({
     kind: "event",
-    event: { provider: "linear", name: "Comment", payload },
+    event: { provider: "linear", installationName: "lin-events", name: "Comment", payload },
   });
   expect(await eventNames(unassigned.id)).toEqual([]);
 
@@ -378,6 +388,26 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
   );
   expect(await eventNames(factory.id)).toEqual(["AgentSessionEvent"]);
 
+  // A session in another workspace of the app is acknowledged with that workspace's token.
+  const otherWorkspace = newWorkspace();
+  await connect(linear.app, otherWorkspace);
+  await nameInstallation(linear.app.id, otherWorkspace.id, "lin-acknowledged");
+  const otherSession = crypto.randomUUID();
+  expect(await deliver(linear, sessionCreated(otherWorkspace, otherSession))).toBe(200);
+  const otherToken = await linearTokens.issue(factory.id, "lin-acknowledged");
+  if (!("token" in otherToken)) throw new Error(otherToken.error);
+  await vi.waitFor(() =>
+    expect(activities).toContainEqual({
+      token: otherToken.token.token,
+      input: expect.objectContaining({ agentSessionId: otherSession }),
+    }),
+  );
+  expect(
+    activities.find(
+      (activity) => (activity.input as { agentSessionId?: string }).agentSessionId === sessionId,
+    )?.token,
+  ).not.toBe(otherToken.token.token);
+
   // A prompt into an existing session goes on without a reply from the hub.
   const before = activities.length;
   const prompted = { ...sessionCreated(workspace, sessionId), action: "prompted" };
@@ -398,6 +428,7 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
     "AgentSessionEvent",
     "AgentSessionEvent",
     "AgentSessionEvent",
+    "AgentSessionEvent",
   ]);
 });
 
@@ -411,14 +442,19 @@ dbTest("leaves a new agent session to Linear when no factory hears of it", async
   expect(activities.length).toBe(before);
 });
 
-dbTest("issues the assigned app's workspace token by id or URL key, or the only one", async () => {
-  const linear = await newApp();
-  const workspace = newWorkspace();
+dbTest("issues the token of each named workspace of the assigned apps", async () => {
+  const [linear, second] = [await newApp(), await newApp()];
+  const [workspace, own, unnamed] = [newWorkspace(), newWorkspace(), newWorkspace()];
   await connect(linear.app, workspace);
+  await connect(second.app, own);
+  await connect(second.app, unnamed);
+  await nameInstallation(linear.app.id, workspace.id, "lin-first");
+  await nameInstallation(second.app.id, own.id, "lin-second");
   const { factory, token } = await newFactory();
   await setAssignments(db, organizationId, linear.app.id, [factory.id]);
+  await setAssignments(db, organizationId, second.app.id, [factory.id]);
 
-  const first = await requestLinearToken(token, { organization: workspace.id });
+  const first = await requestLinearToken(token, "lin-first");
   expect(first.status).toBe(200);
   const body = first.body as LinearTokenResponse;
   expect(body).toEqual({
@@ -426,87 +462,60 @@ dbTest("issues the assigned app's workspace token by id or URL key, or the only 
     expiresAt: expect.any(String),
     app: { name: linear.app.name, userId: workspace.userId },
   });
-  expect(await requestLinearToken(token, { organization: workspace.urlKey.toUpperCase() })).toEqual(
-    first,
-  );
-  expect(await requestLinearToken(token, {})).toEqual(first);
-
-  expect(await requestLinearToken(token, { organization: "nowhere" })).toEqual({
-    status: 404,
-    body: { error: "No Linear app assigned to this factory is connected to nowhere." },
+  expect(await requestLinearToken(token, "lin-second")).toMatchObject({
+    status: 200,
+    body: { app: { name: second.app.name, userId: own.userId } },
   });
-  expect((await requestLinearToken(token, { organization: "" })).status).toBe(400);
-  expect((await requestLinearToken(token, { organization: 7 })).status).toBe(400);
-  expect((await requestLinearToken("nope", {})).status).toBe(401);
+
+  expect(await requestLinearToken(token, "nowhere")).toEqual({
+    status: 404,
+    body: { error: "No Linear installation named nowhere is assigned to this factory." },
+  });
+  expect((await requestLinearToken(token, unnamed.urlKey)).status).toBe(404);
+  expect((await requestLinearToken("nope", "lin-first")).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
   });
-  expect((await status.json()).apps).toEqual([
-    {
-      provider: "linear",
-      name: linear.app.name,
-      installations: [{ account: workspace.urlKey, installationName: null }],
-    },
-  ]);
-});
-
-dbTest("refuses a token when no workspace, or more than one, matches", async () => {
-  const [first, second] = [await newApp(), await newApp()];
-  const [shared, own] = [newWorkspace(), newWorkspace()];
-  const { factory, token } = await newFactory();
-  expect(await requestLinearToken(token, {})).toEqual({
-    status: 404,
-    body: { error: "No Linear app assigned to this factory is connected to a Linear workspace." },
+  expect((await status.json()).apps).toContainEqual({
+    provider: "linear",
+    name: linear.app.name,
+    installations: [{ account: workspace.urlKey, installationName: "lin-first" }],
   });
-  await connect(first.app, shared);
-  await connect(second.app, shared);
-  await connect(second.app, own);
-  await setAssignments(db, organizationId, first.app.id, [factory.id]);
-  await setAssignments(db, organizationId, second.app.id, [factory.id]);
-
-  const both = [`${first.app.name} (${shared.urlKey})`, `${second.app.name} (${shared.urlKey})`];
-  expect(await requestLinearToken(token, { organization: shared.urlKey })).toEqual({
-    status: 409,
-    body: {
-      error: `More than one Linear app assigned to this factory is connected to ${shared.urlKey}: ${both.sort().join(", ")}.`,
-    },
-  });
-  expect((await requestLinearToken(token, {})).status).toBe(409);
-  expect((await requestLinearToken(token, { organization: own.id })).status).toBe(200);
 });
 
 dbTest("refreshes a token near expiry once, and stops on a refused refresh", async () => {
   const linear = await newApp();
   const workspace = newWorkspace();
   await connect(linear.app, workspace);
+  await nameInstallation(linear.app.id, workspace.id, "lin-refreshed");
   const { factory } = await newFactory();
   await setAssignments(db, organizationId, linear.app.id, [factory.id]);
-  const current = await linearTokens.issue(factory.id, undefined);
+  const current = await linearTokens.issue(factory.id, "lin-refreshed");
   if (!("token" in current)) throw new Error(current.error);
 
   const before = refreshes;
   const hours = (n: number) => Date.parse(current.token.expiresAt) - n * 60 * 60 * 1000;
-  expect(await linearTokens.issue(factory.id, undefined, hours(7))).toEqual(current);
+  expect(await linearTokens.issue(factory.id, "lin-refreshed", hours(7))).toEqual(current);
   expect(refreshes).toBe(before);
 
   const nearExpiry = hours(5);
   const [one, two] = await Promise.all([
-    linearTokens.issue(factory.id, undefined, nearExpiry),
-    linearTokens.issue(factory.id, undefined, nearExpiry),
+    linearTokens.issue(factory.id, "lin-refreshed", nearExpiry),
+    linearTokens.issue(factory.id, "lin-refreshed", nearExpiry),
   ]);
   expect(refreshes - before).toBe(1);
   expect(one).toEqual(two);
   if (!("token" in one)) throw new Error(one.error);
   expect(one.token.token).not.toBe(current.token.token);
   expect(Date.parse(one.token.expiresAt)).toBeGreaterThan(nearExpiry + 60 * 60 * 1000);
-  expect(await linearTokens.issue(factory.id, undefined, nearExpiry)).toEqual(one);
+  expect(await linearTokens.issue(factory.id, "lin-refreshed", nearExpiry)).toEqual(one);
   expect(refreshes - before).toBe(1);
 
   // Linear refuses a refresh token it no longer knows, as when the app is revoked.
   refreshTokens.clear();
   const later = Date.parse(one.token.expiresAt) - 60 * 1000;
-  const refused = await linearTokens.issue(factory.id, undefined, later);
+  const refused = await linearTokens.issue(factory.id, "lin-refreshed", later);
   expect(refused).toEqual({
     status: 503,
     error: `Connect ${workspace.urlKey} to ${linear.app.name} again on the hub: Linear refused to refresh the token (400).`,
@@ -515,20 +524,22 @@ dbTest("refreshes a token near expiry once, and stops on a refused refresh", asy
     "Linear refused to refresh the token (400).",
   );
   const issuedBefore = issued;
-  expect(await linearTokens.issue(factory.id, undefined, later)).toEqual(refused);
+  expect(await linearTokens.issue(factory.id, "lin-refreshed", later)).toEqual(refused);
   expect(issued).toBe(issuedBefore);
 
   await connect(linear.app, workspace);
-  const reconnected = await linearTokens.issue(factory.id, undefined);
+  const reconnected = await linearTokens.issue(factory.id, "lin-refreshed");
   if (!("token" in reconnected)) throw new Error(reconnected.error);
 
   // A reconnect that lands while a refused refresh is out keeps its own tokens.
   refreshTokens.clear();
   beforeRefresh = () => connect(linear.app, workspace);
   const racing = Date.parse(reconnected.token.expiresAt) - 60 * 1000;
-  expect(await linearTokens.issue(factory.id, undefined, racing)).toMatchObject({ status: 503 });
+  expect(await linearTokens.issue(factory.id, "lin-refreshed", racing)).toMatchObject({
+    status: 503,
+  });
   expect((await installationOf(linear.app, workspace))?.failure).toBeNull();
-  expect("token" in (await linearTokens.issue(factory.id, undefined))).toBe(true);
+  expect("token" in (await linearTokens.issue(factory.id, "lin-refreshed"))).toBe(true);
 });
 
 dbTest("validates a Linear app and adds it once per hub", async () => {

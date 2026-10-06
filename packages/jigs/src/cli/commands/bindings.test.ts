@@ -20,7 +20,9 @@ beforeEach(() => {
   tmp = makeTmpDir();
   remoteDir = makeRemoteBackedRepo(tmp).remoteDir;
   // A local bare repo stands in for GitHub, so the clone is real and offline.
-  factory = makeFactoryRepo(tmp, { bindings: { api: { remote: remoteDir } } });
+  factory = makeFactoryRepo(tmp, {
+    bindings: { api: { remote: remoteDir, installationName: "github-acme" } },
+  });
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 });
 afterEach(() => {
@@ -37,13 +39,13 @@ const printed = async (cwd = factory) => {
 
 const cloneDir = () => cloneRepoDir({ factoryRoot: factory, bindingName: "api" });
 
-// "api" pads to the NAME header's width; the remote, clone and state columns
-// are each already wider than their header.
-const apiRow = (state: string) => `api   ${remoteDir}  ${cloneDir()}  ${state}`;
+// "api" and "github-acme" pad to their headers' widths; the remote, clone and state
+// columns are each already wider than their header.
+const apiRow = (state: string) => `api   ${remoteDir}  github-acme   ${cloneDir()}  ${state}`;
 
 test("a binding with no clone yet reports where the clone will land", async () => {
   const lines = await printed();
-  expect(lines[0]?.split(/ {2,}/)).toEqual(["NAME", "REMOTE", "CLONE", "STATE"]);
+  expect(lines[0]?.split(/ {2,}/)).toEqual(["NAME", "REMOTE", "INSTALLATION", "CLONE", "STATE"]);
   expect(lines.slice(1)).toEqual([apiRow("not cloned (restart the service)")]);
 });
 

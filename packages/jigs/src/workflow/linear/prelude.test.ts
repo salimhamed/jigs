@@ -23,37 +23,50 @@ beforeEach(() => {
 
 test("resolves, claims, and snapshots the resolved ticket in order", async () => {
   const calls: string[] = [];
-  const resolveLinearIssue = vi.fn(async (reference: string) => {
-    calls.push(`resolve:${reference}`);
-    return issue;
-  });
+  const resolveLinearIssue = vi.fn(
+    async ({ installationName, reference }: { installationName: string; reference: string }) => {
+      calls.push(`resolve:${installationName}:${reference}`);
+      return issue;
+    },
+  );
+
   createHook.mockImplementation(({ token }: { token: string }) => ({
     getConflict: async () => {
       calls.push(`claim:${token}`);
       return null;
     },
   }));
-  const fetchTicketSnapshot = vi.fn(async (issueId: string) => {
+  const fetchTicketSnapshot = vi.fn(async ({ issueId }: { issueId: string }) => {
     calls.push(`snapshot:${issueId}`);
     return snapshot;
   });
 
-  const result = await acquireTicket("raw-reference", {
-    resolveLinearIssue,
-    fetchTicketSnapshot,
-  });
+  const result = await acquireTicket(
+    { installationName: "linear-acme", reference: "raw-reference" },
+    {
+      resolveLinearIssue,
+      fetchTicketSnapshot,
+    },
+  );
 
   expect(result).toEqual({
-    claim: expect.objectContaining({ issueId: issue.id, identifier: issue.identifier }),
+    claim: expect.objectContaining({
+      installationName: "linear-acme",
+      issueId: issue.id,
+      identifier: issue.identifier,
+    }),
     snapshot,
   });
   expect(calls).toEqual([
-    "resolve:raw-reference",
-    "claim:linear:ticket:issue-uuid",
+    "resolve:linear-acme:raw-reference",
+    "claim:linear:ticket:linear-acme:issue-uuid",
     "snapshot:issue-uuid",
   ]);
-  expect(createHook).toHaveBeenCalledWith({ token: "linear:ticket:issue-uuid" });
-  expect(fetchTicketSnapshot).toHaveBeenCalledWith(issue.id);
+  expect(createHook).toHaveBeenCalledWith({ token: "linear:ticket:linear-acme:issue-uuid" });
+  expect(fetchTicketSnapshot).toHaveBeenCalledWith({
+    installationName: "linear-acme",
+    issueId: issue.id,
+  });
 });
 
 test("does not fetch a snapshot when another run holds the ticket claim", async () => {
@@ -61,10 +74,13 @@ test("does not fetch a snapshot when another run holds the ticket claim", async 
   const fetchTicketSnapshot = vi.fn(async () => snapshot);
 
   await expect(
-    acquireTicket("AGE-471", {
-      resolveLinearIssue: vi.fn(async () => issue),
-      fetchTicketSnapshot,
-    }),
+    acquireTicket(
+      { installationName: "linear-acme", reference: "AGE-471" },
+      {
+        resolveLinearIssue: vi.fn(async () => issue),
+        fetchTicketSnapshot,
+      },
+    ),
   ).rejects.toBeInstanceOf(ClaimConflictError);
 
   expect(fetchTicketSnapshot).not.toHaveBeenCalled();

@@ -1655,14 +1655,14 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
     streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => [],
-    accessEnv: async ({ harness }): Promise<Record<string, string>> =>
+    accessEnv: async (harness): Promise<Record<string, string>> =>
       harness.github === undefined ? {} : { GH_TOKEN: "ghs_bot", GIT_AUTHOR_NAME: "jigs[bot]" },
     jitFailures: async (_wire, env) => {
       jitEnvs.push(env);
       return undefined;
     },
   };
-  const run = (github?: true) =>
+  const run = (github?: { installationName: string }) =>
     agentStep(
       buildAgentRequest({
         harness: harnesses.claude({ model: "sonnet", ...(github ? { github } : {}) }),
@@ -1673,7 +1673,7 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
       deps,
     );
   try {
-    await run(true);
+    await run({ installationName: "github-acme" });
     await run();
   } finally {
     vi.unstubAllEnvs();

@@ -64,6 +64,9 @@ export async function reviewTicket(options: {
       onReply: "continue",
     });
     // The reply lands on the ticket, so the next round reads it afresh.
-    snapshot = await fetchTicketSnapshot(snapshot.id);
+    snapshot = await fetchTicketSnapshot({
+      installationName: claim.installationName,
+      issueId: snapshot.id,
+    });
   }
 }

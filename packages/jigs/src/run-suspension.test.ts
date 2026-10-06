@@ -9,22 +9,30 @@ import { slackThreadToken } from "./workflow/slack/thread-token.ts";
 // derived from a prefix the minters no longer produce degrades to the generic
 // one, and a test carrying its own copy of the prefix would stay green.
 test("a ticket claim is not a park, and every other hook explains itself", () => {
-  expect(describeSuspension(ticketToken(crypto.randomUUID()))).toBeNull();
-  expect(describeSuspension(pullRequestToken({ owner: "acme", repo: "api", number: 41 }))).toEqual({
-    token: "github:pr:acme/api#41",
+  expect(describeSuspension(ticketToken("linear-acme", crypto.randomUUID()))).toBeNull();
+  expect(
+    describeSuspension(
+      pullRequestToken({ installationName: "github-acme", owner: "acme", repo: "api", number: 41 }),
+    ),
+  ).toEqual({
+    token: "github:pr:github-acme:acme/api#41",
     kind: "pull-request",
     reason: "waiting for pull request activity on acme/api#41",
     url: "https://github.com/acme/api/pull/41",
   });
   // The ticket the run was launched with, never the issue UUID in the token:
   // the identifier is what an operator can act on.
-  expect(describeSuspension(needsHumanToken("issue-1", "comment-1"), "AGE-317")).toEqual({
-    token: "jigs:needs-human:issue-1:comment-1",
+  expect(
+    describeSuspension(needsHumanToken("linear-acme", "issue-1", "comment-1"), "AGE-317"),
+  ).toEqual({
+    token: "jigs:needs-human:linear-acme:issue-1:comment-1",
     kind: "needs-human",
     reason: "waiting for a human reply on AGE-317",
   });
-  expect(describeSuspension(slackThreadToken("C0123ABCD", "1790723244.335019"))).toEqual({
-    token: "slack:thread:C0123ABCD:1790723244.335019",
+  expect(
+    describeSuspension(slackThreadToken("slack-acme", "C0123ABCD", "1790723244.335019")),
+  ).toEqual({
+    token: "slack:thread:slack-acme:C0123ABCD:1790723244.335019",
     kind: "slack-thread",
     reason: "waiting for a reply in the Slack thread 1790723244.335019 in C0123ABCD",
   });

@@ -4,10 +4,8 @@
 import {
   type FactoryStatus,
   factoryStatusPath,
-  type GitHubTokenRequest,
   type GitHubTokenResponse,
   githubTokenPath,
-  type LinearTokenRequest,
   type LinearTokenResponse,
   linearTokenPath,
   type PagerDutyTokenResponse,
@@ -15,6 +13,7 @@ import {
   pagerDutyTokenPath,
   type SlackTokenResponse,
   slackTokenPath,
+  type TokenRequest,
 } from "@jigs-ai/hub-protocol";
 import type { CheckResult } from "../checks/check.ts";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
@@ -113,67 +112,46 @@ export function fetchFactoryStatus(ctx: FactoryContext = currentFactoryContext()
   return hubSend<FactoryStatus>(ctx, factoryStatusPath);
 }
 
-/** What the factory asks the hub for each provider's token, and what it gets back. */
-export interface HubTokenExchange {
-  github: { request: GitHubTokenRequest; response: GitHubTokenResponse };
-  linear: { request: LinearTokenRequest; response: LinearTokenResponse };
-  slack: { request: Record<string, never>; response: SlackTokenResponse };
-  pagerduty: { request: Record<string, never>; response: PagerDutyTokenResponse };
+/** What the hub answers each provider's token request with. */
+export interface HubTokenResponses {
+  github: GitHubTokenResponse;
+  linear: LinearTokenResponse;
+  slack: SlackTokenResponse;
+  pagerduty: PagerDutyTokenResponse;
 }
 
-type HintsByStatus = Partial<Record<number, string>>;
-
-const HUB_TOKENS: {
-  [P in Provider]: { path: string; hints(request: HubTokenExchange[P]["request"]): HintsByStatus };
-} = {
-  github: {
-    path: githubTokenPath,
-    hints: ({ owner }) => ({
-      404: `in the hub, install one of this factory's GitHub Apps on ${owner}, or assign the factory an App installed there`,
-      409: `in the hub, leave this factory assigned only one App installed on ${owner}`,
-    }),
-  },
-  linear: {
-    path: linearTokenPath,
-    hints: () => ({
-      404: "in the hub, connect a Linear workspace to one of this factory's Linear apps, or assign the factory an app connected there",
-      409: "in the hub, leave this factory assigned one Linear app, connected to one workspace",
-      503: "in the hub, connect the Linear workspace again: Linear refused to refresh the app's access",
-    }),
-  },
-  slack: {
-    path: slackTokenPath,
-    hints: () => ({
-      404: "in the hub, install one of this factory's Slack apps in the workspace, or assign the factory a Slack app installed there",
-      409: "in the hub, leave this factory assigned one Slack app, installed in one workspace",
-    }),
-  },
-  pagerduty: {
-    path: pagerDutyTokenPath,
-    hints: () => ({
-      404: "in the hub, assign this factory a PagerDuty app",
-      409: "in the hub, leave this factory assigned only one PagerDuty app",
-      503: "PagerDuty refused the hub's credentials for this factory's PagerDuty app: in the hub, remove the app and add it again with its current client id and secret",
-    }),
-  },
+const TOKEN_PATHS: Record<Provider, string> = {
+  github: githubTokenPath,
+  linear: linearTokenPath,
+  slack: slackTokenPath,
+  pagerduty: pagerDutyTokenPath,
 };
 
-/**
- * A token the hub mints for the factory's app of `provider`: GitHub's for the repository owner
- * `request` names, Linear's for the workspace it names or the only one.
- */
+/** Each provider's name as people write it. */
+export const PROVIDER_NAMES: Record<Provider, string> = {
+  github: "GitHub",
+  linear: "Linear",
+  slack: "Slack",
+  pagerduty: "PagerDuty",
+};
+
+/** A token the hub mints for the factory on the installation named `installationName`. */
 export async function hubToken<P extends Provider>(
   provider: P,
-  request: HubTokenExchange[P]["request"],
+  installationName: string,
   ctx: FactoryContext = currentFactoryContext(),
-): Promise<HubTokenExchange[P]["response"]> {
-  const { path, hints } = HUB_TOKENS[provider];
+): Promise<HubTokenResponses[P]> {
   try {
-    return await hubSend(ctx, path, { method: "POST", body: request });
+    return await hubSend(ctx, TOKEN_PATHS[provider], {
+      method: "POST",
+      body: { installationName } satisfies TokenRequest,
+    });
   } catch (error) {
-    if (!(error instanceof HubResponseError)) throw error;
-    const hint = hints(request)[error.status];
-    if (hint === undefined) throw error;
-    throw new HubResponseError(error.status, error.message, hint);
+    if (!(error instanceof HubResponseError) || error.status !== 404) throw error;
+    throw new HubResponseError(
+      404,
+      error.message,
+      `in the hub, name a ${PROVIDER_NAMES[provider]} installation ${installationName} and assign its app to this factory, or use the name of one that is`,
+    );
   }
 }

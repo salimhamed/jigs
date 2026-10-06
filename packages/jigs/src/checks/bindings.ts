@@ -3,6 +3,10 @@ import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
+import { githubGet } from "../providers/github-api.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
+import { parseGithubRemote } from "../providers/github-remote.ts";
+import { HubResponseError, hubRefused } from "../providers/hub.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
@@ -51,11 +55,12 @@ export function bindingChecks(options: BindingChecksOptions): Check[] {
   return (options.names ?? Object.keys(config.bindings)).map((name) => ({
     id: `binding.${name}`,
     label: `binding ${name}`,
-    run: () => checkBinding(factoryRoot, name, config.bindings[name]),
+    run: () => checkBinding(options.context, factoryRoot, name, config.bindings[name]),
   }));
 }
 
 async function checkBinding(
+  ctx: FactoryContext,
   factoryRoot: string,
   name: string,
   binding: BindingEntry | undefined,
@@ -93,7 +98,36 @@ async function checkBinding(
       repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or a git credential helper for an https remote), then: \`${RESTART_SERVICE}\``,
     };
   }
-  return { ok: true };
+  return checkInstallationReach(ctx, name, binding);
+}
+
+// Pushes go over git, but pull requests, labels and wakes go through the
+// binding's GitHub installation, which may not include the repository.
+async function checkInstallationReach(
+  ctx: FactoryContext,
+  name: string,
+  { remote, installationName }: BindingEntry,
+): Promise<CheckResult> {
+  const repository = parseGithubRemote(remote);
+  if (repository === null) return { ok: true };
+  const slug = `${repository.owner}/${repository.repo}`;
+  try {
+    await githubGet(installationName, `/repos/${slug}`, ctx);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof HubResponseError)
+      return hubRefused(`the hub gave no token for GitHub installation ${installationName}`, err);
+    const missing = err instanceof GitHubApiError && err.status === 404;
+    return {
+      ok: false,
+      reason: missing
+        ? `GitHub installation ${installationName} cannot reach ${slug}`
+        : `could not read ${slug} through GitHub installation ${installationName}: ${err instanceof Error ? err.message : String(err)}`,
+      repair: missing
+        ? `in GitHub, give installation ${installationName} access to ${slug}, or set bindings.${name}.installationName in ${FACTORY_CONFIG_FILE} to an installation that has it, then: \`pnpm exec jigs up\``
+        : "retry: `pnpm exec jigs doctor`, and check GitHub's status page if it repeats",
+    };
+  }
 }
 
 // Provisioning would refuse the same entries, but only after the run started.

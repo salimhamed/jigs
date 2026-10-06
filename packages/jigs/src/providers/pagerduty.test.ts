@@ -13,7 +13,7 @@ async function rejection<E>(promise: Promise<unknown>): Promise<E> {
   throw new Error("expected a rejection");
 }
 
-const context = testFactoryContext({ config: { pagerduty: { from: "oncall@example.com" } } });
+const context = testFactoryContext();
 
 // Recorded shapes from api.pagerduty.com, trimmed to the fields jigs reads.
 const INCIDENT = {
@@ -38,7 +38,10 @@ const USER = { id: "PUSER01", type: "user", name: "On Call", email: "oncall@exam
 function fakeTokens() {
   let minted = 0;
   const tokens: PagerDutyTokens & { minted: () => number } = {
-    bearer: async () => `token-${minted === 0 ? ++minted : minted}`,
+    issued: async () => ({
+      token: `token-${minted === 0 ? ++minted : minted}`,
+      from: "oncall@example.com",
+    }),
     invalidate: (stale) => {
       if (stale === `token-${minted}`) minted += 1;
     },
@@ -51,7 +54,13 @@ function server(handle: (call: FetchCall) => Response, ctx = context) {
   const { fetch, calls } = fakeFetch(handle);
   const { sleep, sleeps } = fakeSleep();
   const tokens = fakeTokens();
-  const client = createPagerDutyClient({ tokens, fetch, sleep, context: ctx });
+  const client = createPagerDutyClient({
+    installationName: "acme",
+    tokens,
+    fetch,
+    sleep,
+    context: ctx,
+  });
   return { client, calls, sleeps, tokens };
 }
 
@@ -96,14 +105,6 @@ test("every write names the from user, and a note comes back with its author", a
     json: { note: { content: "jigs is looking" } },
   });
   expect(calls[0]?.url.pathname).toBe("/incidents/Q1ABCDEF/notes");
-});
-
-test("a write without a pagerduty section fails before reaching PagerDuty", async () => {
-  const { client, calls } = server(() => json({ note: NOTE }, 201), testFactoryContext());
-  await expect(client.createNote("Q1", "x")).rejects.toThrow(
-    "jigs.config.ts has no pagerduty section",
-  );
-  expect(calls).toEqual([]);
 });
 
 test("a 401 gets a new token and retries once", async () => {

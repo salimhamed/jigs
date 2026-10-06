@@ -5,27 +5,19 @@ import * as hub from "./hub.ts";
 import { fakeGithub } from "./test-fixtures.ts";
 import { jsonResponse } from "./test-support.ts";
 
-test("repository and GraphQL calls require an account before authentication", async () => {
-  for (const apiPath of ["/repos//repo/issues", "/repos/owner", "/graphql"]) {
-    await expect(githubRequest("GET", apiPath)).rejects.toThrow("requires an account");
-  }
-});
-
-test("repository paths and GraphQL use the token of their target account", async () => {
+test("each call uses the token of the installation it names, asked of the hub once per name", async () => {
   const github = fakeGithub();
   try {
     const requests = vi.mocked(hub.hubToken).mock.calls;
-    github.reply(jsonResponse({})).reply(jsonResponse({}));
-    await githubRequest("GET", "/repos/Acme/repo/issues", undefined, {
-      context: testFactoryContext(),
-    });
-    await githubRequest(
-      "POST",
-      "/graphql",
-      {},
-      { account: "Other", context: testFactoryContext() },
-    );
-    expect(requests.map(([, request]) => request)).toEqual([{ owner: "Acme" }, { owner: "Other" }]);
+    github.reply(jsonResponse({})).reply(jsonResponse({})).reply(jsonResponse({}));
+    const context = testFactoryContext();
+    await githubRequest("acme", "GET", "/repos/Acme/repo/issues", undefined, context);
+    await githubRequest("other", "POST", "/graphql", {}, context);
+    await githubRequest("acme", "GET", "/repos/Acme/repo", undefined, context);
+    expect(requests.map(([provider, name]) => [provider, name])).toEqual([
+      ["github", "acme"],
+      ["github", "other"],
+    ]);
   } finally {
     vi.restoreAllMocks();
   }

@@ -20,6 +20,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
     rows.push([
       name,
       binding.remote,
+      binding.installationName,
       displayPath(clone),
       await resolveState(clone, binding.remote),
     ]);
@@ -28,7 +29,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
     deps.out("no bindings");
     return;
   }
-  for (const line of formatTable(["NAME", "REMOTE", "CLONE", "STATE"], rows)) {
+  for (const line of formatTable(["NAME", "REMOTE", "INSTALLATION", "CLONE", "STATE"], rows)) {
     deps.out(line);
   }
 }

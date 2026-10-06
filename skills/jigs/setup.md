@@ -36,7 +36,9 @@ pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
 jigs acts on GitHub, Linear, Slack and PagerDuty as the apps the hub assigns
-the factory, so there is nothing to choose here. Add
+the factory, so there is nothing to choose here. The factory names each
+installation it uses by its installation name on the hub, such as
+`github-acme`; ask the user for these names when a step below needs one. Add
 `linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
 comments mention the operator and the assignee rather than the ticket's
 creator.
@@ -128,12 +130,13 @@ jigs recipe add linear-ticket-to-pr
 to add by hand. The copied code is the factory's to edit; `workflows/linear-ticket-to-pr/README.md` explains the linear-ticket-to-pr recipe.
 
 ```sh
-jigs bind git@github.com:owner/repo.git
+jigs bind git@github.com:owner/repo.git --installation <github-installation>
 jigs bindings
 jigs up
 ```
 
-`jigs bind` adds the binding to `jigs.config.ts`, creates the factory's
+`jigs bind` adds the binding, with the GitHub installation that reaches the
+repository as its `installationName`, to `jigs.config.ts`, creates the factory's
 `bindings/<name>/` folder with a README when it is missing, and, with the
 factory's GitHub App, creates the `jigs:approved` label. The service clones each binding into
 `~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`

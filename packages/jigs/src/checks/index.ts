@@ -2,11 +2,11 @@ import path from "node:path";
 import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { githubChecks } from "../providers/github-checks.ts";
+import { githubInstallationProbe } from "../providers/github-checks.ts";
 import { fetchFactoryStatus } from "../providers/hub.ts";
-import { linearChecks, linearOperatorDoctorChecks } from "../providers/linear-checks.ts";
-import { pagerDutyChecks, pagerDutyFromDoctorChecks } from "../providers/pagerduty-checks.ts";
-import { slackChecks } from "../providers/slack-checks.ts";
+import { linearInstallationProbe } from "../providers/linear-checks.ts";
+import { pagerDutyInstallationProbe } from "../providers/pagerduty-checks.ts";
+import { slackInstallationProbe } from "../providers/slack-checks.ts";
 import { driverFor, type HarnessTarget } from "../steps/agents/shared/drivers.ts";
 import { agentStepEnv, factoryAgentEnv } from "../steps/agents/shared/env.ts";
 import { AGENT_ACCESS_PROVIDERS, agentTokensReadBy } from "../workflow/agents/agent-access.ts";
@@ -23,9 +23,9 @@ import {
   runChecks,
   type WorkflowManifests,
 } from "./catalog.ts";
-import { type Check, failedCheck } from "./check.ts";
+import { type Check, type CheckResult, failedCheck } from "./check.ts";
 import { descriptorChecks, requiredDescriptors, usedDescriptorChecks } from "./harnesses.ts";
-import { hubAppChecks, hubChecks } from "./hub.ts";
+import { hubChecks, installationsCheck } from "./hub.ts";
 import { mcpServerChecks } from "./mcp.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 import { skillChecks } from "./skills.ts";
@@ -61,6 +61,58 @@ function integrationsOf(requires: WorkflowRequires): Provider[] {
   return [...new Set([...(requires.integrations ?? []), ...opted])];
 }
 
+/** An event trigger as doctor sees it: the provider its source reads, and the installation it names. */
+export interface TriggerInstallation {
+  provider: Provider;
+  /** Absent while the trigger's params do not name one; its own check reports that. */
+  installationName?: string;
+}
+
+// The installations of a provider a workflow's agents act on.
+function agentInstallations(requires: WorkflowRequires, provider: Provider): string[] {
+  if (provider === "slack") return [];
+  return Object.values(requires.agents ?? {}).flatMap(
+    (agent) => agent[provider]?.installationName ?? [],
+  );
+}
+
+// An unreadable config binds nothing: the binding checks report it.
+function hasBindings(ctx: FactoryContext): boolean {
+  try {
+    return Object.keys(ctx.config.bindings).length > 0;
+  } catch {
+    return false;
+  }
+}
+
+function linearOperator(ctx: FactoryContext): string | undefined {
+  try {
+    return ctx.config.linear.operator;
+  } catch {
+    return undefined;
+  }
+}
+
+function installationProbe(
+  provider: Provider,
+  ctx: FactoryContext,
+  doctor: boolean,
+): (installationName: string) => Promise<CheckResult> {
+  switch (provider) {
+    case "github":
+      return githubInstallationProbe(ctx);
+    // A mention must never stop a run from starting, so only doctor looks up the operator.
+    case "linear":
+      return linearInstallationProbe(ctx, doctor ? { operator: linearOperator(ctx) } : {});
+    case "slack":
+      return slackInstallationProbe(ctx);
+    case "pagerduty":
+      return pagerDutyInstallationProbe(ctx);
+  }
+}
+
+const PROVIDERS: readonly Provider[] = ["linear", "github", "pagerduty", "slack"];
+
 export function preflightChecks(
   requires: WorkflowRequires,
   inputs?: Record<string, unknown>,
@@ -72,11 +124,22 @@ export function preflightChecks(
   // binding list declared in their manifest.
   const bindings =
     typeof inputs?.binding === "string" ? [inputs.binding] : (requires.bindings ?? []);
+  // Only the names the run declares: another installation's trouble must not
+  // stop it, and a name only its inputs give fails at its first step with the
+  // hub's answer. A binding's installation is its binding check's to probe.
+  const installations = (provider: Provider): Check[] => {
+    const declared = agentInstallations(requires, provider);
+    return declared.length === 0
+      ? []
+      : [
+          installationsCheck(provider, {
+            declared,
+            probe: installationProbe(provider, ctx, false),
+          }),
+        ];
+  };
   return [
-    ...(integrations.includes("linear") ? linearChecks(ctx) : []),
-    ...(integrations.includes("github") ? githubChecks(ctx) : []),
-    ...(integrations.includes("pagerduty") ? pagerDutyChecks(ctx) : []),
-    ...(integrations.includes("slack") ? slackChecks(ctx) : []),
+    ...PROVIDERS.filter((provider) => integrations.includes(provider)).flatMap(installations),
     ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
     ...agentGithubChecks(Object.values(requires.agents ?? {})),
@@ -86,22 +149,17 @@ export function preflightChecks(
   ];
 }
 
-// Beyond what a workflow requires, the configuration can ask for a provider
-// itself: a binding needs GitHub, a Linear operator needs Linear, and a
-// pagerduty or slack section is set up on purpose. An unreadable config asks
-// for nothing: the binding checks report it.
+// Beyond what a workflow requires and what a trigger watches, the
+// configuration can ask for a provider itself: a binding needs GitHub, and a
+// Linear operator needs Linear. An unreadable config asks for nothing: the
+// binding checks report it.
 function configuredProviders(ctx: FactoryContext): Record<Provider, boolean> {
-  try {
-    const { bindings, linear, pagerduty, slack } = ctx.config;
-    return {
-      github: Object.keys(bindings).length > 0,
-      linear: linear.operator !== undefined,
-      pagerduty: pagerduty !== undefined,
-      slack: slack !== undefined,
-    };
-  } catch {
-    return { github: false, linear: false, pagerduty: false, slack: false };
-  }
+  return {
+    github: hasBindings(ctx),
+    linear: linearOperator(ctx) !== undefined,
+    pagerduty: false,
+    slack: false,
+  };
 }
 
 function usedAgentGithubChecks(workflows: WorkflowManifests): Check[] {
@@ -224,10 +282,10 @@ export function runDoctorChecks(checks: Check[]): Promise<CheckReport> {
 // Every check follows the factory: its workflows' manifests, the providers its
 // event triggers read, and its configuration. A provider, harness or AWS
 // profile nothing uses is not checked. `triggers` maps each trigger to the
-// provider its source reads.
+// provider its source reads and the installation it names.
 export function doctorChecks(
   workflows: WorkflowManifests,
-  triggers: Record<string, Provider> = {},
+  triggers: Record<string, TriggerInstallation> = {},
   ctx: FactoryContext = currentFactoryContext(),
 ): Check[] {
   const users = requirementUsers(workflows, (requires) => [
@@ -235,30 +293,39 @@ export function doctorChecks(
     ...(requires.aws ? (["aws"] as const) : []),
   ]);
   const configured = configuredProviders(ctx);
-  const provider = (name: Provider, checks: () => Check[]): Check[] => {
-    const needing = users.get(name) ?? [];
-    const watching = Object.keys(triggers).filter((trigger) => triggers[trigger] === name);
-    return needing.length > 0 || watching.length > 0 || configured[name]
-      ? neededByUsers(checks(), needing, watching)
-      : [];
-  };
   const aws = users.get("aws") ?? [];
-  // One read of the hub answers its own check, GitHub's, Slack's and PagerDuty's.
+  // One read of the hub answers its own check and every provider's.
   let hubStatus: Promise<FactoryStatus> | undefined;
   const status = () => {
     hubStatus ??= fetchFactoryStatus(ctx);
     return hubStatus;
   };
+  const installations = (provider: Provider): Check[] => {
+    const needing = users.get(provider) ?? [];
+    const watching = Object.entries(triggers).filter(
+      ([, trigger]) => trigger.provider === provider,
+    );
+    if (needing.length === 0 && watching.length === 0 && !configured[provider]) return [];
+    const declared = [
+      ...Object.values(workflows).flatMap(({ requires }) =>
+        agentInstallations(requires ?? {}, provider),
+      ),
+      ...watching.flatMap(([, trigger]) => trigger.installationName ?? []),
+    ];
+    const check = installationsCheck(provider, {
+      declared,
+      probe: installationProbe(provider, ctx, true),
+      status,
+    });
+    return neededByUsers(
+      [check],
+      needing,
+      watching.map(([name]) => name),
+    );
+  };
   return [
     ...hubChecks(ctx, status),
-    ...provider("linear", () => [...linearChecks(ctx), ...linearOperatorDoctorChecks(ctx)]),
-    ...provider("github", () => githubChecks(ctx, status)),
-    ...provider("pagerduty", () => [
-      ...hubAppChecks(ctx, "pagerduty", status),
-      ...pagerDutyChecks(ctx),
-      ...pagerDutyFromDoctorChecks(ctx),
-    ]),
-    ...provider("slack", () => [...hubAppChecks(ctx, "slack", status), ...slackChecks(ctx)]),
+    ...PROVIDERS.flatMap(installations),
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),
@@ -285,6 +352,8 @@ export function jitChecks(target: HarnessTarget, env: Record<string, string>): C
   const driver = driverFor(harness.kind);
   return [
     ...(driver.jitChecks?.(target) ?? []),
+    // A harness can name its GitHub installation only once the run knows it.
+    ...agentGithubChecks([harness]),
     ...skillChecks(harness.skills ?? []),
     ...mcpServerChecks(harness.mcpServers ?? {}, target.cwd, env, {
       inherit: driver.mcpInheritsEnv === true,

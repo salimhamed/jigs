@@ -50,6 +50,7 @@ const review = {
 };
 const github = (name: string, payload: unknown): RoutedEvent => ({
   provider: "github",
+  installationName: "acme",
   name,
   payload,
 });
@@ -57,7 +58,7 @@ const github = (name: string, payload: unknown): RoutedEvent => ({
 test("a PR review nobody is listening to is dropped, and dropped again on redelivery", async () => {
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenLastCalledWith(
-    "[events] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github dropped reason=no-matching-hook token=github:pr:acme:acme/api#41 event=pull_request_review",
   );
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenCalledTimes(2);
@@ -68,9 +69,9 @@ test("a GitHub event matching a hook wakes it, logs its token and notes the wake
   delivers();
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "woken" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] github accepted token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github accepted token=github:pr:acme:acme/api#41 event=pull_request_review",
   );
-  expect(lastWake("github:pr:acme/api#41", RUN)?.kind).toBe("github pull_request_review");
+  expect(lastWake("github:pr:acme:acme/api#41", RUN)?.kind).toBe("github pull_request_review");
 });
 
 test("GitHub's canonical casing resumes a hook claimed from a lowercase remote", async () => {
@@ -82,7 +83,7 @@ test("GitHub's canonical casing resumes a hook claimed from a lowercase remote",
   };
   expect(await route(github("pull_request_review", payload))).toEqual({ outcome: "woken" });
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
-    "github:pr:junglescout/data-lake-airflow#1",
+    "github:pr:acme:junglescout/data-lake-airflow#1",
     undefined,
   );
 });
@@ -91,7 +92,7 @@ test("a GitHub wake failure is not misreported as a missing hook", async () => {
   resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
   expect(await route(github("pull_request_review", review))).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
+    "[events] github dropped reason=delivery-failed token=github:pr:acme:acme/api#41 event=pull_request_review",
   );
 });
 
@@ -102,7 +103,7 @@ test("a check_suite event is routed to the PR it belongs to", async () => {
     repository: { name: "api", owner: { login: "acme" } },
   };
   expect(await route(github("check_suite", payload))).toEqual({ outcome: "dropped" });
-  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("github:pr:acme/api#41", undefined);
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("github:pr:acme:acme/api#41", undefined);
 });
 
 const status = (state: string) =>
@@ -140,8 +141,8 @@ test("a status resolves every matching PR and routes by base repo", async () => 
   expect(await route(status("failure"))).toEqual({ outcome: "woken" });
   expect(resumeHookMock.mock.calls.map(([token]) => token).sort()).toEqual(
     [
-      pullRequestToken({ owner: "acme", repo: "api", number: 41 }),
-      pullRequestToken({ owner: "acme", repo: "web", number: 7 }),
+      pullRequestToken({ installationName: "acme", owner: "acme", repo: "api", number: 41 }),
+      pullRequestToken({ installationName: "acme", owner: "acme", repo: "web", number: 7 }),
     ].sort(),
   );
   expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -171,8 +172,10 @@ test("a status lookup failure fails rather than throws", async () => {
 });
 
 test.each([
-  ["the hub has no installation for the repository", new HubResponseError(404, "no installation")],
-  ["the hub has more than one", new HubResponseError(409, "ambiguous installation")],
+  [
+    "the hub does not give the factory the installation",
+    new HubResponseError(404, "no installation"),
+  ],
   ["GitHub refuses the request", new GitHubApiError(404, "/repos/acme/api/commits/x/pulls", "{}")],
   ["GitHub cannot process it", new GitHubApiError(422, "/repos/acme/api/commits/x/pulls", "{}")],
 ])("a status lookup refused for good is ignored loudly, not retried: %s", async (_name, error) => {
@@ -212,6 +215,16 @@ test("a GitHub 403 for its rate limit is retried; any other 403 is ignored", asy
   expect(await route(status("success"))).toEqual({ outcome: "ignored" });
 });
 
+test("a status from an installation is looked up and woken through that installation", async () => {
+  const lookup = vi.spyOn(githubApi, "findOpenPullRequestsByHeadSha").mockResolvedValue([]);
+  await route(status("success"));
+  expect(lookup).toHaveBeenCalledWith(
+    { installationName: "acme", owner: "contributor", repo: "fork" },
+    "status-sha",
+    context,
+  );
+});
+
 test("an unroutable GitHub event is ignored", async () => {
   const ping = { zen: "Keep it logically awesome.", hook_id: 1, repository: review.repository };
   expect(await route(github("ping", ping))).toEqual({ outcome: "ignored" });
@@ -224,6 +237,7 @@ const comment = () => {
   const issueId = crypto.randomUUID();
   const event: RoutedEvent = {
     provider: "linear",
+    installationName: "acme",
     name: "Comment",
     payload: { action: "create", type: "Comment", data: { id: "c1", body: "reply", issueId } },
   };
@@ -234,7 +248,7 @@ test("a Linear comment on an unclaimed issue is dropped", async () => {
   const { issueId, event } = comment();
   expect(await route(event)).toEqual({ outcome: "dropped" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
+    `[events] linear dropped reason=no-matching-hook token=linear:ticket:acme:${issueId} event=Comment`,
   );
 });
 
@@ -243,12 +257,14 @@ test("a Linear comment matching a hook wakes it and logs its token", async () =>
   const { issueId, event } = comment();
   expect(await route(event)).toEqual({ outcome: "woken" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] linear accepted token=linear:ticket:${issueId} event=Comment`,
+    `[events] linear accepted token=linear:ticket:acme:${issueId} event=Comment`,
   );
 });
 
 test("a Linear event without a body is ignored", async () => {
-  expect(await route({ provider: "linear", name: "", payload: null })).toEqual({
+  expect(
+    await route({ provider: "linear", installationName: "acme", name: "", payload: null }),
+  ).toEqual({
     outcome: "ignored",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored reason=unrecognized-shape");
@@ -256,7 +272,9 @@ test("a Linear event without a body is ignored", async () => {
 
 test("an unroutable Linear resource type is ignored", async () => {
   const payload = { action: "update", type: "Issue", data: { id: "issue-1" } };
-  expect(await route({ provider: "linear", name: "Issue", payload })).toEqual({
+  expect(
+    await route({ provider: "linear", installationName: "acme", name: "Issue", payload }),
+  ).toEqual({
     outcome: "ignored",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith(
@@ -267,11 +285,18 @@ test("an unroutable Linear resource type is ignored", async () => {
 test("a Linear agent session goes to the triggers, not to waiting runs", async () => {
   push.mockResolvedValueOnce(["mentions"]);
   const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
-  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+  expect(
+    await route({
+      provider: "linear",
+      installationName: "acme",
+      name: "AgentSessionEvent",
+      payload,
+    }),
+  ).toEqual({
     outcome: "triggered",
     triggers: ["mentions"],
   });
-  expect(push).toHaveBeenCalledExactlyOnceWith("linear", payload);
+  expect(push).toHaveBeenCalledExactlyOnceWith("linear", { installationName: "acme", payload });
   expect(resumeHookMock).not.toHaveBeenCalled();
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[events] linear accepted triggers=mentions event=AgentSessionEvent",
@@ -281,7 +306,14 @@ test("a Linear agent session goes to the triggers, not to waiting runs", async (
 test("a Linear agent session no trigger could read is a failure, logged", async () => {
   push.mockRejectedValueOnce(new Error("issue lookup failed"));
   const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
-  expect(await route({ provider: "linear", name: "AgentSessionEvent", payload })).toEqual({
+  expect(
+    await route({
+      provider: "linear",
+      installationName: "acme",
+      name: "AgentSessionEvent",
+      payload,
+    }),
+  ).toEqual({
     outcome: "failed",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith(
@@ -295,6 +327,7 @@ const incidentTriggered = () =>
   ) as { event: { event_type: string } };
 const page = (payload = incidentTriggered()): RoutedEvent => ({
   provider: "pagerduty",
+  installationName: "acme",
   name: payload.event.event_type,
   payload,
 });
@@ -319,10 +352,16 @@ test("a PagerDuty push that fails is a failure, logged", async () => {
 // Each run starts from an incident on the one service the trigger watches.
 const paged = {
   workflows: {
-    respond: { workflow: async () => undefined, inputs: z.object({ incident: z.string() }) },
+    respond: {
+      workflow: async () => undefined,
+      inputs: z.object({ installationName: z.string(), incident: z.string() }),
+    },
   },
   triggers: {
-    pages: { workflow: "respond", source: pagerduty.incidents({ services: ["PSVC001"] }) },
+    pages: {
+      workflow: "respond",
+      source: pagerduty.incidents({ installationName: "acme", services: ["PSVC001"] }),
+    },
   },
 } satisfies Factory;
 
@@ -373,7 +412,10 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
   release();
   await vi.waitFor(() =>
     expect(starts).toEqual([
-      { inputs: { incident: "Q1" }, triggerId: eventTriggerId("pages", "Q1") },
+      {
+        inputs: { installationName: "acme", incident: "Q1" },
+        triggerId: eventTriggerId("pages", "Q1"),
+      },
     ]),
   );
 });
@@ -396,16 +438,20 @@ const callback = (event: object) => ({
 });
 const slack = (event: object = reply): RoutedEvent => ({
   provider: "slack",
+  installationName: "acme",
   name: "message",
   payload: callback(event),
 });
 
-const THREAD = "slack:thread:C0C5EUZ7P9Q:1790723478.961719";
+const THREAD = "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719";
 
 test("a Slack message goes to the triggers and wakes the thread it replies in", async () => {
   delivers();
   expect(await route(slack())).toEqual({ outcome: "woken" });
-  expect(push).toHaveBeenCalledExactlyOnceWith("slack", callback(reply));
+  expect(push).toHaveBeenCalledExactlyOnceWith("slack", {
+    installationName: "acme",
+    payload: callback(reply),
+  });
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(THREAD, undefined);
   expect(lastWake(THREAD, RUN)?.kind).toBe("slack message");
   expect(log).toHaveBeenCalledWith(`[events] slack accepted token=${THREAD} event=message`);
@@ -454,3 +500,22 @@ test("a Slack push that fails with no thread woken fails the routing", async () 
   push.mockRejectedValueOnce(new Error("registry unreachable"));
   expect(await route(slack({ ...reply, thread_ts: undefined }))).toEqual({ outcome: "failed" });
 });
+
+test.each([
+  ["github", review],
+  ["linear", comment().event.payload],
+  ["pagerduty", incidentTriggered()],
+  ["slack", callback(reply)],
+] as const)(
+  "a %s event from an installation with no name is ignored, logged",
+  async (provider, payload) => {
+    expect(await route({ provider, installationName: null, name: "x", payload })).toEqual({
+      outcome: "ignored",
+    });
+    expect(log).toHaveBeenCalledExactlyOnceWith(
+      `[events] ${provider} ignored reason=no-installation-name event=x`,
+    );
+    expect(push).not.toHaveBeenCalled();
+    expect(resumeHookMock).not.toHaveBeenCalled();
+  },
+);

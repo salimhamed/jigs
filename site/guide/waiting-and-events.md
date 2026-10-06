@@ -14,26 +14,41 @@ run as waiting, then continues the same run when a person replies there. It
 requires [Linear credentials](/guide/configuration#linear-app) and a claimed
 ticket. Claiming prevents multiple runs from independently owning the same ticket.
 
-This complete workflow resolves its `ticket` input, claims the ticket, then
+This complete workflow resolves its `ticket` input in the Linear installation
+its `linearInstallation` input names, such as `linear-acme`, claims the ticket, then
 returns the person's answer. Save it as `workflows/ask-scope/ask-scope.ts` and
 [register `ask-scope` in the factory](/guide/build-a-workflow#_3-register-the-workflow).
 Rebuild with `pnpm exec jigs up`, then run
-`pnpm exec jigs run ask-scope --input ticket=ENG-123`, replacing
-`ENG-123` with your ticket identifier.
+`pnpm exec jigs run ask-scope --input linearInstallation=linear-acme --input ticket=ENG-123`,
+replacing `linear-acme` with your installation name and `ENG-123` with your
+ticket identifier.
 
 ```ts
 // workflows/ask-scope/ask-scope.ts
-import { defineWorkflow, ticketInputSchema, type WorkflowInputs } from "@jigs-ai/jigs";
+import {
+  defineWorkflow,
+  installationNameSchema,
+  ticketInputSchema,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
 import { claimTicket, haltForHuman } from "#jigs/routines";
 import { resolveLinearIssue } from "#jigs/steps";
 
-const inputs = z.object({ ticket: ticketInputSchema });
+const inputs = z.object({
+  linearInstallation: installationNameSchema,
+  ticket: ticketInputSchema,
+});
 
 export async function askScope(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const issue = await resolveLinearIssue(input.ticket);
-  const claim = await claimTicket(issue.id, issue.identifier);
+  const installationName = input.linearInstallation;
+  const issue = await resolveLinearIssue({ installationName, reference: input.ticket });
+  const claim = await claimTicket({
+    installationName,
+    issueId: issue.id,
+    identifier: issue.identifier,
+  });
   const reply = await haltForHuman(claim, {
     headline: "A decision is needed before work continues.",
     where: "scope",
@@ -64,10 +79,11 @@ it. The [routine reference](/api/factory/routines#haltforhuman) covers the optio
 
 **`watchPullRequest` reports facts. It does not decide what the facts mean or
 what the workflow should do next.** This complete workflow watches an existing
-pull request identified by its owner, repository and number. It requires
+pull request identified by the GitHub installation that reaches it, its owner,
+repository and number. It requires
 [GitHub credentials](/guide/configuration#github-app). Save it as
 `workflows/watch-pr/watch-pr.ts` and register `watch-pr` in the factory. Rebuild
-with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input owner=acme --input repo=app --input number=42`
+with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input installationName=github-acme --input owner=acme --input repo=app --input number=42`
 with your pull request's details.
 
 ```ts
@@ -77,6 +93,7 @@ import { z } from "zod";
 import { watchPullRequest } from "#jigs/routines";
 
 const inputs = z.object({
+  installationName: z.string().min(1),
   owner: z.string().min(1),
   repo: z.string().min(1),
   number: z.coerce.number().int().positive(),
@@ -84,7 +101,12 @@ const inputs = z.object({
 
 export async function watchPr(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const pr: PullRequestRef = { owner: input.owner, repo: input.repo, number: input.number };
+  const pr: PullRequestRef = {
+    installationName: input.installationName,
+    owner: input.owner,
+    repo: input.repo,
+    number: input.number,
+  };
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
       return { merged: snapshot.merged };
@@ -144,8 +166,9 @@ Your workflow decides which feedback needs a reply and what to do next.
 
 GitHub, Linear and Slack waits wake on the events the factory's
 [hub](/guide/configuration#hub) passes on; the hub keeps them while the service
-is down. An event or a poke wakes the run so it can read the current facts
-again. Custom SDK hooks need their own event delivery.
+is down. An event wakes only the runs waiting through the installation it
+came from, and one from an installation with no name on the hub wakes none.
+An event or a poke wakes the run so it can read the current facts again. Custom SDK hooks need their own event delivery.
 
 ## Check now with `jigs poke`
 

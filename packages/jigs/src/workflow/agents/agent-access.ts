@@ -35,7 +35,7 @@ export function assertAgentAccess(
     if (provider !== undefined)
       throw new JigsError(
         `MCP server '${name}' reads ${AGENT_TOKEN_ENV[provider]}, the token jigs gives only to an agent whose harness sets ${provider}`,
-        `set \`${provider}: true\` on the harness${provider === "github" ? ", or `github: { owner }` for an agent with no worktree" : ""}`,
+        `set \`${provider}: { installationName: "<name on the hub>" }\` on the harness`,
       );
   }
 }
