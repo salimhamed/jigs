@@ -42,7 +42,9 @@ in Linear, replace the callback URL and webhook URL with these.
 On the app's page on the hub, choose **Connect a Linear workspace**. Linear
 asks a workspace admin to approve the app; the hub asks for `read` and
 `write`, and for the app to be mentionable and assignable, so it can work as
-an agent. The workspace then appears under **Workspaces**.
+an agent. The workspace then appears under **Workspaces**. Give it an
+[installation name](/guide/hub#installation-names), such as
+`linear-acme`, under **Installation name**, and save.
 
 If the hub can no longer refresh a workspace's tokens, for example because
 the app was revoked in Linear, the workspace shows **Connect again**. Connect

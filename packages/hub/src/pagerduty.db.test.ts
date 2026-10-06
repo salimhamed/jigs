@@ -12,6 +12,7 @@ import {
   createPagerDutyRoutes,
   hasPagerDutyWebhookSecret,
   pagerDutyWebhookPath,
+  setPagerDutyFrom,
   setPagerDutyWebhookSecret,
 } from "./pagerduty.ts";
 import { organizationId, setUpTestHub } from "./test-hub.ts";
@@ -20,12 +21,31 @@ const { db, encryptionKey, waiters, listen, serveHub, newFactory, requestToken }
 let hub: string;
 let identity: string;
 
-// The fake PagerDuty identity server: each app's secret and the accounts it may act in.
+// The fake PagerDuty identity server and REST API: each app's secret and the
+// accounts it may act in, each account's users' emails, and the account each
+// minted token acts in.
 const clients = new Map<string, { secret: string; accounts: Set<string> }>();
 const grants: { clientId: string; scope: string }[] = [];
+const users = new Map<string, string[]>();
+const tokenAccounts = new Map<string, string>();
 
-function fakeIdentity() {
-  return express().post("/oauth/token", express.urlencoded(), (request, response) => {
+function fakePagerDuty() {
+  const app = express();
+  app.get("/users", (request, response) => {
+    const token = /^Bearer (\S+)$/.exec(request.get("authorization") ?? "")?.[1] ?? "";
+    const account = tokenAccounts.get(token);
+    if (!account) {
+      response.status(401).json({ error: { message: "Unauthorized" } });
+      return;
+    }
+    const query = String(request.query.query ?? "");
+    response.json({
+      users: (users.get(account) ?? [])
+        .filter((email) => email.startsWith(query))
+        .map((email) => ({ id: email, name: email, email })),
+    });
+  });
+  return app.post("/oauth/token", express.urlencoded(), (request, response) => {
     const form = request.body as Record<string, string>;
     const client = clients.get(form.client_id ?? "");
     if (
@@ -42,6 +62,7 @@ function fakeIdentity() {
       return;
     }
     grants.push({ clientId: form.client_id ?? "", scope: form.scope ?? "" });
+    tokenAccounts.set(`pdus+_${grants.length}`, account ?? "");
     response.json({
       access_token: `pdus+_${grants.length}`,
       scope: scopes.join(" "),
@@ -52,7 +73,7 @@ function fakeIdentity() {
 }
 
 beforeAll(async () => {
-  identity = await listen(fakeIdentity());
+  identity = await listen(fakePagerDuty());
   hub = await serveHub({
     routes: createPagerDutyRoutes({ db, waiters, encryptionKey }),
     apiUrls: { pagerduty: identity },
@@ -68,6 +89,7 @@ async function newApp(webhookSecret: string | null = `pd_wh_${appCount + 1}`) {
     secret: `secret ${appCount}`,
     accounts: new Set([`as_account-us.${subdomain}`]),
   });
+  users.set(`as_account-us.${subdomain}`, ["oncall@example.com"]);
   const added = await addPagerDutyApp(
     db,
     encryptionKey,
@@ -78,8 +100,9 @@ async function newApp(webhookSecret: string | null = `pd_wh_${appCount + 1}`) {
       clientSecret: `secret ${appCount}`,
       subdomain,
       region: "us",
+      from: "oncall@example.com",
     },
-    { apiUrl: identity },
+    { apiUrl: identity, restApiUrl: identity },
   );
   if ("error" in added) throw new Error(added.error);
   if (webhookSecret) {
@@ -115,12 +138,14 @@ async function deliver(app: App, payload: unknown, signature: (body: string) => 
 
 dbTest("adds an app once PagerDuty mints a token for its account", async () => {
   clients.set("good", { secret: "s", accounts: new Set(["as_account-eu.acme"]) });
+  users.set("as_account-eu.acme", ["oncall@example.com", "oncall@example.com.au"]);
   const input = {
     name: "Jigs",
     clientId: "good",
     clientSecret: "s",
     subdomain: "acme",
     region: "eu",
+    from: "oncall@example.com",
   };
   const add = (changes: Partial<typeof input>, organization = organizationId) =>
     addPagerDutyApp(
@@ -128,13 +153,17 @@ dbTest("adds an app once PagerDuty mints a token for its account", async () => {
       encryptionKey,
       organization,
       { ...input, ...changes },
-      {
-        apiUrl: identity,
-      },
+      { apiUrl: identity, restApiUrl: identity },
     );
 
   expect(await add({ subdomain: "" })).toEqual({
-    error: "Enter the name, client ID, client secret and account subdomain.",
+    error: "Enter the name, client ID, client secret, account subdomain and from email.",
+  });
+  expect(await add({ from: "" })).toEqual({
+    error: "Enter the name, client ID, client secret, account subdomain and from email.",
+  });
+  expect(await add({ from: "oncall@example" })).toEqual({
+    error: "acme has no PagerDuty user with the email oncall@example.",
   });
   expect(await add({ region: "ap" })).toEqual({ error: "The region is us or eu." });
   expect(await add({ clientSecret: "wrong" })).toEqual({
@@ -156,11 +185,33 @@ dbTest("adds an app once PagerDuty mints a token for its account", async () => {
       .from(schema.installations)
       .where(eq(schema.installations.appId, added.app.id)),
   ).toEqual([
-    expect.objectContaining({ externalId: "eu.acme", account: "acme", settings: { region: "eu" } }),
+    expect.objectContaining({
+      externalId: "eu.acme",
+      account: "acme",
+      settings: { region: "eu", from: "oncall@example.com" },
+    }),
   ]);
   expect(await add({}, "other")).toEqual({
     error: "The PagerDuty app with client ID good is already on this hub.",
   });
+
+  const setFrom = (from: string, organization = organizationId) =>
+    setPagerDutyFrom(db, encryptionKey, organization, added.app.id, from, {
+      apiUrl: identity,
+      restApiUrl: identity,
+    });
+  expect(await setFrom("nobody@example.com")).toEqual({
+    error: "acme has no PagerDuty user with the email nobody@example.com.",
+  });
+  expect(await setFrom("Oncall@Example.com.au", "other")).toEqual({
+    error: "There is no such PagerDuty app.",
+  });
+  expect(await setFrom("oncall@example.com.au")).toEqual({ from: "oncall@example.com.au" });
+  const [account] = await db
+    .select()
+    .from(schema.installations)
+    .where(eq(schema.installations.appId, added.app.id));
+  expect(account?.settings).toEqual({ region: "eu", from: "oncall@example.com.au" });
 
   expect(hasPagerDutyWebhookSecret(encryptionKey, added.app)).toBe(false);
   expect(await setPagerDutyWebhookSecret(db, encryptionKey, "other", added.app.id, "w")).toBe(
@@ -237,7 +288,7 @@ dbTest("mints a token of the one assigned app on every request", async () => {
     {
       provider: "pagerduty",
       name: app.name,
-      installations: [{ account: app.name.replace("Jigs ", "acme-") }],
+      installations: [{ account: app.name.replace("Jigs ", "acme-"), installationName: null }],
     },
   ]);
 

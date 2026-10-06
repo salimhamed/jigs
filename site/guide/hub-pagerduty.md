@@ -18,7 +18,7 @@ An account admin or owner registers the app once per PagerDuty account.
    | --- | --- |
    | `incidents.read` | Reading incidents, and the preflight check. |
    | `incidents.write` | Adding notes to incidents. |
-   | `users.read` | `jigs doctor`'s check of the `from` user. |
+   | `users.read` | Checking the from user exists, on the hub and in `jigs doctor`. |
 
 3. Save, and note the app's **Client ID** and **Client Secret**.
 
@@ -26,8 +26,18 @@ An account admin or owner registers the app once per PagerDuty account.
 
 In the hub, under **Apps → Add a PagerDuty connection**, enter the app's
 name, its client ID and client secret, the account's subdomain (the
-`<subdomain>` in `<subdomain>.pagerduty.com`) and its region, US or EU. The
-hub checks them by getting a token for the account.
+`<subdomain>` in `<subdomain>.pagerduty.com`), its region, US or EU, and the
+**from email**.
+
+The from email is a real user on the account. PagerDuty attributes every
+change jigs makes, such as a note on an incident, to this person, so pick a
+user whose name reads well on an incident timeline, such as a shared on-call
+account. The hub gets a token for the account and checks that a user has
+this email before it saves. Change it later under **Account** on the app's
+page; the hub checks it again.
+
+Then give the account an [installation name](/guide/hub#installation-names),
+such as `pagerduty-acme`, under **Installation name** on the app's page.
 
 ## 3. Add the webhook subscription
 

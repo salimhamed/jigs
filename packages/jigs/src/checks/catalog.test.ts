@@ -398,7 +398,13 @@ test("doctor reads the hub once for both the hub and GitHub checks", async () =>
   const status = vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
     factory: { name: "personal" },
     organization: { name: "Acme" },
-    apps: [{ provider: "github", name: "jigs-dev", installations: [{ account: "o" }] }],
+    apps: [
+      {
+        provider: "github",
+        name: "jigs-dev",
+        installations: [{ account: "o", installationName: null }],
+      },
+    ],
   });
   const report = await runChecks(doctorChecks({ hello: {} }));
   expect(report.checks.filter((check) => check.id !== "binding.api")).toEqual([

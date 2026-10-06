@@ -116,8 +116,14 @@ dbTest("reports the factory, its Organization and only its assigned apps", async
   const assigned = await appFor([factory.id, other.factory.id]);
   await appFor([other.factory.id]);
   await db.insert(schema.installations).values([
-    { appId: assigned, externalId: "1", account: "widgets" },
-    { appId: assigned, externalId: "2", account: "acme" },
+    { appId: assigned, organizationId, externalId: "1", account: "widgets" },
+    {
+      appId: assigned,
+      organizationId,
+      externalId: "2",
+      account: "acme",
+      installationName: "gh-acme",
+    },
   ]);
   const bare = await appFor([factory.id]);
 
@@ -138,7 +144,10 @@ dbTest("reports the factory, its Organization and only its assigned apps", async
       {
         provider: "github",
         name: names.get(assigned),
-        installations: [{ account: "acme" }, { account: "widgets" }],
+        installations: [
+          { account: "acme", installationName: "gh-acme" },
+          { account: "widgets", installationName: null },
+        ],
       },
       { provider: "github", name: names.get(bare), installations: [] },
     ]),

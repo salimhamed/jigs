@@ -4,7 +4,7 @@ import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
 import { type App, findApp, findAssignedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
-import { apps } from "./db/schema.ts";
+import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
 import { parseWebhookJson, webhookBody } from "./webhooks.ts";
@@ -21,6 +21,8 @@ export const pagerDutyRegions = ["us", "eu"] as const;
 /** What the hub knows of an app's account, kept in `installations.settings`. Its subdomain is the account. */
 export interface PagerDutyAccountSettings {
   region: (typeof pagerDutyRegions)[number];
+  /** The email of the account's user that changes are made as, since PagerDuty requires one on a note. */
+  from: string;
 }
 
 interface PagerDutyAppSecrets {
@@ -36,10 +38,17 @@ export interface PagerDutyAppInput {
   clientSecret: string;
   subdomain: string;
   region: string;
+  from: string;
 }
 
-// PagerDuty mints app tokens from its identity service, not its REST API.
+/** PagerDuty's identity service, which mints app tokens, and its REST API; replaced in tests. */
+export interface PagerDutyApiUrls {
+  apiUrl?: string;
+  restApiUrl?: string;
+}
+
 const defaultApiUrl = "https://identity.pagerduty.com";
+const defaultRestApiUrl = "https://api.pagerduty.com";
 
 const readSecrets = (encryptionKey: Buffer, app: App) =>
   decryptJson<PagerDutyAppSecrets>(encryptionKey, app.secrets);
@@ -71,20 +80,46 @@ async function mintToken(
   };
 }
 
+/** Why `from` cannot be the account's user, or `null` when a user has that email. */
+async function checkFrom(
+  restApiUrl: string,
+  token: string,
+  subdomain: string,
+  from: string,
+): Promise<string | null> {
+  const response = await fetch(
+    `${restApiUrl}/users?${new URLSearchParams({ query: from, limit: "100" })}`,
+    {
+      headers: {
+        authorization: `Bearer ${token}`,
+        accept: "application/vnd.pagerduty+json;version=2",
+      },
+    },
+  );
+  if (!response.ok) return `PagerDuty answered ${response.status} looking up ${from}.`;
+  // `query` also matches names and email prefixes, so the match is made here.
+  const { users } = (await response.json()) as { users: { email: string }[] };
+  return users.some((user) => user.email.toLowerCase() === from.toLowerCase())
+    ? null
+    : `${subdomain} has no PagerDuty user with the email ${from}.`;
+}
+
 /**
  * Add a PagerDuty app to an Organization with the account it acts in, once
- * PagerDuty mints a token with its credentials, or say what is wrong with the
- * input.
+ * PagerDuty mints a token with its credentials and the account has the `from`
+ * user, or say what is wrong with the input.
  */
 export async function addPagerDutyApp(
   db: HubDatabase,
   encryptionKey: Buffer,
   organizationId: string,
   input: PagerDutyAppInput,
-  { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
+  { apiUrl = defaultApiUrl, restApiUrl = defaultRestApiUrl }: PagerDutyApiUrls = {},
 ): Promise<{ app: App } | { error: string }> {
-  if (!input.name || !input.clientId || !input.clientSecret || !input.subdomain) {
-    return { error: "Enter the name, client ID, client secret and account subdomain." };
+  if (!input.name || !input.clientId || !input.clientSecret || !input.subdomain || !input.from) {
+    return {
+      error: "Enter the name, client ID, client secret, account subdomain and from email.",
+    };
   }
   if (!(pagerDutyRegions as readonly string[]).includes(input.region)) {
     return { error: "The region is us or eu." };
@@ -95,6 +130,8 @@ export async function addPagerDutyApp(
       error: `PagerDuty refused these credentials for ${input.subdomain} in ${input.region} (${minted.refused}).`,
     };
   }
+  const fromError = await checkFrom(restApiUrl, minted.token, input.subdomain, input.from);
+  if (fromError) return { error: fromError };
   return db.transaction(async (tx) => {
     const [app] = await tx
       .insert(apps)
@@ -115,13 +152,60 @@ export async function addPagerDutyApp(
         error: `The PagerDuty app with client ID ${input.clientId} is already on this hub.`,
       };
     }
-    await recordInstallation(tx, app.id, {
+    await recordInstallation(tx, app, {
       externalId: `${input.region}.${input.subdomain}`,
       account: input.subdomain,
-      settings: { region: input.region } as PagerDutyAccountSettings,
+      settings: {
+        region: input.region as PagerDutyAccountSettings["region"],
+        from: input.from,
+      } satisfies PagerDutyAccountSettings,
     });
     return { app };
   });
+}
+
+/** Change the `from` email of an app's account, once the account has that user. */
+export async function setPagerDutyFrom(
+  db: HubDatabase,
+  encryptionKey: Buffer,
+  organizationId: string,
+  appId: string,
+  from: string,
+  { apiUrl = defaultApiUrl, restApiUrl = defaultRestApiUrl }: PagerDutyApiUrls = {},
+): Promise<{ from: string } | { error: string }> {
+  if (!from) return { error: "Enter the email of a PagerDuty user." };
+  const [found] = await db
+    .select({ app: apps, installation: installations })
+    .from(apps)
+    .innerJoin(installations, eq(installations.appId, apps.id))
+    .where(
+      and(
+        eq(apps.id, appId),
+        eq(apps.organizationId, organizationId),
+        eq(apps.provider, "pagerduty"),
+      ),
+    );
+  if (!found) return { error: "There is no such PagerDuty app." };
+  const { app, installation } = found;
+  const settings = installation.settings as PagerDutyAccountSettings;
+  const minted = await mintToken(apiUrl, {
+    clientId: app.externalId,
+    clientSecret: readSecrets(encryptionKey, app).clientSecret,
+    subdomain: installation.account,
+    region: settings.region,
+  });
+  if ("refused" in minted) {
+    return {
+      error: `PagerDuty refused ${app.name}'s credentials for ${installation.account} (${minted.refused}).`,
+    };
+  }
+  const fromError = await checkFrom(restApiUrl, minted.token, installation.account, from);
+  if (fromError) return { error: fromError };
+  await db
+    .update(installations)
+    .set({ settings: { ...settings, from } satisfies PagerDutyAccountSettings })
+    .where(eq(installations.id, installation.id));
+  return { from };
 }
 
 /** Whether an admin has entered the app's webhook signing secret. */

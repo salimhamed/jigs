@@ -288,7 +288,7 @@ export function createLinearRoutes(options: {
       viewer: { id: string };
       organization: { id: string; name: string; urlKey: string };
     }>(apiUrl, secrets.accessToken, "{ viewer { id } organization { id name urlKey } }");
-    await recordInstallation(db, app.id, {
+    await recordInstallation(db, app, {
       externalId: organization.id,
       account: organization.urlKey,
       settings: { name: organization.name, userId: viewer.id } satisfies LinearWorkspaceSettings,

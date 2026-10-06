@@ -254,7 +254,13 @@ test("a green preflight lets the trigger call start()", async () => {
       return Response.json({
         factory: { name: "dev" },
         organization: { name: "Acme" },
-        apps: [{ provider: "github", name: "jigs-dev", installations: [{ account: "acme" }] }],
+        apps: [
+          {
+            provider: "github",
+            name: "jigs-dev",
+            installations: [{ account: "acme", installationName: null }],
+          },
+        ],
       });
     }
     throw new Error(`unexpected fetch: ${url}`);

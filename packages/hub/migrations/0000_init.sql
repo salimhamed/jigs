@@ -23,7 +23,8 @@ CREATE TABLE "apps" (
 	"settings" jsonb NOT NULL,
 	"secrets" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "apps_provider_external_id" UNIQUE("provider","external_id")
+	CONSTRAINT "apps_provider_external_id" UNIQUE("provider","external_id"),
+	CONSTRAINT "apps_id_organization" UNIQUE("id","organization_id")
 );
 --> statement-breakpoint
 CREATE TABLE "assignments" (
@@ -56,13 +57,17 @@ CREATE TABLE "factory_messages" (
 CREATE TABLE "installations" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"app_id" uuid NOT NULL,
+	"organization_id" text NOT NULL,
 	"external_id" text NOT NULL,
+	"installation_name" text,
 	"account" text NOT NULL,
 	"settings" jsonb,
 	"secrets" text,
 	"failure" text,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
-	CONSTRAINT "installations_app_external_id" UNIQUE("app_id","external_id")
+	CONSTRAINT "installations_app_external_id" UNIQUE("app_id","external_id"),
+	CONSTRAINT "installations_organization_name" UNIQUE("organization_id","installation_name"),
+	CONSTRAINT "installations_name_format" CHECK ("installations"."installation_name" ~ '^[a-z][a-z0-9-]*$')
 );
 --> statement-breakpoint
 CREATE TABLE "invitation" (
@@ -146,7 +151,7 @@ ALTER TABLE "assignments" ADD CONSTRAINT "assignments_factory_id_factories_id_fk
 ALTER TABLE "factories" ADD CONSTRAINT "factories_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "factory_messages" ADD CONSTRAINT "factory_messages_factory_id_factories_id_fk" FOREIGN KEY ("factory_id") REFERENCES "public"."factories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "factory_messages" ADD CONSTRAINT "factory_messages_provider_event_id_provider_events_id_fk" FOREIGN KEY ("provider_event_id") REFERENCES "public"."provider_events"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
-ALTER TABLE "installations" ADD CONSTRAINT "installations_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "installations" ADD CONSTRAINT "installations_app_organization_fk" FOREIGN KEY ("app_id","organization_id") REFERENCES "public"."apps"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "invitation" ADD CONSTRAINT "invitation_inviter_id_user_id_fk" FOREIGN KEY ("inviter_id") REFERENCES "public"."user"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "member" ADD CONSTRAINT "member_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint

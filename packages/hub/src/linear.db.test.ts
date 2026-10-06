@@ -443,7 +443,11 @@ dbTest("issues the assigned app's workspace token by id or URL key, or the only 
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
   });
   expect((await status.json()).apps).toEqual([
-    { provider: "linear", name: linear.app.name, installations: [{ account: workspace.urlKey }] },
+    {
+      provider: "linear",
+      name: linear.app.name,
+      installations: [{ account: workspace.urlKey, installationName: null }],
+    },
   ]);
 });
 

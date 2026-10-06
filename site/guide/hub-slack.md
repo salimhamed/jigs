@@ -41,16 +41,21 @@ for. It starts with every scope jigs uses:
 | `chat:write` | Posting messages and thread replies. |
 | `users:read` | Looking up the names of the people who wrote a message. |
 | `users:read.email` | Looking up their email addresses. |
+| `reactions:write` | Adding and removing emoji reactions. |
+| `files:write` | Uploading files. |
 
-Add any scope a factory's own Slack calls need, such as `reactions:write`,
-and save. Install the app again in each workspace after changing them.
+Every factory's Slack app needs these, so the hub refuses a list that leaves
+one out. Add any other scope a factory's own Slack calls need, such as
+`pins:write`, and save. Install the app again in each workspace after changing
+them.
 
 ## 5. Install the app
 
 On the app's page on the hub, choose **Add to Slack** and approve. Some
 workspaces require an admin to approve new apps; Slack asks for approval if
 yours does. The workspace then appears under **Workspaces**, with the scopes
-it granted.
+it granted. Give it an [installation name](/guide/hub#installation-names),
+such as `slack-acme`, under **Installation name**, and save.
 
 Invite the bot to each channel factories should hear, public or private, with
 `/invite @<bot name>`. jigs never reads direct messages.

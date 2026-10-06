@@ -250,21 +250,23 @@ dbTest("installs an app in a workspace through Slack's OAuth flow", async () => 
   expect(await installationsOf(slack.app)).toHaveLength(1);
 
   // A factory's extra scopes are asked for once an admin adds them.
+  const base = slackBotScopes.join(", ");
+  const scopes = [...slackBotScopes, "im:history"];
   expect(
-    await setSlackScopes(db, organizationId, slack.app.id, "chat:write, im:history\nchat:write"),
-  ).toEqual({ scopes: ["chat:write", "im:history"] });
+    await setSlackScopes(db, organizationId, slack.app.id, `${base}, im:history\nchat:write`),
+  ).toEqual({ scopes });
   const asked = authorizeUrl(await startInstall(slack.app));
-  expect(asked.searchParams.get("scope")).toBe("chat:write,im:history");
+  expect(asked.searchParams.get("scope")).toBe(scopes.join(","));
   await install(slack, workspace);
   const [reinstalled] = await installationsOf(slack.app);
-  expect(reinstalled?.settings).toMatchObject({ scopes: ["chat:write", "im:history"] });
-  expect(await setSlackScopes(db, organizationId, slack.app.id, " ")).toEqual({
-    error: "Enter at least one scope.",
+  expect(reinstalled?.settings).toMatchObject({ scopes });
+  expect(await setSlackScopes(db, organizationId, slack.app.id, "chat:write im:history")).toEqual({
+    error: `Keep the scopes every factory needs: ${slackBotScopes.filter((s) => s !== "chat:write").join(", ")}.`,
   });
-  expect(await setSlackScopes(db, organizationId, slack.app.id, "chat:write, Bad Scope")).toEqual({
+  expect(await setSlackScopes(db, organizationId, slack.app.id, `${base}, Bad Scope`)).toEqual({
     error: "These are not Slack scopes: Bad, Scope.",
   });
-  expect(await setSlackScopes(db, "other", slack.app.id, "chat:write")).toEqual({
+  expect(await setSlackScopes(db, "other", slack.app.id, base)).toEqual({
     error: "There is no such Slack app.",
   });
 });
@@ -382,7 +384,11 @@ dbTest("issues the bot token of the factory's one installation", async () => {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
   });
   expect((await status.json()).apps).toEqual([
-    { provider: "slack", name: slack.app.name, installations: [{ account: workspace.name }] },
+    {
+      provider: "slack",
+      name: slack.app.name,
+      installations: [{ account: workspace.name, installationName: null }],
+    },
   ]);
 });
 

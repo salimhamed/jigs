@@ -8,6 +8,8 @@ import { sql } from "drizzle-orm";
 import {
   bigint,
   boolean,
+  check,
+  foreignKey,
   index,
   jsonb,
   pgTable,
@@ -178,7 +180,11 @@ export const apps = pgTable(
     secrets: text("secrets").notNull(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [unique("apps_provider_external_id").on(table.provider, table.externalId)],
+  (table) => [
+    unique("apps_provider_external_id").on(table.provider, table.externalId),
+    // The target of installations' foreign key, which carries the Organization along.
+    unique("apps_id_organization").on(table.id, table.organizationId),
+  ],
 );
 
 /** Where an app is installed, such as a GitHub account or a Linear workspace. */
@@ -186,11 +192,13 @@ export const installations = pgTable(
   "installations",
   {
     id: uuid("id").primaryKey().defaultRandom(),
-    appId: uuid("app_id")
-      .notNull()
-      .references(() => apps.id, { onDelete: "cascade" }),
+    appId: uuid("app_id").notNull(),
+    /** The app's Organization, kept here so installation names are unique within it. */
+    organizationId: text("organization_id").notNull(),
     /** The provider's id for the installation. */
     externalId: text("external_id").notNull(),
+    /** The name factories use for the installation, which an admin sets; `null` until then. */
+    installationName: text("installation_name"),
     /** The account or workspace the app is installed on, such as a GitHub login or a Linear URL key. */
     account: text("account").notNull(),
     /** What the provider says about the installation, such as a Linear workspace's name. */
@@ -201,7 +209,16 @@ export const installations = pgTable(
     failure: text("failure"),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
   },
-  (table) => [unique("installations_app_external_id").on(table.appId, table.externalId)],
+  (table) => [
+    unique("installations_app_external_id").on(table.appId, table.externalId),
+    unique("installations_organization_name").on(table.organizationId, table.installationName),
+    foreignKey({
+      name: "installations_app_organization_fk",
+      columns: [table.appId, table.organizationId],
+      foreignColumns: [apps.id, apps.organizationId],
+    }).onDelete("cascade"),
+    check("installations_name_format", sql`${table.installationName} ~ '^[a-z][a-z0-9-]*$'`),
+  ],
 );
 
 /** An app allowed to a factory: the factory receives the app's provider events. */

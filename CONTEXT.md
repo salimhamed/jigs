@@ -235,6 +235,13 @@ Linear workspace, a Slack workspace or a PagerDuty account. Tokens are for one
 installation.
 _Avoid_: workspace, connection (for the general term)
 
+**Installation name**: The name an admin gives an installation on the hub,
+such as `slack-js` or `linear-personal`, which factories use to say which
+installation they mean. Lowercase letters, digits and hyphens, starting with a
+letter, and unique in the Organization. `installationName` in code. An
+installation the hub learned of by itself has none until an admin sets it.
+_Avoid_: alias, label, account (the provider's own name for where it is installed)
+
 **Assignment**: An app allowed to a factory. A factory receives provider events
 from, and gets tokens for, only its assigned apps.
 _Avoid_: subscription, grant
