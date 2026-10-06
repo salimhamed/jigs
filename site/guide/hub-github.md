@@ -69,6 +69,10 @@ and choose its repositories. GitHub returns to the hub, which records the
 installation; it then appears under **Installations**. Install it on every
 account that owns a repository a factory binds.
 
+Each installation, including any the App already had, needs an
+[installation name](/guide/hub#installation-names), such as `github-acme`.
+Enter it under **Installation name** and save.
+
 ## 5. Assign it to factories
 
 Under **Factories** on the App's page, check each factory that should act as

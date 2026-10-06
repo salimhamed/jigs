@@ -95,7 +95,10 @@ export async function addSlackApp(
 
 const SCOPE = /^[a-z][a-z_.:-]*$/;
 
-/** Set the bot token scopes an app's installs ask for, from a list split on commas or spaces. */
+/**
+ * Set the bot token scopes an app's installs ask for, from a list split on
+ * commas or spaces. The list keeps every scope in `slackBotScopes`.
+ */
 export async function setSlackScopes(
   db: HubDatabase,
   organizationId: string,
@@ -103,9 +106,12 @@ export async function setSlackScopes(
   list: string,
 ): Promise<{ error: string } | { scopes: string[] }> {
   const scopes = [...new Set(list.split(/[\s,]+/).filter(Boolean))];
-  if (scopes.length === 0) return { error: "Enter at least one scope." };
   const bad = scopes.filter((scope) => !SCOPE.test(scope));
   if (bad.length > 0) return { error: `These are not Slack scopes: ${bad.join(", ")}.` };
+  const dropped = slackBotScopes.filter((scope) => !scopes.includes(scope));
+  if (dropped.length > 0) {
+    return { error: `Keep the scopes every factory needs: ${dropped.join(", ")}.` };
+  }
   const [updated] = await db
     .update(apps)
     .set({
@@ -308,7 +314,7 @@ export function createSlackRoutes(options: {
         );
       return;
     }
-    await recordInstallation(db, app.id, {
+    await recordInstallation(db, app, {
       externalId: body.team.id,
       account: body.team.name,
       settings: {

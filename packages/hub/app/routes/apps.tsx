@@ -47,6 +47,7 @@ export async function action({ context, request }: Route.ActionArgs) {
           clientSecret: field("clientSecret"),
           subdomain: field("subdomain"),
           region: field("region"),
+          from: field("from"),
         });
       case "github":
         return addGitHubApp(db, config.encryptionKey, organizationId, {
@@ -95,6 +96,11 @@ const pagerDutyFields: Field[] = [
   { name: "clientId", label: "Client ID" },
   { name: "clientSecret", label: "Client secret", secret: true },
   { name: "subdomain", label: "Account subdomain, as in <subdomain>.pagerduty.com" },
+  {
+    name: "from",
+    label:
+      "From email: the account's user that factories make changes as, such as an on-call account",
+  },
 ];
 
 function Fields({ fields }: { fields: Field[] }) {
@@ -138,7 +144,19 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
                   </Link>
                 </td>
                 <td>{app.provider}</td>
-                <td>{app.installations.join(", ") || "—"}</td>
+                <td>
+                  {app.installations.length === 0
+                    ? "—"
+                    : app.installations.map((installation, index) => (
+                        <span key={installation.account}>
+                          {index > 0 && ", "}
+                          {installation.installationName ?? (
+                            <span className="text-red-600 dark:text-red-400">needs a name</span>
+                          )}{" "}
+                          <span className="text-zinc-500">({installation.account})</span>
+                        </span>
+                      ))}
+                </td>
                 <td>{app.factories.join(", ") || "—"}</td>
               </tr>
             ))}
@@ -199,8 +217,8 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
           <p className="text-sm text-zinc-500">
             Create an app in PagerDuty first, under Integrations, App Registration, with Scoped
             OAuth and the scopes its page on the hub lists, then copy its details here. The hub
-            checks them by getting a token. The connection's page then shows the webhook to add in
-            PagerDuty and takes its signing secret.
+            checks them by getting a token and finding the from user. The connection's page then
+            shows the webhook to add in PagerDuty and takes its signing secret.
           </p>
           <Fields fields={pagerDutyFields} />
           <label className="flex flex-col gap-1 text-sm">

@@ -3,7 +3,7 @@ import { type GitHubTokenResponse, githubTokenPath } from "@jigs-ai/hub-protocol
 import { eq } from "drizzle-orm";
 import express from "express";
 import { beforeAll, expect } from "vitest";
-import { type App, setAssignments } from "./apps.ts";
+import { type App, setAssignments, setInstallationName } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import {
@@ -140,7 +140,12 @@ async function installed(app: App, login = "acme") {
   installationCount += 1;
   const id = String(5000 + installationCount);
   githubInstallations.set(id, { appId: app.externalId, login });
-  await db.insert(schema.installations).values({ appId: app.id, externalId: id, account: login });
+  await db.insert(schema.installations).values({
+    appId: app.id,
+    organizationId: app.organizationId,
+    externalId: id,
+    account: login,
+  });
   return Number(id);
 }
 
@@ -388,6 +393,60 @@ dbTest("learns installations the hub missed, when added and when an event names 
     .where(eq(schema.installations.appId, app.app.id));
   expect(known.map((row) => row.externalId).sort()).toEqual(["61", "62"]);
   expect(await eventNames(factory.id)).toEqual(["issues", "issues"]);
+});
+
+dbTest("names installations uniquely within an Organization", async () => {
+  const [first, second, theirs] = [await newApp(), await newApp(), await newApp("other")];
+  await installed(first.app, "acme");
+  await installed(second.app, "widgets");
+  await installed(theirs.app, "other");
+  const [acme, widgets, other] = await Promise.all(
+    [first, second, theirs].map(async ({ app }) => {
+      const [row] = await db
+        .select()
+        .from(schema.installations)
+        .where(eq(schema.installations.appId, app.id));
+      if (!row) throw new Error("expected an installation");
+      expect(row.installationName).toBeNull();
+      return row;
+    }),
+  );
+  if (!acme || !widgets || !other) throw new Error("expected installations");
+  const name = (app: App, installationId: string, installationName: string, org = organizationId) =>
+    setInstallationName(db, org, app.id, installationId, installationName);
+
+  expect(await name(first.app, acme.id, "github-acme")).toEqual({
+    installationName: "github-acme",
+  });
+  for (const bad of ["", "GitHub", "1github", "-github", "github_acme", "github acme"]) {
+    expect(await name(first.app, acme.id, bad)).toEqual({
+      error:
+        "An installation name is lowercase letters, digits and hyphens, starting with a letter.",
+    });
+  }
+  expect(await name(second.app, widgets.id, "github-acme")).toEqual({
+    error: "Another installation is already named github-acme.",
+  });
+  // Another Organization's names are its own.
+  expect(await name(theirs.app, other.id, "github-acme", "other")).toEqual({
+    installationName: "github-acme",
+  });
+  expect(await name(theirs.app, other.id, "github-other")).toEqual({
+    error: "There is no such installation.",
+  });
+  expect(await name(second.app, acme.id, "github-widgets")).toEqual({
+    error: "There is no such installation.",
+  });
+  expect(await name(first.app, "not-a-uuid", "github-widgets")).toEqual({
+    error: "There is no such installation.",
+  });
+  // Renaming keeps the row and frees the old name.
+  expect(await name(first.app, acme.id, "github-acme-2")).toEqual({
+    installationName: "github-acme-2",
+  });
+  expect(await name(second.app, widgets.id, "github-acme")).toEqual({
+    installationName: "github-acme",
+  });
 });
 
 dbTest("validates a GitHub App before adding it, once per hub", async () => {

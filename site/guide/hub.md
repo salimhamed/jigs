@@ -201,7 +201,7 @@ one at once. **Remove** deletes the factory and every event waiting for it.
 
 The factories list shows when each factory last reached the hub, its jigs
 version and how many events it has not confirmed. A factory's own page lists
-its assigned apps and its event log: every provider event the hub kept for
+its assigned apps with their installations' names, and its event log: every provider event the hub kept for
 it, with when it arrived and whether the factory has confirmed it.
 
 ## Add apps and assign them {#apps}
@@ -233,6 +233,21 @@ For now, a factory works with:
 Assigning a factory a second app of one of these providers, or connecting its
 Linear or Slack app to a second workspace, makes the hub refuse the factory's
 tokens for that provider until you remove the extra one.
+
+### Name each installation {#installation-names}
+
+Each place an app is installed or connected, such as a GitHub account or a
+Slack workspace, is an installation, and each needs an **installation name**:
+the name factories use to say which installation they mean, such as
+`github-acme` or `slack-support`. A name is lowercase letters, digits and
+hyphens, starting with a letter, and no two installations in your Organization
+share one.
+
+The hub learns of some installations by itself, such as those a GitHub App
+already had when you added it, so a new installation starts without a name.
+The app's page shows it as **Needs a name**; enter one under **Installation
+name** and save. You can rename one later, but every factory that uses the
+old name then needs the new one.
 
 `pnpm exec jigs doctor`, in the factory, checks that it reaches the hub and
 that the hub assigned it what its configuration uses, and names what to fix

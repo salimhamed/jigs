@@ -37,10 +37,13 @@ export async function listApps(context: AppLoadContext, organizationId: string) 
     orderBy: [asc(apps.provider), asc(apps.name)],
   });
   const installed = await context.db
-    .select({ appId: installations.appId, account: installations.account })
+    .select({
+      appId: installations.appId,
+      account: installations.account,
+      installationName: installations.installationName,
+    })
     .from(installations)
-    .innerJoin(apps, eq(apps.id, installations.appId))
-    .where(eq(apps.organizationId, organizationId))
+    .where(eq(installations.organizationId, organizationId))
     .orderBy(asc(installations.account));
   const assigned = await context.db
     .select({ appId: assignments.appId, factory: factories.name })
@@ -50,7 +53,9 @@ export async function listApps(context: AppLoadContext, organizationId: string) 
     .orderBy(asc(factories.name));
   return rows.map((app) => ({
     ...app,
-    installations: installed.filter((row) => row.appId === app.id).map((row) => row.account),
+    installations: installed
+      .filter((row) => row.appId === app.id)
+      .map(({ account, installationName }) => ({ account, installationName })),
     factories: assigned.filter((row) => row.appId === app.id).map((row) => row.factory),
   }));
 }
@@ -65,6 +70,8 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
   const [installed, organizationFactories] = await Promise.all([
     context.db
       .select({
+        id: installations.id,
+        installationName: installations.installationName,
         externalId: installations.externalId,
         account: installations.account,
         settings: installations.settings,
@@ -102,6 +109,8 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         callbackUrl: `${origin}${linearCallbackPath(app.id)}`,
         webhookUrl: `${origin}${linearWebhookPath(app.id)}`,
         workspaces: installed.map((workspace) => ({
+          id: workspace.id,
+          installationName: workspace.installationName,
           externalId: workspace.externalId,
           urlKey: workspace.account,
           name: (workspace.settings as LinearWorkspaceSettings | null)?.name ?? workspace.account,
@@ -119,7 +128,9 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         redirectUrl: `${origin}${slackCallbackPath(app.id)}`,
         requestUrl: `${origin}${slackWebhookPath}`,
         events: [...slackBotEvents],
-        workspaces: installed.map(({ externalId, account, settings }) => ({
+        workspaces: installed.map(({ id, installationName, externalId, account, settings }) => ({
+          id,
+          installationName,
           externalId,
           name: account,
           scopes: (settings as SlackWorkspaceSettings | null)?.scopes ?? [],
@@ -134,11 +145,17 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         webhookUrl: `${origin}${pagerDutyWebhookPath(app.id)}`,
         scopes: [...pagerDutyScopes],
         eventTypes: [...pagerDutyEventTypes],
-        accounts: installed.map((account) => ({
-          externalId: account.externalId,
-          subdomain: account.account,
-          region: (account.settings as PagerDutyAccountSettings | null)?.region ?? "",
-        })),
+        accounts: installed.map((account) => {
+          const settings = account.settings as PagerDutyAccountSettings;
+          return {
+            id: account.id,
+            installationName: account.installationName,
+            externalId: account.externalId,
+            subdomain: account.account,
+            region: settings.region,
+            from: settings.from,
+          };
+        }),
       };
     case "github":
       return {
@@ -149,19 +166,46 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         installUrl: githubInstallUrl(app),
         webhookUrl: `${origin}${githubWebhookPath}`,
         setupUrl: `${origin}${githubSetupPath(app.id)}`,
-        installations: installed.map(({ externalId, account }) => ({ externalId, account })),
+        installations: installed.map(({ id, installationName, externalId, account }) => ({
+          id,
+          installationName,
+          externalId,
+          account,
+        })),
       };
     default:
       throw new Error(`Unknown provider ${app.provider satisfies never}`);
   }
 }
 
-/** The apps assigned to a factory. */
+/** The apps assigned to a factory, each with its installations. */
 export async function assignedApps(context: AppLoadContext, factoryId: string) {
-  return context.db
-    .select({ id: apps.id, provider: apps.provider, name: apps.name })
+  const rows = await context.db
+    .select({
+      id: apps.id,
+      provider: apps.provider,
+      name: apps.name,
+      account: installations.account,
+      installationName: installations.installationName,
+    })
     .from(assignments)
     .innerJoin(apps, eq(apps.id, assignments.appId))
+    .leftJoin(installations, eq(installations.appId, apps.id))
     .where(eq(assignments.factoryId, factoryId))
-    .orderBy(asc(apps.provider), asc(apps.name));
+    .orderBy(asc(apps.provider), asc(apps.name), asc(installations.account));
+  const assigned = new Map<
+    string,
+    {
+      id: string;
+      provider: (typeof rows)[number]["provider"];
+      name: string;
+      installations: { account: string; installationName: string | null }[];
+    }
+  >();
+  for (const { id, provider, name, account, installationName } of rows) {
+    const app = assigned.get(id) ?? { id, provider, name, installations: [] };
+    assigned.set(id, app);
+    if (account !== null) app.installations.push({ account, installationName });
+  }
+  return [...assigned.values()];
 }

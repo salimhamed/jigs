@@ -36,8 +36,8 @@ test("a scope the workspace did not grant fails, naming it and where to add it",
 
 test("the factory's own slack.scopes are checked too", async () => {
   expect(
-    await outcome(issued(slackBotScopes), { slack: { scopes: ["reactions:write"] } }),
-  ).toMatchObject({ ok: false, reason: "jigs's bot token lacks reactions:write" });
+    await outcome(issued(slackBotScopes), { slack: { scopes: ["pins:write"] } }),
+  ).toMatchObject({ ok: false, reason: "jigs's bot token lacks pins:write" });
 });
 
 test("no Slack app on the hub fails with the hub's reason and repair", async () => {

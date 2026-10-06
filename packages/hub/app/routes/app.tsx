@@ -1,7 +1,7 @@
-import { Download, KeyRound, Link2, Trash2 } from "lucide-react";
+import { Download, KeyRound, Link2, Save, Trash2 } from "lucide-react";
 import { data, Form, redirect } from "react-router";
-import { isUuid, removeApp, setAssignments } from "../../src/apps.ts";
-import { setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
+import { isUuid, removeApp, setAssignments, setInstallationName } from "../../src/apps.ts";
+import { setPagerDutyFrom, setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
 import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
@@ -45,6 +45,28 @@ export async function action({ context, request, params }: Route.ActionArgs) {
         throw notFound();
       }
       return { message: "Saved the signing secret." };
+    }
+    case "installationName": {
+      const named = await setInstallationName(
+        context.db,
+        organizationId,
+        params.id,
+        String(form.get("installationId") ?? ""),
+        String(form.get("installationName") ?? "").trim(),
+      );
+      if ("error" in named) return named;
+      return { message: `Named the installation ${named.installationName}.` };
+    }
+    case "from": {
+      const saved = await setPagerDutyFrom(
+        context.db,
+        context.config.encryptionKey,
+        organizationId,
+        params.id,
+        String(form.get("from") ?? "").trim(),
+      );
+      if ("error" in saved) return saved;
+      return { message: `Factories now make changes as ${saved.from}.` };
     }
     case "scopes": {
       const saved = await setSlackScopes(
@@ -199,8 +221,9 @@ function GitHubApp({
           <table className={table}>
             <thead className="text-zinc-500">
               <tr>
+                <th>Installation name</th>
                 <th>Account</th>
-                <th>Installation</th>
+                <th>GitHub installation</th>
               </tr>
             </thead>
             <tbody>
@@ -209,6 +232,9 @@ function GitHubApp({
                   key={installation.externalId}
                   className="border-t border-zinc-200 dark:border-zinc-800"
                 >
+                  <td>
+                    <InstallationName installation={installation} isAdmin={isAdmin} />
+                  </td>
                   <td>{installation.account}</td>
                   <td className="tabular-nums">{installation.externalId}</td>
                 </tr>
@@ -263,6 +289,7 @@ function LinearApp({
           <table className={table}>
             <thead className="text-zinc-500">
               <tr>
+                <th>Installation name</th>
                 <th>Workspace</th>
                 <th>URL key</th>
                 <th>Status</th>
@@ -274,6 +301,9 @@ function LinearApp({
                   key={workspace.externalId}
                   className="border-t border-zinc-200 dark:border-zinc-800"
                 >
+                  <td>
+                    <InstallationName installation={workspace} isAdmin={isAdmin} />
+                  </td>
                   <td>{workspace.name}</td>
                   <td>{workspace.urlKey}</td>
                   <td>
@@ -349,8 +379,8 @@ function SlackApp({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">Bot scopes</h2>
         <p className="text-sm text-zinc-500">
-          What installing asks a workspace for: every scope jigs uses, plus any a factory's config
-          adds.
+          What installing asks a workspace for: every scope jigs uses, which stay, plus any a
+          factory's own Slack calls need.
         </p>
         <Form method="post" className="max-w-xl space-y-2">
           <textarea
@@ -377,6 +407,7 @@ function SlackApp({
           <table className={table}>
             <thead className="text-zinc-500">
               <tr>
+                <th>Installation name</th>
                 <th>Workspace</th>
                 <th>Team ID</th>
                 <th>Granted scopes</th>
@@ -388,6 +419,9 @@ function SlackApp({
                   key={workspace.externalId}
                   className="border-t border-zinc-200 dark:border-zinc-800"
                 >
+                  <td>
+                    <InstallationName installation={workspace} isAdmin={isAdmin} />
+                  </td>
                   <td>{workspace.name}</td>
                   <td>{workspace.externalId}</td>
                   <td className="font-mono text-xs">{workspace.scopes.join(", ")}</td>
@@ -423,11 +457,60 @@ function PagerDutyApp({
     <>
       <div className="space-y-1">
         <h1 className="text-2xl font-semibold">{app.name}</h1>
-        <p className="text-sm text-zinc-500">
-          PagerDuty connection, client ID {app.clientId}, acting as the app in{" "}
-          {app.accounts.map((account) => `${account.subdomain} (${account.region})`).join(", ")}
-        </p>
+        <p className="text-sm text-zinc-500">PagerDuty connection, client ID {app.clientId}</p>
       </div>
+
+      <section className="space-y-2">
+        <h2 className="text-lg font-semibold">Account</h2>
+        <table className={table}>
+          <thead className="text-zinc-500">
+            <tr>
+              <th>Installation name</th>
+              <th>Subdomain</th>
+              <th>Region</th>
+              <th>From</th>
+            </tr>
+          </thead>
+          <tbody>
+            {app.accounts.map((account) => (
+              <tr
+                key={account.externalId}
+                className="border-t border-zinc-200 dark:border-zinc-800"
+              >
+                <td>
+                  <InstallationName installation={account} isAdmin={isAdmin} />
+                </td>
+                <td>{account.subdomain}</td>
+                <td>{account.region}</td>
+                <td>
+                  {isAdmin ? (
+                    <Form method="post" className="flex items-center gap-2">
+                      <input
+                        name="from"
+                        type="email"
+                        required
+                        defaultValue={account.from}
+                        aria-label="From email"
+                        className={input}
+                      />
+                      <button type="submit" name="intent" value="from" className={quietButton}>
+                        <Save className="size-4" />
+                        Save
+                      </button>
+                    </Form>
+                  ) : (
+                    account.from
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+        <p className="text-sm text-zinc-500">
+          PagerDuty records every change, such as a note, as one of the account's users: the From
+          user. The hub checks the account has a user with that email.
+        </p>
+      </section>
 
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">In PagerDuty</h2>
@@ -481,6 +564,42 @@ function PagerDutyApp({
         )}
       </section>
     </>
+  );
+}
+
+/** An installation's name, which factories use for it, with a form to set it for admins. */
+function InstallationName({
+  installation,
+  isAdmin,
+}: {
+  installation: { id: string; installationName: string | null };
+  isAdmin: boolean;
+}) {
+  if (!isAdmin) {
+    return (
+      installation.installationName ?? (
+        <span className="text-red-600 dark:text-red-400">Needs a name</span>
+      )
+    );
+  }
+  return (
+    <Form method="post" className="flex items-center gap-2">
+      <input type="hidden" name="installationId" value={installation.id} />
+      <input
+        name="installationName"
+        required
+        pattern="[a-z][a-z0-9\-]*"
+        title="Lowercase letters, digits and hyphens, starting with a letter"
+        defaultValue={installation.installationName ?? ""}
+        placeholder="Needs a name"
+        aria-label="Installation name"
+        className={`${input} font-mono placeholder:text-red-600 dark:placeholder:text-red-400`}
+      />
+      <button type="submit" name="intent" value="installationName" className={quietButton}>
+        <Save className="size-4" />
+        Save
+      </button>
+    </Form>
   );
 }
 

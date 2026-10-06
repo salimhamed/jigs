@@ -10,7 +10,7 @@ const status =
     apps: apps.map(({ provider, name, accounts }) => ({
       provider: provider as "slack",
       name,
-      installations: accounts.map((account) => ({ account })),
+      installations: accounts.map((account) => ({ account, installationName: null })),
     })),
   });
 

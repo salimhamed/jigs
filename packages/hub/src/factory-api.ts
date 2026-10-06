@@ -152,6 +152,7 @@ async function readStatus(db: HubDatabase, factory: Factory): Promise<FactorySta
       provider: apps.provider,
       name: apps.name,
       account: installations.account,
+      installationName: installations.installationName,
     })
     .from(assignments)
     .innerJoin(apps, eq(apps.id, assignments.appId))
@@ -165,7 +166,9 @@ async function readStatus(db: HubDatabase, factory: Factory): Promise<FactorySta
       app = { provider: row.provider, name: row.name, installations: [] };
       assigned.set(row.id, app);
     }
-    if (row.account !== null) app.installations.push({ account: row.account });
+    if (row.account !== null) {
+      app.installations.push({ account: row.account, installationName: row.installationName });
+    }
   }
   return {
     factory: { name: factory.name },

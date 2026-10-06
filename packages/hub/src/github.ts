@@ -97,7 +97,7 @@ export async function addGitHubApp(
       .onConflictDoNothing()
       .returning();
     if (!app) return { error: `GitHub App ${input.appId} is already on this hub.` };
-    await recordInstallations(tx, app.id, installed.installations);
+    await recordInstallations(tx, app, installed.installations);
     return { app };
   });
 }
@@ -213,7 +213,7 @@ export function createGitHubRoutes(options: {
     if ("status" in installed) {
       throw new Error(`GitHub answered ${installed.status} listing ${app.name}'s installations`);
     }
-    await recordInstallations(db, app.id, installed.installations);
+    await recordInstallations(db, app, installed.installations);
     return installed.installations.some((row) => row.externalId === String(installationId));
   };
 
@@ -246,7 +246,7 @@ export function createGitHubRoutes(options: {
       if (payload.action === "deleted") {
         await removeInstallation(db, app.id, String(installationId));
       } else if (payload.action === "created") {
-        await recordInstallation(db, app.id, {
+        await recordInstallation(db, app, {
           externalId: String(installationId),
           account: accountName(payload.installation ?? {}),
         });
@@ -290,7 +290,7 @@ export function createGitHubRoutes(options: {
         .send(`GitHub has no installation ${installationId} of ${app.name}.`);
       return;
     }
-    await recordInstallation(db, app.id, { externalId: installationId, account });
+    await recordInstallation(db, app, { externalId: installationId, account });
     response.redirect(303, `/apps/${app.id}`);
   });
 

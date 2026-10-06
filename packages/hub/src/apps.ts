@@ -73,16 +73,19 @@ export interface InstallationValues {
   secrets?: string;
 }
 
+/** The app an installation belongs to. */
+type InstallationOwner = Pick<App, "id" | "organizationId">;
+
 /** Record where an app is installed, or update an installation it has, clearing any failure. */
 export async function recordInstallation(
   db: HubDatabase | Transaction,
-  appId: string,
+  app: InstallationOwner,
   installation: InstallationValues,
 ): Promise<void> {
   const { externalId, ...values } = installation;
   await db
     .insert(installations)
-    .values({ appId, externalId, ...values })
+    .values({ appId: app.id, organizationId: app.organizationId, externalId, ...values })
     .onConflictDoUpdate({
       target: [installations.appId, installations.externalId],
       set: { ...values, failure: null },
@@ -113,18 +116,64 @@ export interface Installed {
  */
 export async function recordInstallations(
   db: HubDatabase | Transaction,
-  appId: string,
+  app: InstallationOwner,
   installed: readonly Installed[],
 ): Promise<void> {
   if (installed.length === 0) return;
   await db
     .insert(installations)
-    .values(installed.map((row) => ({ appId, ...row })))
+    .values(installed.map((row) => ({ appId: app.id, organizationId: app.organizationId, ...row })))
     .onConflictDoUpdate({
       target: [installations.appId, installations.externalId],
       set: { account: sql`excluded.account` },
     });
 }
+
+const INSTALLATION_NAME = /^[a-z][a-z0-9-]*$/;
+
+/**
+ * Name one of an app's installations, the name factories use for it. Names are
+ * unique within the Organization.
+ */
+export async function setInstallationName(
+  db: HubDatabase,
+  organizationId: string,
+  appId: string,
+  installationId: string,
+  installationName: string,
+): Promise<{ installationName: string } | { error: string }> {
+  if (!INSTALLATION_NAME.test(installationName)) {
+    return {
+      error:
+        "An installation name is lowercase letters, digits and hyphens, starting with a letter.",
+    };
+  }
+  if (!isUuid(installationId)) return { error: "There is no such installation." };
+  const named = await db
+    .update(installations)
+    .set({ installationName })
+    .where(
+      and(
+        eq(installations.id, installationId),
+        eq(installations.appId, appId),
+        eq(installations.organizationId, organizationId),
+      ),
+    )
+    .returning({ id: installations.id })
+    .catch((error: unknown) => {
+      if (isUniqueViolation(error)) return null;
+      throw error;
+    });
+  if (named === null) {
+    return { error: `Another installation is already named ${installationName}.` };
+  }
+  if (named.length === 0) return { error: "There is no such installation." };
+  return { installationName };
+}
+
+const isUniqueViolation = (error: unknown): boolean =>
+  error instanceof Error &&
+  ((error as { code?: string }).code === "23505" || isUniqueViolation(error.cause));
 
 /** The one installation of a provider's apps assigned to a factory that `where` matches, or the status and message to refuse with. */
 export async function findAssignedInstallation(

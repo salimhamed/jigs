@@ -28,19 +28,48 @@ export default function Factory({ loaderData }: Route.ComponentProps) {
   return (
     <div className="space-y-4">
       <h1 className="text-2xl font-semibold">{name}</h1>
-      <p className="text-sm">
-        <span className="text-zinc-500">Apps: </span>
-        {apps.length === 0
-          ? "none, so it receives no provider events"
-          : apps.map((app, index) => (
-              <span key={app.id}>
-                {index > 0 && ", "}
-                <Link to={`/apps/${app.id}`} className="underline">
-                  {app.name}
-                </Link>
-              </span>
+      {apps.length === 0 ? (
+        <p className="text-sm text-zinc-500">
+          No apps assigned, so it receives no provider events.
+        </p>
+      ) : (
+        <table className={table}>
+          <thead className="text-zinc-500">
+            <tr>
+              <th>App</th>
+              <th>Provider</th>
+              <th>Installations</th>
+            </tr>
+          </thead>
+          <tbody>
+            {apps.map((app) => (
+              <tr key={app.id} className="border-t border-zinc-200 dark:border-zinc-800">
+                <td>
+                  <Link to={`/apps/${app.id}`} className="underline">
+                    {app.name}
+                  </Link>
+                </td>
+                <td>{app.provider}</td>
+                <td>
+                  {app.installations.length === 0
+                    ? "—"
+                    : app.installations.map((installation, index) => (
+                        <span key={installation.account}>
+                          {index > 0 && ", "}
+                          {installation.installationName === null ? (
+                            <span className="text-red-600 dark:text-red-400">needs a name</span>
+                          ) : (
+                            <code>{installation.installationName}</code>
+                          )}{" "}
+                          <span className="text-zinc-500">({installation.account})</span>
+                        </span>
+                      ))}
+                </td>
+              </tr>
             ))}
-      </p>
+          </tbody>
+        </table>
+      )}
       <p className="text-sm text-zinc-500">
         The provider events sent to this factory, newest first.
       </p>

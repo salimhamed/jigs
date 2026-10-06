@@ -17,7 +17,7 @@ const ctx = testFactoryContext({
 const app = (name: string, ...accounts: string[]): FactoryStatus["apps"][number] => ({
   provider: "github",
   name,
-  installations: accounts.map((account) => ({ account })),
+  installations: accounts.map((account) => ({ account, installationName: null })),
 });
 
 const status = (apps: FactoryStatus["apps"]) => async (): Promise<FactoryStatus> => ({
@@ -40,7 +40,15 @@ test("an App installed on every bound owner passes and says where it acts", asyn
 
 test("no GitHub App assigned fails, whatever else is assigned", async () => {
   expect(
-    await run(status([{ provider: "linear", name: "jigs", installations: [{ account: "acme" }] }])),
+    await run(
+      status([
+        {
+          provider: "linear",
+          name: "jigs",
+          installations: [{ account: "acme", installationName: null }],
+        },
+      ]),
+    ),
   ).toMatchObject({ ok: false, reason: "no GitHub App is assigned to this factory on the hub" });
 });
 

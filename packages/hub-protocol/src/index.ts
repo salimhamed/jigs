@@ -89,8 +89,11 @@ export interface FactoryStatus {
   apps: {
     provider: Provider;
     name: string;
-    /** The accounts or workspaces the app is installed on. */
-    installations: { account: string }[];
+    /**
+     * Where the app is installed: the account or workspace, and the name an
+     * admin gave the installation on the hub, `null` until one does.
+     */
+    installations: { account: string; installationName: string | null }[];
   }[];
 }
 
@@ -156,6 +159,8 @@ export const slackBotScopes = [
   "chat:write",
   "users:read",
   "users:read.email",
+  "reactions:write",
+  "files:write",
 ] as const;
 
 /** The body of a {@link slackTokenPath} response. */
