@@ -3,15 +3,14 @@ import {
   cursorPath,
   type FactoryStatus,
   factoryStatusPath,
-  type GitHubTokenRequest,
   githubTokenPath,
-  type LinearTokenRequest,
   linearTokenPath,
   type MessagesResponse,
   maxWaitSeconds,
   messagesPath,
   pagerDutyTokenPath,
   slackTokenPath,
+  type TokenRequest,
 } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import express, { type Request, type Response, type Router } from "express";
@@ -97,45 +96,52 @@ export function createFactoryApi(options: {
     response.json((await readStatus(db, factory)) satisfies FactoryStatus);
   });
 
-  router.post(githubTokenPath, express.json(), async (request, response) => {
+  // The factory and the installation a token request names, or `null` once it has answered.
+  const tokenRequest = async (request: Request, response: Response) => {
     const factory = await authenticate(request, response);
-    if (!factory) return;
-    const { owner } = (request.body ?? {}) as Partial<GitHubTokenRequest>;
-    if (typeof owner !== "string" || owner === "") {
-      response.status(400).json({ error: "owner must be a GitHub login." });
-      return;
+    if (!factory) return null;
+    const { installationName } = (request.body ?? {}) as Partial<TokenRequest>;
+    if (typeof installationName !== "string" || installationName === "") {
+      response.status(400).json({ error: "installationName must name an installation." });
+      return null;
     }
+    return { factoryId: factory.id, installationName };
+  };
+
+  router.post(githubTokenPath, express.json(), async (request, response) => {
+    const named = await tokenRequest(request, response);
+    if (!named) return;
     answerToken(
       response,
-      await issueGitHubToken(db, encryptionKey, factory.id, owner, { apiUrl: apiUrls.github }),
+      await issueGitHubToken(db, encryptionKey, named.factoryId, named.installationName, {
+        apiUrl: apiUrls.github,
+      }),
     );
   });
 
   router.post(linearTokenPath, express.json(), async (request, response) => {
-    const factory = await authenticate(request, response);
-    if (!factory) return;
-    const { organization } = (request.body ?? {}) as Partial<LinearTokenRequest>;
-    if (organization !== undefined && (typeof organization !== "string" || organization === "")) {
-      response
-        .status(400)
-        .json({ error: "organization must be a Linear organization id or URL key." });
-      return;
-    }
-    answerToken(response, await linearTokens.issue(factory.id, organization));
+    const named = await tokenRequest(request, response);
+    if (!named) return;
+    answerToken(response, await linearTokens.issue(named.factoryId, named.installationName));
   });
 
-  router.post(slackTokenPath, async (request, response) => {
-    const factory = await authenticate(request, response);
-    if (!factory) return;
-    answerToken(response, await issueSlackToken(db, encryptionKey, factory.id));
-  });
-
-  router.post(pagerDutyTokenPath, async (request, response) => {
-    const factory = await authenticate(request, response);
-    if (!factory) return;
+  router.post(slackTokenPath, express.json(), async (request, response) => {
+    const named = await tokenRequest(request, response);
+    if (!named) return;
     answerToken(
       response,
-      await issuePagerDutyToken(db, encryptionKey, factory.id, { apiUrl: apiUrls.pagerduty }),
+      await issueSlackToken(db, encryptionKey, named.factoryId, named.installationName),
+    );
+  });
+
+  router.post(pagerDutyTokenPath, express.json(), async (request, response) => {
+    const named = await tokenRequest(request, response);
+    if (!named) return;
+    answerToken(
+      response,
+      await issuePagerDutyToken(db, encryptionKey, named.factoryId, named.installationName, {
+        apiUrl: apiUrls.pagerduty,
+      }),
     );
   });
 

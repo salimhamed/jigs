@@ -1,12 +1,12 @@
 import { createHmac, timingSafeEqual } from "node:crypto";
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
-import { and, eq, or, sql } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
 import { appOAuth } from "./app-oauth.ts";
 import {
   type App,
   findApp,
-  findAssignedInstallation,
+  findNamedInstallation,
   type Installation,
   recordInstallation,
 } from "./apps.ts";
@@ -207,6 +207,7 @@ export function createLinearRoutes(options: {
     const { appendedTo } = await fanOutProviderEvent(db, waiters, {
       organizationId: app.organizationId,
       appId: app.id,
+      installationId: installation.id,
       provider: "linear",
       name,
       payload,
@@ -303,7 +304,7 @@ export function createLinearRoutes(options: {
 /** What {@link LinearTokens.issue} answers: a token, or the status and message to refuse with. */
 export type LinearTokenResult =
   | { token: LinearTokenResponse }
-  | { status: 404 | 409 | 503; error: string };
+  | { status: 404 | 503; error: string };
 
 // A token is refreshed once it has less than this to live, so a factory can
 // hand an agent one that outlasts a turn of several hours.
@@ -330,30 +331,13 @@ export class LinearTokens {
     this.#apiUrl = options.apiUrl ?? defaultApiUrl;
   }
 
-  /** The token of the one connected workspace, among the Linear apps assigned to the factory, that `organization` names. */
+  /** The token of the named workspace connected to a Linear app assigned to the factory. */
   async issue(
     factoryId: string,
-    organization: string | undefined,
+    installationName: string,
     now = Date.now(),
   ): Promise<LinearTokenResult> {
-    const found = await findAssignedInstallation(
-      this.#db,
-      factoryId,
-      "linear",
-      organization === undefined
-        ? undefined
-        : or(
-            eq(installations.externalId, organization),
-            sql`lower(${installations.account}) = lower(${organization})`,
-          ),
-      {
-        none: `No Linear app assigned to this factory is connected to ${organization ?? "a Linear workspace"}.`,
-        several:
-          organization === undefined
-            ? "More than one Linear workspace is connected to the Linear apps assigned to this factory, so name one"
-            : `More than one Linear app assigned to this factory is connected to ${organization}`,
-      },
-    );
+    const found = await findNamedInstallation(this.#db, factoryId, "linear", installationName);
     if ("error" in found) return found;
     const { app, installation } = found;
     const access = await this.access(app, installation, now);

@@ -22,6 +22,12 @@ export interface ProviderEvent {
   /** The hub's id for the stored event. */
   id: string;
   provider: Provider;
+  /**
+   * The name of the installation the event came through, as an admin set it
+   * on the hub. `null` while that installation has no name, or once it is
+   * gone; a factory acts on no such event.
+   */
+  installationName: string | null;
   /** GitHub's `X-GitHub-Event` header; for the others, the payload's own event type. */
   name: string;
   /** When the hub received it, as an ISO 8601 timestamp. */
@@ -98,42 +104,38 @@ export interface FactoryStatus {
 }
 
 /**
- * `POST` a {@link GitHubTokenRequest} for a {@link GitHubTokenResponse}: an
- * installation token of the GitHub App assigned to the factory that is
- * installed on the owner. The hub answers 404 when no assigned App is
- * installed there, and 409 when more than one is.
+ * The body of every token request: the name of the installation to act on.
+ * The hub answers 404 unless it names an installation of an app assigned to
+ * the factory.
+ */
+export interface TokenRequest {
+  installationName: string;
+}
+
+/**
+ * `POST` a {@link TokenRequest} for a {@link GitHubTokenResponse}: an
+ * installation token of a GitHub App assigned to the factory.
  */
 export const githubTokenPath = "/api/factory/tokens/github";
-
-/** The body of a {@link githubTokenPath} request. */
-export interface GitHubTokenRequest {
-  /** The login of the repository owner, a user or an organization. */
-  owner: string;
-}
 
 /** The body of a {@link githubTokenPath} response. */
 export interface GitHubTokenResponse {
   token: string;
   /** When the token stops working, as an ISO 8601 timestamp. */
   expiresAt: string;
+  /** The login of the user or organization the App is installed on. */
+  account: string;
   /** The App the token acts as; it commits as `<slug>[bot]` with the bot's user id. */
   app: { slug: string; botUserId: number };
 }
 
 /**
- * `POST` a {@link LinearTokenRequest} for a {@link LinearTokenResponse}: the
- * access token of a Linear workspace connected to a Linear app assigned to the
- * factory. The hub answers 404 when there is no such workspace, 409 when the
- * request matches more than one, and 503 when the workspace must be connected
- * again on the hub.
+ * `POST` a {@link TokenRequest} for a {@link LinearTokenResponse}: the access
+ * token of a Linear workspace connected to a Linear app assigned to the
+ * factory. The hub answers 503 when the workspace must be connected again on
+ * the hub.
  */
 export const linearTokenPath = "/api/factory/tokens/linear";
-
-/** The body of a {@link linearTokenPath} request. */
-export interface LinearTokenRequest {
-  /** The workspace's Linear organization id or URL key; may be left out when only one is connected. */
-  organization?: string;
-}
 
 /** The body of a {@link linearTokenPath} response. */
 export interface LinearTokenResponse {
@@ -145,10 +147,8 @@ export interface LinearTokenResponse {
 }
 
 /**
- * `POST` an empty object for a {@link SlackTokenResponse}: the bot token of
- * the one Slack workspace where a Slack app assigned to the factory is
- * installed. The hub answers 404 when there is no such installation and 409
- * when there are several.
+ * `POST` a {@link TokenRequest} for a {@link SlackTokenResponse}: the bot
+ * token of a workspace where a Slack app assigned to the factory is installed.
  */
 export const slackTokenPath = "/api/factory/tokens/slack";
 
@@ -176,10 +176,9 @@ export interface SlackTokenResponse {
 }
 
 /**
- * `POST` an empty object for a {@link PagerDutyTokenResponse}: a fresh token
- * of the one PagerDuty app assigned to the factory, acting as the app in its
- * account. The hub answers 404 when none is, 409 when several are, and 503
- * when PagerDuty refuses the app's credentials.
+ * `POST` a {@link TokenRequest} for a {@link PagerDutyTokenResponse}: a fresh
+ * token of a PagerDuty app assigned to the factory, acting as the app in its
+ * account. The hub answers 503 when PagerDuty refuses the app's credentials.
  */
 export const pagerDutyTokenPath = "/api/factory/tokens/pagerduty";
 
@@ -191,4 +190,6 @@ export interface PagerDutyTokenResponse {
   token: string;
   /** When the token stops working, as an ISO 8601 timestamp. */
   expiresAt: string;
+  /** The email of the PagerDuty user that writes, such as notes, are made as. */
+  from: string;
 }

@@ -248,6 +248,10 @@ export const providerEvents = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     /** The app it came through; `null` once that app is removed. */
     appId: uuid("app_id").references(() => apps.id, { onDelete: "set null" }),
+    /** The installation it came through; `null` once that installation is removed. */
+    installationId: uuid("installation_id").references(() => installations.id, {
+      onDelete: "set null",
+    }),
     provider: text("provider").$type<Provider>().notNull(),
     name: text("name").notNull(),
     receivedAt: timestamp("received_at", { withTimezone: true }).defaultNow().notNull(),

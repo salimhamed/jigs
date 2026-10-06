@@ -32,8 +32,17 @@ import {
 
 const publicUrl = new URL("https://hub.example.test");
 
-const { db, encryptionKey, waiters, listen, serveHub, newFactory, eventNames, requestToken } =
-  setUpTestHub();
+const {
+  db,
+  encryptionKey,
+  waiters,
+  listen,
+  serveHub,
+  newFactory,
+  eventNames,
+  requestToken,
+  nameInstallation,
+} = setUpTestHub();
 let hub: string;
 
 interface Workspace {
@@ -204,8 +213,8 @@ async function deliver(
   });
 }
 
-const requestSlackToken = (token: string, body: unknown) =>
-  requestToken(slackTokenPath, token, body);
+const requestSlackToken = (token: string, installationName: string) =>
+  requestToken(slackTokenPath, token, { installationName });
 
 const installationsOf = (app: App) =>
   db.select().from(schema.installations).where(eq(schema.installations.appId, app.id));
@@ -325,8 +334,12 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   const [message] = await readMessages(db, assigned.id);
   expect(message).toMatchObject({
     kind: "event",
-    event: { provider: "slack", name: "message", payload },
+    event: { provider: "slack", installationName: null, name: "message", payload },
   });
+  await nameInstallation(slack.app.id, workspace.id, "slack-events");
+  expect(await readMessages(db, assigned.id)).toMatchObject([
+    { event: { installationName: "slack-events" } },
+  ]);
   expect(await eventNames(unassigned.id)).toEqual([]);
 
   const fresh = () => messageEvent(slack, workspace);
@@ -362,14 +375,19 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   expect(await eventNames(assigned.id)).toEqual(["message", "message", "message"]);
 });
 
-dbTest("issues the bot token of the factory's one installation", async () => {
-  const slack = await newApp();
-  const workspace = newWorkspace();
+dbTest("issues the bot token of each named installation of the assigned apps", async () => {
+  const [slack, second] = [await newApp(), await newApp()];
+  const [workspace, own, unnamed] = [newWorkspace(), newWorkspace(), newWorkspace()];
   await install(slack, workspace);
+  await install(second, own);
+  await install(second, unnamed);
+  await nameInstallation(slack.app.id, workspace.id, "slack-first");
+  await nameInstallation(second.app.id, own.id, "slack-second");
   const { factory, token } = await newFactory();
   await setAssignments(db, organizationId, slack.app.id, [factory.id]);
+  await setAssignments(db, organizationId, second.app.id, [factory.id]);
 
-  expect(await requestSlackToken(token, {})).toEqual({
+  expect(await requestSlackToken(token, "slack-first")).toEqual({
     status: 200,
     body: {
       token: expect.stringMatching(/^xoxb-/),
@@ -378,43 +396,24 @@ dbTest("issues the bot token of the factory's one installation", async () => {
       team: workspace.id,
     } satisfies SlackTokenResponse,
   });
-  expect((await requestSlackToken("nope", {})).status).toBe(401);
+  expect(await requestSlackToken(token, "slack-second")).toMatchObject({
+    status: 200,
+    body: { app: { name: second.app.name, botUserId: own.botUserId }, team: own.id },
+  });
+  expect(await requestSlackToken(token, "nowhere")).toEqual({
+    status: 404,
+    body: { error: "No Slack installation named nowhere is assigned to this factory." },
+  });
+  expect((await requestSlackToken("nope", "slack-first")).status).toBe(401);
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
   });
-  expect((await status.json()).apps).toEqual([
-    {
-      provider: "slack",
-      name: slack.app.name,
-      installations: [{ account: workspace.name, installationName: null }],
-    },
-  ]);
-});
-
-dbTest("refuses a token when there is no installation, or more than one", async () => {
-  const [first, second] = [await newApp(), await newApp()];
-  const [shared, own] = [newWorkspace(), newWorkspace()];
-  const { factory, token } = await newFactory();
-  expect(await requestSlackToken(token, {})).toEqual({
-    status: 404,
-    body: { error: "No Slack app assigned to this factory is installed in a workspace." },
+  expect((await status.json()).apps).toContainEqual({
+    provider: "slack",
+    name: slack.app.name,
+    installations: [{ account: workspace.name, installationName: "slack-first" }],
   });
-  await install(second, shared);
-  await install(second, own);
-  await setAssignments(db, organizationId, second.app.id, [factory.id]);
-  const names = [`${second.app.name} (${shared.name})`, `${second.app.name} (${own.name})`];
-  expect(await requestSlackToken(token, {})).toEqual({
-    status: 409,
-    body: {
-      error: `More than one Slack installation is assigned to this factory, so leave one: ${names.sort().join(", ")}.`,
-    },
-  });
-
-  await install(first, shared);
-  await setAssignments(db, organizationId, first.app.id, [factory.id]);
-  await setAssignments(db, organizationId, second.app.id, []);
-  expect((await requestSlackToken(token, {})).status).toBe(200);
 });
 
 dbTest("validates a Slack app and adds it once per hub", async () => {

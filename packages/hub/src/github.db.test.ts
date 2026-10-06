@@ -136,7 +136,7 @@ async function newApp(organization = organizationId) {
 }
 
 let installationCount = 0;
-async function installed(app: App, login = "acme") {
+async function installed(app: App, login = "acme", installationName?: string) {
   installationCount += 1;
   const id = String(5000 + installationCount);
   githubInstallations.set(id, { appId: app.externalId, login });
@@ -145,6 +145,7 @@ async function installed(app: App, login = "acme") {
     organizationId: app.organizationId,
     externalId: id,
     account: login,
+    installationName,
   });
   return Number(id);
 }
@@ -241,9 +242,21 @@ dbTest("stores a signed event once and sends it only to the app's factories", as
     payload: issueOpened(installationId),
   });
   const [message] = await readMessages(db, assigned.id);
-  expect(message).toMatchObject({ kind: "event", event: { id: stored?.id, name: "issues" } });
+  expect(message).toMatchObject({
+    kind: "event",
+    event: { id: stored?.id, installationName: null, name: "issues" },
+  });
   expect(await eventNames(alsoAssigned.id)).toEqual(["issues"]);
   expect(await eventNames(unassigned.id)).toEqual([]);
+
+  // An installation named after its events arrived delivers them with the name.
+  await db
+    .update(schema.installations)
+    .set({ installationName: "gh-events" })
+    .where(eq(schema.installations.externalId, String(installationId)));
+  expect(await readMessages(db, assigned.id)).toMatchObject([
+    { event: { installationName: "gh-events" } },
+  ]);
 });
 
 dbTest("answers ping without storing it", async () => {
@@ -317,6 +330,12 @@ dbTest("keeps installations current from installation events", async () => {
   expect(await installationsOf()).toEqual([]);
   expect(await deliver(github, "issues", issueOpened(77))).toBe(202);
   expect(await eventNames(factory.id)).toEqual(["installation", "issues", "installation"]);
+  // The installation is gone, so none of its events carries a name any more.
+  expect(
+    (await readMessages(db, factory.id)).map(
+      (message) => message.kind === "event" && message.event.installationName,
+    ),
+  ).toEqual([null, null, null]);
 });
 
 async function setup(app: App | string, query: Record<string, string>) {
@@ -488,24 +507,28 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
   });
 });
 
-const requestGitHubToken = (token: string, owner: unknown) =>
-  requestToken(githubTokenPath, token, { owner });
+const requestGitHubToken = (token: string, installationName: unknown) =>
+  requestToken(githubTokenPath, token, { installationName });
 
 dbTest(
-  "issues a fresh installation token of the assigned App for an owner on every request",
+  "issues a fresh token of each named installation of the assigned Apps on every request",
   async () => {
-    const github = await newApp();
+    const [github, second] = [await newApp(), await newApp()];
     const { factory, token } = await newFactory();
     await setAssignments(db, organizationId, github.app.id, [factory.id]);
-    const installationId = String(await installed(github.app, "Acme-Corp"));
+    await setAssignments(db, organizationId, second.app.id, [factory.id]);
+    const installationId = String(await installed(github.app, "Acme-Corp", "gh-acme-corp"));
+    const widgetsId = String(await installed(github.app, "widgets", "gh-widgets"));
+    const secondId = String(await installed(second.app, "acme-labs", "gh-acme-labs"));
     const before = { minted: minted.length, lookups: botLookups };
 
-    const first = await requestGitHubToken(token, "acme-corp");
+    const first = await requestGitHubToken(token, "gh-acme-corp");
     expect(first.status).toBe(200);
     const issued = first.body as GitHubTokenResponse;
     expect(issued).toEqual({
       token: minted.at(-1)?.token,
       expiresAt: expect.any(String),
+      account: "Acme-Corp",
       app: { slug: github.app.name, botUserId: githubBots.get(`${github.app.name}[bot]`) },
     });
     expect(minted.at(-1)?.installationId).toBe(installationId);
@@ -519,7 +542,7 @@ dbTest(
 
     // The factory asks again for a longer-lived token, or after GitHub rejected one, so every
     // request mints anew; the bot's id is not looked up again.
-    const again = await requestGitHubToken(token, "ACME-CORP");
+    const again = await requestGitHubToken(token, "gh-acme-corp");
     expect(again).toEqual({
       status: 200,
       body: { ...issued, token: minted.at(-1)?.token, expiresAt: expect.any(String) },
@@ -527,41 +550,47 @@ dbTest(
     expect((again.body as GitHubTokenResponse).token).not.toBe(issued.token);
     expect(minted.length - before.minted).toBe(2);
     expect(botLookups - before.lookups).toBe(1);
+
+    expect((await requestGitHubToken(token, "gh-widgets")).body).toMatchObject({
+      account: "widgets",
+      app: { slug: github.app.name },
+    });
+    expect(minted.at(-1)?.installationId).toBe(widgetsId);
+    expect((await requestGitHubToken(token, "gh-acme-labs")).body).toMatchObject({
+      account: "acme-labs",
+      app: { slug: second.app.name },
+    });
+    expect(minted.at(-1)?.installationId).toBe(secondId);
   },
 );
 
 dbTest(
-  "refuses a token for an owner no assigned App, or more than one, is installed on",
+  "refuses a token unless it names an installation of an App assigned to the factory",
   async () => {
-    const [first, second, unassigned] = [await newApp(), await newApp(), await newApp()];
+    const [assigned, unassigned, theirs] = [await newApp(), await newApp(), await newApp("other")];
     const { factory, token } = await newFactory();
-    await setAssignments(db, organizationId, first.app.id, [factory.id]);
-    await setAssignments(db, organizationId, second.app.id, [factory.id]);
-    await installed(first.app, "shared");
-    await installed(second.app, "shared");
-    await installed(unassigned.app, "elsewhere");
+    await setAssignments(db, organizationId, assigned.app.id, [factory.id]);
+    await installed(assigned.app, "unnamed");
+    await installed(unassigned.app, "elsewhere", "gh-elsewhere");
+    await installed(theirs.app, "theirs", "gh-theirs");
+    // Assignments never cross Organizations; this one stands in for a bug that made one.
+    await db.insert(schema.assignments).values({ appId: theirs.app.id, factoryId: factory.id });
     const before = minted.length;
 
-    expect(await requestGitHubToken(token, "nobody")).toEqual({
+    expect(await requestGitHubToken(token, "gh-nobody")).toEqual({
       status: 404,
-      body: { error: "No GitHub App assigned to this factory is installed on nobody." },
+      body: { error: "No GitHub installation named gh-nobody is assigned to this factory." },
     });
-    expect((await requestGitHubToken(token, "elsewhere")).status).toBe(404);
-    expect(await requestGitHubToken(token, "shared")).toEqual({
-      status: 409,
-      body: {
-        error: `More than one GitHub App assigned to this factory is installed on shared: ${[
-          first.app.name,
-          second.app.name,
-        ]
-          .sort()
-          .map((name) => `${name} (shared)`)
-          .join(", ")}.`,
-      },
-    });
-    expect((await requestGitHubToken(token, "")).status).toBe(400);
-    expect((await requestGitHubToken(token, 7)).status).toBe(400);
-    expect((await requestGitHubToken("nope", "shared")).status).toBe(401);
+    expect((await requestGitHubToken(token, "unnamed")).status).toBe(404);
+    expect((await requestGitHubToken(token, "gh-elsewhere")).status).toBe(404);
+    expect((await requestGitHubToken(token, "gh-theirs")).status).toBe(404);
+    for (const bad of ["", 7, undefined]) {
+      expect(await requestGitHubToken(token, bad)).toEqual({
+        status: 400,
+        body: { error: "installationName must name an installation." },
+      });
+    }
+    expect((await requestGitHubToken("nope", "gh-theirs")).status).toBe(401);
     expect(minted.length).toBe(before);
   },
 );

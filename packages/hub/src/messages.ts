@@ -1,7 +1,13 @@
 import { type Message, maxMessagesPerResponse, type Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
-import { assignments, factories, factoryMessages, providerEvents } from "./db/schema.ts";
+import {
+  assignments,
+  factories,
+  factoryMessages,
+  installations,
+  providerEvents,
+} from "./db/schema.ts";
 
 /**
  * Factories holding a long poll open, woken when a message is appended for
@@ -63,6 +69,8 @@ const APPEND_LOCK = 7_001_661;
 export interface ReceivedProviderEvent {
   organizationId: string;
   appId: string;
+  /** The hub's id for the installation it came through, `null` when it names none the hub has. */
+  installationId: string | null;
   provider: Provider;
   name: string;
   payload: unknown;
@@ -126,15 +134,17 @@ export async function readMessages(db: HubDatabase, factoryId: string): Promise<
       position: factoryMessages.position,
       kind: factoryMessages.kind,
       event: providerEvents,
+      installationName: installations.installationName,
     })
     .from(factoryMessages)
     .leftJoin(providerEvents, eq(providerEvents.id, factoryMessages.providerEventId))
+    .leftJoin(installations, eq(installations.id, providerEvents.installationId))
     .where(
       and(eq(factoryMessages.factoryId, factoryId), gt(factoryMessages.position, sql`(${cursor})`)),
     )
     .orderBy(asc(factoryMessages.position))
     .limit(maxMessagesPerResponse);
-  return rows.map(({ position, kind, event }): Message => {
+  return rows.map(({ position, kind, event, installationName }): Message => {
     if (kind === "fellBehind") return { position: String(position), kind };
     if (!event) throw new Error(`event message ${position} has no provider event`);
     return {
@@ -143,6 +153,7 @@ export async function readMessages(db: HubDatabase, factoryId: string): Promise<
       event: {
         id: event.id,
         provider: event.provider,
+        installationName,
         name: event.name,
         receivedAt: event.receivedAt.toISOString(),
         payload: event.payload,

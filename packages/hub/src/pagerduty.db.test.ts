@@ -17,7 +17,8 @@ import {
 } from "./pagerduty.ts";
 import { organizationId, setUpTestHub } from "./test-hub.ts";
 
-const { db, encryptionKey, waiters, listen, serveHub, newFactory, requestToken } = setUpTestHub();
+const { db, encryptionKey, waiters, listen, serveHub, newFactory, requestToken, nameInstallation } =
+  setUpTestHub();
 let hub: string;
 let identity: string;
 
@@ -110,6 +111,14 @@ async function newApp(webhookSecret: string | null = `pd_wh_${appCount + 1}`) {
   }
   return added.app;
 }
+
+const accountOf = (app: App) => app.name.replace("Jigs ", "acme-");
+
+const nameAccount = (app: App, installationName: string) =>
+  nameInstallation(app.id, `us.${accountOf(app)}`, installationName);
+
+const requestPagerDutyToken = (token: string, installationName: string) =>
+  requestToken(pagerDutyTokenPath, token, { installationName });
 
 const triggered = () => ({
   event: {
@@ -238,8 +247,12 @@ dbTest("sends a signed event only to the app's factories", async () => {
   const [message] = await readMessages(db, assigned.id);
   expect(message).toMatchObject({
     kind: "event",
-    event: { provider: "pagerduty", name: "incident.triggered", payload },
+    event: { provider: "pagerduty", installationName: null, name: "incident.triggered", payload },
   });
+  await nameAccount(app, "pd-events");
+  expect(await readMessages(db, assigned.id)).toMatchObject([
+    { event: { installationName: "pd-events" } },
+  ]);
   expect(await readMessages(db, unassigned.id)).toEqual([]);
 
   // While a secret rotates the header holds a signature for each; one match is enough.
@@ -261,48 +274,61 @@ dbTest("sends a signed event only to the app's factories", async () => {
   expect(await deliver(unset, triggered(), (body) => sign("", body))).toBe(401);
 });
 
-dbTest("mints a token of the one assigned app on every request", async () => {
+dbTest("mints a token of each named account of the assigned apps on every request", async () => {
   const { factory, token } = await newFactory();
-  expect(await requestToken(pagerDutyTokenPath, token)).toEqual({
+  expect(await requestPagerDutyToken(token, "pd-first")).toEqual({
     status: 404,
-    body: { error: "No PagerDuty app is assigned to this factory." },
+    body: { error: "No PagerDuty installation named pd-first is assigned to this factory." },
   });
-  const app = await newApp();
+  const [app, second] = [await newApp(), await newApp()];
+  await nameAccount(app, "pd-first");
+  await nameAccount(second, "pd-second");
   await setAssignments(db, organizationId, app.id, [factory.id]);
-  const first = await requestToken(pagerDutyTokenPath, token);
+  await setAssignments(db, organizationId, second.id, [factory.id]);
+  const first = await requestPagerDutyToken(token, "pd-first");
   expect(first).toEqual({
     status: 200,
-    body: { token: expect.stringMatching(/^pdus\+_/), expiresAt: expect.any(String) },
+    body: {
+      token: expect.stringMatching(/^pdus\+_/),
+      expiresAt: expect.any(String),
+      from: "oncall@example.com",
+    },
   });
   expect(grants.at(-1)).toEqual({
     clientId: app.externalId,
-    scope: [`as_account-us.${app.name.replace("Jigs ", "acme-")}`, ...pagerDutyScopes].join(" "),
+    scope: [`as_account-us.${accountOf(app)}`, ...pagerDutyScopes].join(" "),
   });
-  expect((await requestToken(pagerDutyTokenPath, token)).body.token).not.toBe(first.body.token);
-  expect((await requestToken(pagerDutyTokenPath, "nope")).status).toBe(401);
+  expect((await requestPagerDutyToken(token, "pd-first")).body.token).not.toBe(first.body.token);
+  expect((await requestPagerDutyToken(token, "pd-second")).status).toBe(200);
+  expect(grants.at(-1)?.clientId).toBe(second.externalId);
+  expect((await requestPagerDutyToken("nope", "pd-first")).status).toBe(401);
+
+  // The from email an admin changes on the hub is the one the next token carries.
+  users.get(`as_account-us.${accountOf(app)}`)?.push("incidents@example.com");
+  expect(
+    await setPagerDutyFrom(db, encryptionKey, organizationId, app.id, "incidents@example.com", {
+      apiUrl: identity,
+      restApiUrl: identity,
+    }),
+  ).toEqual({ from: "incidents@example.com" });
+  expect((await requestPagerDutyToken(token, "pd-first")).body.from).toBe("incidents@example.com");
 
   const status = await fetch(`${hub}${factoryStatusPath}`, {
     headers: { authorization: `Bearer ${token}`, "user-agent": "jigs/1.2.3" },
   });
-  expect((await status.json()).apps).toEqual([
-    {
-      provider: "pagerduty",
-      name: app.name,
-      installations: [{ account: app.name.replace("Jigs ", "acme-"), installationName: null }],
-    },
-  ]);
+  expect((await status.json()).apps).toContainEqual({
+    provider: "pagerduty",
+    name: app.name,
+    installations: [{ account: accountOf(app), installationName: "pd-first" }],
+  });
 
   // PagerDuty stops taking the credentials, as when the app's secret is regenerated.
   const client = clients.get(app.externalId);
   if (client) client.secret = "regenerated";
-  expect(await requestToken(pagerDutyTokenPath, token)).toEqual({
+  expect(await requestPagerDutyToken(token, "pd-first")).toEqual({
     status: 503,
     body: {
-      error: `PagerDuty refused ${app.name}'s credentials for ${app.name.replace("Jigs ", "acme-")} (401); remove the app on the hub and add it with working ones.`,
+      error: `PagerDuty refused ${app.name}'s credentials for ${accountOf(app)} (401); remove the app on the hub and add it with working ones.`,
     },
   });
-
-  const second = await newApp();
-  await setAssignments(db, organizationId, second.id, [factory.id]);
-  expect((await requestToken(pagerDutyTokenPath, token)).status).toBe(409);
 });
