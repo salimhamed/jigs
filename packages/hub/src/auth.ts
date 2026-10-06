@@ -49,8 +49,8 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
     account: { encryptOAuthTokens: true },
     socialProviders: {
       github: {
-        clientId: config.githubClientId,
-        clientSecret: config.githubClientSecret,
+        clientId: config.signInGithubClientId,
+        clientSecret: config.signInGithubClientSecret,
       },
     },
     databaseHooks: {

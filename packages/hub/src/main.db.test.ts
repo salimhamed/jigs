@@ -29,13 +29,17 @@ async function startHub() {
       HUB_PUBLIC_URL: "https://hub.example.com",
       HUB_DATABASE_URL: database.url,
       HUB_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
-      HUB_GITHUB_CLIENT_ID: "client",
-      HUB_GITHUB_CLIENT_SECRET: "secret",
+      HUB_SIGN_IN_GITHUB_CLIENT_ID: "client",
+      HUB_SIGN_IN_GITHUB_CLIENT_SECRET: "secret",
       HUB_ADMIN_EMAIL: "admin@example.com",
     },
     stdio: ["ignore", "pipe", "pipe"],
   });
+  let stdout = "";
   let stderr = "";
+  child.stdout.on("data", (chunk) => {
+    stdout += chunk;
+  });
   child.stderr.on("data", (chunk) => {
     stderr += chunk;
   });
@@ -48,11 +52,11 @@ async function startHub() {
   const [line] = await once(child.stdout, "data");
   const url = /http:\/\/\S+/.exec(String(line))?.[0];
   expect(url).toBeDefined();
-  return { database, child, url: url as string, stderr: () => stderr };
+  return { database, child, url: url as string, stdout: () => stdout, stderr: () => stderr };
 }
 
 dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async () => {
-  const { database, child, url, stderr } = await startHub();
+  const { database, child, url, stdout, stderr } = await startHub();
 
   const health = await fetch(`${url}/health`);
   expect(health.status).toBe(200);
@@ -89,6 +93,10 @@ dbTest("serves the built hub, logs only real errors and exits on SIGTERM", async
   child.kill("SIGTERM");
   const [code, signal] = await once(child, "close");
   expect({ code, signal }).toEqual({ code: 0, signal: null });
+  expect(stdout()).toContain("sign-in app Homepage URL: https://hub.example.com\n");
+  expect(stdout()).toContain(
+    "sign-in app Redirect URI: https://hub.example.com/api/auth/callback/github\n",
+  );
   expect(stderr()).not.toContain("No route matches");
   expect(stderr()).toContain('relation "invitation" does not exist');
 });

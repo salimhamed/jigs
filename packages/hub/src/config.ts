@@ -7,13 +7,18 @@ export interface HubConfig {
   databaseUrl: string;
   /** The AES-256 key every stored secret is encrypted with. */
   encryptionKey: Buffer;
-  /** The GitHub OAuth app people sign in with. */
-  githubClientId: string;
-  githubClientSecret: string;
+  /** The sign-in app: the GitHub OAuth App people sign in to the hub with. */
+  signInGithubClientId: string;
+  signInGithubClientSecret: string;
   /** Whoever signs in with this GitHub email first creates the Organization. */
   adminEmail: string;
   /** How many days the hub keeps a factory's messages, confirmed or not. */
   retentionDays: number;
+}
+
+/** The Redirect URI the sign-in app needs on GitHub. */
+export function signInRedirectUri(publicUrl: URL): string {
+  return new URL("/api/auth/callback/github", publicUrl).href;
 }
 
 /** Read the hub's config, throwing one error that names every bad value. */
@@ -45,8 +50,8 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
     problems.push("HUB_ENCRYPTION_KEY must be 32 bytes in base64 (openssl rand -base64 32)");
   }
 
-  const githubClientId = required("HUB_GITHUB_CLIENT_ID");
-  const githubClientSecret = required("HUB_GITHUB_CLIENT_SECRET");
+  const signInGithubClientId = required("HUB_SIGN_IN_GITHUB_CLIENT_ID");
+  const signInGithubClientSecret = required("HUB_SIGN_IN_GITHUB_CLIENT_SECRET");
   const adminEmail = required("HUB_ADMIN_EMAIL");
 
   const retentionDays = Number(env.HUB_RETENTION_DAYS ?? 7);
@@ -57,7 +62,16 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
   }
 
   if (problems.length > 0) {
-    throw new Error(`The hub cannot start:\n${problems.map((p) => `  - ${p}`).join("\n")}`);
+    let message = `The hub cannot start:\n${problems.map((p) => `  - ${p}`).join("\n")}`;
+    const publicUrlIsValid = publicUrl && !problems.some((p) => p.startsWith("HUB_PUBLIC_URL"));
+    if (publicUrlIsValid && (!signInGithubClientId || !signInGithubClientSecret)) {
+      message += [
+        "\n\nCreate the sign-in app on GitHub under Developer settings → OAuth Apps, with:",
+        `  Homepage URL: ${publicUrl.origin}`,
+        `  Redirect URI: ${signInRedirectUri(publicUrl)}`,
+      ].join("\n");
+    }
+    throw new Error(message);
   }
   return {
     host: env.HOST ?? "127.0.0.1",
@@ -65,8 +79,8 @@ export function readConfig(env: NodeJS.ProcessEnv): HubConfig {
     publicUrl: publicUrl as URL,
     databaseUrl,
     encryptionKey,
-    githubClientId,
-    githubClientSecret,
+    signInGithubClientId,
+    signInGithubClientSecret,
     adminEmail,
     retentionDays,
   };

@@ -32,8 +32,24 @@ upgrade them together.
   GitHub, Linear, Slack and PagerDuty can reach, and that you and your
   factories open. A [Tailscale Funnel](#tailscale-funnel) gives you one
   without a server.
-- **A GitHub OAuth app for signing in**, described in
-  [First sign-in](#first-sign-in).
+- **A sign-in app on GitHub**, described in [First sign-in](#first-sign-in).
+
+### Two kinds of GitHub app {#github-apps}
+
+A hub uses GitHub in two separate ways, through two different kinds of app.
+Keep them apart: each has its own settings page on GitHub and its own URLs.
+
+| | Sign-in app | GitHub App |
+| --- | --- | --- |
+| What it does | Lets people sign in to the hub's web pages. | Lets factories act on GitHub, and sends the hub GitHub's webhooks. |
+| How many | Exactly one per hub. | One or more, added once the hub runs. |
+| Created under | **Developer settings → OAuth Apps** | **Developer settings → GitHub Apps** |
+| Its credentials go | In the hub's environment, as `HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`. | Into the hub's web pages, under **Apps → Add a GitHub App**. |
+| URLs it needs | **Homepage URL** and **Redirect URI**, which the hub prints. | **Webhook URL** and **Setup URL**, which the App's page on the hub shows. |
+| Set it up | [First sign-in](#first-sign-in) | [GitHub App](/guide/hub-github) |
+
+The sign-in app never receives webhooks, and a GitHub App's Webhook URL never
+goes in the sign-in app's Redirect URI.
 
 ## Settings
 
@@ -45,8 +61,8 @@ to start with a message naming every missing or bad value.
 | `HUB_PUBLIC_URL` | required | The one address people, providers and factories reach the hub at. It must be a bare origin, such as `https://hub.example.com`, with no path. Open the web app at this address: it refuses forms sent from any other. |
 | `HUB_DATABASE_URL` | required | The Postgres connection URL of the hub's database. |
 | `HUB_ENCRYPTION_KEY` | required | 32 random bytes in base64, from `openssl rand -base64 32`. Every secret the hub stores is encrypted with it, and sign-in sessions are signed with a key made from it. |
-| `HUB_GITHUB_CLIENT_ID` | required | The client ID of the GitHub OAuth app people sign in with. |
-| `HUB_GITHUB_CLIENT_SECRET` | required | That OAuth app's client secret. |
+| `HUB_SIGN_IN_GITHUB_CLIENT_ID` | required | The client ID of the [sign-in app](#first-sign-in). |
+| `HUB_SIGN_IN_GITHUB_CLIENT_SECRET` | required | The sign-in app's client secret. |
 | `HUB_ADMIN_EMAIL` | required | The email of the person who creates the Organization: the first to sign in with a GitHub account whose [sign-in email](#first-sign-in) is this one. |
 | `HUB_RETENTION_DAYS` | `7` | How many days the hub keeps a factory's provider events, confirmed or not. |
 | `HOST` | `127.0.0.1` | The address the hub listens on. Set `0.0.0.0` in a container. |
@@ -79,8 +95,8 @@ pinned to your factories' jigs version:
 HUB_PUBLIC_URL=https://hub.example.com
 HUB_DATABASE_URL=postgres://hub:hub@127.0.0.1:5490/hub
 HUB_ENCRYPTION_KEY=...
-HUB_GITHUB_CLIENT_ID=...
-HUB_GITHUB_CLIENT_SECRET=...
+HUB_SIGN_IN_GITHUB_CLIENT_ID=...
+HUB_SIGN_IN_GITHUB_CLIENT_SECRET=...
 HUB_ADMIN_EMAIL=you@example.com
 ```
 
@@ -89,8 +105,16 @@ set -a; . ./hub.env; set +a
 npx @jigs-ai/hub@<version>
 ```
 
-It prints `hub listening on http://127.0.0.1:3000`. Open `HUB_PUBLIC_URL`
-to sign in.
+It prints where it listens and the two URLs the
+[sign-in app](#first-sign-in) needs:
+
+```text
+hub listening on http://127.0.0.1:3000
+sign-in app Homepage URL: https://hub.example.com
+sign-in app Redirect URI: https://hub.example.com/api/auth/callback/github
+```
+
+Open `HUB_PUBLIC_URL` to sign in.
 
 For a local trial, `HUB_PUBLIC_URL=http://127.0.0.1:3000` works for signing
 in and adding factories, but providers cannot reach it: no webhooks arrive, and
@@ -142,10 +166,11 @@ network and use the Postgres container's name as the host.
 
 ## First sign-in {#first-sign-in}
 
-People sign in to the hub with GitHub, through a GitHub OAuth app that is
-separate from the GitHub Apps your factories act as. Create it on GitHub under
-**Settings → Developer settings → OAuth Apps → New OAuth App**, or under your
-organization's Developer settings:
+People sign in to the hub with GitHub, through the hub's **sign-in app**: a
+GitHub OAuth App, separate from the [GitHub Apps](/guide/hub-github) your
+factories act as. Create it on GitHub under **Settings → Developer settings →
+OAuth Apps → New OAuth App**, or under your organization's Developer
+settings, and set:
 
 - **Homepage URL**: `HUB_PUBLIC_URL`.
 - **Redirect URI**, under **Redirect URIs**: `HUB_PUBLIC_URL` followed by
@@ -155,8 +180,13 @@ organization's Developer settings:
   user access tokens** doesn't matter: the hub uses GitHub only to learn who
   signs in.
 
+You don't need to assemble these by hand. The hub prints both URLs each time
+it starts, and also when it refuses to start because the sign-in app's
+client ID or secret is not set yet, so you can start it once without them to
+see what to enter.
+
 Generate a client secret, and set the client ID and secret as
-`HUB_GITHUB_CLIENT_ID` and `HUB_GITHUB_CLIENT_SECRET`.
+`HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`.
 
 The hub knows a person by their GitHub account's **sign-in email**: its public
 email, or its primary email when it shows none publicly. That email must be

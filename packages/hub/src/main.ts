@@ -2,7 +2,7 @@ import type { AddressInfo } from "node:net";
 import { fromNodeHeaders } from "better-auth/node";
 import type { Request } from "express";
 import { adminOrganization, createAuth } from "./auth.ts";
-import { readConfig } from "./config.ts";
+import { readConfig, signInRedirectUri } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
 import { createGitHubRoutes } from "./github.ts";
@@ -55,6 +55,8 @@ const shutdown = new Shutdown();
 const server = createHubApp(auth, routers, web, shutdown).listen(config.port, config.host, () => {
   const address = server.address() as AddressInfo;
   console.log(`hub listening on http://${address.address}:${address.port}`);
+  console.log(`sign-in app Homepage URL: ${publicUrl.origin}`);
+  console.log(`sign-in app Redirect URI: ${signInRedirectUri(publicUrl)}`);
 });
 
 process.once("SIGTERM", async () => {

@@ -231,6 +231,11 @@ Linear OAuth app, a Slack bot or a PagerDuty connection. A provider can have
 several.
 _Avoid_: integration, connection or bot (for the general term)
 
+**Sign-in app**: The GitHub OAuth App people sign in to a hub's web pages
+with. One per hub, set in the hub's environment; it is not an **App** in the sense above, belongs to
+no Organization, and no factory uses it.
+_Avoid_: OAuth app, login app, GitHub app (for this one)
+
 **Installation**: Where an app is installed or connected: a GitHub account, a
 Linear workspace, a Slack workspace or a PagerDuty account. Tokens are for one
 installation.
