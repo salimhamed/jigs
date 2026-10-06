@@ -155,8 +155,8 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "github.identity",
-    "linear.identity",
+    "github.installations",
+    "linear.installations",
   ]);
   for (const failure of body.failures) {
     expect(failure.reason).not.toBe("");
@@ -188,7 +188,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
   const workspace = makeTmpDir();
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { playground: { remote: remoteDir } },
+    bindings: { playground: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   await ensureBindingClone({
@@ -217,7 +217,7 @@ test("GET /api/doctor reports rejected configured credentials without creating a
   };
   expect(body.ok).toBe(false);
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
-  expect(failed.map((check) => check.id)).toContain("github.identity");
+  expect(failed.map((check) => check.id)).toContain("github.installations");
   for (const failure of failed) expect(failure.repair).not.toBe("");
   // Doctor reads every workflow's manifest for the harnesses the factory uses.
   expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
@@ -231,7 +231,7 @@ test("a green preflight lets the trigger call start()", async () => {
   // ls-remote against the URL, and this one answers offline.
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { api: { remote: remoteDir } },
+    bindings: { api: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
@@ -250,6 +250,14 @@ test("a green preflight lets the trigger call start()", async () => {
         app: { name: "jigs", userId: "app-user" },
       });
     }
+    if (url === "https://hub.example.test/api/factory/tokens/github") {
+      return Response.json({
+        token: "ghs_test",
+        expiresAt: "2999-01-01T00:00:00Z",
+        account: "acme",
+        app: { slug: "jigs-dev", botUserId: 1 },
+      });
+    }
     if (url === "https://hub.example.test/api/factory/status") {
       return Response.json({
         factory: { name: "dev" },
@@ -258,7 +266,12 @@ test("a green preflight lets the trigger call start()", async () => {
           {
             provider: "github",
             name: "jigs-dev",
-            installations: [{ account: "acme", installationName: null }],
+            installations: [{ account: "acme", installationName: "acme" }],
+          },
+          {
+            provider: "linear",
+            name: "jigs",
+            installations: [{ account: "Acme", installationName: "acme-linear" }],
           },
         ],
       });

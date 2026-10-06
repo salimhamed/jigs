@@ -33,20 +33,22 @@ afterAll(() => {
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-// A source whose pushed events are `{ page, at }` objects.
+// A source whose pushed payloads are `{ page, at }` objects.
 function fakeSource() {
   const source: Source<{ service: string }> = {
     provider: "github",
     params: z.object({ service: z.string() }),
     sampleInputs: { page: "P0" },
     fromPush: async (_params, event) => {
-      const { page, at } = event as { page?: string; at?: Date };
+      const { page, at } = event.payload as { page?: string; at?: Date };
       return page === undefined ? null : { key: page, inputs: { page }, at: at ?? minutes(1) };
     },
     describe: (inputs) => `page ${String(inputs.page)}`,
   };
   return { source };
 }
+
+const pushed = (payload: unknown) => ({ installationName: "acme", payload });
 
 const memoryStore = (now: () => Date = () => T0) => memoryTriggerStore(now, T0);
 
@@ -218,7 +220,8 @@ function harness(
     sources,
     /** Push each occurrence, then start what is waiting. */
     see: async (...occurrences: SourceOccurrence[]) => {
-      for (const { inputs, at } of occurrences) await engine.push("github", { ...inputs, at });
+      for (const { inputs, at } of occurrences)
+        await engine.push("github", pushed({ ...inputs, at }));
       await engine.drain();
     },
     /** The queued deliveries create their runs. */
@@ -267,8 +270,8 @@ test("an occurrence pushed twice starts one run", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(2));
-  expect(await h.engine.push("github", { page: "P1" })).toEqual(["pages"]);
-  expect(await h.engine.push("github", { page: "P1" })).toEqual([]);
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual([]);
   await h.engine.drain();
 
   expect(h.starts).toEqual([
@@ -294,7 +297,7 @@ test("a pushed event is recorded and started, and answers before the run starts"
   await h.engine.arm();
   h.at(minutes(2));
 
-  expect(await h.engine.push("github", { page: "P7" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P7" }))).toEqual(["pages"]);
   expect(h.memory.state("pages", "P7")?.state).toBe("pending");
   release();
   await h.engine.drain();
@@ -304,8 +307,8 @@ test("a pushed event is recorded and started, and answers before the run starts"
 test("a push for another provider, or not an occurrence, is not taken", async () => {
   const h = harness();
   await h.engine.arm();
-  expect(await h.engine.push("linear", { page: "P1" })).toEqual([]);
-  expect(await h.engine.push("github", { other: true })).toEqual([]);
+  expect(await h.engine.push("linear", pushed({ page: "P1" }))).toEqual([]);
+  expect(await h.engine.push("github", pushed({ other: true }))).toEqual([]);
   expect(h.memory.rows.size).toBe(0);
 });
 
@@ -336,7 +339,7 @@ test("runs this trigger did not start do not count against its cap", async () =>
   const h = harness({ runs, trigger: { ...pagesTrigger, maxActive: 1 } });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
+  await h.engine.push("github", pushed({ page: "P1" }));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
 });
@@ -438,7 +441,7 @@ test("a start that fails preflight is recorded failed with its report, and never
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P5" });
+  await h.engine.push("github", pushed({ page: "P5" }));
   await h.engine.drain();
   await h.engine.drain();
 
@@ -459,7 +462,7 @@ test("inputs the workflow rejects at start are recorded failed with a repair", a
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P6" });
+  await h.engine.push("github", pushed({ page: "P6" }));
   await h.engine.drain();
   const report = h.memory.state("pages", "P6")?.report;
   expect(report?.checks[0]).toMatchObject({
@@ -479,7 +482,7 @@ test("a preflight that throws is retried without an attempt, and keeps its own c
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
+  await h.engine.push("github", pushed({ page: "P1" }));
   await h.engine.drain();
   // The push's own drain, then this one: each a plain retry.
   expect(calls).toBe(2);
@@ -618,7 +621,7 @@ test("a first arm whose markers fail still starts the settle clock, so an unconf
   await expect(h.engine.arm()).rejects.toThrow("db blip");
   await pendingRow(h.memory.store, "P1", T0);
   // A later push retries the markers; the drain starts P1, whose start throws.
-  await h.engine.push("github", { other: true });
+  await h.engine.push("github", pushed({ other: true }));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
   h.at(minutes(4));
@@ -994,7 +997,7 @@ test("a push after a restart answers without waiting for the leftover backlog to
   h.at(minutes(2));
 
   // The leftover start is still held behind its gate.
-  expect(await h.engine.push("github", { page: "P2" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P2" }))).toEqual(["pages"]);
   open();
   await h.engine.drain();
   expect(h.memory.state("pages", "P2")?.state).toBe("started");
@@ -1013,11 +1016,11 @@ test("a push whose occurrence could not be recorded rejects, and its redelivery 
   const h = harness({ store: flaky });
   await h.engine.arm();
   h.at(minutes(10));
-  await expect(h.engine.push("github", { page: "P9", at: minutes(4) })).rejects.toThrow(
+  await expect(h.engine.push("github", pushed({ page: "P9", at: minutes(4) }))).rejects.toThrow(
     "1 trigger(s) could not read the event",
   );
   failing = false;
-  expect(await h.engine.push("github", { page: "P9", at: minutes(4) })).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P9", at: minutes(4) }))).toEqual(["pages"]);
   await h.engine.drain();
   expect(memory.state("pages", "P9")?.state).toBe("started");
 });
@@ -1031,7 +1034,7 @@ test("one trigger's failing start holds up no other trigger", async () => {
   });
   await h.engine.arm();
   h.at(minutes(2));
-  expect(await h.engine.push("github", { page: "P1" })).toEqual(["alpha", "beta"]);
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual(["alpha", "beta"]);
   await h.engine.drain();
   expect(h.memory.state("alpha", "P1")?.state).toBe("pending");
   expect(h.memory.state("beta", "P1")?.state).toBe("started");
@@ -1048,8 +1051,8 @@ test("stopping waits for the start in flight and starts nothing after", async ()
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
-  await h.engine.push("github", { page: "P2" });
+  await h.engine.push("github", pushed({ page: "P1" }));
+  await h.engine.push("github", pushed({ page: "P2" }));
   await vi.waitFor(() => expect(starts).toBe(1));
 
   let settled = false;
@@ -1157,7 +1160,7 @@ test("a failed arm at boot is retried by the next push, and the drain timer stil
   await vi.waitFor(() => expect(timers.map((timer) => timer.ms)).toEqual([30_000]));
   expect(lines[0]).toContain("could not enable triggers, retrying on each push");
   expect(memory.marks.get("pages")).toBeUndefined();
-  await engine.push("github", { other: true });
+  await engine.push("github", pushed({ other: true }));
   expect(memory.marks.get("pages")).toEqual({ enabledAt: T0 });
 });
 

@@ -229,8 +229,19 @@ program
     "--binding-name <binding-name>",
     "binding name (default: an existing exact-remote match, else the repo name lowercased)",
   )
-  .action(async (remoteUrl: string, options: { bindingName?: string }) => {
-    await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.bindingName });
+  .option(
+    "--installation <installation-name>",
+    "the GitHub App installation, as named on the hub, that reaches the repo (default: the binding's own)",
+  )
+  .action(async (remoteUrl: string, options: { bindingName?: string; installation?: string }) => {
+    await bindRepo(
+      remoteUrl,
+      { cwd: process.cwd(), out },
+      {
+        ...(options.bindingName === undefined ? {} : { name: options.bindingName }),
+        ...(options.installation === undefined ? {} : { installation: options.installation }),
+      },
+    );
   });
 
 program

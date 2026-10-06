@@ -1,58 +1,76 @@
+import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import { expect, test } from "vitest";
-import { testFactoryContext } from "../test-fixtures.ts";
-import { runChecks } from "./catalog.ts";
-import { hubAppChecks } from "./hub.ts";
+import { JigsError } from "../errors.ts";
+import type { CheckResult } from "./check.ts";
+import { installationsCheck } from "./hub.ts";
 
 const status =
-  (apps: Array<{ provider: string; name: string; accounts: string[] }>) => async () => ({
+  (installations: Array<{ provider: "slack" | "github"; installationName: string | null }>) =>
+  async (): Promise<FactoryStatus> => ({
     factory: { name: "f" },
     organization: { name: "o" },
-    apps: apps.map(({ provider, name, accounts }) => ({
-      provider: provider as "slack",
-      name,
-      installations: accounts.map((account) => ({ account, installationName: null })),
+    apps: installations.map(({ provider, installationName }) => ({
+      provider,
+      name: "jigs",
+      installations: [{ account: "Acme", installationName }],
     })),
   });
 
-const outcome = async (
-  apps: Parameters<typeof status>[0],
-  provider: "slack" | "pagerduty" = "slack",
-) => (await runChecks(hubAppChecks(testFactoryContext(), provider, status(apps)))).checks[0];
+const probed: string[] = [];
+const probe = async (installationName: string): Promise<CheckResult> => {
+  probed.push(installationName);
+  return installationName.startsWith("bad")
+    ? { ok: false, reason: "no token", repair: `name ${installationName}` }
+    : { ok: true, detail: "acting as jigs" };
+};
 
-test("an assigned Slack app passes, naming its workspaces", async () => {
-  expect(await outcome([{ provider: "slack", name: "jigs", accounts: ["Acme"] }])).toEqual({
-    id: "hub.slack",
-    label: "hub Slack app",
-    ok: true,
-    detail: "jigs in Acme",
-  });
-});
+const run = (options: Partial<Parameters<typeof installationsCheck>[1]>) => {
+  probed.length = 0;
+  return installationsCheck("slack", { declared: [], probe, ...options }).run();
+};
 
-test("no Slack app assigned fails with the repair", async () => {
-  expect(await outcome([{ provider: "github", name: "jigs", accounts: ["acme"] }])).toMatchObject({
-    ok: false,
-    reason: "no Slack app is assigned to this factory on the hub",
-    repair: expect.stringContaining("assign this factory a Slack app"),
-  });
-});
-
-test("an assigned PagerDuty app passes, naming its account", async () => {
+test("every declared and every named assigned installation is probed once", async () => {
   expect(
-    await outcome([{ provider: "pagerduty", name: "jigs-pd", accounts: ["acme"] }], "pagerduty"),
+    await run({
+      declared: ["acme", "acme"],
+      status: status([
+        { provider: "slack", installationName: "acme" },
+        { provider: "slack", installationName: "beta" },
+        { provider: "slack", installationName: null },
+        { provider: "github", installationName: "gh" },
+      ]),
+    }),
+  ).toEqual({ ok: true, detail: "acme: acting as jigs; beta: acting as jigs" });
+  expect(probed).toEqual(["acme", "beta"]);
+});
+
+test("a failing installation is named with its own reason and repair", async () => {
+  expect(await run({ declared: ["acme", "bad-one", "bad-two"] })).toEqual({
+    ok: false,
+    reason: "bad-one: no token; bad-two: no token",
+    repair: "name bad-one\nname bad-two",
+  });
+});
+
+test("no named installation fails with the repair on the hub", async () => {
+  expect(await run({ status: status([{ provider: "slack", installationName: null }]) })).toEqual({
+    ok: false,
+    reason: "no Slack installation is named and assigned to this factory on the hub",
+    repair: expect.stringContaining("in the hub, name an installation of a Slack app"),
+  });
+});
+
+test("a hub that cannot answer fails with its own repair", async () => {
+  expect(
+    await run({
+      status: async () => {
+        throw new JigsError("JIGS_HUB_TOKEN is not set", "connect the factory");
+      },
+    }),
   ).toEqual({
-    id: "hub.pagerduty",
-    label: "hub PagerDuty app",
-    ok: true,
-    detail: "jigs-pd in acme",
-  });
-});
-
-test("no PagerDuty app assigned fails with the repair", async () => {
-  expect(
-    await outcome([{ provider: "slack", name: "jigs", accounts: ["Acme"] }], "pagerduty"),
-  ).toMatchObject({
     ok: false,
-    reason: "no PagerDuty app is assigned to this factory on the hub",
-    repair: expect.stringContaining("assign this factory a PagerDuty app"),
+    reason:
+      "could not read this factory's Slack installations from the hub: JIGS_HUB_TOKEN is not set",
+    repair: "connect the factory",
   });
 });

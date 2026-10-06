@@ -2,7 +2,7 @@ import { afterAll, describe, expect, test, vi } from "vitest";
 import {
   PAGERDUTY_API_URL,
   type PagerDutyIncident,
-  pagerDutyClientFor,
+  pagerDutyFor,
 } from "../../providers/pagerduty.ts";
 import { livePagerDutyClient, waitForLiveIncident } from "../../providers/test-fixtures.ts";
 import { fetchIncidentSnapshot } from "./fetch-snapshot.ts";
@@ -14,7 +14,7 @@ import { postIncidentNote } from "./notes.ts";
 // PAGERDUTY_EVENTS_ROUTING_KEY set.
 vi.mock("../../providers/pagerduty.ts", async (importOriginal) => ({
   ...(await importOriginal<typeof import("../../providers/pagerduty.ts")>()),
-  pagerDutyClientFor: vi.fn(),
+  pagerDutyFor: vi.fn(),
 }));
 
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
@@ -26,7 +26,7 @@ const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 
 describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
   const client = livePagerDutyClient(token ?? "", from ?? "");
-  vi.mocked(pagerDutyClientFor).mockReturnValue(client);
+  vi.mocked(pagerDutyFor).mockReturnValue(client);
 
   const dedupKey = `jigs-live-test-${crypto.randomUUID()}`;
   const enqueue = (action: "trigger" | "resolve") =>
@@ -61,7 +61,10 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
   test("reads the incident, then notes it once, naming the run", async () => {
     const incident = await openIncident();
 
-    const snapshot = await fetchIncidentSnapshot(incident.id);
+    const snapshot = await fetchIncidentSnapshot({
+      installationName: "pagerduty-live",
+      incidentId: incident.id,
+    });
     expect(snapshot).toMatchObject({
       id: incident.id,
       number: incident.incident_number,
@@ -74,9 +77,14 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
     for (const assignee of snapshot.assignees) expect(assignee.id).toMatch(/^P/);
 
     const runId = `wrun_live_${dedupKey.slice(-8)}`;
-    const { noteId } = await postIncidentNote(incident.id, "jigs live test note.", {
-      workflowRunId: runId,
-    });
+    const { noteId } = await postIncidentNote(
+      {
+        installationName: "pagerduty-live",
+        incidentId: incident.id,
+        content: "jigs live test note.",
+      },
+      { workflowRunId: runId },
+    );
     expect(noteId).toMatch(/^P/);
 
     const res = await fetch(`${PAGERDUTY_API_URL}/incidents/${incident.id}/notes`, {

@@ -12,9 +12,10 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { reviewTicket } from "./review-ticket.ts";
 
 const claim = {
+  installationName: "linear-acme",
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   identifier: "AGE-313",
-  token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
+  token: "linear:ticket:linear-acme:68bc9696-35d5-442d-ab56-214c8cfefbec",
   postedCommentIds: [] as string[],
 } as TicketClaim;
 
@@ -68,8 +69,8 @@ vi.mock("#jigs/routines", () => ({
 
 // The reply landed on the ticket, so each re-read carries one more comment.
 vi.mock("#jigs/steps", () => ({
-  fetchTicketSnapshot: async (issueId: string) => {
-    fake.fetched.push(issueId);
+  fetchTicketSnapshot: async (request: { installationName: string; issueId: string }) => {
+    fake.fetched.push(`${request.installationName}:${request.issueId}`);
     return {
       ...snapshot,
       description: `${snapshot.description}\n\nRound ${fake.fetched.length}: ${reply.body}`,
@@ -202,7 +203,7 @@ test("each needs-human round re-reads the ticket, so the reply is what the next 
 
   expect(fake.agentCalls).toHaveLength(3);
   expect(fake.humanCalls).toHaveLength(2);
-  expect(fake.fetched).toEqual([snapshot.id, snapshot.id]);
+  expect(fake.fetched).toEqual([`linear-acme:${snapshot.id}`, `linear-acme:${snapshot.id}`]);
   expect(fake.agentCalls[0]?.prompt).not.toContain("cap comments at 100");
   expect(fake.agentCalls[1]?.prompt).toContain("Round 1: cap comments at 100");
   expect(fake.agentCalls[2]?.prompt).toContain("Round 2: cap comments at 100");

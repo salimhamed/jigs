@@ -1,12 +1,12 @@
 // The one credential source behind every Linear call jigs makes: an access
-// token of the factory's Linear app, handed out by the hub. Reads the
-// environment and the network, so it is only reached from a step, a check or
-// the CLI — never from workflow code.
+// token of one of the factory's Linear installations, handed out by the hub.
+// Reads the environment and the network, so it is only reached from a step, a
+// check or the CLI — never from workflow code.
 
 import type { FactoryContext } from "../config/factory-context.ts";
-import { createHubTokens, perContext } from "./credentials.ts";
+import type { HubTokens } from "./credentials.ts";
 import type { ProviderAuth } from "./http.ts";
-import { hubToken } from "./hub.ts";
+import { installationTokens } from "./installation-tokens.ts";
 
 export const LINEAR_API_URL = "https://api.linear.app/graphql";
 
@@ -23,21 +23,12 @@ export interface LinearAuth extends ProviderAuth {
   user(): Promise<LinearAppUser>;
 }
 
-export interface LinearAuthDeps {
-  now?: () => number;
-  issue(organization: string | undefined): Promise<{
-    token: string;
-    expiresAt: string;
-    app: { name: string; userId: string };
-  }>;
-}
+type LinearTokens = Pick<
+  HubTokens<{ token: string; app: { name: string; userId: string } }>,
+  "issued" | "bearer" | "invalidate"
+>;
 
-/** The credential for one workspace, or for the only one when `organization` is left out. */
-export function createLinearAuth(
-  organization: string | undefined,
-  deps: LinearAuthDeps,
-): LinearAuth {
-  const tokens = createHubTokens(() => deps.issue(organization), deps.now);
+export function createLinearAuth(tokens: LinearTokens): LinearAuth {
   return {
     bearer: tokens.bearer,
     invalidate: tokens.invalidate,
@@ -48,21 +39,6 @@ export function createLinearAuth(
   };
 }
 
-const factoryLinear = perContext((ctx) => ({
-  ctx,
-  auths: new Map<string | undefined, LinearAuth>(),
-}));
-
-/** The factory's Linear credential for one workspace, created once per factory. */
-export function linearAuthFor(ctx?: FactoryContext, organization?: string): LinearAuth {
-  const linear = factoryLinear(ctx);
-  let auth = linear.auths.get(organization);
-  if (!auth) {
-    auth = createLinearAuth(organization, {
-      issue: (named) =>
-        hubToken("linear", named === undefined ? {} : { organization: named }, linear.ctx),
-    });
-    linear.auths.set(organization, auth);
-  }
-  return auth;
-}
+/** The credential for one Linear installation. */
+export const linearAuthFor = (installationName: string, ctx?: FactoryContext): LinearAuth =>
+  createLinearAuth(installationTokens("linear", installationName, ctx));

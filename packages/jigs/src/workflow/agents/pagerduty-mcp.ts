@@ -36,7 +36,7 @@ export type PagerdutyMcpOptions = {
  *
  * const triager = harnesses.claude({
  *   model: "opus",
- *   pagerduty: true,
+ *   pagerduty: { installationName: "pagerduty-acme" },
  *   mcpServers: { pagerduty: pagerdutyMcp() },
  * });
  * ```

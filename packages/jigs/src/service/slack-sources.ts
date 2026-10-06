@@ -3,10 +3,12 @@
 
 import { z } from "zod";
 import { type SlackBot, type SlackMessage, slackBot } from "../providers/slack.ts";
+import { installationNameSchema } from "../workflow/factory-schema.ts";
 import type { Source, SourceOccurrence } from "./event-triggers/sources.ts";
 
 // A direct message's ID starts with D, so a trigger can never name one.
 const paramsSchema = z.strictObject({
+  installationName: installationNameSchema,
   channels: z
     .array(z.string().regex(/^[CG][A-Z0-9]+$/, "must be a channel ID such as C0123ABCD"))
     .min(1),
@@ -42,9 +44,9 @@ function startsRun(message: SlackMessage, bot: SlackBot, mentionsOnly: boolean):
   return !mentionsOnly || (message.text ?? "").includes(`<@${bot.userId}>`);
 }
 
-const occurred = (channel: string, ts: string): SourceOccurrence => ({
+const occurred = (installationName: string, channel: string, ts: string): SourceOccurrence => ({
   key: `${channel}:${ts}`,
-  inputs: { channel, ts },
+  inputs: { installationName, channel, ts },
   at: new Date(Number(ts) * 1000),
 });
 
@@ -52,15 +54,16 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
   return {
     provider: "slack",
     params: paramsSchema,
-    sampleInputs: { channel: "C0123ABCD", ts: "1790723244.335019" },
-    async fromPush({ channels }, body) {
-      const callback = callbackSchema.safeParse(body).data;
+    sampleInputs: { installationName: "acme", channel: "C0123ABCD", ts: "1790723244.335019" },
+    async fromPush({ installationName, channels }, event) {
+      if (event.installationName !== installationName) return null;
+      const callback = callbackSchema.safeParse(event.payload).data;
       if (callback === undefined) return null;
       const message = callback.event as SlackMessageEvent;
       if (!channels.includes(message.channel)) return null;
       if (!CHANNEL_TYPES.has(message.channel_type ?? "")) return null;
-      return startsRun(message, await slackBot(), mentionsOnly)
-        ? occurred(message.channel, message.ts)
+      return startsRun(message, await slackBot(installationName), mentionsOnly)
+        ? occurred(installationName, message.channel, message.ts)
         : null;
     },
     describe: ({ channel, ts }) => `slack ${String(channel)} ${String(ts)}`,

@@ -39,6 +39,7 @@ vi.mock("../../config/factory-context.ts", async (original) =>
 
 const worktree = {
   binding: "api",
+  installationName: "github-acme",
   path: "/work",
   branch: "feature",
   defaultBranch: "main",
@@ -76,7 +77,7 @@ afterEach(() => {
 test("a GitHub remote is pushed to over HTTPS, with the token beside the URL rather than in it", async () => {
   vi.mocked(pushCommit).mockResolvedValueOnce({ created: true });
   await pushApprovedChange(worktree, "approved");
-  expect(githubAuthFor).toHaveBeenLastCalledWith("acme");
+  expect(githubAuthFor).toHaveBeenLastCalledWith("github-acme");
   const target = { remote: "https://github.com/acme/api.git", token: "ghs_installation" };
   expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", target);
   await pushBranch(worktree);

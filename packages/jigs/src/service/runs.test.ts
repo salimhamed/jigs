@@ -106,6 +106,7 @@ function reviewApproval(): void {
     bearer: async () => "t",
     invalidate: () => {},
     bot: async () => ({ login: "jigs-dev[bot]", id: 1 }),
+    account: async () => "acme",
   });
 }
 
@@ -133,6 +134,7 @@ test.each([
     blocker,
   });
   expect(github.fetchPrSnapshot).toHaveBeenCalledExactlyOnceWith({
+    installationName: "acme",
     owner: "acme",
     repo: "api",
     number: 41,
@@ -153,12 +155,26 @@ test("a run reads the wake it was sent, and never another run's", async () => {
 });
 
 test("a run parked on a human reads the wake its ticket claim was sent", async () => {
-  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear unavailable"));
-  const halted = describeSuspension(needsHumanToken("issue-1", "comment-1"));
-  recordWake(ticketToken("issue-1"), RUN_B, "linear Comment", new Date("2026-09-16T10:05:00Z"));
+  vi.spyOn(linear, "linearFor").mockReturnValue({
+    getComment: async () => {
+      throw new Error("Linear unavailable");
+    },
+  } as unknown as linear.LinearClient);
+  const halted = describeSuspension(needsHumanToken("acme", "issue-1", "comment-1"));
+  recordWake(
+    ticketToken("acme", "issue-1"),
+    RUN_B,
+    "linear Comment",
+    new Date("2026-09-16T10:05:00Z"),
+  );
   expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toBeUndefined();
 
-  recordWake(ticketToken("issue-1"), RUN_A, "linear Comment", new Date("2026-09-16T10:06:00Z"));
+  recordWake(
+    ticketToken("acme", "issue-1"),
+    RUN_A,
+    "linear Comment",
+    new Date("2026-09-16T10:06:00Z"),
+  );
   expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toEqual({
     kind: "linear Comment",
     at: "2026-09-16T10:06:00.000Z",
@@ -166,7 +182,7 @@ test("a run parked on a human reads the wake its ticket claim was sent", async (
 });
 
 test("a run parked on a Slack thread reads the wake that thread was sent", async () => {
-  const token = slackThreadToken("C0C5EUZ7P9Q", "1790723478.961719");
+  const token = slackThreadToken("acme", "C0C5EUZ7P9Q", "1790723478.961719");
   recordWake(token, RUN_A, "slack reply", new Date("2026-09-16T10:06:00Z"));
   expect(
     (await enrichSuspensions([describeSuspension(token) as RunSuspension], RUN_A))[0]?.lastWake,
@@ -306,7 +322,12 @@ const worldRun = (over: Partial<StoredRun> = {}): StoredRun => ({
 // written down, and what the listing has to read it back out of.
 const storedArgs = (triggerId: string) => [[1], { triggerId: 2 }, triggerId];
 
-const PARK_TOKEN = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+const PARK_TOKEN = pullRequestToken({
+  installationName: "acme",
+  owner: "acme",
+  repo: "api",
+  number: 41,
+});
 
 test("the listing follows every SDK cursor", async () => {
   world({ runPages: [[worldRun({ runId: RUN_B })], [worldRun()]] });
@@ -375,7 +396,7 @@ test("describeRunState is the one thing status list and detail both read", async
 test("a run holding only its ticket claim is not parked", async () => {
   world({
     runs: [worldRun()],
-    hooks: [{ runId: RUN_A, token: ticketToken(crypto.randomUUID()) }],
+    hooks: [{ runId: RUN_A, token: ticketToken("acme", crypto.randomUUID()) }],
   });
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("running");

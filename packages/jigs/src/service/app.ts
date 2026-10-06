@@ -21,7 +21,7 @@ import type { Factory } from "../workflow/factory.ts";
 import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { triggerStore } from "./event-triggers/store.ts";
-import { listTriggers, triggerChecks, triggerProviders } from "./event-triggers/view.ts";
+import { listTriggers, triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
 import { startRun } from "./launch.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
@@ -159,7 +159,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
   app.get("/api/doctor", async (_request, response) =>
     response.json(
       await runDoctorChecks([
-        ...doctorChecks(factory.workflows, triggerProviders(factory), context()),
+        ...doctorChecks(factory.workflows, triggerInstallations(factory), context()),
         ...scheduleChecks(factory),
         ...triggerChecks(factory, undefined, { store: triggers }),
       ]),

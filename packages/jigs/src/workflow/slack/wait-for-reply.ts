@@ -22,6 +22,8 @@ export interface SlackReplySteps {
  * @group Slack messages
  */
 export interface SlackQuestion {
+  /** The Slack installation, as named on the hub, the thread is read through; only its events wake the wait. */
+  installationName: string;
   channel: string;
   threadTs: string;
   lastRead: string;
@@ -73,7 +75,7 @@ export async function waitForSlackReply(
   steps: SlackReplySteps,
 ): Promise<SlackReplyResult> {
   const { fetchSlackMessage } = steps;
-  const { channel, threadTs, lastRead, until } = question;
+  const { installationName, channel, threadTs, lastRead, until } = question;
   const deadline = until === undefined ? undefined : new Date(until);
   if (
     deadline !== undefined &&
@@ -81,14 +83,14 @@ export async function waitForSlackReply(
   ) {
     throw new JigsError(`until must be an ISO 8601 timestamp, got ${JSON.stringify(until)}`);
   }
-  const token = slackThreadToken(channel, threadTs);
+  const token = slackThreadToken(installationName, channel, threadTs);
   // The wake carries nothing; it only makes the routine read the thread again.
   const hook = createHook<unknown>({ token });
   let expired: Promise<"timed-out"> | undefined;
   try {
     const since = tsValue(lastRead);
     while (true) {
-      const thread = await fetchSlackMessage({ channel, ts: threadTs });
+      const thread = await fetchSlackMessage({ installationName, channel, ts: threadTs });
       if (thread.gone) return { outcome: "gone" };
       const replies = thread.replies.filter((post) => !post.author.bot && tsValue(post.ts) > since);
       if (replies.length > 0) return { outcome: "replied", replies };

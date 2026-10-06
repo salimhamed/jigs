@@ -56,7 +56,7 @@ test("a finished step and the park that follows it are two lines, in that order"
     lastStep: { name: "createPullRequest", status: "completed", at: "2026-08-26T12:00:00.000Z" },
     suspensions: [
       {
-        token: "github:pr:acme/api#41",
+        token: "github:pr:acme:acme/api#41",
         kind: "pull-request",
         reason: "waiting for an approving review and green CI on acme/api#41",
         url: "https://github.com/acme/api/pull/41",
@@ -73,7 +73,7 @@ test("a finished step and the park that follows it are two lines, in that order"
 
 const parked = run({
   suspensions: [
-    { token: "github:pr:acme/api#41", kind: "pull-request", reason: "waiting on acme/api#41" },
+    { token: "github:pr:acme:acme/api#41", kind: "pull-request", reason: "waiting on acme/api#41" },
   ],
 });
 

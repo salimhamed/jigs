@@ -155,48 +155,44 @@ function editableBindings(text: string, manualEdit?: string) {
   };
 }
 
-export function upsertBinding(text: string, name: string, remote: string): string {
+export function upsertBinding(
+  text: string,
+  name: string,
+  entry: { remote: string; installationName: string },
+): string {
+  const initializer = `{ remote: ${JSON.stringify(entry.remote)}, installationName: ${JSON.stringify(entry.installationName)} }`;
   const {
     source,
     object,
     property: bindingsProperty,
     insertedBindings,
     fail,
-  } = editableBindings(
-    text,
-    `the binding to add: \`${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }\``,
-  );
+  } = editableBindings(text, `the binding to add: \`${JSON.stringify(name)}: ${initializer}\``);
   const property = namedProperty(object, name) as PropertyAssignment | undefined;
   if (!property) {
     if (insertedBindings) {
-      object.addPropertyAssignment({
-        name: propertyKey(name),
-        initializer: `{ remote: ${JSON.stringify(remote)} }`,
-      });
+      object.addPropertyAssignment({ name: propertyKey(name), initializer });
       return source.getFullText();
     }
-    return insertEntry(
-      text,
-      object,
-      bindingsProperty,
-      `${propertyKey(name)}: { remote: ${JSON.stringify(remote)} },`,
-    );
-  } else {
-    const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
-    const remoteProperty = namedProperty(binding, "remote") as PropertyAssignment | undefined;
-    if (remoteProperty) {
-      const value = remoteProperty.getInitializer();
-      if (!value || !Node.isStringLiteral(value))
-        fail(`binding ${name}'s remote is not a string literal`);
-      if ((value as StringLiteral).getLiteralValue() === remote) return text;
-      remoteProperty.setInitializer(JSON.stringify(remote));
-    } else
-      binding.addPropertyAssignment({
-        name: "remote",
-        initializer: JSON.stringify(remote),
-      });
+    return insertEntry(text, object, bindingsProperty, `${propertyKey(name)}: ${initializer},`);
   }
-  return source.getFullText();
+  const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
+  let changed = false;
+  for (const [key, wanted] of Object.entries(entry)) {
+    const existing = namedProperty(binding, key) as PropertyAssignment | undefined;
+    if (!existing) {
+      binding.addPropertyAssignment({ name: key, initializer: JSON.stringify(wanted) });
+      changed = true;
+      continue;
+    }
+    const value = existing.getInitializer();
+    if (!value || !Node.isStringLiteral(value))
+      fail(`binding ${name}'s ${key} is not a string literal`);
+    if ((value as StringLiteral).getLiteralValue() === wanted) continue;
+    existing.setInitializer(JSON.stringify(wanted));
+    changed = true;
+  }
+  return changed ? source.getFullText() : text;
 }
 
 export function removeBinding(text: string, name: string): string {

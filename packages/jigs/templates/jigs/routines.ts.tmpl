@@ -109,12 +109,13 @@ export const haltForHuman = linear.haltForHuman;
 export const noteOnTicket = linear.noteOnTicket;
 
 /**
- * Resolve a Linear ticket, claim it, and read its requirements, before any protected work.
+ * Resolve a Linear ticket in the named Linear installation, claim it, and read its requirements,
+ * before any protected work.
  *
  * @group Linear and human input
  */
-export const acquireTicket = (reference: string) =>
-  acquireTicketRoutine(reference, { resolveLinearIssue, fetchTicketSnapshot });
+export const acquireTicket = (ticket: { installationName: string; reference: string }) =>
+  acquireTicketRoutine(ticket, { resolveLinearIssue, fetchTicketSnapshot });
 
 export const {
   /**

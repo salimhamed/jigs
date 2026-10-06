@@ -10,7 +10,7 @@ import { doctorChecks, preflightChecks } from "./index.ts";
 
 inTestFactory();
 
-const builder = harnesses.codex({ model: "m", github: true });
+const builder = harnesses.codex({ model: "m", github: { installationName: "acme" } });
 const installed = { exec: async () => ({}), factoryEnv: () => [] };
 
 test("no harness opts in, so nothing is checked", () => {
@@ -38,7 +38,7 @@ test("a missing gh fails with how to install it", async () => {
 test("preflight checks a workflow's opted-in agents", () => {
   const ids = (agents: Record<string, ReturnType<typeof harnesses.codex>>) =>
     preflightChecks({ agents }).map((check) => check.id);
-  expect(ids({ builder })).toEqual(expect.arrayContaining(["github.identity", "agent.gh"]));
+  expect(ids({ builder })).toEqual(expect.arrayContaining(["github.installations", "agent.gh"]));
   expect(ids({ builder: harnesses.codex({ model: "m" }) })).not.toContain("agent.gh");
 });
 
@@ -55,11 +55,11 @@ test("doctor checks github-mcp-server is installed instead of probing it without
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   const withMcp = harnesses.claude({
     model: "m",
-    github: true,
+    github: { installationName: "acme" },
     mcpServers: { github: githubMcp() },
   });
   const checks = doctorChecks({ ship: { requires: { agents: { builder: withMcp } } } });
   const ids = checks.map((check) => check.id);
-  expect(ids).toEqual(expect.arrayContaining(["github.identity", "agent.gh", "mcp.github"]));
+  expect(ids).toEqual(expect.arrayContaining(["github.installations", "agent.gh", "mcp.github"]));
   expect(checks.find((check) => check.id === "mcp.github")?.label).toBe("MCP server github");
 });

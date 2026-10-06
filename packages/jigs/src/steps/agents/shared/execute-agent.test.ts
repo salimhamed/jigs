@@ -1662,7 +1662,7 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
       return undefined;
     },
   };
-  const run = (github?: true) =>
+  const run = (github?: { installationName: string }) =>
     agentStep(
       buildAgentRequest({
         harness: harnesses.claude({ model: "sonnet", ...(github ? { github } : {}) }),
@@ -1673,7 +1673,7 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
       deps,
     );
   try {
-    await run(true);
+    await run({ installationName: "github-acme" });
     await run();
   } finally {
     vi.unstubAllEnvs();

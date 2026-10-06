@@ -10,11 +10,11 @@ const reply = {
 };
 
 test("a human's thread reply names the thread's hook", () => {
-  expect(slackThreadTokenFromEvent(reply)).toBe(
-    slackThreadToken("C0C5EUZ7P9Q", "1790723478.961719"),
+  expect(slackThreadTokenFromEvent("slack-acme", reply)).toBe(
+    slackThreadToken("slack-acme", "C0C5EUZ7P9Q", "1790723478.961719"),
   );
-  expect(slackThreadToken("C0C5EUZ7P9Q", "1790723478.961719")).toBe(
-    "slack:thread:C0C5EUZ7P9Q:1790723478.961719",
+  expect(slackThreadToken("slack-acme", "C0C5EUZ7P9Q", "1790723478.961719")).toBe(
+    "slack:thread:slack-acme:C0C5EUZ7P9Q:1790723478.961719",
   );
 });
 
@@ -25,5 +25,5 @@ test.each([
   ["no channel", { ...reply, channel: undefined }],
   ["not an object", null],
 ])("%s names no thread hook", (_, event) => {
-  expect(slackThreadTokenFromEvent(event)).toBeNull();
+  expect(slackThreadTokenFromEvent("slack-acme", event)).toBeNull();
 });

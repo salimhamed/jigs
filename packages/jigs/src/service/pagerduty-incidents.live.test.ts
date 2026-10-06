@@ -101,13 +101,13 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     workflows: {
       respond: {
         workflow: { workflowId: workflowName } as never,
-        inputs: z.object({ incident: z.string(), team: z.string() }),
+        inputs: z.object({ installationName: z.string(), incident: z.string(), team: z.string() }),
       },
     },
     triggers: {
       pages: {
         workflow: "respond",
-        source: pagerduty.incidents({ services: [SERVICE] }),
+        source: pagerduty.incidents({ installationName: "live", services: [SERVICE] }),
         inputs: { team: "live" },
         // Other tests' incidents on the sandbox start runs here too.
         maxActive: 100,
@@ -129,14 +129,17 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     const mine = await waitForLiveIncident(token ?? "", dedupKey);
     const id = mine.id;
     const triggered = {
-      event: {
-        event_type: "incident.triggered",
-        data: {
-          id,
-          created_at: mine.created_at,
-          service: { id: mine.service.id },
-          teams: [],
-          urgency: mine.urgency,
+      installationName: "live",
+      payload: {
+        event: {
+          event_type: "incident.triggered",
+          data: {
+            id,
+            created_at: mine.created_at,
+            service: { id: mine.service.id },
+            teams: [],
+            urgency: mine.urgency,
+          },
         },
       },
     };
@@ -161,7 +164,10 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
         await new Promise((resolve) => setTimeout(resolve, 3_000));
     }
     const started = await row();
-    expect(started).toMatchObject({ state: "started", inputs: { incident: id } });
+    expect(started).toMatchObject({
+      state: "started",
+      inputs: { installationName: "live", incident: id },
+    });
 
     expect(await engine.push("pagerduty", triggered)).toEqual([]);
     await engine.drain();

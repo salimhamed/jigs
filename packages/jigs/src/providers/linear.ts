@@ -75,6 +75,8 @@ const operationName = (query: string): string =>
   /\b(?:query|mutation)\s+(\w+)/.exec(query)?.[1] ?? "graphql";
 
 export interface LinearClientDeps {
+  /** The Linear installation, as named on the hub, the client acts through. */
+  installationName: string;
   auth?: LinearAuth;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
@@ -168,10 +170,10 @@ export interface LinearIssueMatch {
   state: string;
 }
 
-export function createLinearClient(deps: LinearClientDeps = {}) {
+export function createLinearClient(deps: LinearClientDeps) {
   const ctx = () => deps.context ?? currentFactoryContext();
   async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const auth = deps.auth ?? linearAuthFor(ctx());
+    const auth = deps.auth ?? linearAuthFor(deps.installationName, ctx());
     let reauthorized = false;
     const rateLimit = rateLimitWaits("linear", runSignal, deps.sleep);
     for (;;) {
@@ -217,7 +219,7 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
 
   /** The factory's own app user in the workspace, as the hub names it. */
   function appUser(): Promise<LinearAppUser> {
-    return (deps.auth ?? linearAuthFor(ctx())).user();
+    return (deps.auth ?? linearAuthFor(deps.installationName, ctx())).user();
   }
 
   /** The active Linear user with this email, or null when none has it. */
@@ -505,59 +507,9 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
 
 export type LinearClient = ReturnType<typeof createLinearClient>;
 
-const processClient = createLinearClient();
-
-// The three that factory steps re-export are declared below, with their own docs.
-
-export const {
-  appUser,
-  findUserByEmail,
-  fetchIssueStates,
-  updateIssueState,
-  resolveIssueRef,
-  getIssueParticipants,
-  fetchIssueSnapshot,
-  findComment,
-  getComment,
-  listCommentsSince,
-} = processClient;
-
-/**
- * Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
- * find it again after a lost response instead of posting twice.
- *
- * @group Create and update
- */
-export function createComment(
-  issueId: string,
-  body: string,
-  id?: string,
-): Promise<{ id: string; createdAt: string }> {
-  return processClient.createComment(issueId, body, id);
-}
-
-/**
- * Create a ticket in the project’s first team.
- *
- * @group Create and update
- */
-export function createIssueInProject(
-  input: CreateIssueInProjectInput,
-): Promise<{ id: string; identifier: string; url: string }> {
-  return processClient.createIssueInProject(input);
-}
-
-/**
- * Find the newest ticket in a project whose title starts with the given text.
- *
- * @group Resolve and read
- */
-export function findIssueInProject(input: {
-  project: string;
-  titlePrefix: string;
-}): Promise<LinearIssueMatch | null> {
-  return processClient.findIssueInProject(input);
-}
+/** The factory's Linear client for one installation. */
+export const linearFor = (installationName: string, context?: FactoryContext): LinearClient =>
+  createLinearClient({ installationName, ...(context === undefined ? {} : { context }) });
 
 // Linear renders @-mentions in API-created comments as @[displayName](userId).
 export function mention(user: LinearUser): string {

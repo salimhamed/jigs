@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SourceDescriptor } from "../factory.ts";
+import { installationNameSchema } from "../factory-schema.ts";
 
 export const LINEAR_AGENT_SESSIONS_SOURCE = "linear.agentSessions";
 
@@ -7,6 +8,7 @@ export const LINEAR_AGENT_SESSIONS_SOURCE = "linear.agentSessions";
 const names = z.array(z.string().min(1)).min(1);
 
 export const linearAgentSessionsParamsSchema = z.strictObject({
+  installationName: installationNameSchema,
   teams: names.optional(),
   projects: names.optional(),
   labels: names.optional(),
@@ -17,6 +19,8 @@ export const linearAgentSessionsParamsSchema = z.strictObject({
  * matched on the session's issue. Each list matches any of its values; leaving
  * one out does not filter on it.
  *
+ * - `installationName`: the Linear installation, as named on the hub, whose
+ *   sessions it watches.
  * - `teams`: team keys, such as `ENG`, or team ids.
  * - `projects`: project ids, or the id at the end of a project's URL.
  * - `labels`: label names, as Linear shows them.
@@ -33,8 +37,8 @@ export type LinearAgentSessionsParams = z.input<typeof linearAgentSessionsParams
 export interface LinearAgentSessionInputs {
   /** The Linear agent session's id. */
   session: string;
-  /** The id of the Linear workspace the session is in. */
-  workspace: string;
+  /** The Linear installation, as named on the hub, the session is in. */
+  installationName: string;
   issue: { id: string; identifier: string; title: string; url: string };
   /** The body of the comment the session started from, or null when an assignment started it. */
   comment: string | null;
@@ -67,10 +71,14 @@ export const linear = {
    * ```ts
    * import { linear } from "@jigs-ai/jigs";
    *
-   * const source = linear.agentSessions({ teams: ["ENG"], labels: ["agent"] });
+   * const source = linear.agentSessions({
+   *   installationName: "acme",
+   *   teams: ["ENG"],
+   *   labels: ["agent"],
+   * });
    * ```
    */
-  agentSessions(params: LinearAgentSessionsParams = {}): SourceDescriptor {
+  agentSessions(params: LinearAgentSessionsParams): SourceDescriptor {
     return { kind: LINEAR_AGENT_SESSIONS_SOURCE, params: { ...params } };
   },
 } as const;

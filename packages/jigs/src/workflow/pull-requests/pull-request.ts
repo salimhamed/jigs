@@ -12,7 +12,7 @@ import type { ApprovalCoverage } from "./policy.ts";
  */
 export function pullRequestToken(pr: PullRequestRef): string {
   const slug = `${pr.owner}/${pr.repo}`.toLowerCase();
-  return `${PULL_REQUEST_TOKEN_PREFIX}${slug}#${pr.number}`;
+  return `${PULL_REQUEST_TOKEN_PREFIX}${pr.installationName}:${slug}#${pr.number}`;
 }
 
 type GithubPayload = {
@@ -35,8 +35,8 @@ function prNumber(payload: GithubPayload): number | null {
   return number ?? null;
 }
 
-/** Return the pull request hook token named by a supported GitHub event payload. */
-export function tokenFromGitHubPayload(payload: unknown): string | null {
+/** Return the pull request hook token named by a supported GitHub event payload from an installation. */
+export function tokenFromGitHubPayload(installationName: string, payload: unknown): string | null {
   if (typeof payload !== "object" || payload === null) return null;
   const { repository } = payload as GithubPayload;
   const repo = repository?.name;
@@ -45,19 +45,29 @@ export function tokenFromGitHubPayload(payload: unknown): string | null {
   if (number === null || typeof repo !== "string" || typeof owner !== "string") {
     return null;
   }
-  return pullRequestToken({ owner, repo, number });
+  return pullRequestToken({ installationName, owner, repo, number });
 }
 
 /**
- * Identifies a pull request by repository owner, repository name and number.
+ * Identifies a repository, and the GitHub installation jigs reaches it through.
  *
  * @group Pull requests
  */
-export type PullRequestRef = {
+export type RepositoryRef = {
+  /** The name of the GitHub App installation, as named on the hub, that jigs acts through. */
+  installationName: string;
   /** The GitHub organization or account that owns the repository. */
   owner: string;
   /** The repository name. */
   repo: string;
+};
+
+/**
+ * Identifies a pull request by its repository, the installation jigs reaches it through, and its number.
+ *
+ * @group Pull requests
+ */
+export type PullRequestRef = RepositoryRef & {
   /** The repository-local pull request number. */
   number: number;
 };

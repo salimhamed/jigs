@@ -17,7 +17,7 @@
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export { type GithubMcpOptions, githubMcp } from "./workflow/agents/github-mcp.ts";
 export {
-  type AgentGithub,
+  type AgentInstallation,
   type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,
@@ -131,9 +131,7 @@ export {
   type FactoryDefinition,
   type GitHubDefinition,
   type LinearDefinition,
-  type PagerDutyDefinition,
   type Schedule,
-  type SlackDefinition,
   type SourceDescriptor,
   type TicketWorkflowInputs,
   ticketInputSchema,
@@ -189,6 +187,7 @@ export type { ApprovalCoverage } from "./workflow/pull-requests/policy.ts";
 export type {
   PullRequestReadOptions,
   PullRequestRef,
+  RepositoryRef,
 } from "./workflow/pull-requests/pull-request.ts";
 export {
   type ApprovalState,

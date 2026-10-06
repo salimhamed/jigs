@@ -124,7 +124,7 @@ const RECORDED = [
 ];
 
 // An Events API body as the hub sends it, its event recorded from the test channel.
-const pushed = (message: object, channelType = "channel", channel = CHANNEL) => ({
+const body = (message: object, channelType = "channel", channel = CHANNEL) => ({
   type: "event_callback",
   api_app_id: "A0C5JPZUW1J",
   team_id: "T0A7SCMC5",
@@ -138,14 +138,22 @@ const pushed = (message: object, channelType = "channel", channel = CHANNEL) => 
   },
 });
 
-const params = { channels: [CHANNEL] };
+const pushed = (...args: Parameters<typeof body>) => ({
+  installationName: "acme",
+  payload: body(...args),
+});
+
+const params = { installationName: "acme", channels: [CHANNEL] };
 const messages = SOURCES["slack.messages"];
 const mentions = SOURCES["slack.mentions"];
 if (messages === undefined || mentions === undefined) throw new Error("slack sources missing");
 
 beforeEach(() => {
   vi.restoreAllMocks();
-  vi.spyOn(slackApi, "slackBot").mockResolvedValue(BOT);
+  vi.spyOn(slackApi, "slackBot").mockImplementation(async (installationName) => {
+    if (installationName !== "acme") throw new Error(`asked for the bot in ${installationName}`);
+    return BOT;
+  });
 });
 
 test("the descriptors a factory writes name the registered kinds", () => {
@@ -153,11 +161,18 @@ test("the descriptors a factory writes name the registered kinds", () => {
   expect(slack.mentions(params)).toEqual({ kind: "slack.mentions", params });
 });
 
-test("channels are IDs of public or private channels, never names or DMs", () => {
+test("an installation name is required, and channels are IDs of public or private channels, never names or DMs", () => {
   expect(messages.params.safeParse(params).success).toBe(true);
-  expect(messages.params.safeParse({ channels: ["G012AB3CD"] }).success).toBe(true);
+  expect(messages.params.safeParse({ ...params, channels: ["G012AB3CD"] }).success).toBe(true);
   for (const channels of [[], ["#jigs-sandbox"], ["D0123ABCD"]])
-    expect(messages.params.safeParse({ channels }).success).toBe(false);
+    expect(messages.params.safeParse({ ...params, channels }).success).toBe(false);
+  expect(messages.params.safeParse({ channels: [CHANNEL] }).success).toBe(false);
+});
+
+test("a message from another installation is not this trigger's", async () => {
+  expect(
+    await messages.fromPush(params, { ...pushed(TOP_LEVEL), installationName: "other" }),
+  ).toBeNull();
 });
 
 test("messages keeps new top-level posts", async () => {
@@ -169,7 +184,7 @@ test("messages keeps new top-level posts", async () => {
   expect(found).toEqual(
     [ME_POST, FILE_POST, APP_POST, OTHER_BOT, MENTION, THREAD_PARENT, TOP_LEVEL].map((m) => ({
       key: `${CHANNEL}:${m.ts}`,
-      inputs: { channel: CHANNEL, ts: m.ts },
+      inputs: { installationName: "acme", channel: CHANNEL, ts: m.ts },
       at: new Date(Number(m.ts) * 1000),
     })),
   );
@@ -181,7 +196,7 @@ test("mentions keeps only the top-level messages that tag the bot", async () => 
     const occurrence = await mentions.fromPush(params, pushed(message));
     if (occurrence !== null) found.push(occurrence.inputs);
   }
-  expect(found).toEqual([{ channel: CHANNEL, ts: MENTION.ts }]);
+  expect(found).toEqual([{ installationName: "acme", channel: CHANNEL, ts: MENTION.ts }]);
 });
 
 test("a pushed message is keyed and described by its channel and timestamp", async () => {
@@ -198,7 +213,10 @@ test.each([
   ["a delete", pushed(DELETE)],
   ["the bot's own post", pushed(OWN_POST)],
   ["another channel", pushed(TOP_LEVEL, "channel", "C0ELSEWHERE")],
-  ["a body that is no event callback", { type: "url_verification", challenge: "c" }],
+  [
+    "a body that is no event callback",
+    { installationName: "acme", payload: { type: "url_verification", challenge: "c" } },
+  ],
   ["a direct message", pushed(TOP_LEVEL, "im")],
 ])("a pushed %s is no occurrence", async (_name, event) => {
   expect(await messages.fromPush(params, event)).toBeNull();
@@ -206,6 +224,7 @@ test.each([
 
 test("a pushed mention is one for mentions, and a plain message is not", async () => {
   expect((await mentions.fromPush(params, pushed(MENTION)))?.inputs).toEqual({
+    installationName: "acme",
     channel: CHANNEL,
     ts: MENTION.ts,
   });
@@ -219,6 +238,7 @@ test.each([
   ["a /me post", ME_POST],
 ])("%s starts a run", async (_name, message) => {
   expect((await messages.fromPush(params, pushed(message)))?.inputs).toEqual({
+    installationName: "acme",
     channel: CHANNEL,
     ts: message.ts,
   });
@@ -227,6 +247,7 @@ test.each([
 test("another bot's post that mentions the bot is a mention", async () => {
   const tagged = { ...OTHER_BOT, text: `<@${BOT.userId}> please check the deploy` };
   expect((await mentions.fromPush(params, pushed(tagged)))?.inputs).toEqual({
+    installationName: "acme",
     channel: CHANNEL,
     ts: tagged.ts,
   });

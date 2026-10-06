@@ -107,7 +107,7 @@ export function hookSubject(
     // Without the identifier the run was launched with, the issue ID is all the token has.
     const label =
       run.ticket == null
-        ? `the Linear ticket ${detail(parsed.issueId)}`
+        ? `the Linear ticket ${detail(parsed.ticket?.issueId ?? token)}`
         : `Linear ticket ${run.ticket}`;
     return { kind: "claim", label };
   }

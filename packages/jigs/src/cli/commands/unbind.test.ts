@@ -19,8 +19,8 @@ beforeEach(() => {
  hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 },
  bindings: {
   // api service
-  api: { remote: "git@github.com:acme/api.git" },
-  web: { remote: "git@github.com:acme/web.git" },
+  api: { remote: "git@github.com:acme/api.git", installationName: "github-acme" },
+  web: { remote: "git@github.com:acme/web.git", installationName: "github-acme" },
  }, workflows: {},
 }`,
   );

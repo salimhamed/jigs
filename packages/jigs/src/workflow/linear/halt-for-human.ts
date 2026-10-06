@@ -10,8 +10,12 @@ import type { HaltQuestion } from "../human/questions.ts";
 import type { TicketClaim } from "./claim.ts";
 
 /** Build the marker token for a run's unanswered ticket comment. */
-export function needsHumanToken(issueId: string, commentId: string): string {
-  return `${NEEDS_HUMAN_TOKEN_PREFIX}${issueId}:${commentId}`;
+export function needsHumanToken(
+  installationName: string,
+  issueId: string,
+  commentId: string,
+): string {
+  return `${NEEDS_HUMAN_TOKEN_PREFIX}${installationName}:${issueId}:${commentId}`;
 }
 
 /**
@@ -52,17 +56,19 @@ export interface HumanReply {
 // declaring the contract in workflow/ typechecks the step against the routine and
 // keeps this side free of any value import into steps/.
 /** Durable step contract for posting a question and recording its cursor. */
-export type PostTicketHumanInputRequest = (
-  issueId: string,
-  halt: Halt,
-) => Promise<{ commentId: string; postedAt: string }>;
+export type PostTicketHumanInputRequest = (request: {
+  installationName: string;
+  issueId: string;
+  halt: Halt;
+}) => Promise<{ commentId: string; postedAt: string }>;
 
 /** Durable step contract for finding a human reply after a cursor, skipping the run's own comments. */
-export type CheckForTicketHumanReply = (
-  issueId: string,
-  sinceIso: string,
-  postedCommentIds: readonly string[],
-) => Promise<{ reply: HumanReply | null; cursor: string }>;
+export type CheckForTicketHumanReply = (request: {
+  installationName: string;
+  issueId: string;
+  since: string;
+  postedCommentIds: readonly string[];
+}) => Promise<{ reply: HumanReply | null; cursor: string }>;
 
 /** Durable operations required to post and resume a human halt. */
 export type HaltForHumanDependencies = {
@@ -88,20 +94,24 @@ export async function haltForHuman(
   // serializes a step call's receiver along with its arguments, and this
   // object holds functions.
   const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
-  const posted = await postTicketHumanInputRequest(claim.issueId, halt);
+  const { installationName, issueId } = claim;
+  const posted = await postTicketHumanInputRequest({ installationName, issueId, halt });
   claim.postedCommentIds.push(posted.commentId);
   // The halt's only signal: the claim hook is held for the run's whole life,
   // so this marker is what tells `jigs status` the run is parked on a human. Never
   // awaited — it registers when the run suspends on the claim hook below.
   const marker = createHook<never>({
-    token: needsHumanToken(claim.issueId, posted.commentId),
+    token: needsHumanToken(installationName, issueId, posted.commentId),
   });
   try {
     let cursor = posted.postedAt;
     for await (const _hint of claim.hook) {
-      const check = await checkForTicketHumanReply(claim.issueId, cursor, [
-        ...claim.postedCommentIds,
-      ]);
+      const check = await checkForTicketHumanReply({
+        installationName,
+        issueId,
+        since: cursor,
+        postedCommentIds: [...claim.postedCommentIds],
+      });
       if (check.reply !== null) return check.reply;
       cursor = check.cursor;
     }

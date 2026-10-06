@@ -191,8 +191,13 @@ dbTest("rows are this factory's alone and filter by run, kind, identity and stat
 });
 
 dbTest("a run's state is its records plus the hooks the World holds", async () => {
-  const claim = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const watch = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+  const claim = ticketToken("linear-acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const watch = pullRequestToken({
+    installationName: "github-acme",
+    owner: "acme",
+    repo: "api",
+    number: 41,
+  });
 
   const state = await readRunState(db, "factory-a", "run_1", async () => ({
     run: {

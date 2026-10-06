@@ -15,21 +15,27 @@ export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 export const SLACK_THREAD_TOKEN_PREFIX = "slack:thread:";
 
 /**
- * A hook token jigs minted, taken apart. The prefix alone decides the kind, so
- * a token whose rest is unreadable keeps its kind and loses only its parts.
+ * A hook token jigs minted, taken apart. Every kind names the installation
+ * jigs reaches its provider through, so an event from another installation
+ * never wakes it. The prefix alone decides the kind, so a token whose rest is
+ * unreadable keeps its kind and loses only its parts.
  */
 export type HookToken =
-  | { kind: "ticket-claim"; provider: "linear"; issueId: string }
+  | {
+      kind: "ticket-claim";
+      provider: "linear";
+      ticket: { installationName: string; issueId: string } | null;
+    }
   | {
       kind: "needs-human";
       provider: "linear";
-      halt: { issueId: string; commentId: string } | null;
+      halt: { installationName: string; issueId: string; commentId: string } | null;
     }
   | { kind: "pull-request"; provider: "github"; slug: string; pr: PullRequestRef | null }
   | {
       kind: "slack-thread";
       provider: "slack";
-      thread: { channel: string; threadTs: string } | null;
+      thread: { installationName: string; channel: string; threadTs: string } | null;
     };
 
 export type HookKind = HookToken["kind"];
@@ -44,47 +50,69 @@ export interface HookDescription {
   url?: string;
 }
 
-const pair = (rest: string): [string, string] | null => {
-  const at = rest.indexOf(":");
-  if (at <= 0 || at === rest.length - 1) return null;
-  return [rest.slice(0, at), rest.slice(at + 1)];
+// An installation name has no ":", so it is everything before the first one.
+const parts = (rest: string, count: number): string[] | null => {
+  const split = rest.split(":");
+  if (split.length < count) return null;
+  const fields = [...split.slice(0, count - 1), split.slice(count - 1).join(":")];
+  return fields.every((field) => field !== "") ? fields : null;
 };
 
 const HOOK_KINDS: { [K in HookKind]: { prefix: string; parse: (rest: string) => HookToken } } = {
   "ticket-claim": {
     prefix: TICKET_TOKEN_PREFIX,
-    parse: (issueId) => ({ kind: "ticket-claim", provider: "linear", issueId }),
+    parse: (rest) => {
+      const [installationName, issueId] = parts(rest, 2) ?? [];
+      return {
+        kind: "ticket-claim",
+        provider: "linear",
+        ticket:
+          installationName === undefined || issueId === undefined
+            ? null
+            : { installationName, issueId },
+      };
+    },
   },
   "needs-human": {
     prefix: NEEDS_HUMAN_TOKEN_PREFIX,
     parse: (rest) => {
-      const parts = pair(rest);
+      const [installationName, issueId, commentId] = parts(rest, 3) ?? [];
       return {
         kind: "needs-human",
         provider: "linear",
-        halt: parts === null ? null : { issueId: parts[0], commentId: parts[1] },
+        halt:
+          installationName === undefined || issueId === undefined || commentId === undefined
+            ? null
+            : { installationName, issueId, commentId },
       };
     },
   },
   "pull-request": {
     prefix: PULL_REQUEST_TOKEN_PREFIX,
-    parse: (slug) => {
-      const [, owner, repo, number] = /^([^/]+)\/([^#]+)#(\d+)$/.exec(slug) ?? [];
+    parse: (rest) => {
+      const [, installationName, slug = rest, owner, repo, number] =
+        /^([^:]+):(([^/]+)\/([^#]+)#(\d+))$/.exec(rest) ?? [];
       const pr =
-        owner === undefined || repo === undefined || number === undefined
+        installationName === undefined ||
+        owner === undefined ||
+        repo === undefined ||
+        number === undefined
           ? null
-          : { owner, repo, number: Number(number) };
+          : { installationName, owner, repo, number: Number(number) };
       return { kind: "pull-request", provider: "github", slug, pr };
     },
   },
   "slack-thread": {
     prefix: SLACK_THREAD_TOKEN_PREFIX,
     parse: (rest) => {
-      const parts = pair(rest);
+      const [installationName, channel, threadTs] = parts(rest, 3) ?? [];
       return {
         kind: "slack-thread",
         provider: "slack",
-        thread: parts === null ? null : { channel: parts[0], threadTs: parts[1] },
+        thread:
+          installationName === undefined || channel === undefined || threadTs === undefined
+            ? null
+            : { installationName, channel, threadTs },
       };
     },
   },
@@ -102,7 +130,7 @@ export function parseHookToken(token: string): HookToken | null {
 export function wakeToken(token: string): string {
   const parsed = parseHookToken(token);
   return parsed?.kind === "needs-human" && parsed.halt !== null
-    ? `${TICKET_TOKEN_PREFIX}${parsed.halt.issueId}`
+    ? `${TICKET_TOKEN_PREFIX}${parsed.halt.installationName}:${parsed.halt.issueId}`
     : token;
 }
 
@@ -115,7 +143,12 @@ export function describeHookToken(token: string, ticket?: string | null): HookDe
   const parsed = parseHookToken(token);
   switch (parsed?.kind) {
     case "ticket-claim": {
-      const label = ticket == null ? `Linear issue ${parsed.issueId}` : `Linear ticket ${ticket}`;
+      const label =
+        ticket == null
+          ? parsed.ticket === null
+            ? `a Linear issue this token does not name (${token})`
+            : `Linear issue ${parsed.ticket.issueId}`
+          : `Linear ticket ${ticket}`;
       return { kind: parsed.kind, label, reason: `holding the claim on ${label}` };
     }
     case "needs-human": {

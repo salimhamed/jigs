@@ -4,7 +4,7 @@ import { z } from "zod";
 import type { Factory } from "../workflow/factory.ts";
 import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
-import { triggerChecks, triggerProviders } from "./event-triggers/view.ts";
+import { triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
 import type { PreparedRun } from "./launch.ts";
 import { PAGERDUTY_INCIDENTS } from "./pagerduty-incidents.ts";
 import { eventTriggerId } from "./runs.ts";
@@ -13,13 +13,21 @@ import { memoryTriggerStore } from "./test-fixtures.ts";
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-test("params take services, teams and urgencies only", () => {
+const ACME = { installationName: "acme" };
+
+test("params take an installation name, then services, teams and urgencies only", () => {
   const source = PAGERDUTY_INCIDENTS;
-  expect(source.params.safeParse({ teams: ["PT1"], urgencies: ["low"] }).success).toBe(true);
-  expect(source.params.safeParse({ urgencies: ["urgent"] }).success).toBe(false);
-  expect(source.params.safeParse({ services: [] }).success).toBe(false);
-  expect(source.params.safeParse({ statuses: ["acknowledged"] }).success).toBe(false);
+  expect(source.params.safeParse({ ...ACME, teams: ["PT1"], urgencies: ["low"] }).success).toBe(
+    true,
+  );
+  expect(source.params.safeParse({ teams: ["PT1"] }).success).toBe(false);
+  expect(source.params.safeParse({ installationName: "Acme" }).success).toBe(false);
+  expect(source.params.safeParse({ ...ACME, urgencies: ["urgent"] }).success).toBe(false);
+  expect(source.params.safeParse({ ...ACME, services: [] }).success).toBe(false);
+  expect(source.params.safeParse({ ...ACME, statuses: ["acknowledged"] }).success).toBe(false);
 });
+
+const from = (payload: unknown, installationName = "acme") => ({ installationName, payload });
 
 // An `incident.triggered` delivery as PagerDuty's v3 webhooks send it.
 const triggered = (): { event: Record<string, unknown> & { data: Record<string, unknown> } } =>
@@ -34,24 +42,34 @@ const withEvent = (fields: Record<string, unknown>, data: Record<string, unknown
 test("a pushed incident.triggered is the incident, as of when it was created", async () => {
   const source = PAGERDUTY_INCIDENTS;
 
-  const pushed = await source.fromPush({}, triggered());
+  const pushed = await source.fromPush(ACME, from(triggered()));
 
-  expect(pushed).toEqual({ key: "Q1", inputs: { incident: "Q1" }, at: minutes(1) });
+  expect(pushed).toEqual({
+    key: "Q1",
+    inputs: { installationName: "acme", incident: "Q1" },
+    at: minutes(1),
+  });
   expect(source.describe(pushed?.inputs ?? {})).toBe("pagerduty Q1");
 });
 
 test("any other webhook event is not an occurrence", async () => {
   const source = PAGERDUTY_INCIDENTS;
   for (const event_type of ["incident.acknowledged", "incident.resolved", "pagey.ping"])
-    expect(await source.fromPush({}, withEvent({ event_type }))).toBeNull();
-  expect(await source.fromPush({}, null)).toBeNull();
-  expect(await source.fromPush({}, { ping: true })).toBeNull();
+    expect(await source.fromPush(ACME, from(withEvent({ event_type })))).toBeNull();
+  expect(await source.fromPush(ACME, from(null))).toBeNull();
+  expect(await source.fromPush(ACME, from({ ping: true }))).toBeNull();
+});
+
+test("an incident from another installation is not this trigger's", async () => {
+  expect(await PAGERDUTY_INCIDENTS.fromPush(ACME, from(triggered(), "other"))).toBeNull();
 });
 
 test("a pushed incident is filtered by the trigger's parameters", async () => {
   const source = PAGERDUTY_INCIDENTS;
-  const push = (params: Parameters<typeof source.fromPush>[0], data = {}) =>
-    source.fromPush(params, withEvent({}, data));
+  const push = (
+    params: Omit<Parameters<typeof source.fromPush>[0], "installationName">,
+    data = {},
+  ) => source.fromPush({ ...ACME, ...params }, from(withEvent({}, data)));
   expect(await push({ services: ["PSVC001", "PSVC002"] })).not.toBeNull();
   expect(await push({ services: ["PSVC002"] })).toBeNull();
   expect(await push({ teams: ["PTEAM01"] })).not.toBeNull();
@@ -63,7 +81,9 @@ test("a pushed incident is filtered by the trigger's parameters", async () => {
 
 test("an incident.triggered without an incident is ignored loudly, not retried", async () => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
-  expect(await PAGERDUTY_INCIDENTS.fromPush({}, withEvent({}, { id: undefined }))).toBeNull();
+  expect(
+    await PAGERDUTY_INCIDENTS.fromPush(ACME, from(withEvent({}, { id: undefined }))),
+  ).toBeNull();
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining("[pagerduty] ignored an incident.triggered it could not read"),
   );
@@ -74,13 +94,13 @@ const respond: Factory = {
   workflows: {
     respond: {
       workflow: async () => undefined,
-      inputs: z.object({ incident: z.string(), team: z.string() }),
+      inputs: z.object({ installationName: z.string(), incident: z.string(), team: z.string() }),
     },
   },
   triggers: {
     pages: {
       workflow: "respond",
-      source: pagerduty.incidents({ services: ["PSVC001"] }),
+      source: pagerduty.incidents({ installationName: "acme", services: ["PSVC001"] }),
       inputs: { team: "infra" },
     },
   },
@@ -144,18 +164,27 @@ test("each pushed incident starts one run, with the incident as its input", asyn
   const h = engineHarness();
   await h.engine.arm();
   h.at(minutes(5));
-  expect(await h.engine.push("pagerduty", triggeredFor("Q1", minutes(1)))).toEqual(["pages"]);
-  expect(await h.engine.push("pagerduty", triggeredFor("Q2", minutes(4)))).toEqual(["pages"]);
+  expect(await h.engine.push("pagerduty", from(triggeredFor("Q1", minutes(1))))).toEqual(["pages"]);
+  expect(await h.engine.push("pagerduty", from(triggeredFor("Q2", minutes(4))))).toEqual(["pages"]);
   h.at(minutes(10));
   // Delivered again: the occurrence is already recorded.
-  expect(await h.engine.push("pagerduty", triggeredFor("Q1", minutes(1)))).toEqual([]);
-  expect(await h.engine.push("pagerduty", triggeredFor("Q3", minutes(8)))).toEqual(["pages"]);
+  expect(await h.engine.push("pagerduty", from(triggeredFor("Q1", minutes(1))))).toEqual([]);
+  expect(await h.engine.push("pagerduty", from(triggeredFor("Q3", minutes(8))))).toEqual(["pages"]);
   await h.engine.drain();
 
   expect(h.starts).toEqual([
-    { inputs: { team: "infra", incident: "Q1" }, triggerId: eventTriggerId("pages", "Q1") },
-    { inputs: { team: "infra", incident: "Q2" }, triggerId: eventTriggerId("pages", "Q2") },
-    { inputs: { team: "infra", incident: "Q3" }, triggerId: eventTriggerId("pages", "Q3") },
+    {
+      inputs: { team: "infra", installationName: "acme", incident: "Q1" },
+      triggerId: eventTriggerId("pages", "Q1"),
+    },
+    {
+      inputs: { team: "infra", installationName: "acme", incident: "Q2" },
+      triggerId: eventTriggerId("pages", "Q2"),
+    },
+    {
+      inputs: { team: "infra", installationName: "acme", incident: "Q3" },
+      triggerId: eventTriggerId("pages", "Q3"),
+    },
   ]);
   expect(h.memory.state("pages", "Q1")?.occurredAt).toEqual(minutes(1));
 });
@@ -164,14 +193,14 @@ test("an incident delivered again after its run ends does not start a second run
   const h = engineHarness();
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("pagerduty", triggeredFor("Q1", minutes(1)));
+  await h.engine.push("pagerduty", from(triggeredFor("Q1", minutes(1))));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
 
   for (const run of h.runs) run.status = "completed";
   for (const at of [minutes(3), minutes(4), minutes(60)]) {
     h.at(at);
-    await h.engine.push("pagerduty", triggeredFor("Q1", minutes(1)));
+    await h.engine.push("pagerduty", from(triggeredFor("Q1", minutes(1))));
     await h.engine.drain();
   }
 
@@ -185,7 +214,7 @@ test("an incident created in the same second the trigger was first enabled start
   h.at(new Date(T0.getTime() + 285));
   await h.engine.arm();
   h.at(minutes(1));
-  await h.engine.push("pagerduty", triggeredFor("Q1", T0));
+  await h.engine.push("pagerduty", from(triggeredFor("Q1", T0)));
   await h.engine.drain();
   expect(h.starts.map((start) => start.triggerId)).toEqual([eventTriggerId("pages", "Q1")]);
   expect(h.memory.state("pages", "Q1")?.occurredAt).toEqual(T0);
@@ -195,13 +224,15 @@ test("an incident created before the trigger was first enabled starts nothing", 
   const h = engineHarness();
   await h.engine.arm();
   h.at(minutes(2));
-  expect(await h.engine.push("pagerduty", triggeredFor("Q0", minutes(-1)))).toEqual([]);
+  expect(await h.engine.push("pagerduty", from(triggeredFor("Q0", minutes(-1))))).toEqual([]);
   expect(h.starts).toEqual([]);
   expect(h.memory.rows.size).toBe(0);
 });
 
-test("the source is shipped, and its trigger reads PagerDuty for doctor", async () => {
-  expect(triggerProviders(respond)).toEqual({ pages: "pagerduty" });
+test("the source is shipped, and its trigger names its PagerDuty installation for doctor", async () => {
+  expect(triggerInstallations(respond)).toEqual({
+    pages: { provider: "pagerduty", installationName: "acme" },
+  });
   const [check] = triggerChecks(respond);
   expect(await check?.run()).toEqual({ ok: true });
   const bad: Factory = {
@@ -209,7 +240,10 @@ test("the source is shipped, and its trigger reads PagerDuty for doctor", async 
     triggers: {
       pages: {
         workflow: "respond",
-        source: { kind: "pagerduty.incidents", params: { urgencies: ["urgent"] } },
+        source: {
+          kind: "pagerduty.incidents",
+          params: { installationName: "acme", urgencies: ["urgent"] },
+        },
         inputs: { team: "infra" },
       },
     },
@@ -225,6 +259,6 @@ test("a pushed incident on a service the trigger does not watch starts nothing",
   await h.engine.arm();
   h.at(minutes(2));
   const elsewhere = withEvent({}, { service: { id: "PSVC009" } });
-  expect(await h.engine.push("pagerduty", elsewhere)).toEqual([]);
+  expect(await h.engine.push("pagerduty", from(elsewhere))).toEqual([]);
   expect(h.memory.rows.size).toBe(0);
 });

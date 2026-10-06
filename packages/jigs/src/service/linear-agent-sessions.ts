@@ -4,8 +4,7 @@
 
 import { z } from "zod";
 import { HubResponseError } from "../providers/hub.ts";
-import { createLinearClient, type LinearIssueFiling } from "../providers/linear.ts";
-import { linearAuthFor } from "../providers/linear-auth.ts";
+import { type LinearIssueFiling, linearFor } from "../providers/linear.ts";
 import {
   type LinearAgentSessionInputs,
   type LinearAgentSessionsParams,
@@ -17,7 +16,6 @@ const headSchema = z.object({ type: z.string(), action: z.string() });
 
 // Only what the occurrence and the filters read; Linear sends more.
 const createdSchema = z.object({
-  organizationId: z.string().min(1),
   agentSession: z.object({
     id: z.string().min(1),
     createdAt: z.iso.datetime({ offset: true }),
@@ -37,7 +35,7 @@ const createdSchema = z.object({
 
 const SAMPLE_INPUTS = {
   session: "00000000-0000-0000-0000-000000000000",
-  workspace: "00000000-0000-0000-0000-000000000000",
+  installationName: "acme",
   issue: {
     id: "00000000-0000-0000-0000-000000000000",
     identifier: "ENG-1",
@@ -48,14 +46,16 @@ const SAMPLE_INPUTS = {
   creator: { id: "00000000-0000-0000-0000-000000000000", name: "Ada", email: "ada@example.com" },
 } satisfies LinearAgentSessionInputs;
 
-// The issue's project and labels, read as the factory's app in the session's
-// workspace. An issue that is gone, or a workspace the hub has no app in, will
-// read the same way every time, so the session is passed over rather than retried.
-async function readFiling(issueId: string, workspace: string): Promise<LinearIssueFiling | null> {
+// The issue's project and labels, read as the factory's app in the trigger's
+// installation. An issue that is gone, or an installation the hub does not give
+// this factory, will read the same way every time, so the session is passed
+// over rather than retried.
+async function readFiling(
+  issueId: string,
+  installationName: string,
+): Promise<LinearIssueFiling | null> {
   try {
-    const filing = await createLinearClient({
-      auth: linearAuthFor(undefined, workspace),
-    }).fetchIssueFiling(issueId);
+    const filing = await linearFor(installationName).fetchIssueFiling(issueId);
     if (filing === null)
       console.error(
         `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
@@ -64,7 +64,7 @@ async function readFiling(issueId: string, workspace: string): Promise<LinearIss
   } catch (error) {
     if (!(error instanceof HubResponseError && error.status === 404)) throw error;
     console.error(
-      `[linear] ignored an agent session in workspace ${workspace}, which the hub has no app for: ${String(error)}`,
+      `[linear] ignored an agent session in installation ${installationName}, which the hub does not give this factory: ${String(error)}`,
     );
     return null;
   }
@@ -74,7 +74,8 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
   provider: "linear",
   params: linearAgentSessionsParamsSchema,
   sampleInputs: SAMPLE_INPUTS,
-  async fromPush(params, event) {
+  async fromPush(params, { installationName, payload: event }) {
+    if (installationName !== params.installationName) return null;
     const head = headSchema.safeParse(event).data;
     if (head?.type !== "AgentSessionEvent" || head.action !== "created") return null;
     // A shape Linear will send the same way every time is no reason to retry.
@@ -85,7 +86,7 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
       );
       return null;
     }
-    const { organizationId: workspace, agentSession } = created.data;
+    const { agentSession } = created.data;
     const { issue } = agentSession;
     if (!issue) return null;
     if (
@@ -94,7 +95,7 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
     )
       return null;
     if (params.projects || params.labels) {
-      const filing = await readFiling(issue.id, workspace);
+      const filing = await readFiling(issue.id, installationName);
       if (filing === null) return null;
       const { project, labels } = filing;
       if (
@@ -109,7 +110,7 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
     const { creator } = agentSession;
     const inputs = {
       session: agentSession.id,
-      workspace,
+      installationName,
       issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
       comment: agentSession.comment?.body ?? null,
       creator: creator ? { id: creator.id, name: creator.name, email: creator.email } : null,

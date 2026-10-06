@@ -1,48 +1,31 @@
 import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
-import type { Check } from "../checks/check.ts";
+import type { CheckResult } from "../checks/check.ts";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { hubRefused, hubToken } from "./hub.ts";
 
 const and = (items: readonly string[]) => items.join(" and ");
 
-// An unreadable config is the binding checks' diagnosis, so it asks for no extra scopes here.
-function declaredScopes(ctx: FactoryContext): string[] {
-  let extra: readonly string[] = [];
-  try {
-    extra = ctx.config.slack?.scopes ?? [];
-  } catch {}
-  return [...new Set([...slackBotScopes, ...extra])];
-}
-
-/**
- * Whether the hub hands this factory a Slack bot token, and the workspace granted it every scope
- * jigs uses plus the factory's own `slack.scopes`.
- */
-export function slackChecks(
+/** Whether the hub hands this factory a Slack installation's bot token, granted every scope jigs uses. */
+export function slackInstallationProbe(
   ctx: FactoryContext,
-  issue: (ctx: FactoryContext) => Promise<SlackTokenResponse> = (ctx) => hubToken("slack", {}, ctx),
-): Check[] {
-  return [
-    {
-      id: "slack.identity",
-      label: "Slack app",
-      run: async () => {
-        let issued: SlackTokenResponse;
-        try {
-          issued = await issue(ctx);
-        } catch (err) {
-          return hubRefused("the hub has no Slack token for this factory", err);
-        }
-        const granted = new Set(issued.scopes);
-        const missing = declaredScopes(ctx).filter((scope) => !granted.has(scope));
-        if (missing.length > 0)
-          return {
-            ok: false,
-            reason: `${issued.app.name}'s bot token lacks ${and(missing)}`,
-            repair: `in the hub, add ${and(missing)} to ${issued.app.name}'s bot scopes and install it in the workspace again, then: \`pnpm exec jigs doctor\``,
-          };
-        return { ok: true, detail: `acting as ${issued.app.name} in ${issued.team}` };
-      },
-    },
-  ];
+  issue: (installationName: string) => Promise<SlackTokenResponse> = (installationName) =>
+    hubToken("slack", installationName, ctx),
+): (installationName: string) => Promise<CheckResult> {
+  return async (installationName) => {
+    let issued: SlackTokenResponse;
+    try {
+      issued = await issue(installationName);
+    } catch (err) {
+      return hubRefused("the hub gave no Slack token", err);
+    }
+    const granted = new Set(issued.scopes);
+    const missing = slackBotScopes.filter((scope) => !granted.has(scope));
+    if (missing.length > 0)
+      return {
+        ok: false,
+        reason: `${issued.app.name}'s bot token lacks ${and(missing)}`,
+        repair: `in the hub, add ${and(missing)} to ${issued.app.name}'s bot scopes and install it in the workspace again, then: \`pnpm exec jigs doctor\``,
+      };
+    return { ok: true, detail: `acting as ${issued.app.name} in ${issued.team}` };
+  };
 }

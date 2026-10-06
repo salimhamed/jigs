@@ -1,5 +1,6 @@
 import { z } from "zod";
 import type { SourceDescriptor } from "../factory.ts";
+import { installationNameSchema } from "../factory-schema.ts";
 
 export const PAGERDUTY_INCIDENTS_SOURCE = "pagerduty.incidents";
 
@@ -7,6 +8,7 @@ export const PAGERDUTY_INCIDENTS_SOURCE = "pagerduty.incidents";
 const ids = z.array(z.string().min(1)).min(1);
 
 export const pagerDutyIncidentsParamsSchema = z.strictObject({
+  installationName: installationNameSchema,
   services: ids.optional(),
   teams: ids.optional(),
   urgencies: z
@@ -19,6 +21,8 @@ export const pagerDutyIncidentsParamsSchema = z.strictObject({
  * Which incidents a `pagerduty.incidents` source starts runs for. Each list
  * matches any of its values; leaving one out does not filter on it.
  *
+ * - `installationName`: the PagerDuty installation, as named on the hub,
+ *   whose incidents it watches.
  * - `services`: PagerDuty service IDs, such as `P48FPG2`.
  * - `teams`: PagerDuty team IDs.
  * - `urgencies`: `high`, `low` or both.
@@ -35,7 +39,7 @@ export type PagerDutyIncidentsParams = z.input<typeof pagerDutyIncidentsParamsSc
 export const pagerduty = {
   /**
    * Watch for new incidents. Every new incident starts at most one run, ever,
-   * with `{ incident: "<id>" }` as its inputs, even one acknowledged or
+   * with `{ installationName, incident: "<id>" }` as its inputs, even one acknowledged or
    * resolved before the service saw it; the workflow can check the status and
    * skip one that is already handled. The run starts as soon as the hub
    * passes on PagerDuty's `incident.triggered` event.
@@ -44,10 +48,14 @@ export const pagerduty = {
    * ```ts
    * import { pagerduty } from "@jigs-ai/jigs";
    *
-   * const source = pagerduty.incidents({ services: ["P48FPG2"], urgencies: ["high"] });
+   * const source = pagerduty.incidents({
+   *   installationName: "acme",
+   *   services: ["P48FPG2"],
+   *   urgencies: ["high"],
+   * });
    * ```
    */
-  incidents(params: PagerDutyIncidentsParams = {}): SourceDescriptor {
+  incidents(params: PagerDutyIncidentsParams): SourceDescriptor {
     return { kind: PAGERDUTY_INCIDENTS_SOURCE, params: { ...params } };
   },
 } as const;

@@ -8,9 +8,7 @@ import {
   type factoryConfigSchema,
   type githubSchema,
   type linearSchema,
-  type pagerDutySchema,
   parseFactoryConfig,
-  type slackSchema,
   type WorkflowImport,
 } from "./factory-schema.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
@@ -198,8 +196,6 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * Who jigs' Linear comments mention.
  *
  * @remarks
- * jigs acts on Linear as the Linear app the hub assigns this factory.
- *
  * `operator` is the email of the Linear user who runs the factory. With it,
  * every Linear comment jigs posts mentions the operator and the ticket's
  * assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
@@ -221,51 +217,12 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
 export type LinearDefinition = z.input<typeof linearSchema>;
 
 /**
- * Who jigs' PagerDuty notes are attributed to.
+ * A repository this factory works in: its remote, the GitHub installation
+ * that reaches it, and how a worktree cut from it is provisioned.
  *
  * @remarks
- * jigs acts on PagerDuty as the PagerDuty app the hub assigns this factory.
- *
- * `from` is the email of a real PagerDuty user. PagerDuty refuses a write that
- * names no user, so every note jigs adds is attributed to them. `jigs doctor`
- * fails when no PagerDuty user has the email.
- *
- * @example
- * Use this value for `pagerduty` in `jigs.config.ts`.
- * ```ts
- * import type { PagerDutyDefinition } from "@jigs-ai/jigs";
- *
- * const pagerduty = { from: "oncall@example.com" } satisfies PagerDutyDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
-
-/**
- * The factory's Slack app, which posts as its own bot.
- *
- * @remarks
- * The hub assigns the factory its Slack app, hands it the bot token and sends
- * it the app's events. `scopes` lists extra bot scopes
- * the factory's own Slack calls need, such as `reactions:write`, so
- * `jigs doctor` checks the workspace granted them.
- *
- * @example
- * Use this value for `slack` in `jigs.config.ts`.
- * ```ts
- * import type { SlackDefinition } from "@jigs-ai/jigs";
- *
- * const slack = { scopes: ["reactions:write"] } satisfies SlackDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type SlackDefinition = z.input<typeof slackSchema>;
-
-/**
- * A repository this factory works in: its remote and how a worktree cut from
- * it is provisioned.
+ * `installationName` is the name an admin gave the GitHub App installation on
+ * the hub. Pushes, pull requests and their events go through it.
  *
  * @example
  * Use this value for `bindings.api` in `jigs.config.ts`.
@@ -274,6 +231,7 @@ export type SlackDefinition = z.input<typeof slackSchema>;
  *
  * const api = {
  *   remote: "git@github.com:acme/api.git",
+ *   installationName: "github-acme",
  *   postCreate: ["pnpm install"],
  * } satisfies BindingDefinition;
  * ```

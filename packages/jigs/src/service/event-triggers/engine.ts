@@ -17,7 +17,12 @@ import {
   runStatuses,
 } from "../runs.ts";
 import { tally } from "./capacity.ts";
-import { SOURCES, type SourceOccurrence, type SourceRegistry } from "./sources.ts";
+import {
+  type PushedEvent,
+  SOURCES,
+  type SourceOccurrence,
+  type SourceRegistry,
+} from "./sources.ts";
 import { DELIVERY_SETTLE_MS, startConfirmation } from "./start-confirmation.ts";
 import { type Occurrence, type TriggerMarker, type TriggerStore, triggerStore } from "./store.ts";
 import { issues, resolveTrigger, type ValidTrigger } from "./validate.ts";
@@ -49,7 +54,7 @@ export interface TriggerEngine {
    * Record the occurrence a pushed event is for, and return the triggers that took it. Rejects
    * when a trigger could not read the event, after the others have taken it.
    */
-  push(provider: Provider, event: unknown): Promise<string[]>;
+  push(provider: Provider, event: PushedEvent): Promise<string[]>;
   /** Start waiting occurrences, oldest first, up to each trigger's cap. */
   drain(): Promise<void>;
   /** Start nothing more, and settle once the drain in flight has. */

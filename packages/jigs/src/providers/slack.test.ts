@@ -67,7 +67,7 @@ beforeEach(() => {
     context: testFactoryContext(),
   };
   slackTokens = useSlackClient(deps);
-  slack = createSlackClient(deps);
+  slack = createSlackClient({ ...deps, installationName: "acme" });
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/slack-test-${factories}`);
 });
@@ -191,7 +191,7 @@ test("a call still rate-limited after its retries fails as ratelimited", async (
 });
 
 test("the bot is read from the hub once per factory context", async () => {
-  const [first, second] = await Promise.all([slackBot(), slackBot()]);
+  const [first, second] = await Promise.all([slackBot("acme"), slackBot("acme")]);
   expect(first).toEqual(second);
   expect(first).toEqual({
     userId: TEST_SLACK_BOT.botUserId,
@@ -202,15 +202,15 @@ test("the bot is read from the hub once per factory context", async () => {
   });
   expect(slackTokens).toHaveBeenCalledTimes(1);
   vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
-  await slackBot();
+  await slackBot("acme");
   expect(slackTokens).toHaveBeenCalledTimes(2);
   expect(calls).toHaveLength(0);
 });
 
 test("a failed token request is not cached", async () => {
   slackTokens.mockRejectedValueOnce(new Error("hub down"));
-  await expect(slackBot()).rejects.toThrow("hub down");
-  expect((await slackBot()).userId).toBe(TEST_SLACK_BOT.botUserId);
+  await expect(slackBot("acme")).rejects.toThrow("hub down");
+  expect((await slackBot("acme")).userId).toBe(TEST_SLACK_BOT.botUserId);
 });
 
 const message = (ts: string, extra: Record<string, unknown> = {}) => ({

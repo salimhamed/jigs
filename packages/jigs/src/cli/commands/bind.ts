@@ -13,6 +13,7 @@ import {
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
+import { installationNameSchema } from "../../workflow/factory-schema.ts";
 import { factoryContextAt } from "../factory-context.ts";
 import { detail, hint, note } from "../output.ts";
 
@@ -26,11 +27,14 @@ export interface BindDeps {
 
 export interface BindOptions {
   name?: string;
+  /** The GitHub App installation, as named on the hub, that reaches the repository. */
+  installation?: string;
 }
 
 export interface BindResult {
   name: string;
   remote: string;
+  installationName: string;
 }
 
 // A config edit plus jigs-owned repository furniture: the jigs labels. The clone is the service's to make at its next start.
@@ -83,15 +87,30 @@ export async function bindRepo(
       `the clone at ${cloneDir({ factoryRoot, bindingName: name })} holds the old repo's objects\nunbind it, then bind again: \`pnpm exec jigs unbind ${name}\``,
     );
   }
-  const updated = upsertBinding(text, name, remoteUrl);
+  const installationName = options.installation ?? existing?.installationName;
+  if (installationName === undefined) {
+    throw new JigsError(
+      `bind needs the GitHub installation that reaches ${remoteUrl}`,
+      `name it as the hub does: \`pnpm exec jigs bind ${remoteUrl} --installation <installation-name>\``,
+    );
+  }
+  if (!installationNameSchema.safeParse(installationName).success) {
+    throw new JigsError(
+      `invalid installation name ${JSON.stringify(installationName)}`,
+      "an installation name is lowercase letters, digits and hyphens, starting with a letter, as named on the hub",
+    );
+  }
+  const updated = upsertBinding(text, name, { remote: remoteUrl, installationName });
 
   if (updated !== text) {
     writeFactoryConfigText(factoryRoot, updated);
   }
   deps.out(
     existing === undefined
-      ? `bound ${name} → ${remoteUrl}`
-      : `${name} already points at ${remoteUrl}`,
+      ? `bound ${name} → ${remoteUrl} through ${installationName}`
+      : updated === text
+        ? `${name} already points at ${remoteUrl} through ${installationName}`
+        : `${name} now points at ${remoteUrl} through ${installationName}`,
   );
   if (createBindingFilesDir(factoryRoot, name)) {
     deps.out(
@@ -107,13 +126,12 @@ export async function bindRepo(
   // Last, so furniture that cannot be ensured leaves the binding recorded and
   // the whole verb re-runnable: the config edit above and the labels below are
   // idempotent.
-  const reBindCommand =
-    options.name !== undefined || name !== derivedName
-      ? `pnpm exec jigs bind ${remoteUrl} --binding-name ${name}`
-      : `pnpm exec jigs bind ${remoteUrl}`;
+  const reBindCommand = `pnpm exec jigs bind ${remoteUrl}${
+    options.name !== undefined || name !== derivedName ? ` --binding-name ${name}` : ""
+  } --installation ${installationName}`;
   // The repair it prints has to land on this binding, not on the one the
   // remote alone would derive.
-  await ensureJigsLabels(remoteUrl, ctx, reBindCommand, deps);
+  await ensureJigsLabels(remoteUrl, installationName, ctx, reBindCommand, deps);
   if (owesClone) {
     for (const line of [
       "",
@@ -122,13 +140,14 @@ export async function bindRepo(
       deps.out(line);
     }
   }
-  return { name, remote: remoteUrl };
+  return { name, remote: remoteUrl, installationName };
 }
 
 // Every label, whatever this factory's approval: a switch to label approval
 // later should not need a re-bind of every repository.
 async function ensureJigsLabels(
   remoteUrl: string,
+  installationName: string,
   ctx: FactoryContext,
   reBindCommand: string,
   deps: BindDeps,
@@ -142,6 +161,7 @@ async function ensureJigsLabels(
   for (const label of JIGS_LABELS) {
     const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
       ...repoRef,
+      installationName,
       label,
       context: ctx,
     }).catch((err: unknown) => {
@@ -149,7 +169,7 @@ async function ensureJigsLabels(
       const repair = tokenWasRejected(err)
         ? `grant the factory's GitHub App "Issues: read & write", accept it on the installation for ${slug}, then ${rerun}`
         : err instanceof GitHubApiError && err.status === 404
-          ? `check the remote, and that the factory's GitHub App installation on ${repoRef.owner} can see ${slug}, then ${rerun}`
+          ? `check the remote, and that the GitHub installation ${installationName} can see ${slug}, then ${rerun}`
           : err instanceof JigsError && err.hint !== undefined
             ? `${err.hint}, then ${rerun}`
             : `once that clears, ${rerun}`;

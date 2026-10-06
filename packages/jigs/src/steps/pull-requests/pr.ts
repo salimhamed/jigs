@@ -16,6 +16,7 @@ import {
   type PullRequestSnapshot,
   postPrComment,
   postPullRequestReview,
+  type RepositoryRef,
   replyToReviewThread,
 } from "../../providers/github.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
@@ -35,15 +36,15 @@ export type OpenedPullRequest = PullRequestRef & {
   url: string;
 };
 
-function repositoryOf(binding: string) {
-  const { remote } = resolveBinding(currentFactoryContext().config, binding);
+function repositoryOf(binding: string): RepositoryRef {
+  const { remote, installationName } = resolveBinding(currentFactoryContext().config, binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
     throw new Error(
       `binding ${binding} points at ${remote}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
     );
   }
-  return ref;
+  return { installationName, ...ref };
 }
 
 /**
@@ -72,17 +73,16 @@ export async function createPullRequest(request: {
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
     const { number, html_url } = await createPr({
-      owner: repo.owner,
-      repo: repo.repo,
+      ...repo,
       head,
       base,
       title,
       body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
       ...(draft === undefined ? {} : { draft }),
     });
-    opened = { owner: repo.owner, repo: repo.repo, number, url: html_url };
+    opened = { ...repo, number, url: html_url };
   }
-  const pr = { owner: opened.owner, repo: opened.repo, number: opened.number };
+  const { url: _, ...pr } = opened;
   if (operator !== null) await assignPullRequest(pr, [operator]);
   return opened;
 }

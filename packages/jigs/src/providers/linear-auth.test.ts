@@ -1,5 +1,6 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { testFactoryContext } from "../test-fixtures.ts";
+import { createHubTokens } from "./credentials.ts";
 import { createLinearClient } from "./linear.ts";
 import { createLinearAuth, LINEAR_API_URL, linearAuthFor } from "./linear-auth.ts";
 import { answerHubTokens } from "./test-fixtures.ts";
@@ -14,7 +15,7 @@ afterEach(() => {
 
 // The hub answering each token request with the next token, each living a day.
 function hubIssuing(...tokens: string[]) {
-  return vi.fn(async (_organization: string | undefined) => {
+  return vi.fn(async () => {
     const token = tokens.shift();
     if (token === undefined) throw new Error("the hub is down");
     return { token, expiresAt: new Date(NOW + 86_400_000).toISOString(), app: APP };
@@ -24,7 +25,7 @@ function hubIssuing(...tokens: string[]) {
 test("a token is reused until five minutes are left, then asked for again", async () => {
   const issue = hubIssuing("first", "second");
   let now = NOW;
-  const auth = createLinearAuth(undefined, { issue, now: () => now });
+  const auth = createLinearAuth(createHubTokens(issue, () => now));
   expect(await auth.bearer()).toBe("first");
   now = NOW + 86_400_000 - 6 * 60_000;
   expect(await auth.bearer()).toBe("first");
@@ -36,7 +37,7 @@ test("a token is reused until five minutes are left, then asked for again", asyn
 test("a caller can ask for a token with more time left than jigs' own margin", async () => {
   const issue = hubIssuing("first", "second");
   let now = NOW;
-  const auth = createLinearAuth(undefined, { issue, now: () => now });
+  const auth = createLinearAuth(createHubTokens(issue, () => now));
   await auth.bearer();
   now = NOW + 86_400_000 - 3 * 60 * 60_000;
   expect(await auth.bearer()).toBe("first");
@@ -45,7 +46,7 @@ test("a caller can ask for a token with more time left than jigs' own margin", a
 
 test("the app's own user is the one the hub names", async () => {
   const issue = hubIssuing("t");
-  const auth = createLinearAuth(undefined, { issue, now: () => NOW });
+  const auth = createLinearAuth(createHubTokens(issue, () => NOW));
   expect(await auth.user()).toEqual({ id: "app-user", name: "jigs" });
   await auth.bearer();
   expect(issue).toHaveBeenCalledTimes(1);
@@ -53,25 +54,25 @@ test("the app's own user is the one the hub names", async () => {
 
 test("callers that arrive together share one request", async () => {
   const issue = hubIssuing("shared");
-  const auth = createLinearAuth(undefined, { issue, now: () => NOW });
+  const auth = createLinearAuth(createHubTokens(issue, () => NOW));
   const tokens = await Promise.all(Array.from({ length: 4 }, () => auth.bearer()));
   expect(tokens).toEqual(Array(4).fill("shared"));
   expect(issue).toHaveBeenCalledTimes(1);
 });
 
-test("each workspace has its own token, asked of the factory's hub once per factory", async () => {
-  const spy = answerHubTokens("linear", async ({ organization }) => ({
-    token: `token-${organization ?? "only"}`,
+test("each installation has its own token, asked of the factory's hub once per factory", async () => {
+  const spy = answerHubTokens("linear", async (installationName) => ({
+    token: `token-${installationName}`,
     expiresAt: "2999-01-01T00:00:00Z",
     app: APP,
   }));
   const ctx = testFactoryContext();
-  expect(await linearAuthFor(ctx).bearer()).toBe("token-only");
-  expect(await linearAuthFor(ctx).bearer()).toBe("token-only");
-  expect(await linearAuthFor(ctx, "acme").bearer()).toBe("token-acme");
+  expect(await linearAuthFor("acme", ctx).bearer()).toBe("token-acme");
+  expect(await linearAuthFor("acme", ctx).bearer()).toBe("token-acme");
+  expect(await linearAuthFor("other", ctx).bearer()).toBe("token-other");
   expect(spy.mock.calls).toEqual([
-    [{}, ctx],
-    [{ organization: "acme" }, ctx],
+    ["acme", ctx],
+    ["other", ctx],
   ]);
 });
 
@@ -90,7 +91,8 @@ function graphqlServer(replies: Array<number | "auth-error">) {
   });
   const issue = hubIssuing("token-1", "token-2", "token-3");
   const client = createLinearClient({
-    auth: createLinearAuth(undefined, { issue, now: () => NOW }),
+    installationName: "acme",
+    auth: createLinearAuth(createHubTokens(issue, () => NOW)),
     fetch: server.fetch,
   });
   return { calls: server.calls, client, issue };
@@ -133,7 +135,8 @@ test("a rate-limited call waits as Linear asks, then retries", async () => {
   );
   const { sleep, sleeps } = fakeSleep();
   const client = createLinearClient({
-    auth: createLinearAuth(undefined, { issue: hubIssuing("t"), now: () => NOW }),
+    installationName: "acme",
+    auth: createLinearAuth(createHubTokens(hubIssuing("t"), () => NOW)),
     fetch: server.fetch,
     sleep,
   });

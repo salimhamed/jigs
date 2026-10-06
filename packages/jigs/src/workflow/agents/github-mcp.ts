@@ -35,7 +35,7 @@ export type GithubMcpOptions = {
  *
  * const builder = harnesses.claude({
  *   model: "opus",
- *   github: true,
+ *   github: { installationName: "github-acme" },
  *   mcpServers: { github: githubMcp() },
  * });
  * ```

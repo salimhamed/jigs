@@ -116,7 +116,7 @@ test("a binding with no clone directory at all is not mistaken for one", () => {
 
 test("every declared binding is listed with the directory its clone belongs in", () => {
   const root = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: remoteDir } },
+    bindings: { api: { remote: remoteDir, installationName: "github-acme" } },
   });
   expect(bindingClones(resolveFactoryContext(root))).toEqual([
     {

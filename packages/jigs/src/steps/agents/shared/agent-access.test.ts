@@ -7,11 +7,13 @@ import { type AgentAccessDeps, agentAccessEnv } from "./agent-access.ts";
 function deps() {
   const fake = {
     github: vi.fn(
-      async ({ harness }: { harness: Harness }): Promise<Record<string, string>> =>
+      async (harness: Harness): Promise<Record<string, string>> =>
         harness.github === undefined ? {} : { GH_TOKEN: "ghs" },
     ),
-    linearToken: vi.fn(async () => "lin_token"),
-    pagerdutyToken: vi.fn(async () => "pd_token"),
+    token: vi.fn(
+      async (provider: "linear" | "pagerduty", installationName: string) =>
+        `${provider}:${installationName}`,
+    ),
   } satisfies AgentAccessDeps;
   return fake;
 }
@@ -22,21 +24,25 @@ const envFor = (harness: Harness, fake: AgentAccessDeps) =>
 test("a harness that opts in to nothing gets nothing and mints nothing", async () => {
   const fake = deps();
   expect(await envFor(harnesses.claude({ model: "m" }), fake)).toEqual({});
-  expect(fake.linearToken).not.toHaveBeenCalled();
-  expect(fake.pagerdutyToken).not.toHaveBeenCalled();
+  expect(fake.token).not.toHaveBeenCalled();
 });
 
-test("each opt-in adds its provider's token under its own name", async () => {
+test("each opt-in adds the token of the installation it names under its provider's name", async () => {
   const fake = deps();
-  const harness = harnesses.codex({ model: "m", github: true, linear: true, pagerduty: true });
+  const harness = harnesses.codex({
+    model: "m",
+    github: { installationName: "github-acme" },
+    linear: { installationName: "linear-acme" },
+    pagerduty: { installationName: "pd-acme" },
+  });
   expect(await envFor(harness, fake)).toEqual({
     GH_TOKEN: "ghs",
-    JIGS_LINEAR_TOKEN: "lin_token",
-    JIGS_PAGERDUTY_TOKEN: "pd_token",
+    JIGS_LINEAR_TOKEN: "linear:linear-acme",
+    JIGS_PAGERDUTY_TOKEN: "pagerduty:pd-acme",
   });
-  expect(await envFor(harnesses.codex({ model: "m", linear: true }), fake)).toEqual({
-    JIGS_LINEAR_TOKEN: "lin_token",
-  });
+  expect(
+    await envFor(harnesses.codex({ model: "m", linear: { installationName: "other" } }), fake),
+  ).toEqual({ JIGS_LINEAR_TOKEN: "linear:other" });
 });
 
 test("a server reading an agent token on a harness without the opt-in fails the step", async () => {
@@ -45,5 +51,5 @@ test("a server reading an agent token on a harness without the opt-in fails the 
   await expect(envFor(github, fake)).rejects.toThrow("MCP server 'github' reads GH_TOKEN");
   const linear = { kind: "claude", model: "m", mcpServers: { linear: linearMcp() } } as const;
   await expect(envFor(linear, fake)).rejects.toThrow("reads JIGS_LINEAR_TOKEN");
-  expect(fake.linearToken).not.toHaveBeenCalled();
+  expect(fake.token).not.toHaveBeenCalled();
 });

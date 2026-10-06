@@ -27,6 +27,7 @@ export default {
     // Main API.
     "acme-api": {
       remote: "git@github.com:acme/api.git", // GitHub
+      installationName: "gh",
       postCreate: ["npm ci"],
     },
   },
@@ -38,6 +39,7 @@ test("binding defaults and declared provisioning are validated", () => {
   const config = readFactoryConfig(factory(source));
   expect(config.bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
+    installationName: "gh",
     copy: [],
     postCreate: ["npm ci"],
     hookTimeoutMinutes: 10,
@@ -81,7 +83,7 @@ test.each([
     {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      bindings: { api: { remote: "url", hookTimeoutMinutes: 0 } },
+      bindings: { api: { remote: "url", installationName: "gh", hookTimeoutMinutes: 0 } },
     },
     "hookTimeoutMinutes",
   ],
@@ -89,9 +91,25 @@ test.each([
     {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      bindings: { api: { remote: "url", typo: true } },
+      bindings: { api: { remote: "url", installationName: "gh", typo: true } },
     },
     "typo",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      bindings: { api: { remote: "url" } },
+    },
+    "bindings.api.installationName",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      bindings: { api: { remote: "url", installationName: "Acme_GitHub" } },
+    },
+    "must be an installation name from the hub",
   ],
   [{ service: { dashboardPort: 9090 } }, "hub"],
   [{ hub: { url: "hub.example.test" }, service: { dashboardPort: 9090 } }, "url"],
@@ -99,9 +117,17 @@ test.each([
     {
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      slack: { socketMode: true },
+      slack: { scopes: [] },
     },
-    '"socketMode"',
+    'Unrecognized key: "slack"',
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      pagerduty: { from: "oncall@example.com" },
+    },
+    'Unrecognized key: "pagerduty"',
   ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
@@ -114,22 +140,6 @@ test("service port defaults while dashboard port is explicit", () => {
       service: { dashboardPort: 3456 },
     }).service,
   ).toEqual({ port: 8990, dashboardPort: 3456 });
-});
-
-test("without a slack section the factory has no Slack app", () => {
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
-    }).slack,
-  ).toBeUndefined();
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
-      slack: {},
-    }).slack,
-  ).toEqual({ scopes: [] });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
@@ -183,17 +193,54 @@ test.each([
 });
 
 test("identical re-bind preserves every byte", () => {
-  expect(upsertBinding(source, "acme-api", "git@github.com:acme/api.git")).toBe(source);
+  expect(
+    upsertBinding(source, "acme-api", {
+      remote: "git@github.com:acme/api.git",
+      installationName: "gh",
+    }),
+  ).toBe(source);
+});
+
+test("updating an installation name preserves all surrounding text and comments", () => {
+  expect(
+    upsertBinding(source, "acme-api", {
+      remote: "git@github.com:acme/api.git",
+      installationName: "other",
+    }),
+  ).toBe(source.replace('installationName: "gh"', 'installationName: "other"'));
+});
+
+test("a binding without an installation name gains one beside its remote", () => {
+  const input = `export default {
+  hub: { url: "https://hub.example.test" },
+  service: { dashboardPort: 9090 },
+  bindings: {
+    // Main API.
+    api: {
+      remote: "a",
+    },
+  },
+};
+`;
+  const edited = upsertBinding(input, "api", { remote: "a", installationName: "gh" });
+  expect(edited).toContain("// Main API.");
+  expect(readFactoryConfig(factory(edited)).bindings.api).toMatchObject({
+    remote: "a",
+    installationName: "gh",
+  });
 });
 
 test("updating a remote preserves all surrounding text and comments", () => {
-  expect(upsertBinding(source, "acme-api", "new-remote")).toBe(
+  expect(upsertBinding(source, "acme-api", { remote: "new-remote", installationName: "gh" })).toBe(
     source.replace("git@github.com:acme/api.git", "new-remote"),
   );
 });
 
 test("adding and removing bindings preserves sibling comments and provisioning", () => {
-  const added = upsertBinding(source, "other.repo", "git@github.com:acme/other.git");
+  const added = upsertBinding(source, "other.repo", {
+    remote: "git@github.com:acme/other.git",
+    installationName: "gh",
+  });
   expect(readFactoryConfig(factory(added)).bindings["other.repo"]?.remote).toBe(
     "git@github.com:acme/other.git",
   );
@@ -213,13 +260,16 @@ export default defineFactory({
 });
 `;
   expect(
-    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+    upsertBinding(input, "playground", {
+      remote: "git@github.com:acme/pg.git",
+      installationName: "gh",
+    }),
   ).toBe(`import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   bindings: {
     api: { remote: "git@github.com:acme/api.git" },
-    playground: { remote: "git@github.com:acme/pg.git" },
+    playground: { remote: "git@github.com:acme/pg.git", installationName: "gh" },
   },
 });
 `);
@@ -231,10 +281,13 @@ test("adding the first binding expands an empty bindings object", () => {
 });
 `;
   expect(
-    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+    upsertBinding(input, "playground", {
+      remote: "git@github.com:acme/pg.git",
+      installationName: "gh",
+    }),
   ).toBe(`export default defineFactory({
   bindings: {
-    playground: { remote: "git@github.com:acme/pg.git" },
+    playground: { remote: "git@github.com:acme/pg.git", installationName: "gh" },
   },
 });
 `);
@@ -248,11 +301,14 @@ test("adding a non-identifier binding keeps its key quoted", () => {
 });
 `;
   expect(
-    upsertBinding(input, "other.repo", "git@github.com:acme/other.git"),
+    upsertBinding(input, "other.repo", {
+      remote: "git@github.com:acme/other.git",
+      installationName: "gh",
+    }),
   ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "git@github.com:acme/api.git" },
-    "other.repo": { remote: "git@github.com:acme/other.git" },
+    "other.repo": { remote: "git@github.com:acme/other.git", installationName: "gh" },
   },
 });
 `);
@@ -263,10 +319,15 @@ test("adding a reserved-word binding keeps its key quoted", () => {
   bindings: {},
 });
 `;
-  expect(upsertBinding(input, "import", "git@github.com:acme/import.git")).toBe(
+  expect(
+    upsertBinding(input, "import", {
+      remote: "git@github.com:acme/import.git",
+      installationName: "gh",
+    }),
+  ).toBe(
     `export default defineFactory({
   bindings: {
-    "import": { remote: "git@github.com:acme/import.git" },
+    "import": { remote: "git@github.com:acme/import.git", installationName: "gh" },
   },
 });
 `,
@@ -275,8 +336,8 @@ test("adding a reserved-word binding keeps its key quoted", () => {
 
 test("adding a binding to a one-line object does not duplicate the config", () => {
   const input = `export default { bindings: { api: { remote: "a" } } };`;
-  expect(upsertBinding(input, "web", "b")).toBe(
-    `export default { bindings: { api: { remote: "a" }, web: { remote: "b" }, } };`,
+  expect(upsertBinding(input, "web", { remote: "b", installationName: "gh" })).toBe(
+    `export default { bindings: { api: { remote: "a" }, web: { remote: "b", installationName: "gh" }, } };`,
   );
 });
 
@@ -288,11 +349,13 @@ test("adding a binding ignores commas in a trailing comment", () => {
   },
 });
 `;
-  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  expect(
+    upsertBinding(input, "web", { remote: "r2", installationName: "gh" }),
+  ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "r1" },
     // api, the main repo
-    web: { remote: "r2" },
+    web: { remote: "r2", installationName: "gh" },
   },
 });
 `);
@@ -306,11 +369,13 @@ test("adding a binding preserves a trailing comma before a comment", () => {
   },
 });
 `;
-  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  expect(
+    upsertBinding(input, "web", { remote: "r2", installationName: "gh" }),
+  ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "r1" },
     // note, with comma
-    web: { remote: "r2" },
+    web: { remote: "r2", installationName: "gh" },
   },
 });
 `);
@@ -318,8 +383,8 @@ test("adding a binding preserves a trailing comma before a comment", () => {
 
 test("adding a binding to a one-line object ignores commas in comments", () => {
   const input = `export default { bindings: { api: { remote: "a" } /* one, two */ } };`;
-  expect(upsertBinding(input, "web", "b")).toBe(
-    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b" }, } };`,
+  expect(upsertBinding(input, "web", { remote: "b", installationName: "gh" })).toBe(
+    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b", installationName: "gh" }, } };`,
   );
 });
 
@@ -327,7 +392,7 @@ test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } };",
     "api",
-    "url",
+    { remote: "url", installationName: "gh" },
   );
   expect(readFactoryConfig(factory(edited)).bindings.api?.remote).toBe("url");
 });
@@ -344,7 +409,9 @@ test.each([
   "export default config;",
   "export default defineFactory({ bindings: { api: { remote: url } } });",
 ])("unsupported automatic edits fail clearly", (text) => {
-  expect(() => upsertBinding(text, "api", "url")).toThrow("Cannot edit bindings in jigs.config.ts");
+  expect(() => upsertBinding(text, "api", { remote: "url", installationName: "gh" })).toThrow(
+    "Cannot edit bindings in jigs.config.ts",
+  );
 });
 
 test.each([
@@ -369,7 +436,7 @@ test("an already registered workflow leaves the config alone", () => {
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
   const root = factory(
-    `const service = { dashboardPort: 9090 }; export default { hub: { url: "https://hub.example.test" }, service, bindings: { api: { remote: "url" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
+    `const service = { dashboardPort: 9090 }; export default { hub: { url: "https://hub.example.test" }, service, bindings: { api: { remote: "url", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
   const ctx = resolveFactoryContext(root);
   expect(resolveService(ctx).dashboardPort).toBe(9090);
@@ -436,23 +503,6 @@ test("a Linear operator is optional and must be an email", () => {
   expect(withSettings({ linear: {} }).linear.operator).toBeUndefined();
   expect(() => withSettings({ linear: { operator: "salim" } })).toThrow("linear.operator");
   expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");
-});
-
-test("a factory without a pagerduty section has no PagerDuty settings", () => {
-  expect(withSettings({}).pagerduty).toBeUndefined();
-});
-
-test("a PagerDuty section names the from user by email, and nothing else", () => {
-  expect(withSettings({ pagerduty: { from: "oncall@example.com" } }).pagerduty).toEqual({
-    from: "oncall@example.com",
-  });
-  for (const from of ["oncall", ""]) {
-    expect(() => withSettings({ pagerduty: { from } })).toThrow("pagerduty.from");
-  }
-  expect(() => withSettings({ pagerduty: {} })).toThrow("pagerduty.from");
-  expect(() =>
-    withSettings({ pagerduty: { from: "oncall@example.com", identity: { mode: "app" } } }),
-  ).toThrow("identity");
 });
 
 const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };

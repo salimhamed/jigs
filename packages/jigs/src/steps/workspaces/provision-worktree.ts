@@ -79,6 +79,7 @@ export async function provisionWorktree(
     const cut = { repoDir, worktreePath: target, branch };
     const facts: Worktree = {
       binding: binding.name,
+      installationName: binding.installationName,
       ...((await findWorktree(cut)) ?? (await createWorktree(cut))),
     };
 

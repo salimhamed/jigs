@@ -34,7 +34,11 @@ export function recordedClient(respond: (call: RecordedCall) => unknown): {
     return new Response(JSON.stringify(respond(call)), { status: 200 });
   });
   const client = createPagerDutyClient({
-    tokens: { bearer: async () => "token", invalidate: () => {} },
+    installationName: "pagerduty-test",
+    tokens: {
+      issued: async () => ({ token: "token", from: "oncall@example.com" }),
+      invalidate: () => {},
+    },
     context,
     fetch: fetch as unknown as typeof globalThis.fetch,
   });

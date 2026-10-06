@@ -10,9 +10,8 @@ import {
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import type { JsonValue } from "../workflow/human/questions.ts";
-import { createHubTokens, perContext } from "./credentials.ts";
 import { ProviderApiError, rateLimitWaits, retryAfterSeconds } from "./http.ts";
-import { hubToken } from "./hub.ts";
+import { installationTokens } from "./installation-tokens.ts";
 
 export const SLACK_API_URL = "https://slack.com/api";
 
@@ -67,6 +66,8 @@ export interface SlackReply {
 }
 
 export interface SlackClientDeps {
+  /** The Slack installation, as named on the hub, whose bot token it sends. */
+  installationName: string;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /** The factory whose token it sends. Defaults to the process's own, resolved on each call. */
@@ -103,7 +104,7 @@ export interface SlackUser {
   bot: boolean;
 }
 
-export function createSlackClient(deps: SlackClientDeps = {}) {
+export function createSlackClient(deps: SlackClientDeps) {
   const ctx = () => deps.context ?? currentFactoryContext();
   // Form-encoded, because every Web API method accepts it and not every read
   // method accepts JSON.
@@ -117,7 +118,7 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
         form.set(key, typeof value === "string" ? value : JSON.stringify(value));
     }
     const rateLimit = rateLimitWaits("slack", runSignal, deps.sleep);
-    const tokens = slackTokens(ctx());
+    const tokens = installationTokens("slack", deps.installationName, ctx());
     let reissued = false;
     for (;;) {
       const { token } = await tokens.issued();
@@ -233,27 +234,12 @@ export function createSlackClient(deps: SlackClientDeps = {}) {
 
 export type SlackClient = ReturnType<typeof createSlackClient>;
 
-/** The process's Slack client. The functions below call it, so a test can spy on its methods. */
-export const slackClient: SlackClient = createSlackClient();
+/** The factory's Slack client for one installation. */
+export const slackFor = (installationName: string, context?: FactoryContext): SlackClient =>
+  createSlackClient({ installationName, ...(context === undefined ? {} : { context }) });
 
-export function slackCall<T extends SlackReply>(
-  method: string,
-  params?: SlackParams,
-): Promise<{ body: T; headers: Headers }> {
-  return slackClient.slackCall<T>(method, params);
-}
-export const slackReplies: SlackClient["slackReplies"] = (...args) =>
-  slackClient.slackReplies(...args);
-export const slackPostMessage: SlackClient["slackPostMessage"] = (...args) =>
-  slackClient.slackPostMessage(...args);
-export const slackPermalink: SlackClient["slackPermalink"] = (...args) =>
-  slackClient.slackPermalink(...args);
-export const slackUser: SlackClient["slackUser"] = (...args) => slackClient.slackUser(...args);
-
-const slackTokens = perContext((ctx) => createHubTokens(() => hubToken("slack", {}, ctx)));
-
-/** The factory's own bot. */
-export async function slackBot(ctx?: FactoryContext): Promise<SlackBot> {
-  const { app, team, scopes } = await slackTokens(ctx).issued();
+/** The factory's own bot in one installation. */
+export async function slackBot(installationName: string, ctx?: FactoryContext): Promise<SlackBot> {
+  const { app, team, scopes } = await installationTokens("slack", installationName, ctx).issued();
   return { userId: app.botUserId, appId: app.appId, name: app.name, team, scopes };
 }

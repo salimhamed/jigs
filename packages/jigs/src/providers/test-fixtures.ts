@@ -8,13 +8,14 @@ import { testFactoryContext } from "../test-fixtures.ts";
 import { createGithubClient, type GithubClientDeps, githubClient } from "./github-http.ts";
 import * as hub from "./hub.ts";
 import { createPagerDutyClient, PAGERDUTY_API_URL, type PagerDutyIncident } from "./pagerduty.ts";
-import { createSlackClient, type SlackClientDeps, slackClient } from "./slack.ts";
+import * as slack from "./slack.ts";
+import { createSlackClient, type SlackClientDeps } from "./slack.ts";
 import { type FetchCall, fakeFetch } from "./test-support.ts";
 
-type TokenAnswer<P extends keyof hub.HubTokenExchange> = (
-  request: hub.HubTokenExchange[P]["request"],
+type TokenAnswer<P extends keyof hub.HubTokenResponses> = (
+  installationName: string,
   ctx?: FactoryContext,
-) => Promise<hub.HubTokenExchange[P]["response"]>;
+) => Promise<hub.HubTokenResponses[P]>;
 
 const hubTokenAnswers = new Map<string, TokenAnswer<never>>();
 
@@ -22,16 +23,16 @@ const hubTokenAnswers = new Map<string, TokenAnswer<never>>();
  * Answer the hub's `provider` token requests with the returned mock, keeping the answers this test
  * already gives for the other providers.
  */
-export function answerHubTokens<P extends keyof hub.HubTokenExchange>(
+export function answerHubTokens<P extends keyof hub.HubTokenResponses>(
   provider: P,
   answer: TokenAnswer<P>,
 ): Mock<TokenAnswer<P>> {
   if (!vi.isMockFunction(hub.hubToken)) {
     hubTokenAnswers.clear();
-    vi.spyOn(hub, "hubToken").mockImplementation((async (asked, request, ctx) => {
+    vi.spyOn(hub, "hubToken").mockImplementation((async (asked, installationName, ctx) => {
       const answered = hubTokenAnswers.get(asked);
       if (answered === undefined) throw new Error(`this test answers no ${asked} token request`);
-      return answered(request as never, ctx);
+      return answered(installationName, ctx);
     }) as typeof hub.hubToken);
   }
   const mock = vi.fn(answer);
@@ -48,6 +49,7 @@ export function useHubGithubTokens(): void {
   answerHubTokens("github", async () => ({
     token: TEST_GITHUB_TOKEN,
     expiresAt: "2999-01-01T00:00:00Z",
+    account: "acme",
     app: { slug: "jigs-test", botUserId: TEST_APP_BOT.id },
   }));
 }
@@ -72,13 +74,15 @@ export function useHubSlackTokens(scopes: readonly string[] = slackBotScopes) {
   }));
 }
 
-/** Route the process's Slack calls to a client built on `deps`; returns the hub's Slack token answer. */
-export function useSlackClient(deps: SlackClientDeps) {
+/**
+ * Build every Slack client the code under test asks for on `deps`, for whichever installation it
+ * names; returns the hub's Slack token answer.
+ */
+export function useSlackClient(deps: Omit<SlackClientDeps, "installationName">) {
   const tokens = useHubSlackTokens();
-  const client = createSlackClient(deps);
-  for (const key of Object.keys(client) as Array<keyof typeof client>) {
-    vi.spyOn(slackClient, key).mockImplementation(client[key] as never);
-  }
+  vi.spyOn(slack, "slackFor").mockImplementation((installationName, context) =>
+    createSlackClient({ ...deps, installationName, ...(context === undefined ? {} : { context }) }),
+  );
   return tokens;
 }
 
@@ -138,8 +142,9 @@ export async function useLiveSlackToken(token: string): Promise<void> {
  */
 export function livePagerDutyClient(token: string, from: string) {
   return createPagerDutyClient({
-    tokens: { bearer: async () => token, invalidate: () => {} },
-    context: testFactoryContext({ config: { pagerduty: { from } } }),
+    installationName: "pagerduty-live",
+    tokens: { issued: async () => ({ token, from }), invalidate: () => {} },
+    context: testFactoryContext(),
   });
 }
 

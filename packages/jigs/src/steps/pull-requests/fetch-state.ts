@@ -22,7 +22,7 @@ export async function readPullRequestSnapshot(
   const facts = await fetchPrSnapshot(pr);
   const signal = currentFactoryContext().config.github.mergeApproval;
   const state = approvalState(facts, signal, { covers: approvalCovers });
-  const { login } = await githubAuthFor(pr.owner).bot();
+  const { login } = await githubAuthFor(pr.installationName).bot();
   return { ...facts, approval: { signal, state }, appBot: login };
 }
 

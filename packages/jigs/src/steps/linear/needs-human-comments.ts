@@ -10,15 +10,14 @@
 // replaces no step.
 
 import { createHash } from "node:crypto";
-import { appUser, createComment, findComment, listCommentsSince } from "../../providers/linear.ts";
+import { type LinearClient, linearFor } from "../../providers/linear.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
-  Halt,
   HumanReply,
   PostTicketHumanInputRequest,
 } from "../../workflow/linear/halt-for-human.ts";
-import type { PostTicketNote, TicketNote } from "../../workflow/linear/review.ts";
+import type { PostTicketNote } from "../../workflow/linear/review.ts";
 import { dashboardRunUrl, type StepRunMetadata } from "../runtime/run-context.ts";
 import { resolveParticipants } from "./mentions.ts";
 import {
@@ -42,8 +41,7 @@ import {
  * @group Human interaction primitives
  */
 export const postTicketHumanInputRequest = async (
-  issueId: string,
-  halt: Halt,
+  { installationName, issueId, halt }: Parameters<PostTicketHumanInputRequest>[0],
   metadata: StepRunMetadata,
   definition: FactoryDefinition,
   render: RenderNeedsHumanComment = renderNeedsHumanComment,
@@ -53,8 +51,9 @@ export const postTicketHumanInputRequest = async (
     workflow: metadata.workflowName,
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
-  const comment = await postOnce(ticketCommentId(metadata, issueId), issueId, async () => {
-    const participants = await resolveParticipants(issueId, {
+  const linear = linearFor(installationName);
+  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+    const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: halt.mention,
     });
@@ -74,14 +73,14 @@ export const postTicketHumanInputRequest = async (
  * @group Human interaction primitives
  */
 export const postTicketNote = async (
-  issueId: string,
-  note: TicketNote,
+  { installationName, issueId, note }: Parameters<PostTicketNote>[0],
   metadata: StepRunMetadata,
   definition: FactoryDefinition,
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
-  const comment = await postOnce(ticketCommentId(metadata, issueId), issueId, async () => {
-    const participants = await resolveParticipants(issueId, {
+  const linear = linearFor(installationName);
+  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+    const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: note.mention,
     });
@@ -115,16 +114,17 @@ export function ticketCommentId(
 // already exists under this id, and creating it again would either post a
 // duplicate or fail on the id, so look first and look again after a failure.
 async function postOnce(
+  linear: LinearClient,
   id: string,
   issueId: string,
   body: () => Promise<string>,
 ): Promise<{ id: string; createdAt: string }> {
-  const existing = await findComment(id);
+  const existing = await linear.findComment(id);
   if (existing !== null) return existing;
   try {
-    return await createComment(issueId, await body(), id);
+    return await linear.createComment(issueId, await body(), id);
   } catch (error) {
-    const created = await findComment(id).catch(() => null);
+    const created = await linear.findComment(id).catch(() => null);
     if (created !== null) return created;
     throw error;
   }
@@ -135,12 +135,17 @@ async function postOnce(
  *
  * @group Human interaction primitives
  */
-export const checkForTicketHumanReply: CheckForTicketHumanReply = async (
+export const checkForTicketHumanReply: CheckForTicketHumanReply = async ({
+  installationName,
   issueId,
-  sinceIso,
+  since: sinceIso,
   postedCommentIds,
-) => {
-  const [comments, app] = await Promise.all([listCommentsSince(issueId, sinceIso), appUser()]);
+}) => {
+  const linear = linearFor(installationName);
+  const [comments, app] = await Promise.all([
+    linear.listCommentsSince(issueId, sinceIso),
+    linear.appUser(),
+  ]);
   const cursor = comments.reduce(
     (max, comment) => (comment.createdAt > max ? comment.createdAt : max),
     sinceIso,

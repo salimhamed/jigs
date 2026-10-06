@@ -1,32 +1,36 @@
 import { expect, test } from "vitest";
-import { runChecks } from "../checks/catalog.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { HubResponseError } from "./hub.ts";
-import { linearChecks, linearOperatorChecks } from "./linear-checks.ts";
+import { type LinearInstallationProbeDeps, linearInstallationProbe } from "./linear-checks.ts";
 
-const ctx = testFactoryContext();
+const issue = async () => ({
+  token: "t",
+  expiresAt: "2999-01-01T00:00:00Z",
+  app: { name: "jigs", userId: "app-user" },
+});
 
-const outcome = async (issue: Parameters<typeof linearChecks>[1]) =>
-  (await runChecks(linearChecks(ctx, issue))).checks[0];
+const probe = (deps: LinearInstallationProbeDeps) =>
+  linearInstallationProbe(testFactoryContext(), { issue, ...deps })("acme");
 
-test("a Linear app the hub hands a token for passes, naming the app", async () => {
-  expect(
-    await outcome(async () => ({
-      token: "t",
-      expiresAt: "2999-01-01T00:00:00Z",
-      app: { name: "jigs", userId: "app-user" },
-    })),
-  ).toEqual({ id: "linear.identity", label: "Linear app", ok: true, detail: "acting as jigs" });
+const users =
+  (found: Record<string, { id: string; name: string }>) =>
+  async (installationName: string, email: string) =>
+    installationName === "acme" ? (found[email] ?? null) : null;
+
+test("an installation the hub hands a token for passes, naming the app", async () => {
+  expect(await probe({})).toEqual({ ok: true, detail: "acting as jigs" });
 });
 
 test("a workspace that needs reconnecting fails with the hub's reason and the repair", async () => {
   expect(
-    await outcome(async () => {
-      throw new HubResponseError(
-        503,
-        "the hub answered 503: Connect acme to jigs again on the hub",
-        "in the hub, connect the Linear workspace again",
-      );
+    await probe({
+      issue: async () => {
+        throw new HubResponseError(
+          503,
+          "the hub answered 503: Connect acme to jigs again on the hub",
+          "in the hub, connect the Linear workspace again",
+        );
+      },
     }),
   ).toMatchObject({
     ok: false,
@@ -35,31 +39,19 @@ test("a workspace that needs reconnecting fails with the hub's reason and the re
   });
 });
 
-const userByEmail =
-  (users: Record<string, { id: string; name: string }>) => async (email: string) =>
-    users[email] ?? null;
-
-test("an operator email no Linear user has fails with a repair naming the setting", async () => {
-  expect(
-    (await runChecks(linearOperatorChecks("typo@example.com", userByEmail({})))).checks,
-  ).toEqual([
-    {
-      id: "linear.operator",
-      label: "Linear operator",
-      ok: false,
-      reason: "no active Linear user has the email typo@example.com",
-      repair: expect.stringContaining("set linear.operator in jigs.config.ts"),
-    },
-  ]);
+test("an operator email no Linear user in the installation has fails with a repair naming the setting", async () => {
+  expect(await probe({ operator: "typo@example.com", userByEmail: users({}) })).toEqual({
+    ok: false,
+    reason: "no active Linear user has the email typo@example.com",
+    repair: expect.stringContaining("set linear.operator in jigs.config.ts"),
+  });
 });
 
 test("a found operator passes and names who is mentioned", async () => {
-  const users = userByEmail({ "salim@example.com": { id: "u2", name: "Salim" } });
-  expect((await runChecks(linearOperatorChecks("salim@example.com", users))).checks).toEqual([
-    { id: "linear.operator", label: "Linear operator", ok: true, detail: "mentions Salim" },
-  ]);
-});
-
-test("no operator configured means no operator check", () => {
-  expect(linearOperatorChecks(undefined, userByEmail({}))).toEqual([]);
+  expect(
+    await probe({
+      operator: "salim@example.com",
+      userByEmail: users({ "salim@example.com": { id: "u2", name: "Salim" } }),
+    }),
+  ).toEqual({ ok: true, detail: "acting as jigs, mentions Salim" });
 });
