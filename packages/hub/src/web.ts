@@ -1,6 +1,6 @@
 import { fileURLToPath } from "node:url";
 import { createRequestHandler } from "@react-router/express";
-import express, { type RequestHandler } from "express";
+import express, { type Express, type RequestHandler } from "express";
 import type { ServerBuild } from "react-router";
 import type { HubAuth } from "./auth.ts";
 import type { HubConfig } from "./config.ts";
@@ -38,7 +38,10 @@ export async function createWebApp(
     const build = () =>
       server.ssrLoadModule("virtual:react-router/server-build") as Promise<ServerBuild>;
     return {
-      handlers: [server.middlewares, createRequestHandler({ build, getLoadContext })],
+      handlers: [
+        server.middlewares,
+        atPublicUrl(context.config.publicUrl, createRequestHandler({ build, getLoadContext })),
+      ],
       close: () => server.close(),
     };
   }
@@ -49,8 +52,25 @@ export async function createWebApp(
     handlers: [
       express.static(`${client}assets`, { immutable: true, maxAge: "1y" }),
       express.static(client, { maxAge: "1h" }),
-      createRequestHandler({ build, getLoadContext }),
+      atPublicUrl(context.config.publicUrl, createRequestHandler({ build, getLoadContext })),
     ],
     close: async () => {},
   };
+}
+
+// Behind a proxy the request arrives addressed to the hub's own port over plain HTTP, while the
+// browser's Origin is HUB_PUBLIC_URL. React Router refuses a form whose Origin differs from the
+// request's URL, so the app always sees requests addressed to HUB_PUBLIC_URL.
+function atPublicUrl(publicUrl: URL, handler: RequestHandler): Express {
+  const app = express();
+  app.disable("x-powered-by");
+  app.set("trust proxy", true);
+  app.use((request, _response, next) => {
+    request.headers.host = publicUrl.host;
+    request.headers["x-forwarded-host"] = publicUrl.host;
+    request.headers["x-forwarded-proto"] = publicUrl.protocol.slice(0, -1);
+    next();
+  });
+  app.use(handler);
+  return app;
 }
