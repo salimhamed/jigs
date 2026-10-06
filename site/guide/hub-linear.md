@@ -11,19 +11,26 @@ mention of it, so two factories that share one both act on the same mention.
 
 ## 1. Create the app in Linear
 
-In Linear, under **Settings → API → OAuth applications**, create a new
-application:
+In Linear, under **Settings → API**, create a new application and fill in the
+form:
 
-- **Name** and icon: what people see, and the name they mention.
-- **Callback URLs**: enter your hub's address for now; you replace it in
+- **Application icon** and **Application name**: what people see, and the
+  name they mention.
+- **Developer name**, **Developer URL** and **Description**: anything; Linear
+  requires the URL only for public apps.
+- **Redirect URIs**: enter your hub's address for now; you replace it in
   step 3.
-- **Webhooks**: turn them on, with your hub's address as the URL for now, and
-  choose **Agent session events** and **Comments**.
+- **GitHub username**: leave it empty.
 - **Public**: leave it off, unless workspaces other than yours should connect
   to it.
+- **Client credentials**: leave it off.
+- **Webhooks**: turn it on. Enter your hub's address as the **Webhook URL**
+  for now; you replace it in step 3. Copy the **Webhook signing secret** Linear
+  shows below it now.
+- Under the events, tick **Comments** in **Data change events** and **Agent
+  session events** in **App events**. Leave every other event off.
 
-Save, then note the app's **Client ID**, **Client secret** and **Webhook
-signing secret**.
+Create the app, then note its **Client ID** and **Client secret**.
 
 ## 2. Add the app to the hub
 
@@ -32,10 +39,11 @@ Linear shows it, its client ID, client secret and webhook signing secret.
 
 ## 3. Finish the app's settings
 
-The app's page on the hub shows its **Callback URL**, ending in
+The app's page on the hub shows its **Redirect URI**, ending in
 `/oauth/linear/<id>/callback`, and its **Webhook URL**, ending in
 `/webhooks/linear/<id>`. Each Linear app has its own. In the app's settings
-in Linear, replace the callback URL and webhook URL with these.
+in Linear, replace the placeholder under **Redirect URIs** and the **Webhook
+URL** with these.
 
 ## 4. Connect your workspace
 
