@@ -63,7 +63,8 @@ test.skipIf(skipPi)(
         response.end(JSON.stringify({ data: [{ id: "hanging-model" }] }));
         return;
       }
-      chatRequests += 1;
+      // Other processes on the host may probe this port; count only model turns.
+      if (request.method === "POST" && request.url === "/v1/chat/completions") chatRequests += 1;
     });
     await new Promise<void>((resolve, reject) => {
       server.once("error", reject);
