@@ -30,7 +30,7 @@ export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> }
  *   mcpServers: {
  *     search: {
  *       command: "npx",
- *       args: ["-y", "@modelcontextprotocol/server-brave-search"],
+ *       args: ["-y", "@brave/brave-search-mcp-server"],
  *       env: { BRAVE_API_KEY: "SEARCH_API_KEY" },
  *       probe: { tool: "brave_web_search", arguments: { query: "jigs", count: 1 } },
  *     },
