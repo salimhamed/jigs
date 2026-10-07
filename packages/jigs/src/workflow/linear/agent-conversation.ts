@@ -67,7 +67,8 @@ const STOPPED = "Stopped.";
  * Claude works, each answer as a response, a failure as an error, and a link to the run. A stop
  * ends the conversation with "Stopped.". The workflow keeps the worktree, the issue and anything
  * it delivers; it runs on once this returns. Only one run converses in a session: a second fails
- * with `ClaimConflictError`.
+ * with `ClaimConflictError` as soon as it calls this, so call it before expensive setup such as
+ * checking out the worktree.
  *
  * @group Linear agent sessions
  */
@@ -106,15 +107,15 @@ export async function linearAgentConversation(
   let opening: ConversationMessage | undefined = {
     uuid: session.session,
     author: session.creator?.name ?? "Someone",
-    text: session.comment ?? "This issue was assigned to you.",
+    text:
+      session.comment ??
+      `${session.issue.identifier} "${session.issue.title}" was assigned to you.`,
   };
   let turns = 0;
 
   const stopped = async (stop: LinearAgentPrompt | undefined) => {
-    await post(
-      { type: "response", body: STOPPED },
-      stop === undefined ? undefined : stopAnswerKey(stop.id),
-    );
+    if (stop === undefined) throw new JigsError("the turn stopped, but the session holds no stop");
+    await post({ type: "response", body: STOPPED }, stopAnswerKey(stop.id));
     return { outcome: "stopped" as const, turns };
   };
   const failed = async (error: string) => {
@@ -131,9 +132,9 @@ export async function linearAgentConversation(
       const stop = lastStop(fresh);
       if (stop !== undefined) return await stopped(stop);
       if (opening === undefined && fresh.length === 0) {
-        idle ??= (typeof idleFor === "number" ? sleep(idleFor) : sleep(idleFor)).then(
-          () => "idle" as const,
-        );
+        // sleep's overloads take a duration string or milliseconds, but not their union.
+        const wait = sleep as (duration: typeof idleFor) => Promise<void>;
+        idle ??= wait(idleFor).then(() => "idle" as const);
         if ((await Promise.race([hook.then(() => "woken" as const), idle])) === "idle") {
           return { outcome: "idle", turns };
         }
@@ -158,6 +159,12 @@ export async function linearAgentConversation(
       if (result.outcome === "stopped") return await stopped(lastStop(await unread()));
       if (result.outcome === "failed") return await failed(result.error);
     }
+  } catch (error) {
+    // Without an error posted, Linear would show the session working until it went stale.
+    await post({ type: "error", body: `The conversation failed: ${String(error)}` }).catch(
+      () => {},
+    );
+    throw error;
   } finally {
     hook.dispose();
     await linking;

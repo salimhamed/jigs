@@ -71,7 +71,7 @@ test("the run's dashboard leads the session's links when the service hosts one",
     { installationName: "acme", sessionId: "s1", urls: [] },
     metadata,
   );
-  expect(api.setExternalUrls).toHaveBeenCalledTimes(1);
+  expect(api.setExternalUrls).toHaveBeenLastCalledWith("s1", []);
 });
 
 test("links and prompts go through the session's installation", async () => {

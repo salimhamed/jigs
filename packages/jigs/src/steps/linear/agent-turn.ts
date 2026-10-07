@@ -18,11 +18,8 @@ export type { LinearAgentTurnRequest };
 
 /** How often the status line may change. */
 export const STATUS_EVERY_MS = 5_000;
-// Posted again unchanged after this long, so a long tool call never lets Linear
-// mark the session stale.
-const STATUS_REFRESH_MS = 5 * 60_000;
 const REPLY_RETRY_MS = [1_000, 5_000, 15_000];
-const DETAIL_CAP = 80;
+const COMMAND_CAP = 80;
 
 type SessionApi = Pick<LinearAgentApi, "listPrompts" | "postActivity" | "postActivityOnce">;
 
@@ -65,7 +62,7 @@ export async function executeLinearAgentTurn(
   }
   const messages = [...(opening === undefined ? [] : [opening]), ...fresh.map(asMessage)];
   if (messages.length === 0) return { outcome: "finished", replies: [], consumed: [] };
-  const session = sessionPoster(linear, sessionId, metadata, request.cwd, deps.wait);
+  const session = sessionPoster(linear, sessionId, metadata, deps.wait);
   try {
     return await deps.executeTurn(
       {
@@ -96,7 +93,6 @@ function sessionPoster(
   linear: SessionApi,
   sessionId: string,
   metadata: StepRunMetadata,
-  cwd: string,
   wait: (ms: number) => Promise<void>,
 ) {
   let queue: Promise<unknown> = Promise.resolve();
@@ -105,16 +101,15 @@ function sessionPoster(
   };
   let working = true;
   let last: string | undefined;
-  let shown: { line: string; at: number } | undefined;
+  let shown: string | undefined;
   let pending = false;
   const answers = new Map<string, number>();
 
   const tick = () => {
     if (!working || pending) return;
     const line = last === undefined ? "Working…" : `Working… (last: ${last})`;
-    const now = Date.now();
-    if (shown?.line === line && now - shown.at < STATUS_REFRESH_MS) return;
-    shown = { line, at: now };
+    if (line === shown) return;
+    shown = line;
     pending = true;
     enqueue(() =>
       linear
@@ -160,7 +155,7 @@ function sessionPoster(
     else if (event.type === "reply") answer(event.text);
     else if (isWork(event.part)) {
       working = true;
-      if (event.part.type === "tool-call") last = describeTool(event.part, cwd);
+      if (event.part.type === "tool-call") last = describeTool(event.part);
     }
   };
   return {
@@ -180,27 +175,11 @@ const isWork = (part: AgentSourcePart) =>
   part.type === "text-delta" ||
   part.type === "reasoning-delta";
 
-function describeTool(part: Extract<AgentSourcePart, { type: "tool-call" }>, cwd: string): string {
-  const input = (part.input ?? {}) as Record<string, unknown>;
-  const field = (name: string) => {
-    const value = input[name];
-    if (typeof value !== "string" || value === "") return undefined;
-    const line = (value.split("\n")[0] ?? "").replace(`${cwd}/`, "");
-    return `\`${line.length > DETAIL_CAP ? `${line.slice(0, DETAIL_CAP)}…` : line}\``;
-  };
-  const verb: Record<string, [string, string]> = {
-    Bash: ["ran", "command"],
-    Read: ["read", "file_path"],
-    Edit: ["edited", "file_path"],
-    MultiEdit: ["edited", "file_path"],
-    Write: ["wrote", "file_path"],
-    Grep: ["searched for", "pattern"],
-    Glob: ["looked for", "pattern"],
-    WebFetch: ["fetched", "url"],
-  };
-  const known = verb[part.toolName];
-  const detail = known === undefined ? undefined : field(known[1]);
-  return known !== undefined && detail !== undefined
-    ? `${known[0]} ${detail}`
-    : `used ${part.toolName}`;
+function describeTool(part: Extract<AgentSourcePart, { type: "tool-call" }>): string {
+  const command = (part.input as { command?: unknown } | undefined)?.command;
+  if (part.toolName !== "Bash" || typeof command !== "string" || command === "") {
+    return `used ${part.toolName}`;
+  }
+  const line = command.split("\n")[0] ?? "";
+  return `ran \`${line.length > COMMAND_CAP ? `${line.slice(0, COMMAND_CAP)}…` : line}\``;
 }

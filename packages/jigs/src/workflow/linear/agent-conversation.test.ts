@@ -243,7 +243,7 @@ test("an assignment opens with a plain message", async () => {
   await parked();
   expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
     instructions: "Be brief.",
-    opening: { uuid: SESSION, author: "Someone", text: "This issue was assigned to you." },
+    opening: { uuid: SESSION, author: "Someone", text: 'AGE-1 "Fix it" was assigned to you.' },
   });
   await goIdle();
   await done;
@@ -256,4 +256,28 @@ test("only a Claude harness can converse, and only one run per session", async (
   hook.conflict = { runId: "wrun_OWNER" };
   await expect(converse()).rejects.toThrow("already claimed by run wrun_OWNER");
   expect(steps.executeLinearAgentTurn).not.toHaveBeenCalled();
+});
+
+test("a turn step that throws posts an error, then fails the run", async () => {
+  turnResults.push(() => {
+    throw new Error("step exhausted its retries");
+  });
+  await expect(converse()).rejects.toThrow("step exhausted its retries");
+  expect(posts()).toEqual([
+    {
+      ...ref,
+      content: {
+        type: "error",
+        body: "The conversation failed: Error: step exhausted its retries",
+      },
+    },
+  ]);
+  expect(hook.disposed).toBe(1);
+});
+
+test("an error that cannot be posted still fails the run with the original error", async () => {
+  steps.listLinearAgentSessionPrompts.mockRejectedValue(new Error("Linear is down"));
+  steps.postLinearAgentActivity.mockRejectedValue(new Error("Linear is down too"));
+  await expect(converse()).rejects.toThrow("Linear is down");
+  expect(steps.postLinearAgentActivity).toHaveBeenCalledTimes(1);
 });

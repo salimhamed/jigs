@@ -66,7 +66,6 @@ export async function setLinearAgentSessionUrls(
 ): Promise<void> {
   const dashboard = dashboardRunUrl(metadata.workflowRunId);
   const all = dashboard === undefined ? urls : [{ label: "jigs run", url: dashboard }, ...urls];
-  if (all.length === 0) return;
   await linearAgentFor(installationName).setExternalUrls(sessionId, all);
 }
 

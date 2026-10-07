@@ -119,28 +119,29 @@ test("the status line names the last tool, changes at most every five seconds, a
     },
   });
   await vi.advanceTimersByTimeAsync(STATUS_EVERY_MS);
-  expect(thoughts()).toEqual(["Working…", "Working… (last: read `src/a.ts`)"]);
+  expect(thoughts()).toEqual(["Working…", "Working… (last: used Read)"]);
   await vi.advanceTimersByTimeAsync(STATUS_EVERY_MS * 3);
   expect(thoughts()).toHaveLength(2);
+  observe({
+    type: "part",
+    part: {
+      type: "tool-call",
+      toolCallId: "3",
+      toolName: "Bash",
+      input: { command: "pnpm test\nx" },
+    },
+  });
+  await vi.advanceTimersByTimeAsync(STATUS_EVERY_MS);
+  expect(thoughts().at(-1)).toBe("Working… (last: ran `pnpm test`)");
 
   observe({ type: "reply", text: "All green." });
   await vi.advanceTimersByTimeAsync(STATUS_EVERY_MS * 100);
-  expect(thoughts()).toHaveLength(2);
+  expect(thoughts()).toHaveLength(3);
   expect(api.postActivityOnce).toHaveBeenCalledWith(
     "session-1",
     { type: "response", body: "All green." },
     expect.any(String),
   );
-  endTurn(finished);
-  await turn;
-});
-
-test("a long quiet tool call reposts the status line so the session never goes stale", async () => {
-  const turn = executeLinearAgentTurn({ ...base, opening, consumed: [] }, metadata, deps);
-  await settle();
-  observe({ type: "start", resume: false });
-  await vi.advanceTimersByTimeAsync(5 * 60_000 + STATUS_EVERY_MS);
-  expect(thoughts()).toEqual(["Working…", "Working…"]);
   endTurn(finished);
   await turn;
 });
