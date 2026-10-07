@@ -9,6 +9,7 @@ import {
   buildAskAgentRequest,
 } from "../../../workflow/agents/plan.ts";
 import type { AgentResult } from "../../../workflow/agents/result.ts";
+import { createClaudeDriver } from "../claude/driver.ts";
 import { createCodexDriver } from "../codex/driver.ts";
 import { codexSessionFile, prepareCodexInvocationHome } from "../codex/home.ts";
 import { type DriverResolver, driverFor } from "./drivers.ts";
@@ -57,7 +58,7 @@ function recordingStream(): { stream: StepStream; parts: AgentStreamPart[] } {
 
 function expectStreamed(parts: AgentStreamPart[], harness: string): void {
   expect(parts[0]).toMatchObject({ type: "attempt-start", attempt: 1, harness, resume: false });
-  expect(parts.some((part) => part.type === "text" || part.type === "reasoning")).toBe(true);
+  expect(parts.some((part) => ["text", "reasoning", "tool-call"].includes(part.type))).toBe(true);
   expect(parts.at(-1)).toMatchObject({ type: "finish" });
 }
 
@@ -71,10 +72,14 @@ async function runAgent(
   runId: string,
   stream?: StepStream,
 ): Promise<AgentResult<unknown>> {
+  // Claude reads its own messages, so its driver opens the step stream itself.
+  const claude = createClaudeDriver({ openStepStream: () => stream });
+  const resolveDriver = ((kind) =>
+    kind === "claude" ? claude : deps.resolveDriver(kind)) as DriverResolver;
   const result = await executeAgentWith(
     wire,
     { workflowRunId: runId },
-    { ...deps, openStepStream: () => stream },
+    { ...deps, openStepStream: () => stream, resolveDriver },
   );
   if ("jitFailure" in result) {
     throw new Error(`unexpected JIT failure: ${JSON.stringify(result.jitFailure)}`);
@@ -101,6 +106,10 @@ test("claude agent step: structured output round-trips typed, session captured",
 
   expect(parsed).toEqual({ ok: true, word: "sky" });
   expectStreamed(streamed, "claude");
+  // Claude Code submits a structured answer through its StructuredOutput tool.
+  expect(streamed).toContainEqual(
+    expect.objectContaining({ type: "tool-call", toolName: "StructuredOutput" }),
+  );
   expect(result.session?.harness).toBe("claude");
   expect(result.session?.id).toBeTruthy();
 });

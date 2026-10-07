@@ -30,11 +30,11 @@ afterAll(() => {
   else process.env.XDG_DATA_HOME = savedDataHome;
 });
 
-function fakeClaude(model = new MockLanguageModelV4()) {
+function fakeCodex(model = new MockLanguageModelV4()) {
   const closed = vi.fn(async () => {});
   const opened: OpenContext[] = [];
-  const driver: Driver<"claude"> = {
-    kind: "claude",
+  const driver: Driver<"codex"> = {
+    kind: "codex",
     family: "harness",
     open: async (_target, context) => {
       opened.push(context);
@@ -43,9 +43,9 @@ function fakeClaude(model = new MockLanguageModelV4()) {
     installationChecks: () => [],
     descriptorChecks: () => [],
     envAllowlist: () => [],
-    sessionPointer: { providerKey: "claude-code", field: "sessionId" },
+    sessionPointer: { providerKey: "codex-app-server", field: "threadId" },
     setsEnv: [],
-    displayName: "Claude Code",
+    displayName: "Codex",
   };
   const seams: ExecutionSeams = {
     ...executionSeams,
@@ -57,51 +57,54 @@ function fakeClaude(model = new MockLanguageModelV4()) {
   return { seams, closed, opened };
 }
 
-const claude = harnesses.claude({ model: "sonnet" });
+const codex = harnesses.codex({ model: "gpt-5.5" });
 const run = { workflowRunId: "run-1" };
 
-test("a Pi descriptor is refused, pointing at runAgent", async () => {
-  const pi = harnesses.pi(models.openaiCodex("gpt-5.5"));
-  const opening = createAgentRunner(pi, { cwd: worktree, run });
+test.each([
+  ["Claude Code", harnesses.claude({ model: "sonnet" })],
+  ["Pi", harnesses.pi(models.openaiCodex("gpt-5.5"))],
+])("a %s descriptor is refused, pointing at runAgent", async (name, harness) => {
+  const opening = createAgentRunner(harness, { cwd: worktree, run });
   await expect(opening).rejects.toBeInstanceOf(JigsError);
+  await expect(opening).rejects.toThrow(`cannot open a ${name} harness`);
   await expect(opening).rejects.toThrow("runAgent");
 });
 
 test("a driver with no provider model is refused before tokens, checks or the lock", async () => {
-  const { seams } = fakeClaude();
-  const driver = seams.resolveDriver("claude");
+  const { seams } = fakeCodex();
+  const driver = seams.resolveDriver("codex");
   seams.resolveDriver = (() => ({ ...driver, open: undefined })) as unknown as DriverResolver;
   seams.accessEnv = vi.fn(async () => ({}));
   seams.jitFailures = vi.fn(async () => undefined);
-  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toThrow(
-    "createAgentRunner cannot open a Claude Code harness",
+  await expect(openAgentRunner(codex, { cwd: worktree, run }, seams)).rejects.toThrow(
+    "createAgentRunner cannot open a Codex harness",
   );
   expect(seams.accessEnv).not.toHaveBeenCalled();
   expect(seams.jitFailures).not.toHaveBeenCalled();
-  const { seams: healthy } = fakeClaude();
-  await (await openAgentRunner(claude, { cwd: worktree, run }, healthy)).close();
+  const { seams: healthy } = fakeCodex();
+  await (await openAgentRunner(codex, { cwd: worktree, run }, healthy)).close();
 });
 
 test("the runner holds the worktree until it is closed, and closes once", async () => {
-  const { seams, closed } = fakeClaude();
-  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
-  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toThrow(
+  const { seams, closed } = fakeCodex();
+  const runner = await openAgentRunner(codex, { cwd: worktree, run }, seams);
+  await expect(openAgentRunner(codex, { cwd: worktree, run }, seams)).rejects.toThrow(
     "an agent is already running",
   );
   await Promise.all([runner.close(), runner.close()]);
   expect(closed).toHaveBeenCalledTimes(1);
-  const next = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  const next = await openAgentRunner(codex, { cwd: worktree, run }, seams);
   await next.close();
 });
 
 test("a second agent on a locked worktree is refused before tokens or checks", async () => {
-  const { seams } = fakeClaude();
-  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  const { seams } = fakeCodex();
+  const runner = await openAgentRunner(codex, { cwd: worktree, run }, seams);
   try {
-    const { seams: second } = fakeClaude();
+    const { seams: second } = fakeCodex();
     second.accessEnv = vi.fn(async () => ({}));
     second.jitFailures = vi.fn(async () => undefined);
-    await expect(openAgentRunner(claude, { cwd: worktree, run }, second)).rejects.toThrow(
+    await expect(openAgentRunner(codex, { cwd: worktree, run }, second)).rejects.toThrow(
       `an agent is already running in ${worktree} — refusing to start a second one in the same worktree`,
     );
     expect(second.accessEnv).not.toHaveBeenCalled();
@@ -112,24 +115,24 @@ test("a second agent on a locked worktree is refused before tokens or checks", a
 });
 
 test("a failed token mint releases the worktree", async () => {
-  const { seams } = fakeClaude();
+  const { seams } = fakeCodex();
   seams.accessEnv = async () => {
     throw new Error("mint failed");
   };
-  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toThrow(
+  await expect(openAgentRunner(codex, { cwd: worktree, run }, seams)).rejects.toThrow(
     "mint failed",
   );
-  const { seams: healthy } = fakeClaude();
-  await (await openAgentRunner(claude, { cwd: worktree, run }, healthy)).close();
+  const { seams: healthy } = fakeCodex();
+  await (await openAgentRunner(codex, { cwd: worktree, run }, healthy)).close();
 });
 
 test("the session comes from the provider metadata, recorded on this descriptor", async () => {
-  const { seams } = fakeClaude();
-  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  const { seams } = fakeCodex();
+  const runner = await openAgentRunner(codex, { cwd: worktree, run }, seams);
   try {
     expect(
-      runner.sessionFrom({ providerMetadata: { "claude-code": { sessionId: "s-1" } } }),
-    ).toEqual({ harness: "claude", id: "s-1", descriptor: '{"kind":"claude","model":"sonnet"}' });
+      runner.sessionFrom({ providerMetadata: { "codex-app-server": { threadId: "s-1" } } }),
+    ).toEqual({ harness: "codex", id: "s-1", descriptor: '{"kind":"codex","model":"gpt-5.5"}' });
     expect(runner.sessionFrom({})).toBeUndefined();
   } finally {
     await runner.close();
@@ -137,7 +140,7 @@ test("the session comes from the provider metadata, recorded on this descriptor"
 });
 
 test("a failed JIT check releases the worktree", async () => {
-  const { seams } = fakeClaude();
+  const { seams } = fakeCodex();
   const failure = {
     ok: false as const,
     id: "mcp.s",
@@ -146,35 +149,35 @@ test("a failed JIT check releases the worktree", async () => {
     repair: "start it",
   };
   seams.jitFailures = async () => [failure];
-  await expect(openAgentRunner(claude, { cwd: worktree, run }, seams)).rejects.toBeInstanceOf(
+  await expect(openAgentRunner(codex, { cwd: worktree, run }, seams)).rejects.toBeInstanceOf(
     JitCheckError,
   );
-  const { seams: healthy } = fakeClaude();
-  await (await openAgentRunner(claude, { cwd: worktree, run }, healthy)).close();
+  const { seams: healthy } = fakeCodex();
+  await (await openAgentRunner(codex, { cwd: worktree, run }, healthy)).close();
 });
 
 test("a session recorded on another harness is an AgentSessionError", async () => {
-  const { seams } = fakeClaude();
+  const { seams } = fakeCodex();
   await expect(
     openAgentRunner(
-      claude,
-      { cwd: worktree, run, resume: { harness: "codex", id: "t", descriptor: "" } },
+      codex,
+      { cwd: worktree, run, resume: { harness: "claude", id: "t", descriptor: "" } },
       seams,
     ),
   ).rejects.toBeInstanceOf(AgentSessionError);
 });
 
 test("a cancelled run is refused before the harness opens, and the worktree is released", async () => {
-  const { seams, opened } = fakeClaude();
+  const { seams, opened } = fakeCodex();
   seams.runStatus = cancellableRun("cancelled");
 
-  const opening = openAgentRunner(claude, { cwd: worktree, run }, seams);
+  const opening = openAgentRunner(codex, { cwd: worktree, run }, seams);
 
   await expect(opening).rejects.toBeInstanceOf(RunCancelledError);
   await expect(opening).rejects.toSatisfy((error) => FatalError.is(error));
   expect(opened).toHaveLength(0);
   seams.runStatus = runningRunStatus;
-  await (await openAgentRunner(claude, { cwd: worktree, run }, seams)).close();
+  await (await openAgentRunner(codex, { cwd: worktree, run }, seams)).close();
 });
 
 test("a factory step's model aborts its provider call once the run is cancelled", async () => {
@@ -186,9 +189,9 @@ test("a factory step's model aborts its provider call once the run is cancelled"
       throw abortSignal?.reason;
     },
   });
-  const { seams, opened } = fakeClaude(model);
+  const { seams, opened } = fakeCodex(model);
   seams.runStatus = status;
-  const runner = forFactoryStep(await openAgentRunner(claude, { cwd: worktree, run }, seams));
+  const runner = forFactoryStep(await openAgentRunner(codex, { cwd: worktree, run }, seams));
 
   try {
     await expect(generateText({ model: runner.model, prompt: "go" })).rejects.toSatisfy((error) =>
@@ -230,9 +233,9 @@ async function factoryRunner(
   model: MockLanguageModelV4,
   status: ReturnType<typeof cancellableRun>,
 ) {
-  const { seams } = fakeClaude(model);
+  const { seams } = fakeCodex(model);
   seams.runStatus = status;
-  return forFactoryStep(await openAgentRunner(claude, { cwd: worktree, run }, seams));
+  return forFactoryStep(await openAgentRunner(codex, { cwd: worktree, run }, seams));
 }
 
 test("a factory step's generate call fails with the cancellation whatever the provider throws", async () => {
@@ -286,9 +289,9 @@ test("a factory step's provider error with no cancellation stays ordinary and re
 
 test("closing the runner ends its watch on the run", async () => {
   const status = cancellableRun();
-  const { seams, opened } = fakeClaude();
+  const { seams, opened } = fakeCodex();
   seams.runStatus = status;
-  const runner = await openAgentRunner(claude, { cwd: worktree, run }, seams);
+  const runner = await openAgentRunner(codex, { cwd: worktree, run }, seams);
   await runner.close();
 
   status.cancel();

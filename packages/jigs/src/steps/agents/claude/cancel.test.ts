@@ -13,7 +13,7 @@ import { claudeProcessSpawner } from "./process.ts";
 
 const skipOnWindows = process.platform === "win32";
 
-// Speaks just enough of Claude Code's stream-json protocol for the provider.
+// Speaks just enough of Claude Code's stream-json protocol for the SDK.
 // `hang` starts a child that ignores SIGTERM and never answers the turn;
 // `linger` answers, then leaves such a child behind when it exits; `escape`
 // answers after starting a child in a new session that holds its stdout.
@@ -223,19 +223,16 @@ for (const how of ["the SDK's kill", "the SDK's abort signal"] as const) {
     `${how} stops the whole group and reports the exit only once it is gone`,
     async () => {
       const sdkAbort = new AbortController();
-      const spawner = claudeProcessSpawner(
-        {
-          PATH: process.env.PATH ?? "",
-          JIGS_TEST_CLAUDE_PIDS: pidFile,
-          JIGS_TEST_CLAUDE_MODE: "hang",
-        },
-        { host: {} },
-      );
+      const spawner = claudeProcessSpawner();
       const launched = spawner({
         command: executable,
         args: [],
         cwd: worktree,
-        env: {},
+        env: {
+          PATH: process.env.PATH ?? "",
+          JIGS_TEST_CLAUDE_PIDS: pidFile,
+          JIGS_TEST_CLAUDE_MODE: "hang",
+        },
         signal: sdkAbort.signal,
       });
       launched.stdin.write(`${JSON.stringify({ type: "user" })}\n`);
@@ -260,19 +257,16 @@ for (const how of ["the SDK's kill", "the SDK's abort signal"] as const) {
 test.skipIf(skipOnWindows)(
   "a Claude Code that exits while a process outside its group holds stdout still reports its exit",
   async () => {
-    const spawner = claudeProcessSpawner(
-      {
-        PATH: process.env.PATH ?? "",
-        JIGS_TEST_CLAUDE_PIDS: pidFile,
-        JIGS_TEST_CLAUDE_MODE: "escape",
-      },
-      { host: {} },
-    );
+    const spawner = claudeProcessSpawner();
     const launched = spawner({
       command: executable,
       args: [],
       cwd: worktree,
-      env: {},
+      env: {
+        PATH: process.env.PATH ?? "",
+        JIGS_TEST_CLAUDE_PIDS: pidFile,
+        JIGS_TEST_CLAUDE_MODE: "escape",
+      },
       signal: new AbortController().signal,
     });
     const exit = new Promise((resolve) => launched.once("exit", resolve));

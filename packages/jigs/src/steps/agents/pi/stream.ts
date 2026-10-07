@@ -1,27 +1,20 @@
 import {
   type AgentSourcePart,
   type AttemptStart,
+  createStreamTap,
   type StepStream,
-  teeAgentStream,
 } from "../shared/step-stream.ts";
 
 /** Observe Pi's JSONL output without participating in its result reduction. */
 export function createPiStreamTap(stream: StepStream, start: AttemptStart) {
-  let controller: ReadableStreamDefaultController<AgentSourcePart>;
-  const parts = new ReadableStream<AgentSourcePart>({
-    start(c) {
-      controller = c;
-    },
-  });
-  // The reducer owns failures; this consumer must never reject the Pi call.
-  const drained = teeAgentStream(parts.values(), stream, start).catch(() => {});
+  const tap = createStreamTap(stream, start);
   let pending = "";
   const write = (chunk: string) => {
     const lines = (pending + chunk).split("\n");
     pending = lines.pop() ?? "";
     for (const line of lines) {
       try {
-        for (const part of partsOf(JSON.parse(line))) controller.enqueue(part);
+        for (const part of partsOf(JSON.parse(line))) tap.write(part);
       } catch {
         // Bad lines still reach the full-buffer reducer, which reports them.
       }
@@ -31,13 +24,7 @@ export function createPiStreamTap(stream: StepStream, start: AttemptStart) {
     write,
     async end(error?: unknown) {
       write("\n");
-      try {
-        controller.enqueue(
-          error === undefined ? { type: "finish", finishReason: "stop" } : { type: "error", error },
-        );
-        controller.close();
-      } catch {}
-      await drained;
+      await tap.end(error);
     },
   };
 }
