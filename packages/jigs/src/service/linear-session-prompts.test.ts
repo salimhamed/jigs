@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { derivedUuid } from "../providers/linear.ts";
+import { onceActivityId } from "../providers/linear-agent.ts";
 import type { LiveTurn } from "../steps/agents/shared/live-turns.ts";
+import { stopAnswerKey } from "../workflow/linear/agent-session.ts";
 import type { Occurrence } from "./event-triggers/store.ts";
 import {
   routeSessionPrompt,
@@ -124,7 +126,7 @@ const fireNext = async (ms?: number) => {
 };
 const bodies = () => [...posted.values()].map(({ body }) => body);
 const stoppedId = (event: ReturnType<typeof prompted>) =>
-  derivedUuid(["linear-session-stopped", event.agentActivity.id]);
+  onceActivityId(event.agentSession.id, stopAnswerKey(event.agentActivity.id));
 
 test("a reply goes into the live turn, and the session's hook is woken too", async () => {
   const live = liveTurn();

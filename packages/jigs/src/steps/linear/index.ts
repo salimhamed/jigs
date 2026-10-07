@@ -17,6 +17,7 @@ export {
   postLinearAgentActivity,
   setLinearAgentSessionUrls,
 } from "./agent-sessions.ts";
+export { executeLinearAgentTurn, type LinearAgentTurnRequest } from "./agent-turn.ts";
 export { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 export {
   type CreateIssueInProjectInput,

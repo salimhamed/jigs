@@ -3,9 +3,9 @@
 
 import { z } from "zod";
 import { derivedUuid, linearFor } from "../providers/linear.ts";
-import { type LinearAgentApi, linearAgentFor } from "../providers/linear-agent.ts";
+import { type LinearAgentApi, linearAgentFor, onceActivityId } from "../providers/linear-agent.ts";
 import { liveTurn } from "../steps/agents/shared/live-turns.ts";
-import { linearSessionToken } from "../workflow/linear/agent-session.ts";
+import { linearSessionToken, stopAnswerKey } from "../workflow/linear/agent-session.ts";
 import { recordedOccurrences, withdrawOccurrence } from "./event-triggers/runner.ts";
 import type { Occurrence } from "./event-triggers/store.ts";
 import { cancelRun, runStatuses } from "./runs.ts";
@@ -167,7 +167,7 @@ function postStopped(
     .postActivityOnce(
       sessionId,
       { type: "response", body: STOPPED },
-      derivedUuid(["linear-session-stopped", stop.id]),
+      onceActivityId(sessionId, stopAnswerKey(stop.id)),
     );
 }
 

@@ -154,6 +154,10 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
+export type {
+  LinearAgentConversationOptions,
+  LinearAgentConversationResult,
+} from "./workflow/linear/agent-conversation.ts";
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export { type TicketNote, ticketReviewVerdictSchema } from "./workflow/linear/review.ts";
@@ -176,7 +180,6 @@ export {
 } from "./workflow/linear/ticket-review.prompt.ts";
 export type { IncidentRef, IncidentSnapshot } from "./workflow/pagerduty/snapshot.ts";
 export { type PagerDutyIncidentsParams, pagerduty } from "./workflow/pagerduty/source.ts";
-
 export { renderChecks } from "./workflow/pull-requests/answers.ts";
 export {
   type PullRequestMarker,
@@ -202,7 +205,6 @@ export {
   type ReviewThread,
 } from "./workflow/pull-requests/snapshot.ts";
 export { defaultPullRequestScope } from "./workflow/pull-requests/writer.ts";
-
 export type { ReleasePolicy, ReleaseReport } from "./workflow/runtime/release.ts";
 export type {
   ResourceRecord,

@@ -248,6 +248,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "bindLinearSteps",
     "bindPullRequestSteps",
     "claimTicket",
+    "linearAgentConversation",
     "postPullRequestNote",
     "waitForSlackReply",
   ],
@@ -262,6 +263,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],
   "steps/linear/index.ts": [
+    "executeLinearAgentTurn",
     "listLinearAgentSessionPrompts",
     "postLinearAgentActivity",
     "setLinearAgentSessionUrls",
