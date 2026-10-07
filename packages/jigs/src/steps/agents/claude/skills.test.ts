@@ -40,7 +40,7 @@ beforeEach(() => {
 const driver = () =>
   createClaudeDriver({
     query,
-    sessionMessages: async () => [{ type: "user" }],
+    transcript: async () => new Set(["earlier"]),
     prepareSkillsPlugin: async (runId, skills) =>
       prepareClaudeSkillsPlugin(runId, skills, { baseDir: pluginBase }),
     openStepStream: () => undefined,
@@ -87,7 +87,7 @@ test("the plugin lives in a per-run folder recorded as the run's claude-plugins 
   const runFolder = path.join(tmp, "jigs", "claude-plugins", "wrun_skills");
   await createClaudeDriver({
     query,
-    sessionMessages: async () => [{ type: "user" }],
+    transcript: async () => new Set(["earlier"]),
     openStepStream: () => undefined,
   }).run?.(runRequest([skill]), context());
 

@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import type { ConversationMessage, TurnRequest } from "../../../workflow/agents/conversation.ts";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
-import { executeTurn } from "../shared/execute-turn.ts";
+import { executeTurn as executeTurnStep } from "../shared/execute-turn.ts";
 import { assertLivePreconditions, makeScratchRepo } from "../shared/live-env.ts";
 import { liveTurn } from "../shared/live-turns.ts";
 import { makeTmpDir, removeTmpDir } from "../shared/test-fixtures.ts";
@@ -70,6 +70,12 @@ function request(cwd: string, messages: ConversationMessage[]): TurnRequest {
   };
 }
 
+async function executeTurn(...args: Parameters<typeof executeTurnStep>) {
+  const result = await executeTurnStep(...args);
+  if ("jitFailure" in result) throw new Error(`the turn did not run: ${JSON.stringify(result)}`);
+  return result;
+}
+
 const metadata = () => ({ workflowRunId: `live-converse-${crypto.randomUUID()}` });
 
 // Calls `then` once, a few seconds after Claude starts its Bash command.
@@ -108,8 +114,8 @@ test("a message sent while Claude runs a command is folded into the same turn", 
   expect(result.outcome).toBe("finished");
   expect(result.consumed).toEqual([runSlow.uuid, aside.uuid]);
   expect(result.replies).toHaveLength(1);
-  expect(result.replies[0]?.text).toMatch(/SLOW-DONE/);
-  expect(result.replies[0]?.text).toMatch(/PINEAPPLE/);
+  expect(result.replies[0]).toMatch(/SLOW-DONE/);
+  expect(result.replies[0]).toMatch(/PINEAPPLE/);
 }, 180_000);
 
 test("stop interrupts the command and drops the queued message", async () => {
@@ -167,5 +173,4 @@ test("a turn killed mid-command continues on replay instead of starting over", a
   expect(replay.outcome).toBe("finished");
   expect(replay.consumed).toEqual([runSlow.uuid]);
   expect(replay.replies).toHaveLength(1);
-  expect(replay.replies[0]?.consumed).toEqual([]);
 }, 240_000);

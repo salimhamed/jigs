@@ -6,7 +6,7 @@ import type {
   OutputInterface,
 } from "ai";
 import type { Check } from "../../../checks/check.ts";
-import type { TurnReply, TurnRequest, TurnResult } from "../../../workflow/agents/conversation.ts";
+import type { TurnRequest, TurnResult } from "../../../workflow/agents/conversation.ts";
 import type {
   Harness,
   HarnessKind,
@@ -122,12 +122,12 @@ export interface DriverContext {
 
 /**
  * What a conversation turn reports while it runs: that it started, each piece of agent activity,
- * and each answer.
+ * and that an answer arrived. The answers themselves are in the turn's result.
  */
 export type TurnEvent =
   | { type: "start"; resume: boolean }
   | { type: "part"; part: AgentSourcePart }
-  | { type: "reply"; reply: TurnReply };
+  | { type: "reply" };
 
 /** Watches a conversation turn. Best effort: a failure here never fails the turn. */
 export type TurnObserver = (event: TurnEvent) => void | Promise<void>;

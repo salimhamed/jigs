@@ -64,6 +64,15 @@ export function claudeStreamParts(): (message: SDKMessage) => Generator<AgentSou
   };
 }
 
+/** Why a result message reports a failed turn, or undefined for a successful one. */
+export function claudeFailure(result: SDKResultMessage, errorKind?: string): string | undefined {
+  if (result.subtype === "success" && !result.is_error) return undefined;
+  const detail =
+    result.subtype === "success" ? result.result : result.errors.filter(Boolean).join("; ");
+  const kind = errorKind === undefined ? "" : ` (${errorKind})`;
+  return `Claude Code failed${kind}: ${detail || result.subtype}`;
+}
+
 /**
  * The generation a result message answers, or the error it reports. `errorKind` is the error the
  * last assistant message carried, such as `authentication_failed`.
@@ -78,11 +87,9 @@ export function claudeGeneration(
       "Claude Code could not produce output matching the schema after its maximum retries",
     );
   }
-  if (result.subtype !== "success" || result.is_error) {
-    const detail =
-      result.subtype === "success" ? result.result : result.errors.filter(Boolean).join("; ");
-    const kind = errorKind === undefined ? "" : ` (${errorKind})`;
-    throw new Error(`Claude Code failed${kind}: ${detail || result.subtype}`);
+  const failure = claudeFailure(result, errorKind);
+  if (failure !== undefined || result.subtype !== "success") {
+    throw new Error(failure ?? result.subtype);
   }
   const providerMetadata = { claude: { sessionId: result.session_id } };
   if (!structured) return { text: result.result, providerMetadata };

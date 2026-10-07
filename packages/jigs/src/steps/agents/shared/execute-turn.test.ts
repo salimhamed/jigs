@@ -29,10 +29,15 @@ afterAll(() => {
 
 inTestFactory();
 
-function seams(cli = fakeClaudeCli(), stream?: StepStream): ExecutionSeams {
+function seams(
+  cli = fakeClaudeCli(),
+  stream?: StepStream,
+  overrides: Partial<ExecutionSeams> = {},
+): ExecutionSeams {
   const claude = createClaudeDriver({
     query: cli.query,
     transcript: async () => new Set(),
+    discardSession: async () => {},
     openStepStream: () => undefined,
   });
   const resolve = (kind: keyof typeof drivers) => (kind === "claude" ? claude : drivers[kind]);
@@ -41,6 +46,7 @@ function seams(cli = fakeClaudeCli(), stream?: StepStream): ExecutionSeams {
     resolveDriver: resolve as ExecutionSeams["resolveDriver"],
     openStepStream: () => stream,
     jitFailures: async () => undefined,
+    ...overrides,
   };
 }
 
@@ -58,6 +64,34 @@ test("a conversation on a harness that cannot hold one fails before launching", 
   await expect(
     executeTurnWith(turn(harnesses.codex({ model: "gpt-5.5" })), metadata, [], seams(cli)),
   ).rejects.toThrow("Codex cannot hold a conversation; run it on a Claude harness");
+});
+
+test("a turn with no messages fails before launching", async () => {
+  const cli = fakeClaudeCli();
+  await expect(
+    executeTurnWith({ ...turn(), messages: [] }, metadata, [], seams(cli)),
+  ).rejects.toThrow("a conversation turn needs at least one message");
+  expect(cli.calls).toEqual([]);
+});
+
+test("a failed just-in-time check comes back as data", async () => {
+  const failure = {
+    id: "worktree",
+    label: "worktree is clean",
+    ok: false as const,
+    reason: "dirty",
+    repair: "commit it",
+  };
+  const cli = fakeClaudeCli();
+  await expect(
+    executeTurnWith(
+      turn(),
+      metadata,
+      [],
+      seams(cli, undefined, { jitFailures: async () => [failure] }),
+    ),
+  ).resolves.toEqual({ jitFailure: [failure] });
+  expect(cli.calls).toEqual([]);
 });
 
 test("observers that throw or reject never fail the turn", async () => {
@@ -78,7 +112,7 @@ test("observers that throw or reject never fail the turn", async () => {
     ],
     seams(),
   );
-  expect(result.outcome).toBe("finished");
+  expect(result).toMatchObject({ outcome: "finished" });
   expect(seen).toEqual(["start", "part", "reply"]);
 });
 

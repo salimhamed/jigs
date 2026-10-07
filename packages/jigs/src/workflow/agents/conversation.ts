@@ -1,3 +1,4 @@
+import type { FailedCheck } from "../../checks/catalog.ts";
 import type { Harness } from "./harness-config.ts";
 
 // Type aliases, not interfaces: aliases carry an implicit index signature,
@@ -16,9 +17,10 @@ export type ConversationMessage = {
  *
  * @remarks
  * `conversation` names the conversation. It keys the live turn that accepts more messages while
- * the turn runs, and every turn with the same name continues the same harness session.
- * `instructions` lead the first message when that session starts fresh, and are ignored once it
- * exists.
+ * the turn runs, and every turn with the same name continues the same harness session. That
+ * session lives with the worktree, so a conversation keeps one `cwd` for its whole life.
+ * `messages` holds at least one message. `instructions` lead the first message when the session
+ * starts fresh, and are ignored once it exists.
  */
 export type TurnRequest = {
   harness: Harness;
@@ -28,19 +30,15 @@ export type TurnRequest = {
   instructions?: string;
 };
 
-/** One answer the harness gave, and the uuids of the messages it answered, in order. */
-export type TurnReply = {
-  text: string;
-  consumed: string[];
-};
-
 /**
- * How a turn ended. `finished` means the harness answered every message the turn accepted;
- * `stopped` means the turn was stopped and messages still queued were dropped. `consumed` lists
- * every message the harness took, in order: one not listed was never delivered.
+ * How a turn ended, with each answer the harness gave and `consumed`, every message it took, in
+ * order: one not listed was never delivered. `finished` means it answered every message the turn
+ * accepted. `stopped` means the turn was stopped and messages still queued were dropped. `failed`
+ * means a turn ended in an error, which `error` describes; the messages after it were dropped.
  */
-export type TurnResult = {
-  outcome: "finished" | "stopped";
-  replies: TurnReply[];
-  consumed: string[];
-};
+export type TurnResult =
+  | { outcome: "finished" | "stopped"; replies: string[]; consumed: string[] }
+  | { outcome: "failed"; error: string; replies: string[]; consumed: string[] };
+
+/** What the turn step returns: the turn's result, or the just-in-time checks that failed. */
+export type TurnStepResult = TurnResult | { jitFailure: FailedCheck[] };
