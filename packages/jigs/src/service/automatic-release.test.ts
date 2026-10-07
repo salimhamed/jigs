@@ -304,6 +304,24 @@ test("timer reconciliation is tracked and cancelled during shutdown", async () =
   expect(cancel).toHaveBeenCalled();
 });
 
+test("a scheduled pass logs only when it released, kept or failed something", async () => {
+  const runs: RunState[] = [run("running")];
+  const h = harness(runs);
+  let fire: (() => void) | undefined;
+  h.deps.setTimer = (scheduled) => {
+    fire = scheduled;
+    return () => undefined;
+  };
+  const coordinator = startAutomaticRelease(factory, h.deps);
+  await vi.waitFor(() => expect(fire).toBeTypeOf("function"));
+  expect(h.deps.log).not.toHaveBeenCalled();
+
+  runs.push(run("completed"));
+  fire?.();
+  await vi.waitFor(() => expect(h.deps.log).toHaveBeenCalledOnce());
+  await coordinator.stop();
+});
+
 test("a failed in-flight scan cannot wedge shutdown", async () => {
   const listed = deferred<RunState[]>();
   const h = harness([]);
