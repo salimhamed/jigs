@@ -27,8 +27,8 @@ continues the same Claude session. If the service restarts mid-turn, the turn
 continues where Claude got to instead of starting over.
 
 When no one has replied for the idle time, the conversation ends and Linear
-shows nothing new. A later reply in that thread gets "This conversation has
-ended; mention @app again to start a new one."
+shows nothing new. A later reply in that thread gets
+`This conversation has ended; mention @<app name> again to start a new one.`
 
 ## A conversation workflow
 
@@ -40,7 +40,7 @@ that started the run. Save it as `workflows/converse/converse.ts`:
 import { defineWorkflow, harnesses, type WorkflowInputs } from "@jigs-ai/jigs";
 import { z } from "zod";
 import { linearAgentConversation } from "#jigs/routines";
-import { provisionWorktree, release } from "#jigs/steps";
+import { provisionWorktree } from "#jigs/steps";
 
 const inputs = z.object({
   session: z.string(),
@@ -54,14 +54,12 @@ const agents = { assistant: harnesses.claude({ model: "opus" }) };
 export async function converse(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
   const worktree = await provisionWorktree({ binding: "app", branch: `linear/${input.session}` });
-  const conversation = await linearAgentConversation(input, {
+  return linearAgentConversation(input, {
     harness: agents.assistant,
     cwd: worktree.path,
     instructions: `You are helping with ${input.issue.identifier}, "${input.issue.title}" (${input.issue.url}).`,
     idleFor: "2h",
   });
-  await release();
-  return conversation;
 }
 
 export default defineWorkflow({
@@ -85,7 +83,7 @@ const triggers = {
 };
 ```
 
-Provision the worktree first, then call `linearAgentConversation`, then release.
+Provision the worktree first, then call `linearAgentConversation`.
 The routine works in the worktree you give it and never changes it; your
 workflow owns the worktree, the issue and anything it delivers, such as a pull
 request, and runs on once the conversation ends.
@@ -114,10 +112,9 @@ then thrown.
 
 ## One run per session
 
-Each mention or assignment starts one Linear agent session, and the trigger
-starts one run for it. A run that converses holds the session for the whole
-conversation, so a second run for the same session fails with a
-`ClaimConflictError` when it calls `linearAgentConversation`.
+Each matching trigger starts one run for the session. The first to call
+`linearAgentConversation` holds it for the whole conversation; any other run
+that calls it throws `ClaimConflictError`.
 
 Every factory assigned a Linear app hears every mention of it. For
 conversations, give each factory its own Linear app, or two factories answer
@@ -129,9 +126,11 @@ issue.
 
 ## Known limits
 
-- A stop that arrives just as a turn starts may not reach Claude. About 30
-  seconds later the service cancels the run and posts "Stopped." itself. A
-  cancelled run releases under your `onFailure` release policy.
+- A stop the conversation does not answer within about 30 seconds makes the
+  service cancel the run and post "Stopped." itself. That happens when the
+  stop arrives just as a turn starts, before the run reaches
+  `linearAgentConversation`, or after the conversation ended. A cancelled run
+  runs no more workflow code and releases under your `onFailure` policy.
 - Replies sent while the run tidies up after the conversation ended get no
   answer.
 - If the service stops right after Claude's answer was posted, the turn may

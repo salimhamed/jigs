@@ -30,12 +30,12 @@ answers in the Linear agent session that started the run, through the routine
   from the stop. If neither a live turn nor the parked run answers within 30 s,
   the service cancels the session's runs and posts the same keyed `Stopped.`,
   so only one appears.
-- **Minimal output, the same for every channel.** One ephemeral status line
+- **Minimal output.** One ephemeral status line
   replaced as Claude works, each answer as a `response` and failures as an
   `error`; the run's dashboard is the session's link. No `elicitation`: a
   question is an answer, and the person replies.
 - **Idle timeout**: `idleFor`, four hours by default, ends the conversation and
-  the run goes on to release its worktree.
+  the run goes on.
 - **A crash continues the turn instead of redoing it.** A retried turn resumes
   the Claude transcript, sends only the messages it does not hold yet, and
   tells Claude the service restarted.
@@ -53,10 +53,13 @@ answers in the Linear agent session that started the run, through the routine
 - The workflow owns the worktree, the issue and delivery; the routine owns the
   turns, cursor, hook, posts, stop, link and idle timeout. A workflow provisions
   its worktree before calling the routine, since the routine needs its `cwd`.
-- Known gaps: a stop that lands just before a turn registers falls to the 30 s
-  fallback; replies during tidy-up after the end get no answer; a crash right
-  after an answer posted can post it twice; an answer that fails every retry is
-  dropped.
+- Known gaps: a stop the conversation does not answer within about 30 s (it
+  arrived just as a turn started, before the run reached the routine, or after
+  the conversation ended) makes the service cancel the run and post
+  `Stopped.`; a cancelled run runs no more workflow code and releases under its
+  `onFailure` policy. Replies during tidy-up after the end get no answer; a
+  crash right after an answer posted can post it twice; an answer that fails
+  every retry is dropped.
 - Linear's agent API is a Developer Preview, so every agent-session query lives
   in one provider module.
 - Rejected: an owner table or hub enforcement across factories (configuration

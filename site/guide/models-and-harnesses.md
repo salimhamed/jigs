@@ -251,8 +251,7 @@ harness built in the workflow body is checked when its agent starts.
 `JIGS_CLAUDE_EXECUTABLE`), and run `claude auth login`. Calls use that account.
 jigs drives that `claude` through the Claude Agent SDK and runs it unattended
 with permission prompts bypassed. `askAgent` uses the model without tools, MCP
-servers or filesystem settings. Claude Code is the only harness that can hold a
-[Linear conversation](/guide/linear-conversations).
+servers or filesystem settings.
 
 ## Codex
 

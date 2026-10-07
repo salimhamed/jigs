@@ -120,9 +120,10 @@ Unknown emails are skipped with a warning; the comment still posts.
 
 To let Claude Code answer in Linear's agent panel, trigger the workflow with
 `linear.agentSessions`, provision a worktree, then call
-`linearAgentConversation(input, { harness, cwd })` from `#jigs/routines` and release
-afterwards. It needs a Claude harness. Its `outcome` is `idle` when no one replied for `idleFor` (4h by
-default), `stopped` when someone pressed stop, or `failed` when a turn failed. A second run for the same session throws
+`linearAgentConversation(input, { harness, cwd })` from `#jigs/routines`. It
+needs a Claude harness. Its `outcome` is `idle` when no one replied for
+`idleFor` (4h by default), `stopped` when someone pressed stop, or `failed`
+when a turn failed. A second run for the same session throws
 `ClaimConflictError`. Session replies never answer `haltForHuman`.
 
 ## Validation ownership

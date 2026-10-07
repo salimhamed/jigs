@@ -68,5 +68,4 @@ In the factory, `pnpm exec jigs doctor` checks that the hub hands it a token
 for each Linear installation it uses. To start runs from mentions and assignments, see
 [Linear mentions and assignments](/guide/configuration#linear-agent-sessions).
 To have Claude Code answer in Linear's agent panel, see
-[Linear conversations](/guide/linear-conversations); give each factory that
-converses its own Linear app.
+[Linear conversations](/guide/linear-conversations).

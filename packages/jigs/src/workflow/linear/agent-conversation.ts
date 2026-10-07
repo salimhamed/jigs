@@ -65,11 +65,10 @@ const STOPPED = "Stopped.";
  * Claude answers the mention that opened the session, then each reply, in the same session and
  * worktree. A reply sent while Claude works joins its turn. Linear shows a live status line while
  * Claude works, each answer as a response, a failure as an error, and a link to the run. A stop
- * ends the conversation with "Stopped.". Provision the worktree before calling this, and release
- * it after: the workflow keeps the worktree, the issue and anything it delivers, and runs on once
- * this returns. The trigger starts one run per session, and that run holds the session for the
- * whole conversation; a second run for the same session throws `ClaimConflictError` when it calls
- * this.
+ * ends the conversation with "Stopped.". Provision the worktree before calling this: the workflow
+ * keeps the worktree, the issue and anything it delivers, and runs on once this returns. Each
+ * matching trigger starts one run for the session. The first to call this holds the session for
+ * the whole conversation; any other run that calls it throws `ClaimConflictError`.
  *
  * @group Linear agent sessions
  */
