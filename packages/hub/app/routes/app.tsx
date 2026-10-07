@@ -424,7 +424,8 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
           <>
             The Linear workspaces connected to this app. {shortName} Your factory code uses that
             name to choose which workspace to work in. A Linear workspace admin approves the app for
-            their workspace. Connect a workspace again to fix one that stopped working.
+            their workspace.
+            {isAdmin && " Connect a workspace again to fix one that stopped working."}
           </>
         }
         action={
@@ -453,7 +454,7 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
                 {workspace.failure === null ? (
                   "Connected"
                 ) : (
-                  <span className={errorText}>Connect again: {workspace.failure}</span>
+                  <span className={errorText}>Stopped working: {workspace.failure}</span>
                 )}
               </td>
             </>
@@ -541,8 +542,9 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
         description={
           <>
             The Slack workspaces this app is installed in. {shortName} Your factory code uses that
-            name to choose which workspace to work in. Install the app again after changing its
-            scopes, here rather than from Slack's reinstall banner, so the hub gets the new token.
+            name to choose which workspace to work in.
+            {isAdmin &&
+              " Install the app again after changing its scopes, here rather than from Slack's reinstall banner, so the hub gets the new token."}
           </>
         }
         action={
@@ -553,7 +555,11 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
             </a>
           )
         }
-        empty="Not installed in a workspace yet. If a workspace admin must approve the app, choose Add to Slack again once they have."
+        empty={
+          isAdmin
+            ? "Not installed in a workspace yet. If a workspace admin must approve the app, choose Add to Slack again once they have."
+            : "Not installed in a workspace yet."
+        }
         head={
           <>
             <th>Workspace</th>
@@ -595,9 +601,9 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
             No webhook signing secret yet
           </h2>
           <p className="text-sm">
-            The hub refuses this app's webhooks until you enter one. PagerDuty shows the secret
-            once, right after you create the webhook subscription described below; if you missed it,
-            create the subscription again.
+            The hub refuses this app's webhooks until the secret is entered. PagerDuty shows the
+            secret once, right after you create the webhook subscription described below; if you
+            missed it, create the subscription again.
           </p>
           {isAdmin && <WebhookSecretForm replacing={false} />}
         </section>

@@ -62,8 +62,8 @@ an agent. The workspace then appears under **Workspaces**. Give it an
 `linear-acme`, under **Installation name**, and save.
 
 If the hub can no longer refresh a workspace's tokens, for example because
-the app was revoked in Linear, the workspace shows **Connect again**. Connect
-it again to fix it.
+the app was revoked in Linear, the workspace shows **Stopped working**. An
+admin connects it again to fix it.
 
 ## 5. Assign it to factories
 

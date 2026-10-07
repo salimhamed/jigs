@@ -40,16 +40,7 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
     <div className="space-y-6">
       <PageHeader
         title="Factories"
-        subtitle={
-          <>
-            Services you run that act on events from the apps connected to them, such as new pull
-            requests or Slack mentions. Add apps on the{" "}
-            <Link to="/apps" className={link}>
-              Apps page
-            </Link>
-            , then connect them from each factory's page.
-          </>
-        }
+        subtitle="Services you run that act on events from the apps connected to them, such as new pull requests or Slack mentions."
         action={
           <Link to="/factories/new" className={button}>
             <Plus className="size-4" />
@@ -68,8 +59,8 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
           {mine ? (
             <>
               You haven't added a factory yet.{" "}
-              <Link to="?tab=all" className={link}>
-                See all factories
+              <Link to="/factories/new" className={link}>
+                Add a factory
               </Link>
               .
             </>
