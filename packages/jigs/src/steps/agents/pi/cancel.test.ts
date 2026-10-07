@@ -1,4 +1,4 @@
-import { existsSync, mkdirSync, readFileSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -122,7 +122,6 @@ test.skipIf(skipPi)(
     );
 
     try {
-      await expect.poll(() => existsSync(pidFile), { timeout: 10_000, interval: 25 }).toBe(true);
       await expect.poll(() => chatRequests, { timeout: 10_000, interval: 25 }).toBeGreaterThan(0);
       const mcpChild = Number(readFileSync(pidFile, "utf8"));
       expect(pidIsRunning(mcpChild)).toBe(true);
