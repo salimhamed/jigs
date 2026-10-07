@@ -15,9 +15,11 @@ step//./jigs/steps//fetchIncidentSnapshot
 step//./jigs/steps//fetchPullRequestState
 step//./jigs/steps//fetchSlackMessage
 step//./jigs/steps//fetchTicketSnapshot
+step//./jigs/steps//listLinearAgentSessionPrompts
 step//./jigs/steps//markPullRequestReady
 step//./jigs/steps//mergePullRequest
 step//./jigs/steps//postIncidentNote
+step//./jigs/steps//postLinearAgentActivity
 step//./jigs/steps//postSlackMessage
 step//./jigs/steps//postTicketHumanInputRequest
 step//./jigs/steps//postTicketNote
@@ -34,6 +36,7 @@ step//./jigs/steps//removeRunDirectory
 step//./jigs/steps//replyToPullRequestReviewThread
 step//./jigs/steps//resolveLinearIssue
 step//./jigs/steps//reviewPullRequest
+step//./jigs/steps//setLinearAgentSessionUrls
 step//./jigs/steps//setTicketStatus
 workflow//./workflows/hello/hello//hello
 workflow//./workflows/linear-ticket-to-pr/linear-ticket-to-pr//linearTicketToPr

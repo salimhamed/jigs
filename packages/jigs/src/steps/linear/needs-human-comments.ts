@@ -52,7 +52,7 @@ export const postTicketHumanInputRequest = async (
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
   const linear = linearFor(installationName);
-  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+  const comment = await postOnce(linear, stepPostingId(metadata, issueId), issueId, async () => {
     const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: halt.mention,
@@ -79,7 +79,7 @@ export const postTicketNote = async (
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
   const linear = linearFor(installationName);
-  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+  const comment = await postOnce(linear, stepPostingId(metadata, issueId), issueId, async () => {
     const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: note.mention,
@@ -91,16 +91,12 @@ export const postTicketNote = async (
 };
 
 /**
- * The id a step's comment is created under: a UUID v4 derived from the run, the step and the issue,
- * so every retry of one step names the same comment while two posts of the same text stay two
- * comments.
+ * The id a step's post is created under: a UUID v4 derived from the run, the step and where it
+ * posts, so every retry of one step names the same post while two posts of the same text stay two.
  */
-export function ticketCommentId(
-  metadata: Pick<StepRunMetadata, "workflowRunId" | "stepId">,
-  issueId: string,
-): string {
+export function stepPostingId(metadata: StepRunMetadata, target: string): string {
   const hex = createHash("sha256")
-    .update(JSON.stringify([metadata.workflowRunId, metadata.stepId, issueId]))
+    .update(JSON.stringify([metadata.workflowRunId, metadata.stepId, target]))
     .digest("hex")
     .slice(0, 32)
     .split("");

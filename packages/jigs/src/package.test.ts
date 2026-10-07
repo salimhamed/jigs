@@ -262,6 +262,9 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],
   "steps/linear/index.ts": [
+    "listLinearAgentSessionPrompts",
+    "postLinearAgentActivity",
+    "setLinearAgentSessionUrls",
     "fetchTicketSnapshot",
     "createComment",
     "createIssueInProject",

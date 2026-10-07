@@ -488,6 +488,7 @@ export function createLinearClient(deps: LinearClientDeps) {
   }
 
   return {
+    graphql: linearGraphql,
     appUser,
     findUserByEmail,
     fetchIssueFiling,

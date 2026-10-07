@@ -50,7 +50,7 @@ vi.mock("../../providers/linear.ts", async (importOriginal) => ({
   linearFor,
 }));
 
-const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote, ticketCommentId } =
+const { checkForTicketHumanReply, postTicketHumanInputRequest, postTicketNote, stepPostingId } =
   await import("./needs-human-comments.ts");
 
 const context = {
@@ -310,12 +310,12 @@ test("a note is created under an id derived from the run, the step and the issue
     context,
     definition,
   );
-  const id = ticketCommentId(context, "issue-1");
+  const id = stepPostingId(context, "issue-1");
   expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
   expect(findComment).toHaveBeenCalledWith(id);
   expect(createComment).toHaveBeenCalledWith("issue-1", expect.any(String), id);
-  expect(ticketCommentId({ ...context, workflowRunId: "wrun_other" }, "issue-1")).not.toBe(id);
-  expect(ticketCommentId(context, "issue-2")).not.toBe(id);
+  expect(stepPostingId({ ...context, workflowRunId: "wrun_other" }, "issue-1")).not.toBe(id);
+  expect(stepPostingId(context, "issue-2")).not.toBe(id);
 });
 
 test("a retry of the same step reuses the id, even when the mentions changed", async () => {
@@ -329,7 +329,7 @@ test("a retry of the same step reuses the id, even when the mentions changed", a
     context,
     operator("op@example.com"),
   );
-  const id = ticketCommentId(context, "issue-1");
+  const id = stepPostingId(context, "issue-1");
   expect(findComment.mock.calls).toEqual([[id], [id]]);
 });
 
@@ -403,7 +403,7 @@ test("a retried halt question is found under the same id instead of posted twice
     commentId: "asked",
     postedAt: "2026-08-31T12:05:00.000Z",
   });
-  expect(findComment).toHaveBeenCalledWith(ticketCommentId(context, "issue-1"));
+  expect(findComment).toHaveBeenCalledWith(stepPostingId(context, "issue-1"));
   expect(createComment).not.toHaveBeenCalled();
 });
 
