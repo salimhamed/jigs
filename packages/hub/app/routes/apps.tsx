@@ -200,9 +200,9 @@ export default function Apps({ loaderData, actionData }: Route.ComponentProps) {
           <input type="hidden" name="provider" value="slack" />
           <h2 className="text-lg font-semibold">Add a Slack app</h2>
           <p className="text-sm text-zinc-500">
-            Create an app at api.slack.com/apps first, from scratch, then copy its details from
-            Basic Information here. Its page on the hub then shows what to set in Slack and installs
-            it in workspaces.
+            Create an app at api.slack.com/apps first as a blank app, not from a template, with
+            Socket Mode off. Then copy its details from Basic Information here. Its page on the hub
+            then shows what to set in Slack and installs it in workspaces.
           </p>
           <Fields fields={slackFields} />
           <button type="submit" className={button}>
