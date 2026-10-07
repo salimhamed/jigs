@@ -246,7 +246,7 @@ export default defineFactory({
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
 | `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
-| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, creator }` | `installationName`, `teams`, `projects`, `labels` |
+| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
 
 `installationName` is required on every source.
@@ -274,6 +274,9 @@ the app at work while the run starts. Each run gets:
 - `issue`: the issue's `id`, `identifier`, `title` and `url`.
 - `comment`: the body of the comment the session started from, or `null` for
   an assignment.
+- `promptContext`: Linear's formatted context for the session, with the issue,
+  its description and the comments around the request, or `null` if Linear
+  sent none.
 - `creator`: the `id`, `name` and `email` of who started it, or `null` for an
   automation.
 
@@ -296,6 +299,10 @@ const triggers = {
   },
 };
 ```
+
+To have Claude Code answer in the session and keep answering replies, call
+`linearAgentConversation` in the run; see
+[Linear conversations](/guide/linear-conversations).
 
 Every factory assigned the app hears every mention of it, and each trigger on
 this source in each of those factories starts its own run. jigs does not pick

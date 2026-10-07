@@ -19,8 +19,8 @@ see [Core concepts](/guide/concepts).
 
 ## The runner
 
-`createAgentRunner` gives a custom step the same harness setup and policy used
-by the built-in agent step. It handles environment policy, checks, worktree
+`createAgentRunner` gives a custom step the same Codex harness setup and policy
+used by the built-in agent step. It handles environment policy, checks, worktree
 locking, session setup and provider startup. The returned live provider model
 can be passed to the AI SDK. See the [runner API](/api/steps#createagentrunner)
 for the exact contract.
@@ -61,7 +61,7 @@ export async function runWithTemperature(request: {
 Create the caller beside the step as `workflows/my-flow/my-flow.ts`. It uses an
 `app` [repository binding](/guide/build-a-workflow#_1-connect-a-repository),
 provisions its own worktree, and passes the agent descriptor into the custom
-step. Authenticate Claude Code, then
+step. Authenticate Codex, then
 [register `my-flow` in the factory](/guide/build-a-workflow#_3-register-the-workflow).
 Run `pnpm exec jigs up`, then
 `pnpm exec jigs run my-flow --input question="Why does saving a draft twice lose its title?"`.
@@ -74,7 +74,7 @@ import { provisionWorktree } from "#jigs/steps";
 import { runWithTemperature } from "./steps.ts";
 
 const inputs = z.object({ question: z.string().min(1) });
-const agents = { investigator: harnesses.claude({ model: "sonnet" }) };
+const agents = { investigator: harnesses.codex({ model: "gpt-5.6-sol" }) };
 
 export async function myFlow(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
@@ -109,6 +109,6 @@ harness cannot resume: catch it and start again without `resume` if the step
 can. The built-in step turns both into what `runAgent` and `agentSession`
 expect; your step decides for itself.
 
-Pi has no AI SDK provider model: jigs runs the Pi CLI and reads its output
-directly. So `createAgentRunner` throws for a Pi descriptor. Run Pi with
-`runAgent`.
+Claude Code and Pi have no AI SDK provider model: jigs drives the Claude Agent
+SDK and the Pi CLI directly. So `createAgentRunner` throws for a Claude Code or
+Pi descriptor. Run them with `runAgent`.

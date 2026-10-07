@@ -69,6 +69,8 @@ test("a mention starts a run with the session, its issue, the comment and who as
         url: "https://linear.app/acme/issue/ENG-42/checkout-button-does-nothing-on-safari",
       },
       comment: "@jigs can you fix this?",
+      promptContext:
+        '<issue identifier="ENG-42">\n<title>Checkout button does nothing on Safari</title>\n</issue>',
       creator: {
         id: "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
         name: "Ada Lovelace",
@@ -88,6 +90,13 @@ test("an assignment starts a run with no comment, and an automation's with no cr
   });
   const automated = withSession({}, { creator: null, creatorId: null });
   expect((await source.fromPush(ACME, from(automated)))?.inputs).toMatchObject({ creator: null });
+});
+
+test("a prompt context missing or of an unexpected shape still starts a run, without it", async () => {
+  for (const promptContext of [undefined, { issue: "ENG-42" }]) {
+    const pushed = await source.fromPush(ACME, from(withSession({ promptContext })));
+    expect(pushed?.inputs).toMatchObject({ promptContext: null });
+  }
 });
 
 test("the same session keys the same occurrence however often it arrives", async () => {

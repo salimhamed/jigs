@@ -31,6 +31,7 @@ const createdSchema = z.object({
     comment: z.object({ body: z.string() }).nullish(),
     creator: z.object({ id: z.string(), name: z.string(), email: z.string() }).nullish(),
   }),
+  promptContext: z.string().nullish().catch(null),
 });
 
 const SAMPLE_INPUTS = {
@@ -43,6 +44,7 @@ const SAMPLE_INPUTS = {
     url: "https://linear.app/acme/issue/ENG-1/an-issue",
   },
   comment: "@jigs take a look",
+  promptContext: '<issue identifier="ENG-1">\n<title>An issue</title>\n</issue>',
   creator: { id: "00000000-0000-0000-0000-000000000000", name: "Ada", email: "ada@example.com" },
 } satisfies LinearAgentSessionInputs;
 
@@ -86,7 +88,7 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
       );
       return null;
     }
-    const { agentSession } = created.data;
+    const { agentSession, promptContext } = created.data;
     const { issue } = agentSession;
     if (!issue) return null;
     if (
@@ -113,6 +115,7 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
       installationName,
       issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
       comment: agentSession.comment?.body ?? null,
+      promptContext: promptContext ?? null,
       creator: creator ? { id: creator.id, name: creator.name, email: creator.email } : null,
     } satisfies LinearAgentSessionInputs;
     return { key: agentSession.id, inputs, at: new Date(agentSession.createdAt) };

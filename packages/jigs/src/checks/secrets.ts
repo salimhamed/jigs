@@ -2,6 +2,7 @@ import type { FactoryContext } from "../config/factory-context.ts";
 import { readFactoryEnv } from "../config/factory-env.ts";
 import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
 import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/shared/mcp-credentials.ts";
+import { AGENT_TOKEN_ENV } from "../workflow/agents/agent-access.ts";
 import { neededByUsers, type WorkflowManifests } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";
@@ -10,13 +11,17 @@ export interface SecretChecksOptions {
   context: FactoryContext;
 }
 
+const AGENT_TOKENS: readonly string[] = Object.values(AGENT_TOKEN_ENV);
+
 // An invalid MCP credential name is the MCP server check's diagnosis, in
-// doctor and when the step starts.
+// doctor and when the step starts. An agent token is not the service's to
+// hold: jigs mints it when the step starts, and refuses a server reading one
+// its harness has not opted in to.
 function secretNames(requires: WorkflowRequires, mcpCredentials = true): string[] {
   const mcp = mcpCredentials
-    ? Object.values(requires.agents ?? {}).flatMap((harness) =>
-        mcpCredentialVariables(harness.mcpServers ?? {}),
-      )
+    ? Object.values(requires.agents ?? {})
+        .flatMap((harness) => mcpCredentialVariables(harness.mcpServers ?? {}))
+        .filter((name) => !AGENT_TOKENS.includes(name))
     : [];
   return [
     ...new Set([

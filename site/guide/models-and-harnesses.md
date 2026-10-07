@@ -150,8 +150,9 @@ its own session.
 
 ## Harness settings
 
-Claude Code and Codex descriptors use the provider's own JSON-serializable
-settings, except for execution policy and lifecycle settings owned by jigs:
+Claude Code descriptors take the Claude Agent SDK's own JSON-serializable
+options, and Codex descriptors the Codex provider's settings, except for
+execution policy and lifecycle settings owned by jigs:
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs";
@@ -248,8 +249,9 @@ harness built in the workflow body is checked when its agent starts.
 `harnesses.claude({ model, ...settings })` is a harness for `runAgent` and
 `askAgent`. Install Claude Code, keep `claude` on the service's `PATH` (or set
 `JIGS_CLAUDE_EXECUTABLE`), and run `claude auth login`. Calls use that account.
-jigs runs it unattended with permission prompts bypassed. `askAgent` uses the
-model without tools, MCP servers or filesystem settings.
+jigs drives that `claude` through the Claude Agent SDK and runs it unattended
+with permission prompts bypassed. `askAgent` uses the model without tools, MCP
+servers or filesystem settings.
 
 ## Codex
 

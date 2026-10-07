@@ -9,8 +9,7 @@
 // different-looking comment passes its own function from its step wrapper and
 // replaces no step.
 
-import { createHash } from "node:crypto";
-import { type LinearClient, linearFor } from "../../providers/linear.ts";
+import { derivedUuid, type LinearClient, linearFor } from "../../providers/linear.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
@@ -52,7 +51,7 @@ export const postTicketHumanInputRequest = async (
     dashboardUrl: dashboardRunUrl(metadata.workflowRunId),
   };
   const linear = linearFor(installationName);
-  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+  const comment = await postOnce(linear, stepPostingId(metadata, issueId), issueId, async () => {
     const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: halt.mention,
@@ -79,7 +78,7 @@ export const postTicketNote = async (
   render: RenderTicketNote = renderTicketNote,
 ): ReturnType<PostTicketNote> => {
   const linear = linearFor(installationName);
-  const comment = await postOnce(linear, ticketCommentId(metadata, issueId), issueId, async () => {
+  const comment = await postOnce(linear, stepPostingId(metadata, issueId), issueId, async () => {
     const participants = await resolveParticipants(linear, issueId, {
       operator: definition.linear?.operator,
       mention: note.mention,
@@ -91,23 +90,14 @@ export const postTicketNote = async (
 };
 
 /**
- * The id a step's comment is created under: a UUID v4 derived from the run, the step and the issue,
- * so every retry of one step names the same comment while two posts of the same text stay two
- * comments.
+ * The id a step's post is created under: derived from the run, the step and where it posts, so
+ * every retry of one step names the same post while two posts of the same text stay two.
  */
-export function ticketCommentId(
+export function stepPostingId(
   metadata: Pick<StepRunMetadata, "workflowRunId" | "stepId">,
-  issueId: string,
+  target: string,
 ): string {
-  const hex = createHash("sha256")
-    .update(JSON.stringify([metadata.workflowRunId, metadata.stepId, issueId]))
-    .digest("hex")
-    .slice(0, 32)
-    .split("");
-  hex[12] = "4";
-  hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
-  const id = hex.join("");
-  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+  return derivedUuid([metadata.workflowRunId, metadata.stepId, target]);
 }
 
 // A step retry may follow a create whose response was lost. The comment then
@@ -151,10 +141,15 @@ export const checkForTicketHumanReply: CheckForTicketHumanReply = async ({
     sinceIso,
   );
   // Anything the factory's app wrote is not a human's answer, whichever run
-  // posted it.
+  // posted it, and neither is a message to an agent: a mention that opened a
+  // Linear agent session, or a reply in its thread.
   const human = comments.find(
     (comment) =>
-      comment.user !== null && comment.user.id !== app.id && !postedCommentIds.includes(comment.id),
+      comment.user !== null &&
+      comment.user.id !== app.id &&
+      !postedCommentIds.includes(comment.id) &&
+      comment.agentSession == null &&
+      comment.parent?.agentSession == null,
   );
   console.log(
     `[checkForTicketHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,

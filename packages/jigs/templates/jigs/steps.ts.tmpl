@@ -23,6 +23,10 @@ import type {
 } from "@jigs-ai/jigs";
 import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
 import * as gitOperations from "@jigs-ai/jigs/steps/git";
+import type {
+  LinearAgentActivityContent,
+  LinearAgentTurnRequest,
+} from "@jigs-ai/jigs/steps/linear";
 import * as linearOperations from "@jigs-ai/jigs/steps/linear";
 import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
@@ -188,6 +192,66 @@ export async function setTicketStatus(request: {
 export async function resolveLinearIssue(request: { installationName: string; reference: string }) {
   "use step";
   return linearOperations.resolveLinearIssue(request);
+}
+
+/**
+ * Post a thought, action, response or error into a Linear agent session as the factory's app.
+ *
+ * @group Linear agent sessions
+ */
+export async function postLinearAgentActivity(request: {
+  installationName: string;
+  sessionId: string;
+  content: LinearAgentActivityContent;
+  ephemeral?: boolean;
+  once?: string;
+}) {
+  "use step";
+  return linearOperations.postLinearAgentActivity(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Replace the links a Linear agent session shows, after the run's dashboard.
+ *
+ * @group Linear agent sessions
+ */
+export async function setLinearAgentSessionUrls(request: {
+  installationName: string;
+  sessionId: string;
+  urls: Array<{ label: string; url: string }>;
+}) {
+  "use step";
+  return linearOperations.setLinearAgentSessionUrls(request, getWorkflowMetadata());
+}
+
+/**
+ * Run one turn of a conversation in a Linear agent session, posting its status and answers there.
+ * Use linearAgentConversation() to hold the whole conversation.
+ *
+ * @group Linear agent sessions
+ */
+export async function executeLinearAgentTurn(request: LinearAgentTurnRequest) {
+  "use step";
+  return linearOperations.executeLinearAgentTurn(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Read every message people sent into a Linear agent session, oldest first.
+ *
+ * @group Linear agent sessions
+ */
+export async function listLinearAgentSessionPrompts(session: {
+  installationName: string;
+  sessionId: string;
+}) {
+  "use step";
+  return linearOperations.listLinearAgentSessionPrompts(session);
 }
 
 /**

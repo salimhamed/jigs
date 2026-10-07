@@ -1,6 +1,6 @@
 // Descriptors are tagged plain data: nothing live crosses the workflow/step boundary.
 
-import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
+import type { Options as ClaudeAgentOptions } from "@anthropic-ai/claude-agent-sdk";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { JigsError } from "../errors.ts";
 import { assertAgentAccess } from "./agent-access.ts";
@@ -120,8 +120,8 @@ export type PiMcpHttpServerConfig = Omit<
 export type PiMcpServerConfig = PiMcpStdioServerConfig | PiMcpHttpServerConfig;
 
 // A value that can be written down: nothing callable anywhere inside it. Keys
-// typed `unknown` or `any` count as data. Depth is capped so the provider's
-// large settings types stay cheap to check.
+// typed `unknown` or `any` count as data. Depth is capped so the large
+// settings types stay cheap to check.
 type IsData<T, Depth extends unknown[] = []> = unknown extends T
   ? true
   : Depth["length"] extends 6
@@ -168,23 +168,24 @@ export const claudePolicyKeys = [
   "resumeSessionAt",
   "resumeDropsTurn",
   "extraArgs",
-  "sdkOptions",
+  "outputFormat",
   "agents",
   "settings",
   "plugins",
+  "projectConfigRoot",
   "skills",
-] as const satisfies readonly (keyof ClaudeCodeSettings)[];
+] as const satisfies readonly (keyof ClaudeAgentOptions)[];
 /**
- * A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
+ * A Claude Code option a descriptor cannot name, because jigs sets it itself or holds it as
  * policy.
  *
  * @remarks
- * jigs sets the working directory, environment, executable and session for every step, and holds
- * permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
- * rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
- * environment, permissions and hooks from outside the worktree; they come from the repository's
- * project settings instead. jigs fills `plugins` itself to load the descriptor's `skills`, which
- * replace Claude Code's own `skills` setting.
+ * jigs sets the working directory, environment, executable, session and output format for every
+ * step, and holds permissions, setting sources and MCP servers as policy. `extraArgs` would
+ * rewrite any of those. `agents`, `settings`, `plugins` and `projectConfigRoot` would bring in
+ * unprobed MCP servers, environment, permissions and hooks from outside the worktree; they come
+ * from the repository's project settings instead. jigs fills `plugins` itself to load the
+ * descriptor's `skills`, which replace Claude Code's own `skills` option.
  *
  * @group Harnesses and models
  */
@@ -255,12 +256,12 @@ export type AgentInstallation = { installationName: string };
 export type HarnessSkills = { skills?: string[] };
 
 /**
- * A Claude Code harness descriptor: the provider's own settings that are data, minus each
+ * A Claude Code harness descriptor: the Claude Agent SDK's own options that are data, minus each
  * {@link ClaudePolicyKey}, plus the model, jigs' MCP server shape and {@link HarnessSkills}.
  *
  * @group Harnesses and models
  */
-export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> &
+export type ClaudeHarness = JsonOnly<Omit<ClaudeAgentOptions, ClaudePolicyKey>> &
   HarnessSkills & {
     kind: "claude";
     model: string;

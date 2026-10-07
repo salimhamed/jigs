@@ -73,7 +73,8 @@ The comment mentions the ticket's creator and assignee, or your
 `mention: ["dana@example.com"]` in the halt to mention more people.
 
 Answer the existing question on Linear. Starting a second run does not answer
-it. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
+it, and neither does a mention of the factory's app or a reply in a [Linear
+conversation](/guide/linear-conversations) on the issue. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
 
 ## Watch a pull request
 

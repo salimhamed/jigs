@@ -13,6 +13,8 @@ export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 /** Prefix for the hook a run parks on while it waits for a reply in a Slack thread. */
 export const SLACK_THREAD_TOKEN_PREFIX = "slack:thread:";
+/** Prefix for the hook a run holds while it converses in a Linear agent session. */
+export const LINEAR_SESSION_TOKEN_PREFIX = "linear:session:";
 
 /**
  * A hook token jigs minted, taken apart. Every kind names the installation
@@ -36,6 +38,11 @@ export type HookToken =
       kind: "slack-thread";
       provider: "slack";
       thread: { installationName: string; channel: string; threadTs: string } | null;
+    }
+  | {
+      kind: "linear-session";
+      provider: "linear";
+      session: { installationName: string; sessionId: string } | null;
     };
 
 export type HookKind = HookToken["kind"];
@@ -116,6 +123,20 @@ const HOOK_KINDS: { [K in HookKind]: { prefix: string; parse: (rest: string) => 
       };
     },
   },
+  "linear-session": {
+    prefix: LINEAR_SESSION_TOKEN_PREFIX,
+    parse: (rest) => {
+      const [installationName, sessionId] = parts(rest, 2) ?? [];
+      return {
+        kind: "linear-session",
+        provider: "linear",
+        session:
+          installationName === undefined || sessionId === undefined
+            ? null
+            : { installationName, sessionId },
+      };
+    },
+  },
 };
 
 /** Take a hook token apart, or null when jigs did not mint it. */
@@ -179,6 +200,17 @@ export function describeHookToken(token: string, ticket?: string | null): HookDe
           ? `a Slack thread this token does not name (${token})`
           : `the Slack thread ${parsed.thread.threadTs} in ${parsed.thread.channel}`;
       return { kind: parsed.kind, label, reason: `waiting for a reply in ${label}` };
+    }
+    case "linear-session": {
+      const label =
+        parsed.session === null
+          ? `a Linear agent session this token does not name (${token})`
+          : `Linear agent session ${parsed.session.sessionId}`;
+      return {
+        kind: parsed.kind,
+        label,
+        reason: "waiting for a reply in the Linear agent session",
+      };
     }
     case undefined:
       return { kind: "external", label: token, reason: `waiting for an external event (${token})` };
