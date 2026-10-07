@@ -3,6 +3,7 @@
 // "use step" function or from a route handler (the trigger's ticket lookup,
 // the run-ref resolver) — never from a workflow body, where both are forbidden.
 
+import { createHash } from "node:crypto";
 import {
   currentFactoryContext,
   type FactoryContext,
@@ -511,6 +512,22 @@ export type LinearClient = ReturnType<typeof createLinearClient>;
 /** The factory's Linear client for one installation. */
 export const linearFor = (installationName: string, context?: FactoryContext): LinearClient =>
   createLinearClient({ installationName, ...(context === undefined ? {} : { context }) });
+
+/**
+ * A UUID v4 derived from `parts`. Linear takes a caller's own id for a comment or an agent
+ * activity, so one derived from what the post is for names it the same way on every retry.
+ */
+export function derivedUuid(parts: readonly string[]): string {
+  const hex = createHash("sha256")
+    .update(JSON.stringify(parts))
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
+  hex[12] = "4";
+  hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
+  const id = hex.join("");
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+}
 
 // Linear renders @-mentions in API-created comments as @[displayName](userId).
 export function mention(user: LinearUser): string {

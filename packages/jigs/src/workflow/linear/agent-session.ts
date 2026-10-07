@@ -7,6 +7,13 @@ import { LINEAR_SESSION_TOKEN_PREFIX } from "../hook-tokens.ts";
 /**
  * Build the hook token for a Linear agent session in one Linear installation. A run conversing in
  * the session holds it, and its live turn is registered under it.
+ *
+ * @remarks
+ * The run must create this hook once, as its first wait, and hold it for the whole conversation,
+ * as a ticket claim is held: that is what makes it the session's one owner, and why a run holding
+ * it is not reported as waiting. Before every wait on it, the run reads the session's prompts
+ * again, because a wake carries nothing and a reply that arrived before the hook existed woke no
+ * one.
  */
 export function linearSessionToken(installationName: string, sessionId: string): string {
   return `${LINEAR_SESSION_TOKEN_PREFIX}${installationName}:${sessionId}`;

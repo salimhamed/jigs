@@ -21,7 +21,7 @@ import { clearWakes, lastWake } from "./wake.ts";
 
 // What an event is worth is what the SDK's resumeHook answers, so the SDK is
 // what a test stands in for here.
-vi.mock("workflow/api", () => ({ resumeHook: vi.fn(), getHookByToken: vi.fn() }));
+vi.mock("workflow/api", () => ({ resumeHook: vi.fn() }));
 const resumeHookMock = vi.mocked(resumeHook);
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";

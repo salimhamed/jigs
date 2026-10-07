@@ -76,6 +76,31 @@ test("a refused activity is an error", async () => {
   );
 });
 
+test("an activity posted once is created under its id", async () => {
+  respond({ agentActivityCreate: { success: true, agentActivity: { id: "a1", createdAt: "t1" } } });
+  expect(await agent.postActivityOnce("session-1", { type: "response", body: "Hi" }, "a1")).toEqual(
+    { id: "a1", createdAt: "t1" },
+  );
+  expect(bodies()[0].variables.input.id).toBe("a1");
+  expect(server.calls).toHaveLength(1);
+});
+
+test("an activity whose id already exists is the one found, not a second post", async () => {
+  replies.push(jsonResponse({ errors: [{ message: "Entity already exists" }] }));
+  respond({ agentActivities: { nodes: [{ id: "a1", createdAt: "t1" }] } });
+  expect(await agent.postActivityOnce("session-1", { type: "response", body: "Hi" }, "a1")).toEqual(
+    { id: "a1", createdAt: "t1" },
+  );
+});
+
+test("a post that failed and left nothing behind fails", async () => {
+  replies.push(jsonResponse({ errors: [{ message: "Linear is down" }] }));
+  respond({ agentActivities: { nodes: [] } });
+  await expect(
+    agent.postActivityOnce("session-1", { type: "response", body: "Hi" }, "a1"),
+  ).rejects.toThrow("Linear is down");
+});
+
 test("an activity is found by id, or is null when Linear has none", async () => {
   respond({ agentActivities: { nodes: [{ id: "a1", createdAt: "t1" }] } });
   respond({ agentActivities: { nodes: [] } });

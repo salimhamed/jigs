@@ -61,6 +61,8 @@ export interface TriggerEngine {
   stop(): Promise<void>;
   /** The rows this factory's triggers on `provider` recorded for the occurrence `key`. */
   recorded(provider: Provider, key: string): Promise<Occurrence[]>;
+  /** Skip a recorded row no start has claimed, so it never starts. False when one has. */
+  withdraw(row: Pick<Occurrence, "trigger" | "occurrence">): Promise<boolean>;
 }
 
 interface Armed extends ValidTrigger {
@@ -308,6 +310,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       );
       return rows.flat();
     },
+    withdraw: (row) => store().withdraw(row.trigger, row.occurrence),
     async push(provider, event) {
       await markers();
       const taken: string[] = [];

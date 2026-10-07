@@ -124,6 +124,31 @@ dbTest(
   },
 );
 
+dbTest(
+  "only a row no start has claimed is withdrawn, and a withdrawn row never starts",
+  async () => {
+    const store = triggerStore(db, "factory-w");
+    for (const occurrence of ["P1", "P2"])
+      await store.record({
+        trigger: "pages",
+        occurrence,
+        state: "pending",
+        inputs: {},
+        attribute: `attr-${occurrence}`,
+        occurredAt: at(0),
+      });
+    expect(await store.attempt("pages", "P2", at(1))).toBe(true);
+
+    expect(await store.withdraw("pages", "P1")).toBe(true);
+    expect(await store.withdraw("pages", "P2")).toBe(false);
+    expect(await store.withdraw("pages", "P1")).toBe(false);
+
+    expect((await store.byAttribute("pages", ["attr-P1"]))[0]?.state).toBe("skipped");
+    expect(await store.attempt("pages", "P1", at(2))).toBe(false);
+    expect((await store.pending("pages")).map((row) => row.occurrence)).toEqual(["P2"]);
+  },
+);
+
 dbTest("a row never attempted is not adopted late", async () => {
   const store = triggerStore(db, "factory-f");
   await store.record({

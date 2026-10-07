@@ -297,6 +297,20 @@ test("the rows an occurrence was recorded under are found by its key, on its pro
   expect(await h.engine.recorded("linear", "P1")).toEqual([]);
 });
 
+test("a recorded occurrence withdrawn before its start never starts", async () => {
+  const h = harness();
+  await h.memory.store.enable("pages", minutes(-60));
+  await pendingRow(h.memory.store, "P1", minutes(-5));
+  const [row] = await h.engine.recorded("github", "P1");
+
+  expect(row && (await h.engine.withdraw(row))).toBe(true);
+  await h.engine.arm();
+  await h.engine.drain();
+
+  expect(h.starts).toEqual([]);
+  expect(h.memory.state("pages", "P1")?.state).toBe("skipped");
+});
+
 test("a pushed event is recorded and started, and answers before the run starts", async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {

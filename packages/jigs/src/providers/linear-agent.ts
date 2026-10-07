@@ -65,6 +65,25 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentActivityCreate.agentActivity;
   }
 
+  /**
+   * Post an activity under `id` unless it is already there. A retry after a lost response creates
+   * the same id again, which Linear refuses; only then is it worth a read to find the first one.
+   */
+  async function postActivityOnce(
+    sessionId: string,
+    content: LinearAgentActivityContent,
+    id: string,
+    options: { ephemeral?: boolean } = {},
+  ): Promise<{ id: string; createdAt: string }> {
+    try {
+      return await postActivity(sessionId, content, { ...options, id });
+    } catch (error) {
+      const created = await findActivity(id).catch(() => null);
+      if (created !== null) return created;
+      throw error;
+    }
+  }
+
   /** An activity by id, or null when none exists. */
   async function findActivity(id: string): Promise<{ id: string; createdAt: string } | null> {
     const data = await graphql<{
@@ -133,7 +152,7 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
       if (!pageInfo.hasNextPage || pageInfo.endCursor === null) break;
       after = pageInfo.endCursor;
     }
-    // Linear lists newest first.
+    // Linear returns a session's activities newest first.
     return prompts.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
@@ -153,7 +172,14 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentSession.activities.nodes.length > 0;
   }
 
-  return { postActivity, findActivity, setExternalUrls, listPrompts, answeredSince };
+  return {
+    postActivity,
+    postActivityOnce,
+    findActivity,
+    setExternalUrls,
+    listPrompts,
+    answeredSince,
+  };
 }
 
 export type LinearAgentApi = ReturnType<typeof createLinearAgentApi>;

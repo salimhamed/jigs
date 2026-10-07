@@ -33,22 +33,14 @@ export async function postLinearAgentActivity(
     content: LinearAgentActivityContent;
     ephemeral?: boolean;
   },
-  metadata: StepRunMetadata,
+  metadata: Pick<StepRunMetadata, "workflowRunId" | "stepId">,
 ): Promise<{ id: string; createdAt: string }> {
-  const linear = linearAgentFor(installationName);
-  const id = stepPostingId(metadata, sessionId);
-  // A retry after a lost response creates the same id again, which Linear
-  // refuses; only then is it worth a read to find the first one.
-  try {
-    return await linear.postActivity(sessionId, content, {
-      id,
-      ...(ephemeral === undefined ? {} : { ephemeral }),
-    });
-  } catch (error) {
-    const created = await linear.findActivity(id).catch(() => null);
-    if (created !== null) return created;
-    throw error;
-  }
+  return linearAgentFor(installationName).postActivityOnce(
+    sessionId,
+    content,
+    stepPostingId(metadata, sessionId),
+    ephemeral === undefined ? {} : { ephemeral },
+  );
 }
 
 /**

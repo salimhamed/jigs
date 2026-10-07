@@ -80,6 +80,12 @@ export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
     },
     failed: async (trigger, occurrence, report) =>
       settle(trigger, occurrence, { state: "failed", report }),
+    withdraw: async (trigger, occurrence) => {
+      const row = rows.get(key(trigger, occurrence));
+      if (row?.state !== "pending" || row.attemptedAt !== null) return false;
+      patch(trigger, occurrence, { state: "skipped" });
+      return true;
+    },
     adoptLate: async (trigger, occurrence, runId, at) => {
       const row = rows.get(key(trigger, occurrence));
       if (row?.state === "failed" && row.attemptedAt !== null)

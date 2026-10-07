@@ -9,8 +9,7 @@
 // different-looking comment passes its own function from its step wrapper and
 // replaces no step.
 
-import { createHash } from "node:crypto";
-import { type LinearClient, linearFor } from "../../providers/linear.ts";
+import { derivedUuid, type LinearClient, linearFor } from "../../providers/linear.ts";
 import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   CheckForTicketHumanReply,
@@ -91,19 +90,14 @@ export const postTicketNote = async (
 };
 
 /**
- * The id a step's post is created under: a UUID v4 derived from the run, the step and where it
- * posts, so every retry of one step names the same post while two posts of the same text stay two.
+ * The id a step's post is created under: derived from the run, the step and where it posts, so
+ * every retry of one step names the same post while two posts of the same text stay two.
  */
-export function stepPostingId(metadata: StepRunMetadata, target: string): string {
-  const hex = createHash("sha256")
-    .update(JSON.stringify([metadata.workflowRunId, metadata.stepId, target]))
-    .digest("hex")
-    .slice(0, 32)
-    .split("");
-  hex[12] = "4";
-  hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
-  const id = hex.join("");
-  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
+export function stepPostingId(
+  metadata: Pick<StepRunMetadata, "workflowRunId" | "stepId">,
+  target: string,
+): string {
+  return derivedUuid([metadata.workflowRunId, metadata.stepId, target]);
 }
 
 // A step retry may follow a create whose response was lost. The comment then

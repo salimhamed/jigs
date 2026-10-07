@@ -1,8 +1,7 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
 const api = vi.hoisted(() => ({
-  postActivity: vi.fn(),
-  findActivity: vi.fn(),
+  postActivityOnce: vi.fn(),
   setExternalUrls: vi.fn(),
   listPrompts: vi.fn(),
 }));
@@ -21,42 +20,24 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-test("an activity is posted through its installation under an id the step derives", async () => {
-  api.postActivity.mockResolvedValueOnce(posted);
+test("an activity is posted once, through its installation, under an id the step derives", async () => {
+  api.postActivityOnce.mockResolvedValueOnce(posted);
   const request = { installationName: "acme", sessionId: "s1", content: thought, ephemeral: true };
 
   expect(await postLinearAgentActivity(request, metadata)).toEqual(posted);
 
   expect(linearAgentFor).toHaveBeenCalledWith("acme");
-  expect(api.postActivity).toHaveBeenCalledWith("s1", thought, {
-    id: stepPostingId(metadata, "s1"),
+  expect(api.postActivityOnce).toHaveBeenCalledWith("s1", thought, stepPostingId(metadata, "s1"), {
     ephemeral: true,
   });
-  expect(api.findActivity).not.toHaveBeenCalled();
 });
 
-test("a retry whose first post landed finds that activity instead of posting twice", async () => {
-  api.postActivity.mockRejectedValueOnce(new Error("id already exists"));
-  api.findActivity.mockResolvedValueOnce(posted);
-
-  const result = await postLinearAgentActivity(
-    { installationName: "acme", sessionId: "s1", content: thought },
-    metadata,
-  );
-
-  expect(result).toEqual(posted);
-  expect(api.findActivity).toHaveBeenCalledWith(stepPostingId(metadata, "s1"));
-});
-
-test("a post that failed and left nothing behind fails the step", async () => {
-  api.postActivity.mockRejectedValueOnce(new Error("Linear is down"));
-  api.findActivity.mockResolvedValueOnce(null);
-  await expect(
-    postLinearAgentActivity(
-      { installationName: "acme", sessionId: "s1", content: thought },
-      metadata,
-    ),
-  ).rejects.toThrow("Linear is down");
+test("every retry of one step names the same activity; another step names another", () => {
+  const id = stepPostingId(metadata, "s1");
+  expect(id).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+  expect(stepPostingId({ ...metadata }, "s1")).toBe(id);
+  expect(stepPostingId({ ...metadata, stepId: "step_02" }, "s1")).not.toBe(id);
+  expect(stepPostingId(metadata, "s2")).not.toBe(id);
 });
 
 test("links and prompts go through the session's installation", async () => {
