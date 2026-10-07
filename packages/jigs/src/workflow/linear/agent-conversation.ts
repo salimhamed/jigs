@@ -34,8 +34,8 @@ export interface LinearAgentConversationSteps {
  * How a Linear agent conversation runs: the Claude harness and the worktree it works in.
  *
  * @remarks
- * `instructions` lead the first message Claude reads, which is Linear's context for the session
- * when it sent one. The conversation ends once no one has replied for `idleFor`, a duration such
+ * `instructions` lead the first message Claude reads, which carries Linear's context for the
+ * session when Linear sends one. The conversation ends once no one has replied for `idleFor`, a duration such
  * as `"30m"` or milliseconds; four hours by default.
  *
  * @group Linear agent sessions
@@ -105,13 +105,17 @@ export async function linearAgentConversation(
     (await steps.listLinearAgentSessionPrompts(ref)).filter((p) => !consumed.includes(p.id));
   const lastStop = (prompts: LinearAgentPrompt[]) =>
     prompts.findLast((prompt) => prompt.signal === "stop");
+  const { issue, comment, promptContext } = session;
+  const assigned = `${issue.identifier} "${issue.title}" was assigned to you.`;
   let opening: ConversationMessage | undefined = {
     uuid: session.session,
     author: session.creator?.name ?? "Someone",
     text:
-      session.promptContext ??
-      session.comment ??
-      `${session.issue.identifier} "${session.issue.title}" was assigned to you.`,
+      comment !== null
+        ? (promptContext ?? comment)
+        : promptContext === null
+          ? assigned
+          : `${assigned}\n\n${promptContext}`,
   };
   let turns = 0;
 

@@ -97,9 +97,11 @@ request, and runs on once the conversation ends.
   Claude Code can take a reply in the middle of a turn.
 - `cwd`: the directory Claude works in, for the whole conversation.
 - `instructions`: optional text that leads the first message Claude reads. The
-  first message is Linear's context for the session (the issue, its
-  description and the comments around the request), so put anything else
-  Claude needs to know here.
+  first message carries Linear's context for the session when Linear sends
+  one: the issue, its description and the comments around the request. A
+  mention opens with that context, or the comment without it; an assignment
+  opens with a line saying the issue was assigned, followed by the context. Put
+  anything else Claude needs to know here.
 - `idleFor`: how long a conversation waits for a reply before it ends, as a
   duration such as `"30m"` or milliseconds. Four hours by default.
 

@@ -235,8 +235,23 @@ test("failed checks before a turn post an error and end failed", async () => {
   expect(posts()).toEqual([{ ...ref, content: { type: "error", body: error } }]);
 });
 
-test("Linear's prompt context opens the conversation when it sent one", async () => {
-  const promptContext = '<issue identifier="AGE-1">\n<title>Fix it</title>\n</issue>';
+const promptContext = '<issue identifier="AGE-1">\n<title>Fix it</title>\n</issue>';
+
+test("Linear's prompt context opens a mention in place of its comment", async () => {
+  const done = linearAgentConversation(
+    { ...inputs, promptContext },
+    { harness: claude, cwd: "/w" },
+    steps,
+  );
+  await parked();
+  expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
+    opening: { uuid: SESSION, author: "Ada", text: promptContext },
+  });
+  await goIdle();
+  await done;
+});
+
+test("an assignment opens with the assignment, then Linear's prompt context", async () => {
   const done = linearAgentConversation(
     { ...inputs, comment: null, promptContext },
     { harness: claude, cwd: "/w" },
@@ -244,7 +259,7 @@ test("Linear's prompt context opens the conversation when it sent one", async ()
   );
   await parked();
   expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
-    opening: { uuid: SESSION, author: "Ada", text: promptContext },
+    opening: { text: `AGE-1 "Fix it" was assigned to you.\n\n${promptContext}` },
   });
   await goIdle();
   await done;

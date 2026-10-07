@@ -92,6 +92,13 @@ test("an assignment starts a run with no comment, and an automation's with no cr
   expect((await source.fromPush(ACME, from(automated)))?.inputs).toMatchObject({ creator: null });
 });
 
+test("a prompt context missing or of an unexpected shape still starts a run, without it", async () => {
+  for (const promptContext of [undefined, { issue: "ENG-42" }]) {
+    const pushed = await source.fromPush(ACME, from(withSession({ promptContext })));
+    expect(pushed?.inputs).toMatchObject({ promptContext: null });
+  }
+});
+
 test("the same session keys the same occurrence however often it arrives", async () => {
   const first = await source.fromPush(ACME, from(created()));
   const again = await source.fromPush(ACME, from(withSession({ webhookTimestamp: 1791115260000 })));

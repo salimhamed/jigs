@@ -31,7 +31,7 @@ const createdSchema = z.object({
     comment: z.object({ body: z.string() }).nullish(),
     creator: z.object({ id: z.string(), name: z.string(), email: z.string() }).nullish(),
   }),
-  promptContext: z.string().nullish(),
+  promptContext: z.string().nullish().catch(null),
 });
 
 const SAMPLE_INPUTS = {
