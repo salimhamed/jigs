@@ -64,6 +64,20 @@ export function claudeStreamParts(): (message: SDKMessage) => Generator<AgentSou
   };
 }
 
+/** A result message's answer, or what went wrong in its turn. */
+export function resultOutcome(result: SDKResultMessage): { answer: string } | { failure: string } {
+  if (result.subtype === "success" && !result.is_error) return { answer: result.result };
+  const detail =
+    result.subtype === "success" ? result.result : result.errors.filter(Boolean).join("; ");
+  return { failure: detail || result.subtype };
+}
+
+/** The error for a failed turn. `errorKind` is the error its last assistant message carried. */
+export function failureText(failure: string, errorKind?: string): string {
+  const kind = errorKind === undefined ? "" : ` (${errorKind})`;
+  return `Claude Code failed${kind}: ${failure}`;
+}
+
 /**
  * The generation a result message answers, or the error it reports. `errorKind` is the error the
  * last assistant message carried, such as `authentication_failed`.
@@ -78,12 +92,9 @@ export function claudeGeneration(
       "Claude Code could not produce output matching the schema after its maximum retries",
     );
   }
-  if (result.subtype !== "success" || result.is_error) {
-    const detail =
-      result.subtype === "success" ? result.result : result.errors.filter(Boolean).join("; ");
-    const kind = errorKind === undefined ? "" : ` (${errorKind})`;
-    throw new Error(`Claude Code failed${kind}: ${detail || result.subtype}`);
-  }
+  const outcome = resultOutcome(result);
+  if ("failure" in outcome) throw new Error(failureText(outcome.failure, errorKind));
+  if (result.subtype !== "success") throw new Error(failureText(result.subtype, errorKind));
   const providerMetadata = { claude: { sessionId: result.session_id } };
   if (!structured) return { text: result.result, providerMetadata };
   const output = result.structured_output;

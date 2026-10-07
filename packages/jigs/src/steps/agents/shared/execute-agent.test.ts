@@ -138,7 +138,7 @@ function makeDeps(
     ...drivers,
     claude: createClaudeDriver({
       query: claudeQuery,
-      sessionMessages: async () => [{ type: "user" }],
+      transcript: async () => new Set(["earlier"]),
       openStepStream: () => deps.openStepStream(),
     }),
     codex: createCodexDriver({
@@ -621,7 +621,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
       captured.claude.push(call);
       return [claudeResult()];
     }),
-    sessionMessages: async () => [{ type: "user", message: "interrupted first turn" }],
+    transcript: async () => new Set(["earlier"]),
     openStepStream: () => undefined,
   });
   const resolveDriver = deps.resolveDriver;
@@ -643,7 +643,7 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
   const { deps, captured } = makeDeps();
   const missing = createClaudeDriver({
     query: fakeClaudeQuery(),
-    sessionMessages: async () => [],
+    transcript: async () => new Set(),
     openStepStream: () => undefined,
   });
   const resolveDriver = deps.resolveDriver;
