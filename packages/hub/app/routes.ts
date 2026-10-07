@@ -15,6 +15,7 @@ export default [
     route("apps/new", "routes/new-app.tsx"),
     route("apps/:id", "routes/app.tsx"),
     route("members", "routes/members.tsx"),
+    route("members/invite", "routes/invite-member.tsx"),
     route("settings", "routes/settings.tsx"),
   ]),
 ] satisfies RouteConfig;

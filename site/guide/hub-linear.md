@@ -67,10 +67,10 @@ it again to fix it.
 
 ## 5. Assign it to factories
 
-On the page of each factory that should act as this app, under **Assigned
-apps**, choose the app and **Assign app**. A factory may be assigned several
-Linear apps and workspaces, and names the installation it uses in each
-trigger, step and agent.
+On the **Settings** tab of each factory that should act as this app, choose
+**Connect app** and connect the app. A factory may be assigned several Linear
+apps and workspaces, and names the installation it uses in each trigger, step
+and agent.
 
 In the factory, `pnpm exec jigs doctor` checks that the hub hands it a token
 for each Linear installation it uses. To start runs from mentions and assignments, see

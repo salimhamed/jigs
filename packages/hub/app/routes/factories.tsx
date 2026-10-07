@@ -1,7 +1,7 @@
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { requireMember } from "../auth.server.ts";
-import { ConfirmForm } from "../components/confirm-form.tsx";
+import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { PageHeader, StatusDot } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
@@ -71,28 +71,18 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
                   <td className={factory.unconfirmed > 0 ? warningText : undefined}>
                     {factory.unconfirmed}
                   </td>
-                  <td>{factory.apps}</td>
+                  <td>{factory.appNames.length}</td>
                   <td>
                     {isAdmin && (
                       <div className="flex justify-end gap-1">
-                        <ConfirmForm
-                          action="/factories/new"
-                          fields={{ intent: "reissue", factoryId: factory.id }}
-                          question={`Re-issue the token of ${factory.name}? Its current token stops working.`}
-                          className={quietButton}
-                        >
+                        <ReissueTokenButton factory={factory} className={quietButton}>
                           <KeyRound className="size-4" />
                           Re-issue token
-                        </ConfirmForm>
-                        <ConfirmForm
-                          action={`/factories/${factory.id}`}
-                          fields={{ intent: "remove" }}
-                          question={`Remove ${factory.name} and every message waiting for it?`}
-                          className={dangerButton}
-                        >
+                        </ReissueTokenButton>
+                        <RemoveFactoryButton factory={factory} className={dangerButton}>
                           <Trash2 className="size-4" />
                           Remove
-                        </ConfirmForm>
+                        </RemoveFactoryButton>
                       </div>
                     )}
                   </td>

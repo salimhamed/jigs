@@ -102,8 +102,8 @@ Enter it under **Installation name** and save.
 
 ## 5. Assign it to factories
 
-On the page of each factory that should act as this App, under **Assigned
-apps**, choose the App and **Assign app**.
+On the **Settings** tab of each factory that should act as this App, choose
+**Connect app** and connect the App.
 
 Each binding in a factory names the installation that reaches its repository
 by its installation name. A factory may be assigned several Apps installed on

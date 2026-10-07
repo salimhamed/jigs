@@ -1,10 +1,12 @@
 import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
-import { assignments, factories, factoryMessages, providerEvents } from "../src/db/schema.ts";
+import { apps, assignments, factories, factoryMessages, providerEvents } from "../src/db/schema.ts";
 
 // A connected factory long-polls at most 30 seconds at a time, and each poll marks it seen.
 const ONLINE_WITHIN_MS = 2 * 60_000;
 
+// Drizzle leaves column names unqualified when a query selects from one table, so the
+// subqueries name the outer factory's columns themselves.
 const summary = {
   id: factories.id,
   name: factories.name,
@@ -13,11 +15,14 @@ const summary = {
   cursor: factories.cursor,
   unconfirmed: sql<number>`(
     select count(*)::int from ${factoryMessages}
-    where ${factoryMessages.factoryId} = ${factories.id}
-      and ${factoryMessages.position} > ${factories.cursor}
+    where ${factoryMessages.factoryId} = "factories"."id"
+      and ${factoryMessages.position} > "factories"."cursor"
   )`,
-  apps: sql<number>`(
-    select count(*)::int from ${assignments} where ${assignments.factoryId} = ${factories.id}
+  appNames: sql<string[]>`array(
+    select ${apps.name} from ${assignments}
+    join ${apps} on ${apps.id} = ${assignments.appId}
+    where ${assignments.factoryId} = "factories"."id"
+    order by ${apps.name}
   )`,
 };
 
@@ -98,4 +103,22 @@ export async function readEventLog(
     })),
     older: rows.length > PAGE_SIZE ? String(page.at(-1)?.position) : null,
   };
+}
+
+/** When the factory was last sent an event of each app, by app id. */
+export async function readLastEvents(context: AppLoadContext, factoryId: string) {
+  const rows = await context.db
+    .select({
+      appId: providerEvents.appId,
+      receivedAt: sql<Date>`max(${providerEvents.receivedAt})`,
+    })
+    .from(factoryMessages)
+    .innerJoin(providerEvents, eq(providerEvents.id, factoryMessages.providerEventId))
+    .where(eq(factoryMessages.factoryId, factoryId))
+    .groupBy(providerEvents.appId);
+  return Object.fromEntries(
+    rows.flatMap(({ appId, receivedAt }) =>
+      appId === null ? [] : [[appId, new Date(receivedAt).toISOString()]],
+    ),
+  ) as Record<string, string>;
 }

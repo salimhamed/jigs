@@ -1,26 +1,28 @@
-import { ChevronRight, KeyRound, Plus, Save, Trash2, X } from "lucide-react";
+import type { Provider } from "@jigs-ai/hub-protocol";
+import { ChevronRight, KeyRound, Plus, Trash2 } from "lucide-react";
+import { useState } from "react";
 import { data, Form, Link, redirect } from "react-router";
 import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
 import { removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
-import { listAppNames } from "../apps.server.ts";
+import { listApps } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
-import { Card, PageHeader, StatusDot } from "../components/page.tsx";
+import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
+import { PageHeader, StatusDot } from "../components/page.tsx";
 import { ProviderInitials } from "../components/provider.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
-  button,
   card,
-  dangerButton,
   input,
+  link,
   quietButton,
   secondaryButton,
   table,
   warningText,
 } from "../components/ui.ts";
-import { readEventLog, readFactory } from "../factories.server.ts";
+import { readEventLog, readFactory, readLastEvents } from "../factories.server.ts";
 import type { Route } from "./+types/factory.ts";
 
 const notFound = () => data(null, { status: 404, statusText: "Not Found" });
@@ -30,23 +32,30 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const found = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
   if (!found) throw notFound();
   const { cursor, ...factory } = found;
-  const before = new URL(request.url).searchParams.get("before");
-  const [log, apps, organizationApps] = await Promise.all([
-    readEventLog(
+  const isAdmin = role === "admin";
+  const query = new URL(request.url).searchParams;
+  if (query.get("tab") === "activity") {
+    const before = query.get("before");
+    const log = await readEventLog(
       context,
       { id: factory.id, cursor },
       before && /^\d{1,19}$/.test(before) ? BigInt(before) : null,
-    ),
+    );
+    return { tab: "activity" as const, isAdmin, factory, ...log, paged: before !== null };
+  }
+  const [connected, lastEvents, organizationApps] = await Promise.all([
     assignedApps(context.db, factory.id),
-    listAppNames(context, organizationId),
+    readLastEvents(context, factory.id),
+    isAdmin ? listApps(context, organizationId) : [],
   ]);
   return {
-    isAdmin: role === "admin",
+    tab: "settings" as const,
+    isAdmin,
     factory,
-    apps,
-    unassignedApps: organizationApps.filter((app) => !apps.some(({ id }) => id === app.id)),
-    ...log,
-    paged: before !== null,
+    connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
+    available: organizationApps
+      .filter((app) => !connected.some(({ id }) => id === app.id))
+      .map(({ id, provider, name, installations }) => ({ id, provider, name, installations })),
   };
 }
 
@@ -58,13 +67,13 @@ export async function action({ context, request, params }: Route.ActionArgs) {
   const form = await request.formData();
   const appId = String(form.get("appId") ?? "");
   switch (form.get("intent")) {
-    case "assign":
-      if (!isUuid(appId)) return { error: "Choose an app to assign." };
+    case "connect":
+      if (!isUuid(appId)) return { error: "Choose an app to connect." };
       await assignApp(context.db, organizationId, params.id, appId);
-      return { message: "Assigned the app." };
-    case "unassign":
+      return { connected: appId };
+    case "disconnect":
       if (isUuid(appId)) await unassignApp(context.db, organizationId, params.id, appId);
-      return { message: "Unassigned the app." };
+      return { message: "Disconnected the app." };
     case "rename": {
       const name = String(form.get("name") ?? "").trim();
       const renamed = await renameFactory(context.db, organizationId, params.id, name);
@@ -79,11 +88,13 @@ export async function action({ context, request, params }: Route.ActionArgs) {
   }
 }
 
+type Loaded = Route.ComponentProps["loaderData"];
+
 export default function Factory({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
-  const { isAdmin, factory, apps, unassignedApps, messages, older, paged } = loaderData;
+  const { factory } = loaderData;
   return (
-    <div className="space-y-8">
+    <div className="space-y-6">
       <div className="space-y-3">
         <PageHeader
           title={
@@ -111,131 +122,123 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
           </div>
         </dl>
       </div>
+      <nav className="flex gap-6 border-b border-zinc-200 text-sm dark:border-zinc-800">
+        <Tab to="?" current={loaderData.tab === "settings"}>
+          Settings
+        </Tab>
+        <Tab to="?tab=activity" current={loaderData.tab === "activity"}>
+          Activity
+        </Tab>
+      </nav>
+      {loaderData.tab === "settings" ? (
+        <SettingsTab
+          loaded={loaderData}
+          justConnected={(actionData && "connected" in actionData && actionData.connected) || null}
+        />
+      ) : (
+        <ActivityTab loaded={loaderData} />
+      )}
+    </div>
+  );
+}
 
+function Tab({ to, current, children }: { to: string; current: boolean; children: string }) {
+  return (
+    <Link
+      to={to}
+      aria-current={current ? "page" : undefined}
+      className={`-mb-px border-b-2 pb-2 ${
+        current
+          ? "border-zinc-900 font-medium dark:border-zinc-100"
+          : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+      }`}
+    >
+      {children}
+    </Link>
+  );
+}
+
+function SettingsTab({
+  loaded,
+  justConnected,
+}: {
+  loaded: Extract<Loaded, { tab: "settings" }>;
+  justConnected: string | null;
+}) {
+  const { isAdmin, factory, connected, available } = loaded;
+  return (
+    <div className="space-y-8">
       <section className="space-y-3">
-        <div>
-          <h2 className="font-semibold">Assigned apps</h2>
-          <p className="text-sm text-zinc-500">
-            The factory receives these apps' events and can ask for their tokens.
-          </p>
-        </div>
-        <div className="flex flex-wrap items-center gap-2">
-          {apps.length === 0 && (
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="space-y-1">
+            <h2 className="font-semibold">
+              Connected apps <span className="font-normal text-zinc-500">· {connected.length}</span>
+            </h2>
             <p className="text-sm text-zinc-500">
-              No apps assigned, so it receives no provider events.
+              This factory receives these apps' events and can ask for their tokens.
             </p>
-          )}
-          {apps.map((app) => (
-            <div
-              key={app.id}
-              className={`${card} flex items-center gap-2 py-1.5 pr-1.5 pl-3 text-sm`}
-            >
-              <ProviderInitials provider={app.provider} />
-              <Link to={`/apps/${app.id}`} className="font-medium hover:underline">
-                {app.name}
-              </Link>
-              <InstallationNames installations={app.installations} />
-              {isAdmin && (
-                <Form method="post">
-                  <input type="hidden" name="appId" value={app.id} />
-                  <button
-                    type="submit"
-                    name="intent"
-                    value="unassign"
-                    aria-label={`Unassign ${app.name}`}
-                    title="Unassign"
-                    className={quietButton}
-                  >
-                    <X className="size-3.5" />
-                  </button>
-                </Form>
-              )}
-            </div>
-          ))}
-        </div>
-        {isAdmin && unassignedApps.length > 0 && (
-          <Form method="post" className="flex flex-wrap items-center gap-2">
-            <select
-              name="appId"
-              required
-              aria-label="App to assign"
-              className={input}
-              defaultValue=""
-            >
-              <option value="" disabled>
-                Choose an app…
-              </option>
-              {unassignedApps.map((app) => (
-                <option key={app.id} value={app.id}>
-                  {app.name} ({providerNames[app.provider]})
-                </option>
-              ))}
-            </select>
-            <button type="submit" name="intent" value="assign" className={secondaryButton}>
-              <Plus className="size-4" />
-              Assign app
-            </button>
-          </Form>
-        )}
-      </section>
-
-      <section className="space-y-3">
-        <div className="flex flex-wrap items-end justify-between gap-2">
-          <h2 className="font-semibold">
-            Event log <span className="font-normal text-zinc-500">· newest first</span>
-          </h2>
-          <div className="flex gap-2">
-            {paged && (
-              <Link to="?" className={secondaryButton}>
-                Newest
-              </Link>
-            )}
-            {older && (
-              <Link to={`?before=${older}`} className={secondaryButton}>
-                Older
-              </Link>
-            )}
           </div>
+          {isAdmin && <ConnectApp factoryName={factory.name} apps={available} />}
         </div>
-        {messages.length === 0 ? (
-          <p className="text-sm text-zinc-500">No events.</p>
+        {connected.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No apps connected, so it receives no provider events.
+          </p>
         ) : (
           <div className={`${card} overflow-x-auto`}>
-            <table className={`${table} [&_td]:align-top`}>
+            <table className={table}>
               <thead>
                 <tr>
-                  <th>#</th>
+                  <th>App</th>
                   <th>Provider</th>
-                  <th>Event</th>
-                  <th>Received</th>
-                  <th>Confirmed</th>
+                  <th>Installations</th>
+                  <th>Last event</th>
+                  <th />
                 </tr>
               </thead>
               <tbody>
-                {messages.map((message) => (
-                  <tr key={message.position}>
-                    <td className="font-mono text-zinc-500 tabular-nums">{message.position}</td>
-                    <td>{message.provider ? providerNames[message.provider] : "—"}</td>
+                {connected.map((app) => (
+                  <tr
+                    key={app.id}
+                    className={
+                      app.id === justConnected ? "bg-emerald-50 dark:bg-emerald-950/40" : undefined
+                    }
+                  >
                     <td>
-                      {message.kind === "fellBehind" ? (
-                        <span className="text-zinc-500">fell behind</span>
-                      ) : (
-                        <details className="group">
-                          <summary className="flex cursor-pointer list-none items-center gap-1 font-mono">
-                            <ChevronRight className="size-3.5 text-zinc-500 group-open:rotate-90" />
-                            {message.name}
-                          </summary>
-                          <pre className="mt-2 max-h-96 max-w-2xl overflow-auto rounded bg-zinc-100 p-3 text-xs dark:bg-zinc-900">
-                            {message.payload}
-                          </pre>
-                        </details>
-                      )}
+                      <span className="flex items-center gap-2.5">
+                        <ProviderInitials provider={app.provider} />
+                        <Link to={`/apps/${app.id}`} className={link}>
+                          {app.name}
+                        </Link>
+                        {app.id === justConnected && (
+                          <span className="text-emerald-600 dark:text-emerald-400">Connected</span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="text-zinc-500">{providerNames[app.provider]}</td>
+                    <td>
+                      <InstallationNames installations={app.installations} />
                     </td>
                     <td className="whitespace-nowrap">
-                      <TimeAgo iso={message.receivedAt} />
+                      {app.lastEventAt ? (
+                        <TimeAgo iso={app.lastEventAt} />
+                      ) : (
+                        <span className="text-zinc-500">No events yet</span>
+                      )}
                     </td>
-                    <td>
-                      {message.confirmed ? "Yes" : <span className={warningText}>Pending</span>}
+                    <td className="text-right">
+                      {isAdmin && (
+                        <ConfirmForm
+                          fields={{ intent: "disconnect", appId: app.id }}
+                          title={`Disconnect ${app.name} from ${factory.name}?`}
+                          body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
+                          confirmLabel="Disconnect"
+                          destructive
+                          className={quietButton}
+                        >
+                          Disconnect
+                        </ConfirmForm>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -246,55 +249,248 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
       </section>
 
       {isAdmin && (
-        <Card title="Name">
-          <Form method="post" className="flex flex-wrap gap-2">
-            <input
-              name="name"
-              required
-              defaultValue={factory.name}
-              aria-label="Name"
-              className={`${input} min-w-64`}
-            />
-            <button type="submit" name="intent" value="rename" className={button}>
-              <Save className="size-4" />
-              Save
-            </button>
-          </Form>
-        </Card>
+        <section className="space-y-3">
+          <h2 className="font-semibold">General</h2>
+          <div className={`${card} divide-y divide-zinc-200 dark:divide-zinc-800`}>
+            <SettingRow label="Name" hint="Shown in the factory list.">
+              <Form method="post" className="flex flex-wrap gap-2">
+                <input
+                  name="name"
+                  required
+                  defaultValue={factory.name}
+                  aria-label="Name"
+                  className={`${input} min-w-0 grow`}
+                />
+                <button type="submit" name="intent" value="rename" className={secondaryButton}>
+                  Save
+                </button>
+              </Form>
+            </SettingRow>
+            <SettingRow
+              label="Connection token"
+              hint="Issuing a new one stops the old token. Run the new connect command on the factory."
+            >
+              <ReissueTokenButton factory={factory} className={secondaryButton}>
+                <KeyRound className="size-4" />
+                Re-issue token
+              </ReissueTokenButton>
+            </SettingRow>
+          </div>
+        </section>
       )}
 
       {isAdmin && (
-        <Card danger>
-          <div className="flex flex-wrap gap-2">
-            <ConfirmForm
-              action="/factories/new"
-              fields={{ intent: "reissue", factoryId: factory.id }}
-              question={`Re-issue the token of ${factory.name}? Its current token stops working.`}
-              className={secondaryButton}
-            >
-              <KeyRound className="size-4" />
-              Re-issue token
-            </ConfirmForm>
-            <ConfirmForm
-              fields={{ intent: "remove" }}
-              question={`Remove ${factory.name} and every message waiting for it?`}
-              className={dangerButton}
+        <div className="rounded-lg border border-red-300 dark:border-red-900">
+          <SettingRow
+            label="Remove factory"
+            hint="Disconnects it from all apps and drops its unconfirmed events."
+          >
+            <RemoveFactoryButton
+              factory={factory}
+              className="inline-flex items-center gap-2 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
             >
               <Trash2 className="size-4" />
               Remove factory
-            </ConfirmForm>
-          </div>
-        </Card>
+            </RemoveFactoryButton>
+          </SettingRow>
+        </div>
       )}
     </div>
   );
 }
 
-function InstallationNames({
-  installations,
+function SettingRow({
+  label,
+  hint,
+  children,
 }: {
-  installations: { account: string; installationName: string | null }[];
+  label: string;
+  hint: string;
+  children: React.ReactNode;
 }) {
+  return (
+    <div className="grid gap-3 p-5 sm:grid-cols-[16rem_1fr] sm:items-center">
+      <div>
+        <div className="font-medium">{label}</div>
+        <p className="text-sm text-zinc-500">{hint}</p>
+      </div>
+      <div className="max-w-md">{children}</div>
+    </div>
+  );
+}
+
+type Installations = { account: string; installationName: string | null }[];
+
+/** The apps not yet connected, in a panel that filters them by name. */
+function ConnectApp({
+  factoryName,
+  apps,
+}: {
+  factoryName: string;
+  apps: { id: string; provider: Provider; name: string; installations: Installations }[];
+}) {
+  const [search, setSearch] = useState("");
+  const shown = apps.filter((app) => app.name.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <>
+      <button type="button" popoverTarget="connect-app" className={secondaryButton}>
+        <Plus className="size-4" />
+        Connect app
+      </button>
+      <div
+        id="connect-app"
+        popover="auto"
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+      >
+        <div className="p-3">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search apps"
+            aria-label="Search apps"
+            className={`${input} w-full`}
+          />
+        </div>
+        <p className="px-4 pb-2 text-sm text-zinc-500">Not connected to {factoryName}</p>
+        <ul className="max-h-80 divide-y divide-zinc-200 overflow-y-auto border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+          {shown.length === 0 && (
+            <li className="px-4 py-3 text-sm text-zinc-500">
+              {apps.length === 0 ? "Every app is connected." : "No app matches."}
+            </li>
+          )}
+          {shown.map((app) => (
+            <li key={app.id} className="flex items-center gap-3 px-4 py-2.5">
+              <ProviderInitials provider={app.provider} />
+              <div className="min-w-0 grow">
+                <div className="text-sm">
+                  {app.name} <span className="text-zinc-500">{providerNames[app.provider]}</span>
+                </div>
+                <InstallationNames installations={app.installations} />
+              </div>
+              <Form
+                method="post"
+                onSubmit={(event) =>
+                  (event.currentTarget.closest("[popover]") as HTMLElement | null)?.hidePopover()
+                }
+              >
+                <input type="hidden" name="appId" value={app.id} />
+                <button type="submit" name="intent" value="connect" className={secondaryButton}>
+                  Connect
+                </button>
+              </Form>
+            </li>
+          ))}
+        </ul>
+        <p className="px-4 py-3 text-sm text-zinc-500">
+          Not listed?{" "}
+          <Link to="/apps/new" className={link}>
+            Add an app
+          </Link>
+        </p>
+      </div>
+    </>
+  );
+}
+
+function ActivityTab({ loaded }: { loaded: Extract<Loaded, { tab: "activity" }> }) {
+  const { messages, older, paged } = loaded;
+  return (
+    <section className="space-y-3">
+      <div className="flex flex-wrap items-end justify-between gap-2">
+        <h2 className="font-semibold">
+          Event log <span className="font-normal text-zinc-500">· newest first</span>
+        </h2>
+        <div className="flex gap-2">
+          {paged && (
+            <Link to="?tab=activity" className={secondaryButton}>
+              Newest
+            </Link>
+          )}
+          {older && (
+            <Link to={`?tab=activity&before=${older}`} className={secondaryButton}>
+              Older
+            </Link>
+          )}
+        </div>
+      </div>
+      {messages.length === 0 ? (
+        <p className="text-sm text-zinc-500">No events.</p>
+      ) : (
+        <div className={`${card} overflow-x-auto`}>
+          <table className={table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Provider</th>
+                <th>Event</th>
+                <th>Received</th>
+                <th>Confirmed</th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {messages.map((message) => (
+                <EventRow key={message.position} message={message} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
+  );
+}
+
+function EventRow({
+  message,
+}: {
+  message: Extract<Loaded, { tab: "activity" }>["messages"][number];
+}) {
+  const [open, setOpen] = useState(false);
+  const expandable = message.kind !== "fellBehind";
+  const toggle = expandable ? () => setOpen(!open) : undefined;
+  return (
+    <>
+      <tr
+        onClick={toggle}
+        className={
+          expandable ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900" : undefined
+        }
+      >
+        <td className="font-mono text-zinc-500 tabular-nums">{message.position}</td>
+        <td>{message.provider ? providerNames[message.provider] : "—"}</td>
+        <td className={expandable ? "font-mono" : "text-zinc-500"}>
+          {expandable ? message.name : "fell behind"}
+        </td>
+        <td className="whitespace-nowrap">
+          <TimeAgo iso={message.receivedAt} />
+        </td>
+        <td>{message.confirmed ? "Yes" : <span className={warningText}>Pending</span>}</td>
+        <td className="w-10 text-right">
+          {expandable && (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={open ? "Hide payload" : "Show payload"}
+              className={quietButton}
+            >
+              <ChevronRight className={`size-4 ${open ? "rotate-90" : ""}`} />
+            </button>
+          )}
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={6} className="bg-zinc-50 dark:bg-zinc-900/50">
+            <pre className="max-h-96 overflow-auto text-xs">{message.payload}</pre>
+          </td>
+        </tr>
+      )}
+    </>
+  );
+}
+
+function InstallationNames({ installations }: { installations: Installations }) {
   if (installations.length === 0) return <span className="text-zinc-500">not installed</span>;
   return (
     <span className="font-mono text-xs">
@@ -306,9 +502,7 @@ function InstallationNames({
               needs a name
             </span>
           ) : (
-            <span title={installation.account} className="text-zinc-500">
-              {installation.installationName}
-            </span>
+            <span title={installation.account}>{installation.installationName}</span>
           )}
         </span>
       ))}

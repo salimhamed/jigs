@@ -56,9 +56,10 @@ do: until then, the hub refuses the app's webhooks.
 
 ## 4. Assign it to factories
 
-On the page of each factory that should use this app, under **Assigned apps**,
-choose the app and **Assign app**. A factory may be assigned several PagerDuty
-accounts, and names the installation it uses in each trigger, step and agent.
+On the **Settings** tab of each factory that should use this app, choose
+**Connect app** and connect the app. A factory may be assigned several
+PagerDuty accounts, and names the installation it uses in each trigger, step
+and agent.
 
 A missing scope does not stop the hub from getting a token. It shows up as a
 refused call, and `jigs doctor` names the scope to add. To use PagerDuty from

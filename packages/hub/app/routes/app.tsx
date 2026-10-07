@@ -133,7 +133,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
       >
         {app.factories.length === 0 ? (
           <p className="text-sm text-zinc-500">
-            Not assigned to any factory yet. Assign it from a{" "}
+            Not connected to any factory yet. Connect it from a{" "}
             <Link to="/factories" className={link}>
               factory's page
             </Link>
@@ -184,7 +184,10 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
             <p className="text-sm">Its factories stop receiving its provider events.</p>
             <ConfirmForm
               fields={{ intent: "remove" }}
-              question={`Remove ${app.name}? Its factories stop receiving its provider events.`}
+              title={`Remove ${app.name}?`}
+              body="The hub forgets its credentials and installations. Factories connected to it stop receiving its events and can no longer ask for its tokens. Events already received stay in their logs."
+              confirmLabel="Remove app"
+              destructive
               className={dangerButton}
             >
               <Trash2 className="size-4" />

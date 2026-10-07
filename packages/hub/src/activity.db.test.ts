@@ -38,7 +38,11 @@ dbTest("counts webhooks and queued events by hour over the last 24 hours", async
   const webhooks = await webhooksByHour(db, organizationId, now);
   expect(webhooks.hours).toHaveLength(24);
   expect(webhooks.hours[0]?.start).toBe("2026-10-06T13:00:00.000Z");
-  expect(webhooks.hours[23]).toEqual({ start: "2026-10-07T12:00:00.000Z", count: 1 });
+  expect(webhooks.hours[23]).toEqual({
+    start: "2026-10-07T12:00:00.000Z",
+    count: 1,
+    byProvider: { github: 1, linear: 0, slack: 0, pagerduty: 0 },
+  });
   expect(webhooks.hours[22]?.count).toBe(1);
   expect(webhooks.hours[0]?.count).toBe(1);
   expect(webhooks.total).toBe(3);

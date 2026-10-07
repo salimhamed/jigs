@@ -77,8 +77,8 @@ Invite the bot to each channel factories should hear, public or private, with
 
 ## 6. Assign it to factories
 
-On the page of each factory that should use this app, under **Assigned apps**,
-choose the app and **Assign app**. A factory may be assigned several Slack
+On the **Settings** tab of each factory that should use this app, choose
+**Connect app** and connect the app. A factory may be assigned several Slack
 apps, even in one workspace, and names the installation it uses in each
 trigger and step; see [one Slack app per
 teammate](/guide/hub#example-per-person).

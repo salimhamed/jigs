@@ -8,7 +8,7 @@ const HOUR = 3_600_000;
 
 /** Counts per hour over the last 24 hours, oldest first; the last hour is the one under way. */
 export interface HourlyActivity {
-  hours: { start: string; count: number }[];
+  hours: { start: string; count: number; byProvider: Record<Provider, number> }[];
   byProvider: Record<Provider, number>;
   total: number;
 }
@@ -60,6 +60,9 @@ const hourOf = (column: AnyPgColumn, since: Date) =>
 
 const windowStart = (now: Date) => new Date(Math.floor(now.getTime() / HOUR) * HOUR - 23 * HOUR);
 
+const noneByProvider = () =>
+  Object.fromEntries(providers.map((provider) => [provider, 0])) as Record<Provider, number>;
+
 function byHour(
   since: Date,
   rows: { hour: Date | string; provider: Provider; count: number }[],
@@ -67,14 +70,15 @@ function byHour(
   const hours = Array.from({ length: 24 }, (_, index) => ({
     start: new Date(since.getTime() + index * HOUR).toISOString(),
     count: 0,
+    byProvider: noneByProvider(),
   }));
-  const byProvider = Object.fromEntries(providers.map((provider) => [provider, 0])) as Record<
-    Provider,
-    number
-  >;
+  const byProvider = noneByProvider();
   for (const { hour, provider, count } of rows) {
     const slot = hours[Math.round((new Date(hour).getTime() - since.getTime()) / HOUR)];
-    if (slot) slot.count += count;
+    if (slot) {
+      slot.count += count;
+      slot.byProvider[provider] += count;
+    }
     byProvider[provider] += count;
   }
   return { hours, byProvider, total: hours.reduce((sum, { count }) => sum + count, 0) };

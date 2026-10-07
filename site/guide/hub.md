@@ -199,11 +199,12 @@ this way; after that, the hub is invite-only.
 
 ## Members {#members}
 
-Under **Members**, an admin invites a person by their GitHub account's
-[sign-in email](#first-sign-in), as an admin or a member. The hub sends no
-email: copy the link from **Pending invites** and send it yourself. The person
-opens the link and signs in with the GitHub account whose sign-in email that
-is. An admin can revoke a pending invite there too.
+Under **Members**, an admin chooses **Invite member** and enters a person's
+GitHub account [sign-in email](#first-sign-in), as an admin or a member. The
+hub sends no email: it shows an invite link to copy and send yourself, which
+works once. The person opens the link and signs in with the GitHub account
+whose sign-in email that is. Until then the invite waits under **Pending
+invites**, where an admin can copy its link again or revoke it.
 
 Admins add apps and factories, assign them, invite people and change roles.
 Members see everything but change nothing.
@@ -238,11 +239,13 @@ and every event waiting for it.
 
 The factories list shows when each factory last reached the hub, with a green
 dot while it is connected, its jigs version, how many events it has not
-confirmed and how many apps it is assigned. A factory's own page lists its
-assigned apps with their installations' names, and its event log: every
-provider event the hub kept for it, with when it arrived and whether the
-factory has confirmed it. Expand an event to see its payload. An admin can
-rename the factory there; it keeps its token.
+confirmed and how many apps it is assigned. A factory's own page has two
+tabs. **Settings** lists its connected apps, with their installations' names
+and when the factory last received an event from each, and lets an admin
+rename the factory, which keeps its token, re-issue its token or remove it.
+**Activity** is its event log: every provider event the hub kept for it, with
+when it arrived and whether the factory has confirmed it. Select an event to
+see its payload.
 
 ## Add apps and assign them {#apps}
 
@@ -257,9 +260,9 @@ or connects it. An admin can rename an app on its page.
 - [Slack app](/guide/hub-slack)
 - [PagerDuty app](/guide/hub-pagerduty)
 
-Then, on each factory's page under **Assigned apps**, choose the app and
-**Assign app**. That is an **assignment**: a factory receives events from,
-and gets tokens for, only the apps assigned to it. An app can be assigned to
+Then, on each factory's **Settings** tab, choose **Connect app** and connect
+the app. That is an **assignment**: a factory receives events from, and gets
+tokens for, only the apps assigned to it. An app can be assigned to
 several factories, and every one of them receives its events; its page lists
 them.
 

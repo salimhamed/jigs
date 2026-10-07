@@ -1,8 +1,9 @@
-import { Trash2, X } from "lucide-react";
-import { Form, useFetcher } from "react-router";
+import { Trash2, UserPlus, X } from "lucide-react";
+import { data, Link, useFetcher } from "react-router";
 import { roles } from "../../src/roles.ts";
 import { attempt, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
+import { ConfirmForm } from "../components/confirm-form.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { PageHeader } from "../components/page.tsx";
 import { button, card, dangerButton, input, table } from "../components/ui.ts";
@@ -59,18 +60,8 @@ export async function action({ context, request }: Route.ActionArgs) {
           body: { invitationId: String(form.get("invitationId")) },
         }),
       );
-    default: {
-      const result = await attempt(() =>
-        context.auth.api.createInvitation({
-          headers,
-          body: {
-            email: String(form.get("email")),
-            role: String(form.get("role")) as (typeof roles)[number],
-          },
-        }),
-      );
-      return result.error ? result : { message: "Invited. Copy the link below and send it." };
-    }
+    default:
+      throw data(null, { status: 400, statusText: "Bad Request" });
   }
 }
 
@@ -82,7 +73,14 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
       <PageHeader
         title="Members"
         subtitle="Admins can change things. Members can look."
-        action={isAdmin && <InviteForm />}
+        action={
+          isAdmin && (
+            <Link to="/members/invite" className={button}>
+              <UserPlus className="size-4" />
+              Invite member
+            </Link>
+          )
+        }
       />
       <div className={`${card} overflow-x-auto`}>
         <table className={table}>
@@ -136,36 +134,6 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
   );
 }
 
-function InviteForm() {
-  return (
-    <div className="space-y-1.5">
-      <Form method="post" className="flex flex-wrap gap-2">
-        <input
-          name="email"
-          type="email"
-          required
-          placeholder="Email on their GitHub account"
-          aria-label="Email"
-          className={`${input} min-w-64`}
-        />
-        <select name="role" aria-label="Role" className={input}>
-          {roles.toReversed().map((role) => (
-            <option key={role} value={role}>
-              {role}
-            </option>
-          ))}
-        </select>
-        <button type="submit" className={button}>
-          Invite
-        </button>
-      </Form>
-      <p className="text-right text-sm text-zinc-500">
-        The hub sends no email: you copy the link and send it.
-      </p>
-    </div>
-  );
-}
-
 function MemberRow({
   member,
   isAdmin,
@@ -208,19 +176,18 @@ function MemberRow({
         )}
       </td>
       <td className="text-right">
-        {isAdmin && (
-          <button
-            type="button"
+        {isAdmin && !isYou && (
+          <ConfirmForm
+            fields={{ intent: "remove", memberId: member.id }}
+            title={`Remove ${member.name}?`}
+            body={`${member.name} loses access to this hub. Invite them again to let them back in.`}
+            confirmLabel="Remove member"
+            destructive
             className={dangerButton}
-            onClick={() => {
-              if (confirm(`Remove ${member.name} from the Organization?`)) {
-                fetcher.submit({ intent: "remove", memberId: member.id }, { method: "post" });
-              }
-            }}
           >
             <Trash2 className="size-4" />
             Remove
-          </button>
+          </ConfirmForm>
         )}
       </td>
     </tr>
@@ -234,8 +201,6 @@ function InviteRow({
   invite: Route.ComponentProps["loaderData"]["invites"][number];
   isAdmin: boolean;
 }) {
-  const fetcher = useFetcher<typeof action>();
-  useActionToast(fetcher.data);
   return (
     <tr>
       <td>{invite.email}</td>
@@ -247,16 +212,17 @@ function InviteRow({
         <div className="flex justify-end gap-1">
           <CopyButton text={invite.link} label="Link" />
           {isAdmin && (
-            <button
-              type="button"
+            <ConfirmForm
+              fields={{ intent: "revoke", invitationId: invite.id }}
+              title={`Revoke the invite for ${invite.email}?`}
+              body="Its link stops working. You can invite them again later."
+              confirmLabel="Revoke invite"
+              destructive
               className={dangerButton}
-              onClick={() =>
-                fetcher.submit({ intent: "revoke", invitationId: invite.id }, { method: "post" })
-              }
             >
               <X className="size-4" />
               Revoke
-            </button>
+            </ConfirmForm>
           )}
         </div>
       </td>
