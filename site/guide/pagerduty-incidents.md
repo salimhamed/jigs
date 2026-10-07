@@ -22,10 +22,9 @@ what the agent found to the incident as a note. It needs the factory's
 may already have been added, and a retry could add it twice. So a failed post
 fails the step, and the run with it unless the workflow catches the error.
 
-The steps read and write through the PagerDuty installation they name. The app does not
-give an agent access to PagerDuty: an agent that needs more than the snapshot,
-such as alerts, log entries or past incidents, gets it from the PagerDuty MCP
-server.
+The steps read and write through the PagerDuty installation they name. An
+agent that needs more than the snapshot, such as alerts or log entries, gets
+it from PagerDuty's MCP server, acting as the same app.
 
 ## An observer workflow
 
@@ -34,7 +33,13 @@ the incident. Save it as `workflows/incident-triage/incident-triage.ts`:
 
 ```ts
 // workflows/incident-triage/incident-triage.ts
-import { defineWorkflow, harnesses, models, type WorkflowInputs } from "@jigs-ai/jigs";
+import {
+  defineWorkflow,
+  harnesses,
+  models,
+  pagerdutyMcp,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
 import { runAgent } from "#jigs/routines";
 import { createRunDirectory, fetchIncidentSnapshot, postIncidentNote } from "#jigs/steps";
@@ -43,21 +48,11 @@ const inputs = z.object({ installationName: z.string().min(1), incident: z.strin
 
 const agents = {
   triager: harnesses.pi(models.openaiCodex("gpt-5.5"), {
+    pagerduty: { installationName: "pagerduty-acme" },
     mcpServers: {
-      pagerduty: {
-        command: "uvx",
-        args: ["pagerduty-mcp"],
-        env: { PAGERDUTY_USER_API_KEY: "PAGERDUTY_USER_API_KEY" },
-        tools: [
-          "get_user_data",
-          "get_incident",
-          "list_alerts_from_incident",
-          "list_log_entries",
-          "get_past_incidents",
-          "get_related_incidents",
-        ],
-        probe: { tool: "get_user_data" },
-      },
+      pagerduty: pagerdutyMcp({
+        tools: ["get_incident", "list_alerts_from_incident", "list_log_entries"],
+      }),
     },
   }),
 };
@@ -82,7 +77,7 @@ export async function incidentTriage(input: WorkflowInputs<typeof inputs>) {
     prompt: [
       `Triage PagerDuty incident #${incident.number} (${incident.id}): ${incident.title}.`,
       `Service: ${incident.service.name}. Urgency: ${incident.urgency}. Opened ${incident.createdAt}.`,
-      "Use the PagerDuty tools to read its alerts, log entries, and related or past incidents.",
+      "Use the PagerDuty tools to read its alerts and log entries.",
       "Do not change the incident. Say what is happening, the likely cause and one next step.",
     ].join("\n"),
     output: findings,
@@ -109,25 +104,18 @@ export default defineWorkflow({
 
 ### The agent's PagerDuty access
 
-The triager is a [Pi agent](/guide/models-and-harnesses#pi) with PagerDuty's
-MCP server, which `uvx` runs from PyPI, so install
-[uv](https://docs.astral.sh/uv/) on the machine that runs the service. The
-server lists read-only tools unless it is started with `--enable-write-tools`,
-and the `tools` list narrows what the agent may call to the reads it needs.
+The triager is a [Pi agent](/guide/models-and-harnesses#pi). Its
+`pagerduty` option names the installation it acts through, and jigs gives
+it that installation's token from the hub when it starts. A harness is fixed
+in code, so name the installation your trigger passes. `pagerdutyMcp()`
+connects it to PagerDuty's hosted MCP server with that token, and the `tools`
+list narrows what it may call to the reads it needs. See
+[Linear and PagerDuty access for agents](/guide/models-and-harnesses#provider-access).
 
-The server authenticates with a PagerDuty user API token, separate from the
-app's credentials. Create one in the **User Settings** of a PagerDuty user who
-can see the incidents, and add it to the factory's `.env`:
-
-```sh
-PAGERDUTY_USER_API_KEY=...
-```
-
-Each `env` entry maps a variable the server receives to a variable in the
-service's environment. An agent gets the variables its MCP servers name,
-so the token needs no [`agents.env`](/guide/configuration#agents-env) entry.
-An account on the EU service region also maps `PAGERDUTY_API_HOST` to a
-variable set to `https://api.eu.pagerduty.com`.
+The token belongs to the app, not a person, so the agent can read and update
+incidents and read users, but tools that answer for a user, such as
+`get_user_data`, do not work. Past and related incidents are left out: they
+failed with a permission error on an account tested with this workflow.
 
 ### Start it from each new incident
 
@@ -172,9 +160,10 @@ URL after `/incidents/`:
 pnpm exec jigs run incident-triage --input installationName=pagerduty-acme --input incident=Q1ABCDEFGHIJKL
 ```
 
-Before the run starts, preflight checks that Pi is installed. The installation
-comes from the run's inputs, so the run's first step checks it. The agent step
-checks that the token is set before the agent starts.
+Before the run starts, preflight checks that Pi is installed and that the
+agent's installation is on the hub. The snapshot's installation comes from the
+run's inputs, so the run's first step checks it. The agent step checks
+PagerDuty's MCP server with the agent's token before the agent starts.
 
 Follow the run with `pnpm exec jigs watch`. When it finishes, the note is on the
 incident's timeline.
