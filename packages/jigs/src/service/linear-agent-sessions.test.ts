@@ -69,6 +69,8 @@ test("a mention starts a run with the session, its issue, the comment and who as
         url: "https://linear.app/acme/issue/ENG-42/checkout-button-does-nothing-on-safari",
       },
       comment: "@jigs can you fix this?",
+      promptContext:
+        '<issue identifier="ENG-42">\n<title>Checkout button does nothing on Safari</title>\n</issue>',
       creator: {
         id: "7a6b5c4d-3e2f-4a1b-9c8d-7e6f5a4b3c2d",
         name: "Ada Lovelace",

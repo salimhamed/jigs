@@ -47,6 +47,7 @@ const inputs = z.object({
   installationName: z.string(),
   issue: z.object({ id: z.string(), identifier: z.string(), title: z.string(), url: z.string() }),
   comment: z.string().nullable(),
+  promptContext: z.string().nullable(),
   creator: z.object({ id: z.string(), name: z.string(), email: z.string() }).nullable(),
 });
 const agents = { assistant: harnesses.claude({ model: "opus" }) };
@@ -96,8 +97,9 @@ request, and runs on once the conversation ends.
   Claude Code can take a reply in the middle of a turn.
 - `cwd`: the directory Claude works in, for the whole conversation.
 - `instructions`: optional text that leads the first message Claude reads. The
-  first message is the comment that mentioned the app, or a line saying the
-  issue was assigned, so put anything else Claude needs to know here.
+  first message is Linear's context for the session (the issue, its
+  description and the comments around the request), so put anything else
+  Claude needs to know here.
 - `idleFor`: how long a conversation waits for a reply before it ends, as a
   duration such as `"30m"` or milliseconds. Four hours by default.
 

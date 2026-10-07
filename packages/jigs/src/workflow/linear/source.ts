@@ -42,6 +42,11 @@ export interface LinearAgentSessionInputs {
   issue: { id: string; identifier: string; title: string; url: string };
   /** The body of the comment the session started from, or null when an assignment started it. */
   comment: string | null;
+  /**
+   * Linear's formatted context for the session: the issue, its description and the comments
+   * around the request, or null if Linear sent none.
+   */
+  promptContext: string | null;
   /** The person who started the session, or null when an automation did. */
   creator: { id: string; name: string; email: string } | null;
 }

@@ -34,8 +34,9 @@ export interface LinearAgentConversationSteps {
  * How a Linear agent conversation runs: the Claude harness and the worktree it works in.
  *
  * @remarks
- * `instructions` lead the first message Claude reads. The conversation ends once no one has
- * replied for `idleFor`, a duration such as `"30m"` or milliseconds; four hours by default.
+ * `instructions` lead the first message Claude reads, which is Linear's context for the session
+ * when it sent one. The conversation ends once no one has replied for `idleFor`, a duration such
+ * as `"30m"` or milliseconds; four hours by default.
  *
  * @group Linear agent sessions
  */
@@ -108,6 +109,7 @@ export async function linearAgentConversation(
     uuid: session.session,
     author: session.creator?.name ?? "Someone",
     text:
+      session.promptContext ??
       session.comment ??
       `${session.issue.identifier} "${session.issue.title}" was assigned to you.`,
   };
