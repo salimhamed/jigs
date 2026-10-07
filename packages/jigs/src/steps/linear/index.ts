@@ -10,6 +10,13 @@
  * @packageDocumentation
  */
 
+export {
+  type LinearAgentActivityContent,
+  type LinearAgentPrompt,
+  listLinearAgentSessionPrompts,
+  postLinearAgentActivity,
+  setLinearAgentSessionUrls,
+} from "./agent-sessions.ts";
 export { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 export {
   type CreateIssueInProjectInput,

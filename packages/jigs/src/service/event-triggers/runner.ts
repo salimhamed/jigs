@@ -6,6 +6,7 @@ import { whenReady } from "../readiness.ts";
 import { onShutdown } from "../shutdown.ts";
 import { createTriggerEngine, type TriggerDeps, type TriggerEngine } from "./engine.ts";
 import type { PushedEvent } from "./sources.ts";
+import type { Occurrence } from "./store.ts";
 
 // How soon an occurrence waiting on the cap notices a run finishing. While
 // nothing waits, each check is one read of the pending rows.
@@ -19,6 +20,9 @@ export interface StartTriggersDeps extends TriggerDeps {
 }
 
 let running: TriggerEngine | undefined;
+// Set once the running engine has shut down: from then on no lookup can tell
+// whether an occurrence was this factory's.
+let retired = false;
 
 /**
  * Starts the factory's event triggers once the service is ready: leftover
@@ -45,7 +49,10 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
     async () => {
       stopped = true;
       cancel();
-      if (running === engine) running = undefined;
+      if (running === engine) {
+        running = undefined;
+        retired = true;
+      }
       await engine.stop();
     },
     { phase: "quiesce" },
@@ -82,4 +89,23 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
  */
 export async function pushEvent(provider: Provider, event: PushedEvent): Promise<string[]> {
   return running === undefined ? [] : running.push(provider, event);
+}
+
+/**
+ * The rows the running event triggers on `provider` recorded for the occurrence `key`. Rejects
+ * once the triggers have shut down, when an empty answer would read as "not this factory's".
+ */
+export async function recordedOccurrences(provider: Provider, key: string): Promise<Occurrence[]> {
+  if (running !== undefined) return running.recorded(provider, key);
+  if (retired) throw new Error("the event triggers have shut down");
+  return [];
+}
+
+/** Skip a recorded row no start has claimed, so it never starts. False when one has. */
+export async function withdrawOccurrence(
+  row: Pick<Occurrence, "trigger" | "occurrence">,
+): Promise<boolean> {
+  if (running !== undefined) return running.withdraw(row);
+  if (retired) throw new Error("the event triggers have shut down");
+  return false;
 }

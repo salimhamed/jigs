@@ -23,6 +23,7 @@ import type {
 } from "@jigs-ai/jigs";
 import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
 import * as gitOperations from "@jigs-ai/jigs/steps/git";
+import type { LinearAgentActivityContent } from "@jigs-ai/jigs/steps/linear";
 import * as linearOperations from "@jigs-ai/jigs/steps/linear";
 import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
@@ -188,6 +189,51 @@ export async function setTicketStatus(request: {
 export async function resolveLinearIssue(request: { installationName: string; reference: string }) {
   "use step";
   return linearOperations.resolveLinearIssue(request);
+}
+
+/**
+ * Post a thought, action, response or error into a Linear agent session as the factory's app.
+ *
+ * @group Linear agent sessions
+ */
+export async function postLinearAgentActivity(request: {
+  installationName: string;
+  sessionId: string;
+  content: LinearAgentActivityContent;
+  ephemeral?: boolean;
+}) {
+  "use step";
+  return linearOperations.postLinearAgentActivity(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Replace the links a Linear agent session shows.
+ *
+ * @group Linear agent sessions
+ */
+export async function setLinearAgentSessionUrls(request: {
+  installationName: string;
+  sessionId: string;
+  urls: Array<{ label: string; url: string }>;
+}) {
+  "use step";
+  return linearOperations.setLinearAgentSessionUrls(request);
+}
+
+/**
+ * Read every message people sent into a Linear agent session, oldest first.
+ *
+ * @group Linear agent sessions
+ */
+export async function listLinearAgentSessionPrompts(session: {
+  installationName: string;
+  sessionId: string;
+}) {
+  "use step";
+  return linearOperations.listLinearAgentSessionPrompts(session);
 }
 
 /**

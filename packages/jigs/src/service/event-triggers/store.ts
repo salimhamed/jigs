@@ -97,6 +97,8 @@ export interface TriggerStore {
   /** Mark a row that failed after its start was attempted as started, by the run that appeared. */
   adoptLate(trigger: string, occurrence: string, runId: string, at: Date): Promise<void>;
   failed(trigger: string, occurrence: string, report: CheckReport): Promise<void>;
+  /** Skip a pending row no start has claimed, so it never starts. False when it was claimed. */
+  withdraw(trigger: string, occurrence: string): Promise<boolean>;
   /** The rows whose occurrence attribute is one of these, whatever their state. */
   byAttribute(trigger: string, attributes: readonly string[]): Promise<Occurrence[]>;
   /** Started rows started at or after this time. */
@@ -184,6 +186,22 @@ export function triggerStore(db: RegistrySql, factory: string): TriggerStore {
       settle(trigger, occurrence, { state: "started", runId, startedAt: at }),
     failed: (trigger, occurrence, report) =>
       settle(trigger, occurrence, { state: "failed", report }),
+    // The same compare and set as the claim, so a withdrawn row is one no
+    // start has taken and none ever will.
+    async withdraw(trigger, occurrence) {
+      const skipped = await db
+        .update(occurrences)
+        .set({ state: "skipped", updatedAt: sql`now()` })
+        .where(
+          and(
+            row(trigger, occurrence),
+            eq(occurrences.state, "pending"),
+            isNull(occurrences.attemptedAt),
+          ),
+        )
+        .returning({ occurrence: occurrences.occurrence });
+      return skipped.length > 0;
+    },
     async adoptLate(trigger, occurrence, runId, at) {
       await db
         .update(occurrences)

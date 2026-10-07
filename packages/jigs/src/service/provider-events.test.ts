@@ -303,6 +303,32 @@ test("a Linear agent session goes to the triggers, not to waiting runs", async (
   );
 });
 
+test("a prompt in a Linear agent session wakes the run conversing in it, not the triggers", async () => {
+  delivers();
+  const payload = {
+    type: "AgentSessionEvent",
+    action: "prompted",
+    agentSession: { id: "s1" },
+    agentActivity: {
+      id: "activity-1",
+      createdAt: "2026-10-07T00:00:00.000Z",
+      signal: null,
+      content: { type: "prompt", body: "and the tests?" },
+      user: { id: "u1", name: "Ada" },
+    },
+  };
+  expect(
+    await route({
+      provider: "linear",
+      installationName: "acme",
+      name: "AgentSessionEvent",
+      payload,
+    }),
+  ).toEqual({ outcome: "woken" });
+  expect(push).not.toHaveBeenCalled();
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:session:acme:s1", undefined);
+});
+
 test("a Linear agent session no trigger could read is a failure, logged", async () => {
   push.mockRejectedValueOnce(new Error("issue lookup failed"));
   const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
