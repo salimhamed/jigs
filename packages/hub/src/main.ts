@@ -67,6 +67,9 @@ const server = createHubApp(auth, routers, web, shutdown).listen(
     console.log(`sign-in app Redirect URI: ${signInRedirectUri(publicUrl)}`);
   },
 );
+// Outlast a load balancer's idle timeout (60 seconds on AWS), or it can send a
+// request down a connection the hub is closing and answer 502.
+server.keepAliveTimeout = 65_000;
 
 process.once("SIGTERM", async () => {
   waiters.close();
