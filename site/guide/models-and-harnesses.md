@@ -150,8 +150,9 @@ its own session.
 
 ## Harness settings
 
-Claude Code and Codex descriptors use the provider's own JSON-serializable
-settings, except for execution policy and lifecycle settings owned by jigs:
+Claude Code descriptors take the Claude Agent SDK's own JSON-serializable
+options, and Codex descriptors the Codex provider's settings, except for
+execution policy and lifecycle settings owned by jigs:
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs";

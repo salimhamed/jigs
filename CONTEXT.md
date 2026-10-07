@@ -127,8 +127,9 @@ the agent loop, tools and session.
 _Avoid_: model, backend
 
 **Harness descriptor**: The plain data a workflow builds to name a harness,
-such as `harnesses.claude({ model })`. For Claude Code and Codex it is the
-provider's own settings type, minus the keys jigs owns.
+such as `harnesses.claude({ model })`. For Claude Code it is the Claude Agent
+SDK's own options type, and for Codex the provider's settings type, minus the
+keys jigs owns.
 _Avoid_: harness options, harness config
 
 **Model source**: An API endpoint that answers directly, with no agent program.
@@ -142,8 +143,8 @@ _Avoid_: adapter, provider
 source directly; `askJev` asks a model source typed yes-no, choice or score
 questions about one state.
 
-**Agent runner**: A Claude Code or Codex harness opened inside a factory's own
-step, with the same checks, environment and isolation as jigs' agent step.
+**Agent runner**: A Codex harness opened inside a factory's own step, with the
+same checks, environment and isolation as jigs' agent step.
 _Avoid_: executor, injected dependencies
 
 **Agent session**: One agent across several turns of a workflow. It resumes the
