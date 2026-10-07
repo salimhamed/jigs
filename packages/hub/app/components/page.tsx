@@ -65,6 +65,28 @@ export function Card({
   );
 }
 
+/** Links to a page's views, such as its tabs, with the one shown underlined. */
+export function Tabs({ tabs }: { tabs: { to: string; label: string; current: boolean }[] }) {
+  return (
+    <nav className="flex gap-6 border-b border-zinc-200 text-sm dark:border-zinc-800">
+      {tabs.map(({ to, label, current }) => (
+        <Link
+          key={label}
+          to={to}
+          aria-current={current ? "page" : undefined}
+          className={`-mb-px border-b-2 pb-2 ${
+            current
+              ? "border-zinc-900 font-medium dark:border-zinc-100"
+              : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+          }`}
+        >
+          {label}
+        </Link>
+      ))}
+    </nav>
+  );
+}
+
 /** A setting's label and explanation beside its control. */
 export function SettingRow({
   label,

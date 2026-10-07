@@ -5,7 +5,7 @@ import { requireMember } from "../auth.server.ts";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
-import { PageHeader, StatusDot } from "../components/page.tsx";
+import { PageHeader, StatusDot, Tabs } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   button,
@@ -21,17 +21,21 @@ import type { Route } from "./+types/factories.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const member = await requireMember(context, request);
+  const mine = new URL(request.url).searchParams.get("tab") !== "all";
   const factories = await listFactories(context, member.organizationId);
   return {
-    factories: factories.map(({ createdBy, ...factory }) => ({
-      ...factory,
-      canManage: manages(member, { createdBy }),
-    })),
+    mine,
+    factories: factories
+      .filter(({ createdBy }) => !mine || createdBy === member.user.id)
+      .map(({ createdBy, ...factory }) => ({
+        ...factory,
+        canManage: manages(member, { createdBy }),
+      })),
   };
 }
 
 export default function Factories({ loaderData }: Route.ComponentProps) {
-  const { factories } = loaderData;
+  const { mine, factories } = loaderData;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -53,8 +57,26 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
           </Link>
         }
       />
+      <Tabs
+        tabs={[
+          { to: "?", label: "My factories", current: mine },
+          { to: "?tab=all", label: "All factories", current: !mine },
+        ]}
+      />
       {factories.length === 0 ? (
-        <p className="text-zinc-500">No factories yet.</p>
+        <p className="text-zinc-500">
+          {mine ? (
+            <>
+              You haven't added a factory yet.{" "}
+              <Link to="?tab=all" className={link}>
+                See all factories
+              </Link>
+              .
+            </>
+          ) : (
+            "No factories yet."
+          )}
+        </p>
       ) : (
         <div className={`${card} overflow-x-auto`}>
           <table className={table}>

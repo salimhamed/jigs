@@ -8,7 +8,7 @@ export function Hint({ label, tip }: { label: ReactNode; tip: ReactNode }) {
       <Tooltip.Trigger asChild>
         <button
           type="button"
-          className="cursor-help font-[inherit] underline decoration-zinc-400 decoration-dotted underline-offset-4"
+          className="cursor-help text-left font-[inherit] underline decoration-zinc-400 decoration-dotted underline-offset-4"
         >
           {label}
         </button>

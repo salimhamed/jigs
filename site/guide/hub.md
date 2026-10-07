@@ -243,17 +243,18 @@ If the token is lost, **Re-issue token** makes a new one, shows its command
 the same way and stops the old one at once. **Remove** deletes the factory
 and every event waiting for it.
 
-The factories list shows when each factory last reached the hub, with a green
-dot while it is connected, its jigs version, how many events it has not
-confirmed, how many apps it is assigned and who added it. A factory's own
-page has two tabs. **Settings** lists its connected apps, with their
-installations' names and when the factory last received an event from each,
-and lets whoever added the factory, or an admin, connect and disconnect apps,
-rename the factory, which keeps its token, re-issue its token or remove it.
-**Activity** is its event log, newest first: every provider event the hub kept
-for it, with when it arrived and whether the factory has confirmed it. Select
-an event to see its payload, and choose **Load older events** to see further
-back.
+**Factories** opens on **My factories**, the ones you added; **All factories**
+lists every factory in the Organization. Both show when each factory last
+reached the hub, with a green dot while it is connected, its jigs version, how
+many events it has not confirmed, how many apps it is assigned and who added
+it. A factory's own page has two tabs. **Settings** lists its connected apps,
+with their installations' names and when the factory last received an event
+from each, and lets whoever added the factory, or an admin, connect and
+disconnect apps, rename the factory, which keeps its token, re-issue its token
+or remove it. **Activity** is its event log, newest first: every provider
+event the hub kept for it, with when it arrived and whether the factory has
+confirmed it. Select an event to see its payload, and choose **Load older
+events** to see further back.
 
 ## Add apps and assign them {#apps}
 

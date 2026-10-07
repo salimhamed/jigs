@@ -12,7 +12,14 @@ import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
-import { DangerRow, Details, PageHeader, SettingRow, StatusDot } from "../components/page.tsx";
+import {
+  DangerRow,
+  Details,
+  PageHeader,
+  SettingRow,
+  StatusDot,
+  Tabs,
+} from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   card,
@@ -133,14 +140,12 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
           ]}
         />
       </div>
-      <nav className="flex gap-6 border-b border-zinc-200 text-sm dark:border-zinc-800">
-        <Tab to="?" current={loaderData.tab === "settings"}>
-          Settings
-        </Tab>
-        <Tab to="?tab=activity" current={loaderData.tab === "activity"}>
-          Activity
-        </Tab>
-      </nav>
+      <Tabs
+        tabs={[
+          { to: "?", label: "Settings", current: loaderData.tab === "settings" },
+          { to: "?tab=activity", label: "Activity", current: loaderData.tab === "activity" },
+        ]}
+      />
       {loaderData.tab === "settings" ? (
         <SettingsTab
           loaded={loaderData}
@@ -151,22 +156,6 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
         <ActivityTab key={loaderData.messages[0]?.position ?? "none"} loaded={loaderData} />
       )}
     </div>
-  );
-}
-
-function Tab({ to, current, children }: { to: string; current: boolean; children: string }) {
-  return (
-    <Link
-      to={to}
-      aria-current={current ? "page" : undefined}
-      className={`-mb-px border-b-2 pb-2 ${
-        current
-          ? "border-zinc-900 font-medium dark:border-zinc-100"
-          : "border-transparent text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
-      }`}
-    >
-      {children}
-    </Link>
   );
 }
 
