@@ -1,8 +1,6 @@
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
-import { removeFactory } from "../../src/factories.ts";
-import { requireAdmin, requireMember } from "../auth.server.ts";
-import { useActionToast } from "../components/action-toast.tsx";
+import { requireMember } from "../auth.server.ts";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { PageHeader, StatusDot } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
@@ -26,21 +24,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const admin = await requireAdmin(context, request);
-  if ("error" in admin) return admin;
-  const form = await request.formData();
-  await removeFactory(
-    context.db,
-    context.waiters,
-    admin.organizationId,
-    String(form.get("factoryId")),
-  );
-  return { message: `Removed ${form.get("name")}.` };
-}
-
-export default function Factories({ loaderData, actionData }: Route.ComponentProps) {
-  useActionToast(actionData);
+export default function Factories({ loaderData }: Route.ComponentProps) {
   const { isAdmin, factories } = loaderData;
   return (
     <div className="space-y-6">
@@ -101,7 +85,8 @@ export default function Factories({ loaderData, actionData }: Route.ComponentPro
                           Re-issue token
                         </ConfirmForm>
                         <ConfirmForm
-                          fields={{ factoryId: factory.id, name: factory.name }}
+                          action={`/factories/${factory.id}`}
+                          fields={{ intent: "remove" }}
                           question={`Remove ${factory.name} and every message waiting for it?`}
                           className={dangerButton}
                         >

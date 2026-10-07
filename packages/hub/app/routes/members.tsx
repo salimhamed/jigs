@@ -115,6 +115,14 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
         ) : (
           <div className={`${card} overflow-x-auto`}>
             <table className={table}>
+              <thead>
+                <tr>
+                  <th>Email</th>
+                  <th>Role</th>
+                  <th>Expires</th>
+                  <th />
+                </tr>
+              </thead>
               <tbody>
                 {invites.map((invite) => (
                   <InviteRow key={invite.id} invite={invite} isAdmin={isAdmin} />
@@ -233,7 +241,7 @@ function InviteRow({
       <td>{invite.email}</td>
       <td>{invite.role}</td>
       <td className="text-zinc-500" suppressHydrationWarning>
-        Expires {new Date(invite.expiresAt).toLocaleDateString()}
+        {new Date(invite.expiresAt).toLocaleDateString()}
       </td>
       <td>
         <div className="flex justify-end gap-1">

@@ -26,9 +26,9 @@ An account admin or owner registers the app once per PagerDuty account.
 ## 2. Add the app to the hub
 
 In the hub, under **Apps → Add app**, choose **PagerDuty**, and enter the
-app's name, which only labels it on the hub, its client ID and client secret, the account's subdomain (the
-`<subdomain>` in `<subdomain>.pagerduty.com`), its region, US or EU, and the
-**from email**.
+app's name, which only labels it on the hub, its client ID and client secret,
+the account's subdomain (the `<subdomain>` in `<subdomain>.pagerduty.com`),
+its region, US or EU, and the **from email**.
 
 The from email is a real user on the account. PagerDuty attributes every
 change jigs makes, such as a note on an incident, to this person, so pick a
@@ -56,9 +56,9 @@ do: until then, the hub refuses the app's webhooks.
 
 ## 4. Assign it to factories
 
-On the page of each factory that should use this app, under **Assigned
-apps**, choose the app and **Assign app**. A factory may be assigned several PagerDuty accounts, and
-names the installation it uses in each trigger, step and agent.
+On the page of each factory that should use this app, under **Assigned apps**,
+choose the app and **Assign app**. A factory may be assigned several PagerDuty
+accounts, and names the installation it uses in each trigger, step and agent.
 
 A missing scope does not stop the hub from getting a token. It shows up as a
 refused call, and `jigs doctor` names the scope to add. To use PagerDuty from

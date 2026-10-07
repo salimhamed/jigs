@@ -10,6 +10,7 @@ const summary = {
   name: factories.name,
   lastSeenAt: factories.lastSeenAt,
   lastSeenVersion: factories.lastSeenVersion,
+  cursor: factories.cursor,
   unconfirmed: sql<number>`(
     select count(*)::int from ${factoryMessages}
     where ${factoryMessages.factoryId} = ${factories.id}
@@ -51,19 +52,6 @@ export async function readFactory(
   return row ? withStatus(row) : null;
 }
 
-/** When the Organization's factory last reached the hub, or `undefined` if there is no such factory. */
-export async function readLastSeen(
-  context: AppLoadContext,
-  organizationId: string,
-  factoryId: string,
-) {
-  const factory = await context.db.query.factories.findFirst({
-    columns: { lastSeenAt: true },
-    where: and(eq(factories.id, factoryId), eq(factories.organizationId, organizationId)),
-  });
-  return factory && (factory.lastSeenAt?.toISOString() ?? null);
-}
-
 /** The command a factory's owner runs to connect it with its token. */
 export function connectCommand(context: AppLoadContext, token: string) {
   return `jigs hub connect ${context.config.publicUrl.origin} ${token}`;
@@ -74,14 +62,9 @@ const PAGE_SIZE = 25;
 /** One page of a factory's messages, newest first, from before `before` when given. */
 export async function readEventLog(
   context: AppLoadContext,
-  factoryId: string,
+  { id: factoryId, cursor }: { id: string; cursor: bigint },
   before: bigint | null,
 ) {
-  const factory = await context.db.query.factories.findFirst({
-    columns: { cursor: true },
-    where: eq(factories.id, factoryId),
-  });
-  const cursor = factory?.cursor ?? 0n;
   const rows = await context.db
     .select({
       position: factoryMessages.position,

@@ -19,8 +19,9 @@ opens, not to the hub's Request URL, even when that URL shows as verified.
 
 In the hub, under **Apps → Add app**, choose **Slack app**, and enter the
 app's name as Slack shows it, and its App ID, client ID, client secret and
-signing secret. The name only labels the app on the hub; you can change it
-on the app's page.
+signing secret. You can rename the app on its page later: running factories
+see the new name the next time they get a Slack token; restart a factory to
+apply it at once.
 
 ## 3. Finish the app's settings
 
@@ -63,11 +64,12 @@ workspace did not grant fails with Slack's `missing_scope` error.
 
 On the app's page on the hub, choose **Add to Slack** and approve. Some
 workspaces require an admin to approve new apps; Slack asks for approval if
-yours does, and once an admin has approved it, choose **Add to Slack** again. Always install from the hub, which keeps the bot token it gets:
-when Slack's own settings show a banner asking you to reinstall the app,
-choose **Add to Slack** on the hub instead. The workspace then appears under
-**Workspaces**, with the scopes it granted. Give it an
-[installation name](/guide/hub#installation-names), such as `slack-acme`, under
+yours does, and once an admin has approved it, choose **Add to Slack** again.
+Always install from the hub, which keeps the bot token it gets: when Slack's
+own settings show a banner asking you to reinstall the app, choose **Add to
+Slack** on the hub instead. The workspace then appears under **Workspaces**,
+with the scopes it granted. Give it an [installation
+name](/guide/hub#installation-names), such as `slack-acme`, under
 **Installation name**, and save.
 
 Invite the bot to each channel factories should hear, public or private, with
@@ -75,9 +77,10 @@ Invite the bot to each channel factories should hear, public or private, with
 
 ## 6. Assign it to factories
 
-On the page of each factory that should use this app, under **Assigned
-apps**, choose the app and **Assign app**. A factory may be assigned several Slack apps, even in one
-workspace, and names the installation it uses in each trigger and step; see
-[one Slack app per teammate](/guide/hub#example-per-person).
+On the page of each factory that should use this app, under **Assigned apps**,
+choose the app and **Assign app**. A factory may be assigned several Slack
+apps, even in one workspace, and names the installation it uses in each
+trigger and step; see [one Slack app per
+teammate](/guide/hub#example-per-person).
 
 To use Slack from a factory, see [Slack](/guide/slack).

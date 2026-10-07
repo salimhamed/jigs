@@ -205,11 +205,11 @@ email: copy the link from **Pending invites** and send it yourself. The person
 opens the link and signs in with the GitHub account whose sign-in email that
 is. An admin can revoke a pending invite there too.
 
-Admins add apps and factories, assign them, invite people and change roles
-on the same page. Members see everything but change nothing.
+Admins add apps and factories, assign them, invite people and change roles.
+Members see everything but change nothing.
 
 The hub's home page charts, hour by hour over the last 24 hours, the
-webhooks it received and the events it delivered to your factories, with a
+webhooks it received and the events it queued for your factories, with a
 total for each provider.
 
 ## Add a factory {#factories}

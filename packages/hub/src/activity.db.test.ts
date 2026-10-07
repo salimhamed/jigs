@@ -1,6 +1,6 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { expect } from "vitest";
-import { deliveriesByHour, webhooksByHour } from "./activity.ts";
+import { queuedByHour, webhooksByHour } from "./activity.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { organizationId, setUpTestHub } from "./test-hub.ts";
@@ -19,7 +19,7 @@ async function received(provider: Provider, at: Date, organization = organizatio
   return event;
 }
 
-dbTest("counts webhooks and deliveries by hour over the last 24 hours", async () => {
+dbTest("counts webhooks and queued events by hour over the last 24 hours", async () => {
   const { factory } = await newFactory();
   const other = await newFactory("other");
   const recent = await received("github", hoursAgo(0.25));
@@ -44,8 +44,8 @@ dbTest("counts webhooks and deliveries by hour over the last 24 hours", async ()
   expect(webhooks.total).toBe(3);
   expect(webhooks.byProvider).toEqual({ github: 1, linear: 1, slack: 1, pagerduty: 0 });
 
-  const deliveries = await deliveriesByHour(db, organizationId, now);
-  expect(deliveries.total).toBe(2);
-  expect(deliveries.byProvider).toEqual({ github: 1, linear: 0, slack: 1, pagerduty: 0 });
-  expect(deliveries.hours.map((hour) => hour.count).slice(-2)).toEqual([1, 1]);
+  const queued = await queuedByHour(db, organizationId, now);
+  expect(queued.total).toBe(2);
+  expect(queued.byProvider).toEqual({ github: 1, linear: 0, slack: 1, pagerduty: 0 });
+  expect(queued.hours.map((hour) => hour.count).slice(-2)).toEqual([1, 1]);
 });

@@ -1,4 +1,4 @@
-import { deliveriesByHour, webhooksByHour } from "../../src/activity.ts";
+import { queuedByHour, webhooksByHour } from "../../src/activity.ts";
 import { requireMember } from "../auth.server.ts";
 import { HourlyChart } from "../components/hourly-chart.tsx";
 import { PageHeader } from "../components/page.tsx";
@@ -6,11 +6,11 @@ import type { Route } from "./+types/home.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
   const { organizationId } = await requireMember(context, request);
-  const [webhooks, deliveries] = await Promise.all([
+  const [webhooks, queued] = await Promise.all([
     webhooksByHour(context.db, organizationId),
-    deliveriesByHour(context.db, organizationId),
+    queuedByHour(context.db, organizationId),
   ]);
-  return { webhooks, deliveries };
+  return { webhooks, queued };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
@@ -18,10 +18,7 @@ export default function Home({ loaderData }: Route.ComponentProps) {
     <div className="space-y-6">
       <PageHeader title="Overview" />
       <HourlyChart title="Webhooks received, last 24 h" activity={loaderData.webhooks} />
-      <HourlyChart
-        title="Messages delivered to factories, last 24 h"
-        activity={loaderData.deliveries}
-      />
+      <HourlyChart title="Events queued for factories, last 24 h" activity={loaderData.queued} />
     </div>
   );
 }

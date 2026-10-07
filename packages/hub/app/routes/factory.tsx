@@ -3,7 +3,7 @@ import { data, Form, Link, redirect } from "react-router";
 import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
 import { removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
-import { listApps } from "../apps.server.ts";
+import { listAppNames } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
@@ -27,21 +27,24 @@ const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { organizationId, role } = await requireMember(context, request);
-  const factory = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
-  if (!factory) throw notFound();
+  const found = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
+  if (!found) throw notFound();
+  const { cursor, ...factory } = found;
   const before = new URL(request.url).searchParams.get("before");
   const [log, apps, organizationApps] = await Promise.all([
-    readEventLog(context, factory.id, before && /^\d{1,19}$/.test(before) ? BigInt(before) : null),
+    readEventLog(
+      context,
+      { id: factory.id, cursor },
+      before && /^\d{1,19}$/.test(before) ? BigInt(before) : null,
+    ),
     assignedApps(context.db, factory.id),
-    listApps(context, organizationId),
+    listAppNames(context, organizationId),
   ]);
   return {
     isAdmin: role === "admin",
     factory,
     apps,
-    unassignedApps: organizationApps
-      .filter((app) => !apps.some(({ id }) => id === app.id))
-      .map(({ id, provider, name }) => ({ id, provider, name })),
+    unassignedApps: organizationApps.filter((app) => !apps.some(({ id }) => id === app.id)),
     ...log,
     paged: before !== null,
   };

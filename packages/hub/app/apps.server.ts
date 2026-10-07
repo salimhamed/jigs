@@ -29,13 +29,18 @@ import {
   slackWebhookPath,
 } from "../src/slack.ts";
 
-/** An Organization's apps, each with its installations and how many factories it is assigned to. */
-export async function listApps(context: AppLoadContext, organizationId: string) {
-  const rows = await context.db.query.apps.findMany({
+/** An Organization's apps, by provider and name. */
+export function listAppNames(context: AppLoadContext, organizationId: string) {
+  return context.db.query.apps.findMany({
     columns: { id: true, provider: true, name: true },
     where: eq(apps.organizationId, organizationId),
     orderBy: [asc(apps.provider), asc(apps.name)],
   });
+}
+
+/** An Organization's apps, each with its installations and how many factories it is assigned to. */
+export async function listApps(context: AppLoadContext, organizationId: string) {
+  const rows = await listAppNames(context, organizationId);
   const installed = await context.db
     .select({
       appId: installations.appId,

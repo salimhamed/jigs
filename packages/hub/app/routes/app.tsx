@@ -211,7 +211,7 @@ function ProviderIds({ app }: { app: Loaded }) {
 function NameHint({ app }: { app: Loaded }) {
   switch (app.provider) {
     case "github":
-      return `Shown only on the hub. The App's slug stays ${app.slug}.`;
+      return `A label for people; GitHub never sees it. The App's slug stays ${app.slug}.`;
     case "linear":
       return (
         <>
@@ -219,8 +219,10 @@ function NameHint({ app }: { app: Loaded }) {
           restart a factory to apply it at once.
         </>
       );
-    default:
-      return "Shown only on the hub.";
+    case "slack":
+      return "Factories see a new name with their next Slack token; restart a factory to apply it at once.";
+    case "pagerduty":
+      return "A label for people; PagerDuty never sees it.";
   }
 }
 

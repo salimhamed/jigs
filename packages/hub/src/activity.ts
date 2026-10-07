@@ -34,8 +34,8 @@ export async function webhooksByHour(
   return byHour(since, rows);
 }
 
-/** The provider events the hub delivered to the Organization's factories, by the hour each was queued. */
-export async function deliveriesByHour(
+/** The provider events queued for the Organization's factories, by the hour each was queued. */
+export async function queuedByHour(
   db: HubDatabase,
   organizationId: string,
   now = new Date(),

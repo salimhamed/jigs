@@ -32,7 +32,6 @@ export async function action({ context, request }: Route.ActionArgs) {
   if ("error" in admin) return admin;
   const { organizationId } = admin;
   const form = await request.formData();
-  const issuedAt = new Date().toISOString();
   if (form.get("intent") === "reissue") {
     const factoryId = String(form.get("factoryId"));
     const factory = isUuid(factoryId)
@@ -41,12 +40,13 @@ export async function action({ context, request }: Route.ActionArgs) {
     const token =
       factory && (await reissueToken(context.db, context.waiters, organizationId, factoryId));
     if (!factory || !token) return { error: "That factory is gone." };
+    // Stamped after re-issuing, so a poll with the old token cannot count as connecting.
     return {
       connect: {
         id: factory.id,
         name: factory.name,
         command: connectCommand(context, token),
-        issuedAt,
+        issuedAt: new Date().toISOString(),
       },
     };
   }
@@ -54,7 +54,14 @@ export async function action({ context, request }: Route.ActionArgs) {
   if (!name) return { error: "Name the factory." };
   try {
     const { factory, token } = await addFactory(context.db, organizationId, name);
-    return { connect: { id: factory.id, name, command: connectCommand(context, token), issuedAt } };
+    return {
+      connect: {
+        id: factory.id,
+        name,
+        command: connectCommand(context, token),
+        issuedAt: new Date().toISOString(),
+      },
+    };
   } catch (error) {
     if (isUniqueViolation(error)) return { error: `A factory is already named ${name}.` };
     throw error;
