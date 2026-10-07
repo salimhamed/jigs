@@ -36,27 +36,35 @@ import {
   slackWebhookPath,
 } from "../src/slack.ts";
 
-/** An Organization's apps, by provider and name. */
-export function listAppNames(context: AppLoadContext, organizationId: string) {
-  return context.db.query.apps.findMany({
-    columns: { id: true, provider: true, name: true },
-    where: eq(apps.organizationId, organizationId),
-    orderBy: [asc(apps.provider), asc(apps.name)],
-  });
+/** An Organization's apps, by provider and name, each with where it is installed. */
+export async function listInstalledApps(context: AppLoadContext, organizationId: string) {
+  const [rows, installed] = await Promise.all([
+    context.db.query.apps.findMany({
+      columns: { id: true, provider: true, name: true },
+      where: eq(apps.organizationId, organizationId),
+      orderBy: [asc(apps.provider), asc(apps.name)],
+    }),
+    context.db
+      .select({
+        appId: installations.appId,
+        account: installations.account,
+        installationName: installations.installationName,
+      })
+      .from(installations)
+      .where(eq(installations.organizationId, organizationId))
+      .orderBy(asc(installations.account)),
+  ]);
+  return rows.map((app) => ({
+    ...app,
+    installations: installed
+      .filter((row) => row.appId === app.id)
+      .map(({ account, installationName }) => ({ account, installationName })),
+  }));
 }
 
 /** An Organization's apps, each with its installations and how many factories it is assigned to. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
-  const rows = await listAppNames(context, organizationId);
-  const installed = await context.db
-    .select({
-      appId: installations.appId,
-      account: installations.account,
-      installationName: installations.installationName,
-    })
-    .from(installations)
-    .where(eq(installations.organizationId, organizationId))
-    .orderBy(asc(installations.account));
+  const rows = await listInstalledApps(context, organizationId);
   const assigned = await context.db
     .select({ appId: assignments.appId })
     .from(assignments)
@@ -64,9 +72,6 @@ export async function listApps(context: AppLoadContext, organizationId: string) 
     .where(eq(apps.organizationId, organizationId));
   return rows.map((app) => ({
     ...app,
-    installations: installed
-      .filter((row) => row.appId === app.id)
-      .map(({ account, installationName }) => ({ account, installationName })),
     factories: assigned.filter((row) => row.appId === app.id).length,
   }));
 }

@@ -5,17 +5,18 @@ import { data, Form, Link, redirect, useFetcher } from "react-router";
 import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
 import { removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
-import { listApps } from "../apps.server.ts";
+import { listInstalledApps } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
-import { Details, PageHeader, StatusDot } from "../components/page.tsx";
+import { DangerRow, Details, PageHeader, SettingRow, StatusDot } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   card,
+  dangerOutlineButton,
   input,
   link,
   quietButton,
@@ -46,16 +47,15 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const [connected, lastEvents, organizationApps] = await Promise.all([
     assignedApps(context.db, factory.id),
     readLastEvents(context, factory.id),
-    listApps(context, organizationId),
+    listInstalledApps(context, organizationId),
   ]);
   return {
     tab: "settings" as const,
     isAdmin,
     factory,
     connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
-    available: organizationApps
-      .filter((app) => !connected.some(({ id }) => id === app.id))
-      .map(({ id, provider, name, installations }) => ({ id, provider, name, installations })),
+    hasApps: organizationApps.length > 0,
+    available: organizationApps.filter((app) => !connected.some(({ id }) => id === app.id)),
   };
 }
 
@@ -148,7 +148,8 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
           justConnected={(actionData && "connected" in actionData && actionData.connected) || null}
         />
       ) : (
-        <ActivityTab loaded={loaderData} />
+        // A new first page means new events arrived; the older pages shown are then stale.
+        <ActivityTab key={loaderData.messages[0]?.position ?? "none"} loaded={loaderData} />
       )}
     </div>
   );
@@ -177,7 +178,7 @@ function SettingsTab({
   loaded: Extract<Loaded, { tab: "settings" }>;
   justConnected: string | null;
 }) {
-  const { isAdmin, factory, connected, available } = loaded;
+  const { isAdmin, factory, connected, available, hasApps } = loaded;
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -191,7 +192,12 @@ function SettingsTab({
               it, for example opening pull requests through a GitHub App or replying in Slack.
             </p>
           </div>
-          <ConnectApp factoryName={factory.name} apps={available} />
+          <ConnectApp
+            factoryName={factory.name}
+            apps={available}
+            hasApps={hasApps}
+            isAdmin={isAdmin}
+          />
         </div>
         {connected.length === 0 ? (
           <p className="text-sm text-zinc-500">
@@ -297,41 +303,16 @@ function SettingsTab({
       )}
 
       {isAdmin && (
-        <div className="rounded-lg border border-red-300 dark:border-red-900">
-          <SettingRow
-            label="Remove factory"
-            hint="Disconnects it from all apps and drops its unconfirmed events."
-          >
-            <RemoveFactoryButton
-              factory={factory}
-              className="inline-flex items-center gap-2 rounded-md border border-red-300 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-50 dark:border-red-900 dark:text-red-400 dark:hover:bg-red-950"
-            >
-              <Trash2 className="size-4" />
-              Remove factory
-            </RemoveFactoryButton>
-          </SettingRow>
-        </div>
+        <DangerRow
+          label="Remove factory"
+          hint="Disconnects it from all apps and drops its unconfirmed events."
+        >
+          <RemoveFactoryButton factory={factory} className={dangerOutlineButton}>
+            <Trash2 className="size-4" />
+            Remove factory
+          </RemoveFactoryButton>
+        </DangerRow>
       )}
-    </div>
-  );
-}
-
-function SettingRow({
-  label,
-  hint,
-  children,
-}: {
-  label: string;
-  hint: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <div className="grid gap-3 p-5 sm:grid-cols-[16rem_1fr] sm:items-center">
-      <div>
-        <div className="font-medium">{label}</div>
-        <p className="text-sm text-zinc-500">{hint}</p>
-      </div>
-      <div className="max-w-md">{children}</div>
     </div>
   );
 }
@@ -342,9 +323,13 @@ type Installations = { account: string; installationName: string | null }[];
 function ConnectApp({
   factoryName,
   apps,
+  hasApps,
+  isAdmin,
 }: {
   factoryName: string;
   apps: { id: string; provider: Provider; name: string; installations: Installations }[];
+  hasApps: boolean;
+  isAdmin: boolean;
 }) {
   const [search, setSearch] = useState("");
   const shown = apps.filter((app) => app.name.toLowerCase().includes(search.toLowerCase()));
@@ -373,7 +358,11 @@ function ConnectApp({
         <ul className="max-h-80 divide-y divide-zinc-200 overflow-y-auto border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
           {shown.length === 0 && (
             <li className="px-4 py-3 text-sm text-zinc-500">
-              {apps.length === 0 ? "Every app is connected." : "No app matches."}
+              {!hasApps
+                ? "No apps yet."
+                : apps.length === 0
+                  ? "Every app is connected."
+                  : "No app matches."}
             </li>
           )}
           {shown.map((app) => (
@@ -398,12 +387,14 @@ function ConnectApp({
             </li>
           ))}
         </ul>
-        <p className="px-4 py-3 text-sm text-zinc-500">
-          Not listed?{" "}
-          <Link to="/apps/new" className={link}>
-            Add an app
-          </Link>
-        </p>
+        {isAdmin && (
+          <p className="px-4 py-3 text-sm text-zinc-500">
+            Not listed?{" "}
+            <Link to="/apps/new" className={link}>
+              Add an app
+            </Link>
+          </p>
+        )}
       </div>
     </>
   );
@@ -516,7 +507,7 @@ function EventRow({ factoryId, message }: { factoryId: string; message: Message 
         <tr>
           <td colSpan={6} className="bg-zinc-50 dark:bg-zinc-900/50">
             <pre className="max-h-96 overflow-auto text-xs">
-              {payload.data?.payload ?? "Loading…"}
+              {payload.data ? (payload.data.payload ?? "No longer kept.") : "Loading…"}
             </pre>
           </td>
         </tr>

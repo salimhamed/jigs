@@ -53,25 +53,25 @@ export async function renameFactory(
 }
 
 /**
- * Give a factory a new token, or `null` if there is no such factory. The hub
- * refuses the old token from then on, and wakes its open polls so they are
- * refused too.
+ * Give a factory a new token, returned with the factory, or `null` if there is
+ * no such factory. The hub refuses the old token from then on, and wakes its
+ * open polls so they are refused too.
  */
 export async function reissueToken(
   db: HubDatabase,
   waiters: MessageWaiters,
   organizationId: string,
   factoryId: string,
-): Promise<string | null> {
+): Promise<{ token: string; factory: { id: string; name: string } } | null> {
   const { token, tokenHash } = newToken();
-  const updated = await db
+  const [factory] = await db
     .update(factories)
     .set({ tokenHash })
     .where(and(eq(factories.id, factoryId), eq(factories.organizationId, organizationId)))
-    .returning({ id: factories.id });
-  if (updated.length === 0) return null;
+    .returning({ id: factories.id, name: factories.name });
+  if (!factory) return null;
   waiters.wake([factoryId]);
-  return token;
+  return { token, factory };
 }
 
 /** Remove a factory and every message waiting for it, and refuse its open polls. */

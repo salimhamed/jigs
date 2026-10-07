@@ -13,8 +13,9 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   const { headers, user, role } = await requireMember(context, request);
   const organization = await context.auth.api.getFullOrganization({ headers });
   const now = new Date();
+  const isAdmin = role === "admin";
   return {
-    isAdmin: role === "admin",
+    isAdmin,
     userId: user.id,
     members: (organization?.members ?? []).map((member) => ({
       id: member.id,
@@ -26,11 +27,16 @@ export async function loader({ context, request }: Route.LoaderArgs) {
     invites: (organization?.invitations ?? [])
       .filter((invite) => invite.status === "pending" && invite.expiresAt > now)
       .map((invite) => ({
-        id: invite.id,
         email: invite.email,
         role: invite.role,
         expiresAt: invite.expiresAt.toISOString(),
-        link: new URL(`invite/${invite.id}`, context.config.publicUrl).href,
+        // An invite's id is its link, which only admins may share or revoke.
+        admin: isAdmin
+          ? {
+              id: invite.id,
+              link: new URL(`invite/${invite.id}`, context.config.publicUrl).href,
+            }
+          : null,
       })),
   };
 }
@@ -123,7 +129,7 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
               </thead>
               <tbody>
                 {invites.map((invite) => (
-                  <InviteRow key={invite.id} invite={invite} isAdmin={isAdmin} />
+                  <InviteRow key={`${invite.email} ${invite.expiresAt}`} invite={invite} />
                 ))}
               </tbody>
             </table>
@@ -194,13 +200,8 @@ function MemberRow({
   );
 }
 
-function InviteRow({
-  invite,
-  isAdmin,
-}: {
-  invite: Route.ComponentProps["loaderData"]["invites"][number];
-  isAdmin: boolean;
-}) {
+function InviteRow({ invite }: { invite: Route.ComponentProps["loaderData"]["invites"][number] }) {
+  const { admin } = invite;
   return (
     <tr>
       <td>{invite.email}</td>
@@ -209,11 +210,11 @@ function InviteRow({
         {new Date(invite.expiresAt).toLocaleDateString()}
       </td>
       <td>
-        <div className="flex justify-end gap-1">
-          <CopyButton text={invite.link} label="Link" />
-          {isAdmin && (
+        {admin && (
+          <div className="flex justify-end gap-1">
+            <CopyButton text={admin.link} label="Link" />
             <ConfirmForm
-              fields={{ intent: "revoke", invitationId: invite.id }}
+              fields={{ intent: "revoke", invitationId: admin.id }}
               title={`Revoke the invite for ${invite.email}?`}
               body="Its link stops working. You can invite them again later."
               confirmLabel="Revoke invite"
@@ -223,8 +224,8 @@ function InviteRow({
               <X className="size-4" />
               Revoke
             </ConfirmForm>
-          )}
-        </div>
+          </div>
+        )}
       </td>
     </tr>
   );

@@ -17,7 +17,7 @@ import {
   secondaryButton,
   warningText,
 } from "../components/ui.ts";
-import { connectCommand, readFactory } from "../factories.server.ts";
+import { connectCommand } from "../factories.server.ts";
 import type { Route } from "./+types/new-factory.ts";
 import type { loader as lastSeenLoader } from "./factory-last-seen.ts";
 
@@ -34,18 +34,17 @@ export async function action({ context, request }: Route.ActionArgs) {
   const form = await request.formData();
   if (form.get("intent") === "reissue") {
     const factoryId = String(form.get("factoryId"));
-    const factory = isUuid(factoryId)
-      ? await readFactory(context, organizationId, factoryId)
+    const reissued = isUuid(factoryId)
+      ? await reissueToken(context.db, context.waiters, organizationId, factoryId)
       : null;
-    const token =
-      factory && (await reissueToken(context.db, context.waiters, organizationId, factoryId));
-    if (!factory || !token) return { error: "That factory is gone." };
-    // Stamped after re-issuing, so a poll with the old token cannot count as connecting.
+    if (!reissued) return { error: "That factory is gone." };
+    const { token, factory } = reissued;
     return {
       connect: {
         id: factory.id,
         name: factory.name,
         command: connectCommand(context, token),
+        // Stamped after re-issuing, so a poll with the old token cannot count as connecting.
         issuedAt: new Date().toISOString(),
       },
     };

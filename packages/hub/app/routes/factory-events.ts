@@ -1,4 +1,3 @@
-import { data } from "react-router";
 import { isUuid } from "../../src/apps.ts";
 import { requireMember } from "../auth.server.ts";
 import { readEventLog, readFactory } from "../factories.server.ts";
@@ -9,8 +8,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   const { organizationId } = await requireMember(context, request);
   const before = new URL(request.url).searchParams.get("before") ?? "";
   const factory = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
-  if (!factory || !/^\d{1,19}$/.test(before)) {
-    throw data(null, { status: 404, statusText: "Not Found" });
-  }
+  // A removed factory has no older events; an error would replace the page the log is on.
+  if (!factory || !/^\d{1,19}$/.test(before)) return { messages: [], older: null };
   return readEventLog(context, factory, BigInt(before));
 }

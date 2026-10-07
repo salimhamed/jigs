@@ -7,6 +7,7 @@ import { addPagerDutyApp } from "../../src/pagerduty.ts";
 import { addSlackApp } from "../../src/slack.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
+import { Codes } from "../components/codes.tsx";
 import { PageHeader, UrlRow } from "../components/page.tsx";
 import { button, external, input, link, quietButton, select } from "../components/ui.ts";
 import type { Route } from "./+types/new-app.ts";
@@ -466,13 +467,4 @@ function FieldInput({ field }: { field: Field }) {
       {control}
     </div>
   );
-}
-
-function Codes({ values }: { values: readonly string[] }) {
-  return values.map((value, index) => (
-    <span key={value}>
-      {index === 0 ? "" : index === values.length - 1 ? " and " : ", "}
-      <code>{value}</code>
-    </span>
-  ));
 }

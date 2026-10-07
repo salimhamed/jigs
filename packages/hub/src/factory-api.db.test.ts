@@ -104,7 +104,7 @@ dbTest("refuses unknown tokens and records who called", async () => {
   const seen = await db.query.factories.findFirst({ where: eq(schema.factories.id, factory.id) });
   expect(seen).toMatchObject({ lastSeenVersion: "1.2.3", lastSeenAt: expect.any(Date) });
 
-  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
+  const reissued = (await reissueToken(db, waiters, organizationId, factory.id))?.token;
   if (!reissued) throw new Error("expected a token");
   expect(reissued).toMatch(/^[0-9a-f]{64}$/);
   expect((await poll(token)).status).toBe(401);
@@ -284,7 +284,7 @@ dbTest("refuses a held poll once its token is re-issued or its factory removed",
   const { factory, token } = await newFactory();
   const held = poll(token, 30);
   await until(() => waiters.held(factory.id) === 1);
-  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
+  const reissued = (await reissueToken(db, waiters, organizationId, factory.id))?.token;
   expect((await held).status).toBe(401);
 
   const again = poll(reissued ?? "", 30);

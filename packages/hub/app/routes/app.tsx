@@ -8,14 +8,15 @@ import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
+import { Codes } from "../components/codes.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { Hint } from "../components/hint.tsx";
-import { Card, Details, PageHeader, UrlRow } from "../components/page.tsx";
+import { Card, DangerRow, Details, PageHeader, UrlRow } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   button,
   card,
-  dangerButton,
+  dangerOutlineButton,
   errorText,
   external,
   input,
@@ -200,26 +201,22 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
       )}
 
       {isAdmin && (
-        <Card danger>
-          <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="max-w-xl text-sm">
-              Removes this app from the hub. Factories connected to it stop receiving its events and
-              can no longer act through it. The app itself isn't deleted from {provider}; do that on{" "}
-              {provider} if you want.
-            </p>
-            <ConfirmForm
-              fields={{ intent: "remove" }}
-              title={`Remove ${app.name}?`}
-              body="The hub forgets its credentials and installations. Factories connected to it stop receiving its events and can no longer act through it. Events already received stay in their logs."
-              confirmLabel="Remove app"
-              destructive
-              className={dangerButton}
-            >
-              <Trash2 className="size-4" />
-              Remove app
-            </ConfirmForm>
-          </div>
-        </Card>
+        <DangerRow
+          label="Remove app"
+          hint={`Removes this app from the hub. Factories connected to it stop receiving its events and can no longer act through it. The app itself isn't deleted from ${provider}; do that on ${provider} if you want.`}
+        >
+          <ConfirmForm
+            fields={{ intent: "remove" }}
+            title={`Remove ${app.name}?`}
+            body="The hub forgets its credentials and installations. Factories connected to it stop receiving its events and can no longer act through it. Events already received stay in their logs."
+            confirmLabel="Remove app"
+            destructive
+            className={dangerOutlineButton}
+          >
+            <Trash2 className="size-4" />
+            Remove app
+          </ConfirmForm>
+        </DangerRow>
       )}
     </div>
   );
@@ -747,15 +744,6 @@ function ProviderSettings({
       {children}
     </Card>
   );
-}
-
-function Codes({ values }: { values: readonly string[] }) {
-  return values.map((value, index) => (
-    <span key={value}>
-      {index > 0 && ", "}
-      <code>{value}</code>
-    </span>
-  ));
 }
 
 type Installation = { id: string; installationName: string | null };

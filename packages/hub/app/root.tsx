@@ -1,3 +1,4 @@
+import { Provider as TooltipProvider } from "@radix-ui/react-tooltip";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import {
@@ -32,7 +33,7 @@ export function Layout({ children }: { children: ReactNode }) {
       </head>
       <body className="min-h-screen bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
-          {children}
+          <TooltipProvider delayDuration={150}>{children}</TooltipProvider>
           <Toaster richColors position="top-center" />
         </ThemeProvider>
         <ScrollRestoration />

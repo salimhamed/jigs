@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { CopyButton } from "./copy-button.tsx";
 import { Hint } from "./hint.tsx";
-import { input } from "./ui.ts";
+import { card, input } from "./ui.ts";
 
 /** A page's title, with the page it sits under, a one-line summary and its main action. */
 export function PageHeader({
@@ -42,21 +42,15 @@ export function Card({
   title,
   description,
   action,
-  danger,
   children,
 }: {
   title?: ReactNode;
   description?: ReactNode;
   action?: ReactNode;
-  danger?: boolean;
   children?: ReactNode;
 }) {
   return (
-    <section
-      className={`space-y-4 rounded-lg border p-5 ${
-        danger ? "border-red-300 dark:border-red-900" : "border-zinc-200 dark:border-zinc-800"
-      }`}
-    >
+    <section className={`${card} space-y-4 p-5`}>
       {(title || action) && (
         <div className="flex flex-wrap items-start justify-between gap-4">
           <div className="space-y-1">
@@ -68,6 +62,46 @@ export function Card({
       )}
       {children}
     </section>
+  );
+}
+
+/** A setting's label and explanation beside its control. */
+export function SettingRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="grid gap-3 p-5 sm:grid-cols-[16rem_1fr] sm:items-center">
+      <div>
+        <div className="font-medium">{label}</div>
+        <p className="text-sm text-zinc-500">{hint}</p>
+      </div>
+      <div className="max-w-md">{children}</div>
+    </div>
+  );
+}
+
+/** A destructive action in a red box, explained beside its button. */
+export function DangerRow({
+  label,
+  hint,
+  children,
+}: {
+  label: string;
+  hint: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="rounded-lg border border-red-300 dark:border-red-900">
+      <SettingRow label={label} hint={hint}>
+        {children}
+      </SettingRow>
+    </div>
   );
 }
 
