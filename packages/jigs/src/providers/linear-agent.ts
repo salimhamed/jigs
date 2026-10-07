@@ -8,7 +8,7 @@ import type {
   LinearAgentActivityContent,
   LinearAgentPrompt,
 } from "../workflow/linear/agent-session.ts";
-import { type LinearClient, linearFor } from "./linear.ts";
+import { derivedUuid, type LinearClient, linearFor } from "./linear.ts";
 
 export type { LinearAgentActivityContent, LinearAgentPrompt };
 
@@ -181,6 +181,10 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     answeredSince,
   };
 }
+
+/** The id of the activity posted once under `key` in a session, whoever posts it. */
+export const onceActivityId = (sessionId: string, key: string): string =>
+  derivedUuid(["linear-agent-activity", sessionId, key]);
 
 export type LinearAgentApi = ReturnType<typeof createLinearAgentApi>;
 

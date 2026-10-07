@@ -154,6 +154,10 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
+export type {
+  LinearAgentConversationOptions,
+  LinearAgentConversationResult,
+} from "./workflow/linear/agent-conversation.ts";
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export { type TicketNote, ticketReviewVerdictSchema } from "./workflow/linear/review.ts";

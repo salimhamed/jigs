@@ -2,6 +2,8 @@
 // session: the hook token a conversation holds, and the activities it posts
 // and reads.
 
+import type { ConversationMessage } from "../agents/conversation.ts";
+import type { Harness } from "../agents/harness-config.ts";
 import { LINEAR_SESSION_TOKEN_PREFIX } from "../hook-tokens.ts";
 
 /**
@@ -49,3 +51,21 @@ export type LinearAgentPrompt = {
   author: { id: string; name: string };
   sourceCommentId: string | null;
 };
+
+/**
+ * One turn of a conversation in a Linear agent session: the harness and worktree it runs in, the
+ * mention that opened the session until a turn takes it, and `consumed`, the ids of the messages
+ * earlier turns took. The turn takes every newer reply in the session.
+ */
+export type LinearAgentTurnRequest = {
+  installationName: string;
+  sessionId: string;
+  harness: Harness;
+  cwd: string;
+  instructions?: string;
+  opening?: ConversationMessage;
+  consumed: string[];
+};
+
+/** The `once` key of the final response that answers a stop, whoever posts it. */
+export const stopAnswerKey = (stopId: string) => `stopped:${stopId}`;

@@ -10,6 +10,7 @@ step//./jigs/steps//createPullRequest
 step//./jigs/steps//createRunDirectory
 step//./jigs/steps//executeAgent
 step//./jigs/steps//executeJev
+step//./jigs/steps//executeLinearAgentTurn
 step//./jigs/steps//executeModel
 step//./jigs/steps//fetchIncidentSnapshot
 step//./jigs/steps//fetchPullRequestState

@@ -23,7 +23,10 @@ import type {
 } from "@jigs-ai/jigs";
 import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
 import * as gitOperations from "@jigs-ai/jigs/steps/git";
-import type { LinearAgentActivityContent } from "@jigs-ai/jigs/steps/linear";
+import type {
+  LinearAgentActivityContent,
+  LinearAgentTurnRequest,
+} from "@jigs-ai/jigs/steps/linear";
 import * as linearOperations from "@jigs-ai/jigs/steps/linear";
 import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
@@ -201,6 +204,7 @@ export async function postLinearAgentActivity(request: {
   sessionId: string;
   content: LinearAgentActivityContent;
   ephemeral?: boolean;
+  once?: string;
 }) {
   "use step";
   return linearOperations.postLinearAgentActivity(request, {
@@ -210,7 +214,7 @@ export async function postLinearAgentActivity(request: {
 }
 
 /**
- * Replace the links a Linear agent session shows.
+ * Replace the links a Linear agent session shows, after the run's dashboard.
  *
  * @group Linear agent sessions
  */
@@ -220,7 +224,21 @@ export async function setLinearAgentSessionUrls(request: {
   urls: Array<{ label: string; url: string }>;
 }) {
   "use step";
-  return linearOperations.setLinearAgentSessionUrls(request);
+  return linearOperations.setLinearAgentSessionUrls(request, getWorkflowMetadata());
+}
+
+/**
+ * Run one turn of a conversation in a Linear agent session, posting its status and answers there.
+ * Use linearAgentConversation() to hold the whole conversation.
+ *
+ * @group Linear agent sessions
+ */
+export async function executeLinearAgentTurn(request: LinearAgentTurnRequest) {
+  "use step";
+  return linearOperations.executeLinearAgentTurn(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
 }
 
 /**

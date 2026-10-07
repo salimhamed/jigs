@@ -210,7 +210,8 @@ function inputQueue() {
 }
 
 // How long a stopped turn waits for Claude Code to confirm the interrupt before closing it.
-const STOP_GRACE_MS = 30_000;
+// Shorter than the service's 30 s stop fallback, so the run ends the turn before it is cancelled.
+const STOP_GRACE_MS = 15_000;
 
 export function createClaudeDriver(
   overrides: Partial<ClaudeDriverDependencies> = {},
