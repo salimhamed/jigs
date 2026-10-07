@@ -121,7 +121,8 @@ export function createClaudeDriver(
     let errorKind: string | undefined;
     for await (const message of deps.query({ prompt, options })) {
       onMessage?.(message);
-      if (message.type === "assistant" && message.error !== undefined) errorKind = message.error;
+      // Only the last assistant message's error explains how the turn ended.
+      if (message.type === "assistant") errorKind = message.error;
       if (message.type === "result") {
         result = message;
         break;

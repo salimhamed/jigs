@@ -53,6 +53,43 @@ test("a tool result carries the name of its call, and an error result is a tool 
   ]);
 });
 
+test("a tool error or result that is not all text is a string with placeholders", () => {
+  const parts = claudeStreamParts();
+  const content = [
+    { type: "text", text: "failed:" },
+    { type: "image", source: {} },
+  ];
+  expect([
+    ...parts(
+      toolResults(
+        { type: "tool_result", tool_use_id: "t1", content, is_error: true },
+        { type: "tool_result", tool_use_id: "t2", content },
+      ),
+    ),
+  ]).toEqual([
+    { type: "tool-error", toolCallId: "t1", toolName: "unknown", error: "failed:\n[image]" },
+    { type: "tool-result", toolCallId: "t2", toolName: "unknown", output: "failed:\n[image]" },
+  ]);
+});
+
+test("text blocks in a row are separated, and text after any other part is not", () => {
+  const parts = claudeStreamParts();
+  expect([
+    ...parts(assistant({ type: "text", text: "Done." })),
+    ...parts(assistant({ type: "text", text: "Next" })),
+    ...parts(assistant({ type: "tool_use", id: "t1", name: "Read", input: {} })),
+    ...parts(assistant({ type: "text", text: "After." })),
+    ...parts(assistant({ type: "thinking", thinking: "hm" }, { type: "text", text: "Last." })),
+  ]).toEqual([
+    { type: "text-delta", text: "Done." },
+    { type: "text-delta", text: "\n\nNext" },
+    { type: "tool-call", toolCallId: "t1", toolName: "Read", input: {} },
+    { type: "text-delta", text: "After." },
+    { type: "reasoning-delta", text: "hm" },
+    { type: "text-delta", text: "Last." },
+  ]);
+});
+
 test("a user message with plain text and every other message add nothing", () => {
   const parts = claudeStreamParts();
   expect([
@@ -77,14 +114,9 @@ test("a structured result answers with the structured output as its text", () =>
   });
 });
 
-test("a structured call with no structured output recovers JSON from the reply", () => {
-  const fenced = success({ result: 'Here it is:\n```json\n{"ok":false}\n```' });
-  expect(claudeGeneration(fenced, true)).toMatchObject({ output: { ok: false } });
-  expect(claudeGeneration(success({ result: ' {"ok":true} ' }), true)).toMatchObject({
-    output: { ok: true },
-  });
-  expect(() => claudeGeneration(success({ result: "I could not decide." }), true)).toThrow(
-    "returned no structured output",
+test("a structured call whose result has no structured output fails, even with JSON in the reply", () => {
+  expect(() => claudeGeneration(success({ result: '{"ok":true}' }), true)).toThrow(
+    "Claude Code returned no structured output for the requested schema",
   );
 });
 

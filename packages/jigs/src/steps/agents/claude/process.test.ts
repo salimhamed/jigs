@@ -178,13 +178,8 @@ test("descriptor settings reach the CLI and jigs' policy wins over a smuggled po
   }
 });
 
-function launchFixture(
-  stepEnv: Record<string, string>,
-  sdkEnv: Record<string, string>,
-  args: readonly string[] = [fixture],
-  host: NodeJS.ProcessEnv = {},
-) {
-  return claudeProcessSpawner(stepEnv, { host })({
+function launchFixture(sdkEnv: Record<string, string>, args: readonly string[] = [fixture]) {
+  return claudeProcessSpawner()({
     command: process.execPath,
     args: [...args],
     cwd: process.cwd(),
@@ -200,44 +195,38 @@ function exited(child: ReturnType<typeof launchFixture>) {
   });
 }
 
-test("the launch hook replaces the SDK's environment with the step's, keeping only what the SDK added", async () => {
-  const record = path.join(tmp, "allowlist-env.json");
-  const host = {
-    PATH: process.env.PATH ?? "",
-    ANTHROPIC_API_KEY: "host",
-    CLAUDE_CODE_OAUTH_TOKEN: "host",
-    AWS_SECRET_ACCESS_KEY: "host",
-    CLAUDE_AGENT_SDK_VERSION: "0.0.0",
-  };
-  const child = launchFixture(
-    { JIGS_CLAUDE_TEST_RECORD: record, JIGS_ALLOWED_TOKEN: "kept" },
-    {
-      ...host,
-      JIGS_ALLOWED_TOKEN: "SDK copy",
-      CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING: "true",
-    },
-    [fixture],
-    host,
-  );
-  const errors: unknown[] = [];
-  child.stdout.on("error", (error) => errors.push(error));
-  await expect(exited(child)).resolves.toEqual([0, null]);
-  expect(errors).toHaveLength(1);
-  const launched = JSON.parse(readFileSync(record, "utf8"));
-  expect(launched).toMatchObject({ allowedToken: "kept", anthropic: false, entrypoint: "sdk-ts" });
-  expect([...launched.names].sort()).toEqual(
-    [
-      "CLAUDE_AGENT_SDK_VERSION",
-      "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING",
-      "CLAUDE_CODE_ENTRYPOINT",
-      "JIGS_ALLOWED_TOKEN",
-      "JIGS_CLAUDE_TEST_RECORD",
-    ].sort(),
-  );
+test("the launch hook gives Claude Code the SDK's environment and nothing from the host", async () => {
+  const record = path.join(tmp, "launch-env.json");
+  vi.stubEnv("SYNTHETIC_HOST_SECRET", "host-only");
+  try {
+    const child = launchFixture({
+      JIGS_CLAUDE_TEST_RECORD: record,
+      JIGS_ALLOWED_TOKEN: "kept",
+      CLAUDE_CODE_ENTRYPOINT: "parent-claude-session",
+      CLAUDE_AGENT_SDK_VERSION: "0.0.0",
+    });
+    const errors: unknown[] = [];
+    child.stdout.on("error", (error) => errors.push(error));
+    await expect(exited(child)).resolves.toEqual([0, null]);
+    expect(errors).toHaveLength(1);
+    const launched = JSON.parse(readFileSync(record, "utf8"));
+    expect(launched).toMatchObject({ allowedToken: "kept", entrypoint: "sdk-ts" });
+    expect([...launched.names].sort()).toEqual(
+      [
+        "CLAUDE_AGENT_SDK_VERSION",
+        "CLAUDE_CODE_ENTRYPOINT",
+        "JIGS_ALLOWED_TOKEN",
+        "JIGS_CLAUDE_TEST_RECORD",
+        "PATH",
+      ].sort(),
+    );
+  } finally {
+    vi.unstubAllEnvs();
+  }
 });
 
 test("a kill through the launcher is a teardown, not a launch failure", async () => {
-  const child = launchFixture({ PATH: process.env.PATH ?? "" }, {}, [
+  const child = launchFixture({}, [
     "-e",
     'process.stdout.write(\'{"type":"result"}\\n\'); setInterval(() => {}, 1000);',
   ]);

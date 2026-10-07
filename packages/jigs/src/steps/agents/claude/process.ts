@@ -2,7 +2,6 @@ import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
 import type { Options, SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
-import { processEnv } from "../../../config/factory-context.ts";
 import { resolveClaudeExecutable } from "../shared/executables.ts";
 import { groupReaper, OWN_GROUP } from "../shared/process-group.ts";
 
@@ -23,7 +22,7 @@ interface ClaudeLaunch {
 
 function spawnClaudeCode(
   options: SpawnOptions,
-  env: Record<string, string>,
+  env: NodeJS.ProcessEnv,
   owner: string,
   cancel: AbortSignal | undefined,
 ): ClaudeLaunch {
@@ -201,7 +200,6 @@ export interface ClaudeLaunchOptions {
   signal?: AbortSignal;
   /** Names the launch in stop diagnostics, such as `Claude Code for run wrun_123`. */
   owner?: string;
-  host?: NodeJS.ProcessEnv;
 }
 
 function exitedWithin(launch: ClaudeLaunch, ms: number): Promise<boolean> {
@@ -215,31 +213,17 @@ function exitedWithin(launch: ClaudeLaunch, ms: number): Promise<boolean> {
   });
 }
 
-// The SDK adds its own variables to the environment it is given, so the launch
-// hook rebuilds it from the step's own. What the SDK added, the keys the host
-// does not have, is kept; the SDK also writes its version marker into the
-// host, so that prefix is kept by name.
-export function claudeProcessSpawner(
-  env: Record<string, string>,
-  options: ClaudeLaunchOptions = {},
-): ClaudeProcessSpawner {
-  const { signal, owner = "Claude Code", host = processEnv() } = options;
+// Given `env`, the SDK builds the child's environment from it alone, adding
+// only its own markers, so a host variable the step did not allow never
+// reaches Claude Code.
+export function claudeProcessSpawner(options: ClaudeLaunchOptions = {}): ClaudeProcessSpawner {
+  const { signal, owner = "Claude Code" } = options;
   const live = new Set<ClaudeLaunch>();
   const spawnHook = (spawnOptions: SpawnOptions): SpawnedProcess => {
-    const sdkAdded = Object.entries(spawnOptions.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined &&
-        !(entry[0] in env) &&
-        (!(entry[0] in host) || entry[0].startsWith("CLAUDE_AGENT_SDK_")),
-    );
     const launch = spawnClaudeCode(
       spawnOptions,
-      {
-        ...Object.fromEntries(sdkAdded),
-        ...env,
-        // Replaces any inherited parent-session marker.
-        CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
-      },
+      // Replaces any inherited parent-session marker.
+      { ...spawnOptions.env, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" },
       owner,
       signal,
     );
@@ -261,27 +245,19 @@ export function claudeProcessSpawner(
 
 /**
  * Claude Agent SDK options for one step: the step's environment, the installed `claude`, and a
- * launch hook that runs Claude in its own process group. When `signal` aborts, the query is
- * aborted and the group stopped. Call the hook's `close` once the query is done.
+ * launch hook that runs Claude in its own process group and stops that group when `signal`
+ * aborts. Call the hook's `close` once the query is done.
  */
 export function claudeStepSettings(
-  options: Options & { env: Record<string, string> } & Omit<ClaudeLaunchOptions, "host">,
+  options: Options & { env: Record<string, string> } & ClaudeLaunchOptions,
 ): Options & { spawnClaudeCodeProcess: ClaudeProcessSpawner } {
   const { signal, owner, ...settings } = options;
   return {
     ...settings,
-    ...(signal === undefined ? {} : { abortController: abortControllerFor(signal) }),
     pathToClaudeCodeExecutable: settings.pathToClaudeCodeExecutable ?? resolveClaudeExecutable(),
-    spawnClaudeCodeProcess: claudeProcessSpawner(settings.env, {
+    spawnClaudeCodeProcess: claudeProcessSpawner({
       ...(signal === undefined ? {} : { signal }),
       ...(owner === undefined ? {} : { owner }),
     }),
   };
-}
-
-function abortControllerFor(signal: AbortSignal): AbortController {
-  const controller = new AbortController();
-  if (signal.aborted) controller.abort(signal.reason);
-  else signal.addEventListener("abort", () => controller.abort(signal.reason), { once: true });
-  return controller;
 }

@@ -10,20 +10,29 @@ function blocks(content: unknown): Block[] {
     : [];
 }
 
-function resultText(content: unknown): unknown {
-  const parts = blocks(content);
-  if (parts.length === 0 || parts.some((part) => part.type !== "text")) return content;
-  return parts.map((part) => part.text).join("\n");
+// A tool result's content is a string or content blocks; blocks other than text, such as an
+// image, show as their type.
+function resultText(content: unknown): string {
+  if (typeof content === "string") return content;
+  return blocks(content)
+    .map((block) =>
+      block.type === "text" && typeof block.text === "string" ? block.text : `[${block.type}]`,
+    )
+    .join("\n");
 }
 
 /** Map Claude Code's messages to step-stream parts, naming each tool result after its call. */
 export function claudeStreamParts(): (message: SDKMessage) => Generator<AgentSourcePart> {
   const toolNames = new Map<string, string>();
+  // Each text block is whole, and the step stream joins adjacent text, so blocks
+  // in a row need their own separator.
+  let afterText = false;
   return function* (message) {
     if (message.type === "assistant") {
       for (const block of blocks(message.message.content)) {
-        if (block.type === "text" && typeof block.text === "string") {
-          yield { type: "text-delta", text: block.text };
+        const isText = block.type === "text" && typeof block.text === "string";
+        if (isText) {
+          yield { type: "text-delta", text: `${afterText ? "\n\n" : ""}${block.text}` };
         } else if (block.type === "thinking" && typeof block.thinking === "string") {
           yield { type: "reasoning-delta", text: block.thinking };
         } else if (typeof block.id === "string" && typeof block.name === "string") {
@@ -35,11 +44,13 @@ export function claudeStreamParts(): (message: SDKMessage) => Generator<AgentSou
             input: block.input,
           };
         }
+        afterText = isText;
       }
     }
     if (message.type === "user") {
       for (const block of blocks(message.message.content)) {
         if (block.type !== "tool_result" || typeof block.tool_use_id !== "string") continue;
+        afterText = false;
         const call = {
           toolCallId: block.tool_use_id,
           toolName: toolNames.get(block.tool_use_id) ?? "unknown",
@@ -51,18 +62,6 @@ export function claudeStreamParts(): (message: SDKMessage) => Generator<AgentSou
       }
     }
   };
-}
-
-// The text itself, or the last fenced block in it, when it parses as a JSON object.
-function jsonObjectIn(text: string): unknown {
-  const fenced = [...text.matchAll(/```(?:json)?\s*\n?([\s\S]*?)```/gi)].map((match) => match[1]);
-  for (const candidate of [text, ...fenced.reverse()]) {
-    try {
-      const parsed: unknown = JSON.parse(candidate?.trim() ?? "");
-      if (typeof parsed === "object" && parsed !== null) return parsed;
-    } catch {}
-  }
-  return undefined;
 }
 
 /**
@@ -87,12 +86,9 @@ export function claudeGeneration(
   }
   const providerMetadata = { claude: { sessionId: result.session_id } };
   if (!structured) return { text: result.result, providerMetadata };
-  // Claude Code can fall back to prose for a schema it cannot enforce.
-  const output = result.structured_output ?? jsonObjectIn(result.result);
+  const output = result.structured_output;
   if (output === undefined) {
-    throw new Error(
-      "Claude Code returned no structured output, and its reply holds no JSON object",
-    );
+    throw new Error("Claude Code returned no structured output for the requested schema");
   }
   return { text: JSON.stringify(output), output, providerMetadata };
 }

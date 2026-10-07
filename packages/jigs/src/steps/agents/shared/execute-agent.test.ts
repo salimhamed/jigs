@@ -2205,34 +2205,6 @@ test("cancelling a run mid-Pi aborts it, cleans up, and fails the step fatally",
   expect(existsSync(captured.piOptions?.env.PI_CODING_AGENT_DIR ?? "")).toBe(false);
 });
 
-test("a Claude run and ask pass the cancellation signal to the SDK", async () => {
-  const { deps, captured } = makeDeps();
-
-  await agentStep(
-    buildAgentRequest({
-      harness: harnesses.claude({ model: "sonnet" }),
-      cwd: worktree,
-      prompt: "go",
-    }),
-    { workflowRunId: "run-claude-signal" },
-    deps,
-  );
-  const runSignal = claudeOptionsOf(captured).abortController?.signal;
-  await agentStep(
-    buildAskAgentRequest({ harness: harnesses.claude({ model: "sonnet" }), prompt: "judge" }),
-    { workflowRunId: "run-claude-signal" },
-    deps,
-  );
-
-  const askSignal = claudeOptionsOf(captured).abortController?.signal;
-
-  expect(runSignal).toBeInstanceOf(AbortSignal);
-  expect(askSignal).toBeInstanceOf(AbortSignal);
-  expect(askSignal).not.toBe(runSignal);
-  expect(runSignal?.aborted).toBe(false);
-  expect(askSignal?.aborted).toBe(false);
-});
-
 test("cancelling a run mid-stream aborts the provider call and fails the step fatally", async () => {
   const run = cancellableRun();
   const model = new MockLanguageModelV4({
