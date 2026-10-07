@@ -24,15 +24,15 @@ export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> }
  * ```ts
  * import { harnesses } from "@jigs-ai/jigs";
  *
- * // The server reads PAGERDUTY_USER_API_KEY; its value comes from the service's PD_USER_TOKEN.
- * const triager = harnesses.claude({
+ * // The server reads BRAVE_API_KEY; its value comes from the service's SEARCH_API_KEY.
+ * const researcher = harnesses.claude({
  *   model: "opus",
  *   mcpServers: {
- *     pagerduty: {
- *       command: "uvx",
- *       args: ["pagerduty-mcp"],
- *       env: { PAGERDUTY_USER_API_KEY: "PD_USER_TOKEN" },
- *       probe: { tool: "get_user_data" },
+ *     search: {
+ *       command: "npx",
+ *       args: ["-y", "@modelcontextprotocol/server-brave-search"],
+ *       env: { BRAVE_API_KEY: "SEARCH_API_KEY" },
+ *       probe: { tool: "brave_web_search", arguments: { query: "jigs", count: 1 } },
  *     },
  *   },
  * });
