@@ -359,8 +359,8 @@ function SlackApp({
       <section className="space-y-2">
         <h2 className="text-lg font-semibold">In Slack</h2>
         <p className="text-sm">
-          In the app's settings at api.slack.com/apps, leave <strong>Socket Mode</strong> off, then
-          set:
+          In the app's settings at api.slack.com/apps, make sure <strong>Socket Mode</strong> is
+          off, or Slack never sends events to the Request URL. Then set:
         </p>
         <ul className="space-y-1 text-sm">
           <Setting label="Request URL" value={app.requestUrl} />
@@ -436,7 +436,8 @@ function SlackApp({
         {isAdmin && (
           <>
             <p className="text-sm text-zinc-500">
-              Install the app again after changing its scopes.
+              Install the app again after changing its scopes, here rather than from Slack's
+              reinstall banner, so the hub gets the new token.
             </p>
             <a href={app.installUrl} className={button}>
               <Download className="size-4" />
