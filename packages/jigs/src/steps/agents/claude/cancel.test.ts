@@ -13,7 +13,7 @@ import { claudeProcessSpawner } from "./process.ts";
 
 const skipOnWindows = process.platform === "win32";
 
-// Speaks just enough of Claude Code's stream-json protocol for the provider.
+// Speaks just enough of Claude Code's stream-json protocol for the SDK.
 // `hang` starts a child that ignores SIGTERM and never answers the turn;
 // `linger` answers, then leaves such a child behind when it exits; `escape`
 // answers after starting a child in a new session that holds its stdout.

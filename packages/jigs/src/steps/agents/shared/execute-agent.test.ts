@@ -1,8 +1,8 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
+import type { Options as ClaudeOptions, SDKMessage } from "@anthropic-ai/claude-agent-sdk";
 import { generateText, type TextStreamPart, type ToolSet } from "ai";
 import { convertArrayToReadableStream, MockLanguageModelV4 } from "ai/test";
-import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import type { CodexAppServerProvider, CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { afterAll, afterEach, beforeAll, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
@@ -20,6 +20,7 @@ import {
 } from "../../../workflow/agents/plan.ts";
 import type { AgentResult } from "../../../workflow/agents/result.ts";
 import { createClaudeDriver } from "../claude/driver.ts";
+import { type ClaudeQueryCall, claudeResult, fakeClaudeQuery } from "../claude/test-fixtures.ts";
 import { createCodexDriver } from "../codex/driver.ts";
 import { createPiDriver, type PiDriverDependencies } from "../pi/driver.ts";
 import { planPiModel } from "../pi/model.ts";
@@ -30,20 +31,6 @@ import { type ExecutionSeams, executionSeams } from "./seams.ts";
 import type { AgentStreamPart, StepStream } from "./step-stream.ts";
 import { cancellableRun, makeTmpDir, removeTmpDir, runningRunStatus } from "./test-fixtures.ts";
 
-// The Claude driver wraps the model it opens, so its settings are read where
-// the driver builds them.
-const claudeSettings = vi.hoisted(() => [] as ClaudeCodeSettings[]);
-vi.mock("ai-sdk-provider-claude-code", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai-sdk-provider-claude-code")>();
-  return {
-    ...actual,
-    claudeCode: (modelId: string, settings: ClaudeCodeSettings) => {
-      claudeSettings.push(settings);
-      return actual.claudeCode(modelId, settings);
-    },
-  };
-});
-
 // The settings look for the CLI eagerly, so these tests would need a codex
 // installed. Claude's half is stubbed below, through JIGS_CLAUDE_EXECUTABLE.
 vi.mock("./executables.ts", async (importOriginal) => ({
@@ -52,7 +39,6 @@ vi.mock("./executables.ts", async (importOriginal) => ({
 }));
 
 let tmp: string;
-// The claude provider validates cwd existence at model construction.
 let worktree: string;
 const savedClaudeExecutable = process.env.JIGS_CLAUDE_EXECUTABLE;
 // The agent step takes a lock under the jigs data dir; nothing here may write
@@ -76,7 +62,6 @@ afterAll(() => {
   else process.env.XDG_DATA_HOME = savedDataHome;
 });
 afterEach(() => {
-  claudeSettings.length = 0;
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
   vi.unstubAllEnvs();
@@ -86,6 +71,7 @@ inTestFactory();
 
 type Captured = {
   options?: Parameters<ExecutionSeams["generateText"]>[0];
+  claude: ClaudeQueryCall[];
   codexModel?: string;
   codexSettings?: CodexAppServerSettings;
   codexCall?: MockLanguageModelV4["doGenerateCalls"][number];
@@ -103,8 +89,18 @@ function makeDeps(
   deps: ExecutionSeams;
   captured: Captured;
   piDeps: PiDriverDependencies;
+  replyAsClaude(reply: (call: ClaudeQueryCall) => AsyncIterable<SDKMessage>): void;
 } {
-  const captured: Captured = { homeRunIds: [] };
+  const sessionId = generation.providerMetadata?.claude?.sessionId;
+  let claudeReply = (_call: ClaudeQueryCall): AsyncIterable<SDKMessage> | SDKMessage[] => [
+    claudeResult({
+      result: generation.text ?? "done",
+      ...(sessionId === undefined ? {} : { session_id: sessionId }),
+      ...(generation.output === undefined ? {} : { structured_output: generation.output }),
+    }),
+  ];
+  const claudeQuery = fakeClaudeQuery((call) => claudeReply(call));
+  const captured: Captured = { homeRunIds: [], claude: claudeQuery.calls };
   const generateText: ExecutionSeams["generateText"] = async (options) => {
     captured.options = options;
     return { text: "done", ...generation };
@@ -140,7 +136,11 @@ function makeDeps(
   };
   const testDrivers = {
     ...drivers,
-    claude: createClaudeDriver({ sessionMessages: async () => [{ type: "user" }] }),
+    claude: createClaudeDriver({
+      query: claudeQuery,
+      sessionMessages: async () => [{ type: "user" }],
+      openStepStream: () => deps.openStepStream(),
+    }),
     codex: createCodexDriver({
       prepareCodexHome: async (runId) => {
         captured.homeRunIds.push(runId);
@@ -199,7 +199,14 @@ function makeDeps(
     jitFailures: async () => undefined,
     runStatus: runningRunStatus,
   };
-  return { deps, captured, piDeps };
+  return {
+    deps,
+    captured,
+    piDeps,
+    replyAsClaude: (reply) => {
+      claudeReply = reply;
+    },
+  };
 }
 
 function streamOf(
@@ -241,10 +248,21 @@ async function agentStep(
   return result;
 }
 
-function claudeSettingsOf(): ClaudeCodeSettings {
-  const settings = claudeSettings.at(-1);
-  if (settings === undefined) throw new Error("no claude settings captured");
-  return settings;
+function lastClaudeCall(captured: Captured): ClaudeQueryCall {
+  const call = captured.claude.at(-1);
+  if (call === undefined) throw new Error("no Claude query captured");
+  return call;
+}
+
+function claudeOptionsOf(captured: Captured): ClaudeOptions {
+  return lastClaudeCall(captured).options;
+}
+
+function failingClaude(error: Error): AsyncIterable<SDKMessage> {
+  return (async function* () {
+    yield* [];
+    throw error;
+  })();
 }
 
 const verdict = z.object({ ok: z.boolean() });
@@ -284,7 +302,8 @@ test("claude agent step hydrates from wire config with the harness invariants fo
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf();
+  const settings = claudeOptionsOf(captured);
+  expect(settings.model).toBe("sonnet");
   expect(settings.cwd).toBe(worktree);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.settingSources).toEqual(["project"]);
@@ -295,7 +314,8 @@ test("claude agent step hydrates from wire config with the harness invariants fo
   });
   expect(JSON.stringify(wire)).not.toContain("secret");
   expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
-  expect(captured.options?.system).toBeUndefined();
+  expect(settings.pathToClaudeCodeExecutable).toBe("/fake/claude");
+  expect(lastClaudeCall(captured).prompt).toBe("implement it");
   expect(captured.homeRunIds).toEqual([]);
 });
 
@@ -382,8 +402,11 @@ test("a server's disabled tools reach Claude as disallowed MCP tools and Codex p
     { workflowRunId: "run-disabled-claude" },
     claude.deps,
   );
-  expect(claudeSettingsOf().disallowedTools).toEqual(["WebFetch", "mcp__pd__get_user_data"]);
-  expect(claudeSettingsOf().mcpServers?.pd).not.toHaveProperty("disabledTools");
+  expect(claudeOptionsOf(claude.captured).disallowedTools).toEqual([
+    "WebFetch",
+    "mcp__pd__get_user_data",
+  ]);
+  expect(claudeOptionsOf(claude.captured).mcpServers?.pd).not.toHaveProperty("disabledTools");
 
   const codex = makeDeps();
   await agentStep(
@@ -480,7 +503,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
     { workflowRunId: "run-1" },
     claudeRun.deps,
   );
-  expect("effort" in claudeSettingsOf()).toBe(false);
+  expect("effort" in claudeOptionsOf(claudeRun.captured)).toBe(false);
 
   const codexRun = makeDeps();
   await agentStep(
@@ -495,7 +518,7 @@ test("omitting effort leaves both providers' settings unset", async () => {
   expect(codexRun.captured.codexSettings).not.toHaveProperty("effort");
 });
 
-test("a declared output schema becomes an AI SDK output spec and the raw output is returned", async () => {
+test("a declared output schema becomes Claude's output format and the raw output is returned", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
@@ -515,11 +538,14 @@ test("a declared output schema becomes an AI SDK output spec and the raw output 
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(captured.options?.output).toBeDefined();
-  expect(result.output).toEqual({ ok: true });
+  expect(claudeOptionsOf(captured).outputFormat).toEqual({
+    type: "json_schema",
+    schema: wire.outputSchema,
+  });
+  expect(result).toMatchObject({ text: '{"ok":true}', output: { ok: true } });
 });
 
-test("without an output schema no output spec is passed and output is undefined", async () => {
+test("without an output schema no output format is passed and output is undefined", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
@@ -529,7 +555,7 @@ test("without an output schema no output spec is passed and output is undefined"
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(captured.options?.output).toBeUndefined();
+  expect(claudeOptionsOf(captured).outputFormat).toBeUndefined();
   expect(result.output).toBeUndefined();
 });
 
@@ -540,7 +566,7 @@ test("the Claude session reference is captured", async () => {
     prompt: "go",
   });
   const { deps } = makeDeps({
-    providerMetadata: { "claude-code": { sessionId: "s-42" } },
+    providerMetadata: { claude: { sessionId: "s-42" } },
   });
 
   const result = await agentStep(wire, { workflowRunId: "run-1" }, deps);
@@ -567,7 +593,7 @@ test("the Codex threadId is captured, and a missing session reference is omitted
   expect("session" in sessionless).toBe(false);
 });
 
-test("a claude resume rides on the settings' resume field", async () => {
+test("a claude resume rides on the query's resume option", async () => {
   const wire = buildAgentRequest({
     harness: harnesses.claude({ model: "sonnet" }),
     cwd: worktree,
@@ -578,8 +604,8 @@ test("a claude resume rides on the settings' resume field", async () => {
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(claudeSettingsOf().resume).toBe("s-42");
-  expect(captured.options?.providerOptions).toBeUndefined();
+  expect(claudeOptionsOf(captured).resume).toBe("s-42");
+  expect(claudeOptionsOf(captured).sessionId).toBeUndefined();
 });
 
 test("a Claude transcript with messages but no summary resumes", async () => {
@@ -589,9 +615,14 @@ test("a Claude transcript with messages but no summary resumes", async () => {
     prompt: "answer the review",
     resume: { harness: "claude", id: "summaryless-session", descriptor: "" },
   });
-  const { deps } = makeDeps();
+  const { deps, captured } = makeDeps();
   const summaryless = createClaudeDriver({
+    query: fakeClaudeQuery((call) => {
+      captured.claude.push(call);
+      return [claudeResult()];
+    }),
     sessionMessages: async () => [{ type: "user", message: "interrupted first turn" }],
+    openStepStream: () => undefined,
   });
   const resolveDriver = deps.resolveDriver;
   deps.resolveDriver = ((kind) =>
@@ -599,7 +630,7 @@ test("a Claude transcript with messages but no summary resumes", async () => {
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  expect(claudeSettingsOf().resume).toBe("summaryless-session");
+  expect(claudeOptionsOf(captured).resume).toBe("summaryless-session");
 });
 
 test("a missing Claude transcript reports resumeFailed before launch", async () => {
@@ -610,7 +641,11 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
     resume: { harness: "claude", id: "missing-session", descriptor: "" },
   });
   const { deps, captured } = makeDeps();
-  const missing = createClaudeDriver({ sessionMessages: async () => [] });
+  const missing = createClaudeDriver({
+    query: fakeClaudeQuery(),
+    sessionMessages: async () => [],
+    openStepStream: () => undefined,
+  });
   const resolveDriver = deps.resolveDriver;
   deps.resolveDriver = ((kind) =>
     kind === "claude" ? missing : resolveDriver(kind)) as DriverResolver;
@@ -620,7 +655,7 @@ test("a missing Claude transcript reports resumeFailed before launch", async () 
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("Claude session missing-session is missing"),
   });
-  expect(captured.options).toBeUndefined();
+  expect(captured.claude).toEqual([]);
 });
 
 test("a codex resume rides on the call's providerOptions['codex-app-server'].threadId", async () => {
@@ -662,7 +697,7 @@ test("a session reference recorded on the other harness reports resumeFailed, no
   expect(result).toEqual({
     resumeFailed: expect.stringContaining("recorded on the codex harness"),
   });
-  expect(captured.options).toBeUndefined();
+  expect(captured.claude).toEqual([]);
   expect(jitFailures).not.toHaveBeenCalled();
 });
 
@@ -672,11 +707,11 @@ test("Claude steps always run with bypass", async () => {
     cwd: worktree,
     prompt: "judge it",
   });
-  const { deps } = makeDeps();
+  const { deps, captured } = makeDeps();
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf();
+  const settings = claudeOptionsOf(captured);
   expect(settings.permissionMode).toBe("bypassPermissions");
   expect(settings.allowDangerouslySkipPermissions).toBe(true);
 });
@@ -705,8 +740,8 @@ test("a Claude execution failure during resume still throws", async () => {
     prompt: "answer the review",
     resume: { harness: "claude", id: "s-42", descriptor: "" },
   });
-  const { deps } = makeDeps();
-  deps.streamText = () => throwingStream(new Error("Claude stopped after launch"));
+  const { deps, replyAsClaude } = makeDeps();
+  replyAsClaude(() => failingClaude(new Error("Claude stopped after launch")));
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "Claude stopped after launch",
@@ -719,8 +754,8 @@ test("a failure with no resume to blame still throws", async () => {
     cwd: worktree,
     prompt: "go",
   });
-  const { deps } = makeDeps();
-  deps.streamText = () => throwingStream(new Error("the harness fell over"));
+  const { deps, replyAsClaude } = makeDeps();
+  replyAsClaude(() => failingClaude(new Error("the harness fell over")));
 
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, deps)).rejects.toThrow(
     "the harness fell over",
@@ -735,15 +770,14 @@ test("a second agent in the same worktree is refused while the first is running"
   });
   let releaseFirst = () => {};
   const first = makeDeps();
-  first.deps.streamText = () => ({
-    ...streamOf({ text: "done" }),
-    fullStream: (async function* () {
-      yield* [];
+  first.replyAsClaude(() =>
+    (async function* () {
       await new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
+      yield claudeResult();
     })(),
-  });
+  );
 
   const inFlight = agentStep(wire, { workflowRunId: "run-1" }, first.deps);
   // Yield so the first call is inside the lock before the second tries.
@@ -753,7 +787,7 @@ test("a second agent in the same worktree is refused while the first is running"
   await expect(executeAgentWith(wire, { workflowRunId: "run-1" }, second.deps)).rejects.toThrow(
     /an agent is already running in .* refusing to start a second one/,
   );
-  expect(second.captured.options).toBeUndefined();
+  expect(second.captured.claude).toEqual([]);
 
   releaseFirst();
   await inFlight;
@@ -761,7 +795,7 @@ test("a second agent in the same worktree is refused while the first is running"
   // Released, so the worktree takes the next agent step normally.
   const after = makeDeps();
   await agentStep(wire, { workflowRunId: "run-1" }, after.deps);
-  expect(after.captured.options?.prompt).toBe("implement it");
+  expect(lastClaudeCall(after.captured).prompt).toBe("implement it");
 });
 
 test("a busy worktree does not block an agent in another one", async () => {
@@ -769,15 +803,14 @@ test("a busy worktree does not block an agent in another one", async () => {
   mkdirSync(other, { recursive: true });
   let releaseFirst = () => {};
   const first = makeDeps();
-  first.deps.streamText = () => ({
-    ...streamOf({ text: "done" }),
-    fullStream: (async function* () {
-      yield* [];
+  first.replyAsClaude(() =>
+    (async function* () {
       await new Promise<void>((resolve) => {
         releaseFirst = resolve;
       });
+      yield claudeResult();
     })(),
-  });
+  );
 
   const inFlight = agentStep(
     buildAgentRequest({
@@ -800,7 +833,7 @@ test("a busy worktree does not block an agent in another one", async () => {
     { workflowRunId: "run-1" },
     elsewhere.deps,
   );
-  expect(elsewhere.captured.options?.prompt).toBe("implement it elsewhere");
+  expect(lastClaudeCall(elsewhere.captured).prompt).toBe("implement it elsewhere");
 
   releaseFirst();
   await inFlight;
@@ -814,11 +847,11 @@ test("the step env is built, not copied: no API credentials, process.env untouch
       cwd: worktree,
       prompt: "go",
     });
-    const { deps } = makeDeps();
+    const { deps, captured } = makeDeps();
 
     await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-    expect(claudeSettingsOf().env?.ANTHROPIC_API_KEY).toBeUndefined();
+    expect(claudeOptionsOf(captured).env?.ANTHROPIC_API_KEY).toBeUndefined();
     expect(process.env.ANTHROPIC_API_KEY).toBe("sk-test-scrub");
   } finally {
     delete process.env.ANTHROPIC_API_KEY;
@@ -853,7 +886,7 @@ test("a failed JIT check returns the marker before the harness is reached", asyn
   );
 
   expect(result).toEqual({ jitFailure: failures });
-  expect(captured.options).toBeUndefined();
+  expect(captured.claude).toEqual([]);
 });
 
 test("descriptor checks run by phase even when an installation check has the same id", async () => {
@@ -899,7 +932,7 @@ test("descriptor checks run by phase even when an installation check has the sam
   );
   expect(requestProbe).toHaveBeenCalledOnce();
   expect(jitFailures).not.toHaveBeenCalled();
-  expect(captured.options).toBeUndefined();
+  expect(captured.claude).toEqual([]);
 });
 
 test("claude ask step disables built-in tools, sees no MCP universe and loads no filesystem settings", async () => {
@@ -912,13 +945,15 @@ test("claude ask step disables built-in tools, sees no MCP universe and loads no
 
   await agentStep(wire, { workflowRunId: "run-1" }, deps);
 
-  const settings = claudeSettingsOf();
+  const settings = claudeOptionsOf(captured);
+  expect(settings.model).toBe("sonnet");
   expect(settings.tools).toEqual([]);
   expect(settings.strictMcpConfig).toBe(true);
   expect(settings.mcpServers).toEqual({});
   expect(settings.settingSources).toEqual([]);
   expect(settings.cwd).toBeUndefined();
-  expect(captured.options?.system).toBe("be terse");
+  expect(settings.systemPrompt).toBeUndefined();
+  expect(lastClaudeCall(captured).prompt).toBe("be terse\n\nsummarize");
 });
 
 test("askAgent rejects Codex, a Pi allowlist and a model source before any check or launch", async () => {
@@ -944,7 +979,7 @@ test("askAgent rejects Codex, a Pi allowlist and a model source before any check
   expect(descriptorChecks).not.toHaveBeenCalled();
   expect(captured.homeRunIds).toEqual([]);
   expect(captured.piHome).toBeUndefined();
-  expect(captured.options).toBeUndefined();
+  expect(captured.claude).toEqual([]);
 });
 
 test("pi ask executes its nested model with isolated discovery and returns executor output", async () => {
@@ -1301,7 +1336,7 @@ test.each([
     });
     expect(run.captured.piHome).toBeUndefined();
     expect(run.captured.codexSettings).toBeUndefined();
-    expect(run.captured.options).toBeUndefined();
+    expect(run.captured.claude).toEqual([]);
   },
 );
 
@@ -1601,15 +1636,14 @@ test("the JIT checks and the harness get the same environment, built from the ba
     ...createClaudeDriver(),
     descriptorChecks: () => [],
     envAllowlist: () => ["DRIVER_VAR"],
-    open: async (_target: unknown, context: { env: Record<string, string> }) => {
+    run: async (_request: unknown, context: { env: Record<string, string> }) => {
       runEnv = context.env;
-      return { model: new MockLanguageModelV4(), close: async () => {} };
+      return { text: "done" };
     },
   };
   const deps: ExecutionSeams = {
     ...executionSeams,
     runStatus: runningRunStatus,
-    streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => ["FACTORY_VAR"],
     jitFailures: async (_wire, env) => {
@@ -1644,15 +1678,14 @@ test("only an agent whose harness sets github gets its GitHub environment, and i
   const driver = {
     ...createClaudeDriver(),
     descriptorChecks: () => [],
-    open: async (_target: unknown, context: { env: Record<string, string> }) => {
+    run: async (_request: unknown, context: { env: Record<string, string> }) => {
       envs.push(context.env);
-      return { model: new MockLanguageModelV4(), close: async () => {} };
+      return { text: "done" };
     },
   };
   const deps: ExecutionSeams = {
     ...executionSeams,
     runStatus: runningRunStatus,
-    streamText: () => streamOf({ text: "done" }),
     resolveDriver: (() => driver) as unknown as DriverResolver,
     factoryEnv: () => [],
     accessEnv: async (harness): Promise<Record<string, string>> =>
@@ -1695,10 +1728,11 @@ const usage = {
 };
 
 // The real AI SDK streamText against a mock provider model, so the result and
-// error contract is the SDK's own, not a fake's.
+// error contract is the SDK's own, not a fake's. Codex is the harness with a
+// provider model.
 function sdkSeams(model: MockLanguageModelV4, stream?: StepStream): ExecutionSeams {
   const driver = {
-    ...createClaudeDriver(),
+    ...createCodexDriver(),
     descriptorChecks: () => [],
     open: async () => ({ model, close: async () => {} }),
   };
@@ -1718,7 +1752,7 @@ function recordingStream(): { stream: StepStream; parts: AgentStreamPart[] } {
   return { stream: { attempt: 1, writable }, parts };
 }
 
-test("a run streams its output and still returns the text, output and session", async () => {
+test("a provider-model run streams its output and still returns the text, output and session", async () => {
   const model = new MockLanguageModelV4({
     doStream: async () => ({
       stream: convertArrayToReadableStream<ModelStreamPart>([
@@ -1731,14 +1765,14 @@ test("a run streams its output and still returns the text, output and session", 
           type: "finish",
           finishReason: { unified: "stop", raw: undefined },
           usage,
-          providerMetadata: { "claude-code": { sessionId: "s-9" } },
+          providerMetadata: { "codex-app-server": { threadId: "s-9" } },
         },
       ]),
     }),
   });
   const { stream, parts } = recordingStream();
   const wire = buildAgentRequest({
-    harness: harnesses.claude({ model: "sonnet" }),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "go",
     output: verdict,
@@ -1750,10 +1784,10 @@ test("a run streams its output and still returns the text, output and session", 
   expect(result).toMatchObject({
     text: '{"ok":true}',
     output: { ok: true },
-    session: { harness: "claude", id: "s-9" },
+    session: { harness: "codex", id: "s-9" },
   });
   expect(parts).toEqual([
-    { type: "attempt-start", attempt: 1, harness: "claude", cwd: worktree, resume: false },
+    { type: "attempt-start", attempt: 1, harness: "codex", cwd: worktree, resume: false },
     { type: "text", text: '{"ok":true}' },
     { type: "finish", finishReason: "stop" },
   ]);
@@ -1762,14 +1796,14 @@ test("a run streams its output and still returns the text, output and session", 
 
 test("a provider error reaches the caller as the same error generateText raises", async () => {
   const wire = buildAgentRequest({
-    harness: harnesses.claude({ model: "sonnet" }),
+    harness: harnesses.codex({ model: "gpt-5.5" }),
     cwd: worktree,
     prompt: "go",
   });
   const run = (model: MockLanguageModelV4) =>
     executeAgentWith(wire, { workflowRunId: "run-error" }, sdkSeams(model));
 
-  const refused = new Error("claude exited with code 1");
+  const refused = new Error("app-server exited with code 1");
   const failing = new MockLanguageModelV4({
     doGenerate: async () => {
       throw refused;
@@ -1812,6 +1846,87 @@ test("a provider error reaches the caller as the same error generateText raises"
       }),
     ),
   ).rejects.toBe(broken);
+});
+
+test("a Claude run streams its messages and still returns the text, output and session", async () => {
+  const { stream, parts } = recordingStream();
+  const { deps, replyAsClaude } = makeDeps();
+  deps.openStepStream = () => stream;
+  replyAsClaude(() =>
+    (async function* () {
+      yield {
+        type: "assistant",
+        parent_tool_use_id: null,
+        message: {
+          content: [
+            { type: "text", text: "Checking." },
+            { type: "tool_use", id: "t1", name: "Read", input: { file_path: "a.ts" } },
+          ],
+        },
+      } as unknown as SDKMessage;
+      yield {
+        type: "user",
+        parent_tool_use_id: null,
+        message: { content: [{ type: "tool_result", tool_use_id: "t1", content: "ok" }] },
+      } as unknown as SDKMessage;
+      yield claudeResult({ result: "", structured_output: { ok: true }, session_id: "s-9" });
+    })(),
+  );
+  const wire = buildAgentRequest({
+    harness: harnesses.claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "go",
+    output: verdict,
+  });
+
+  const result = await agentStep(wire, { workflowRunId: "run-claude-stream" }, deps);
+  await new Promise((resolve) => setTimeout(resolve, 0));
+
+  expect(result).toMatchObject({
+    text: '{"ok":true}',
+    output: { ok: true },
+    session: { harness: "claude", id: "s-9" },
+  });
+  expect(parts).toEqual([
+    { type: "attempt-start", attempt: 1, harness: "claude", cwd: worktree, resume: false },
+    { type: "text", text: "Checking." },
+    { type: "tool-call", toolCallId: "t1", toolName: "Read", input: '{"file_path":"a.ts"}' },
+    { type: "tool-result", toolCallId: "t1", toolName: "Read", output: "ok", isError: false },
+    { type: "finish", finishReason: "stop" },
+  ]);
+  expect(stream.writable.locked).toBe(false);
+});
+
+test("a failed Claude run ends its stream with the error and still throws it", async () => {
+  const { stream, parts } = recordingStream();
+  const { deps, replyAsClaude } = makeDeps();
+  deps.openStepStream = () => stream;
+  replyAsClaude(() =>
+    (async function* () {
+      yield {
+        type: "result",
+        subtype: "error_max_turns",
+        is_error: true,
+        errors: ["Reached maximum number of turns (1)"],
+        session_id: "s-9",
+      } as unknown as SDKMessage;
+    })(),
+  );
+  const wire = buildAgentRequest({
+    harness: harnesses.claude({ model: "sonnet" }),
+    cwd: worktree,
+    prompt: "go",
+  });
+
+  await expect(executeAgentWith(wire, { workflowRunId: "run-claude-fail" }, deps)).rejects.toThrow(
+    "Reached maximum number of turns (1)",
+  );
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  expect(parts.at(-1)).toEqual({
+    type: "error",
+    message: "Claude Code failed: Reached maximum number of turns (1)",
+  });
+  expect(stream.writable.locked).toBe(false);
 });
 
 test("asks open no step stream, including pi asks", async () => {
@@ -2090,7 +2205,7 @@ test("cancelling a run mid-Pi aborts it, cleans up, and fails the step fatally",
   expect(existsSync(captured.piOptions?.env.PI_CODING_AGENT_DIR ?? "")).toBe(false);
 });
 
-test("a Claude run and ask pass the cancellation signal to the AI SDK", async () => {
+test("a Claude run and ask pass the cancellation signal to the SDK", async () => {
   const { deps, captured } = makeDeps();
 
   await agentStep(
@@ -2102,18 +2217,19 @@ test("a Claude run and ask pass the cancellation signal to the AI SDK", async ()
     { workflowRunId: "run-claude-signal" },
     deps,
   );
-  const runSignal = captured.options?.abortSignal;
+  const runSignal = claudeOptionsOf(captured).abortController?.signal;
   await agentStep(
     buildAskAgentRequest({ harness: harnesses.claude({ model: "sonnet" }), prompt: "judge" }),
     { workflowRunId: "run-claude-signal" },
     deps,
   );
 
-  const askSignal = captured.options?.abortSignal;
+  const askSignal = claudeOptionsOf(captured).abortController?.signal;
 
   expect(runSignal).toBeInstanceOf(AbortSignal);
   expect(askSignal).toBeInstanceOf(AbortSignal);
   expect(askSignal).not.toBe(runSignal);
+  expect(runSignal?.aborted).toBe(false);
   expect(askSignal?.aborted).toBe(false);
 });
 
@@ -2123,18 +2239,18 @@ test("cancelling a run mid-stream aborts the provider call and fails the step fa
     doStream: async ({ abortSignal }) => {
       run.cancel();
       await new Promise((resolve) => abortSignal?.addEventListener("abort", resolve));
-      throw new Error("claude was stopped");
+      throw new Error("app-server was stopped");
     },
   });
   const seams = { ...sdkSeams(model), runStatus: run };
 
   const attempt = executeAgentWith(
     buildAgentRequest({
-      harness: harnesses.claude({ model: "sonnet" }),
+      harness: harnesses.codex({ model: "gpt-5.5" }),
       cwd: worktree,
       prompt: "go",
     }),
-    { workflowRunId: "run-claude-cancelled" },
+    { workflowRunId: "run-provider-cancelled" },
     seams,
   );
 
@@ -2145,17 +2261,17 @@ test("cancelling a run mid-stream aborts the provider call and fails the step fa
 test("a provider error in an uncancelled run leaves the step retryable", async () => {
   const model = new MockLanguageModelV4({
     doStream: async () => {
-      throw new Error("claude exited with code 1");
+      throw new Error("app-server exited with code 1");
     },
   });
 
   const attempt = executeAgentWith(
     buildAgentRequest({
-      harness: harnesses.claude({ model: "sonnet" }),
+      harness: harnesses.codex({ model: "gpt-5.5" }),
       cwd: worktree,
       prompt: "go",
     }),
-    { workflowRunId: "run-claude-failed" },
+    { workflowRunId: "run-provider-failed" },
     { ...sdkSeams(model), runStatus: cancellableRun() },
   );
 
@@ -2163,6 +2279,6 @@ test("a provider error in an uncancelled run leaves the step retryable", async (
     (error) =>
       !(error instanceof RunCancelledError) &&
       !FatalError.is(error) &&
-      String(error).includes("claude exited with code 1"),
+      String(error).includes("app-server exited with code 1"),
   );
 });

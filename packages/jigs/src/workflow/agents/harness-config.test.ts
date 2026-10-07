@@ -197,17 +197,19 @@ const claudePolicyRejected = [
   () => harnesses.claude({ model: "opus", resumeDropsTurn: "m" }),
   // @ts-expect-error extraArgs is Claude policy
   () => harnesses.claude({ model: "opus", extraArgs: {} }),
-  // @ts-expect-error sdkOptions is Claude policy
-  () => harnesses.claude({ model: "opus", sdkOptions: {} }),
+  // @ts-expect-error outputFormat is Claude policy
+  () => harnesses.claude({ model: "opus", outputFormat: { type: "json_schema", schema: {} } }),
   // @ts-expect-error agents is Claude policy
   () => harnesses.claude({ model: "opus", agents: {} }),
   // @ts-expect-error settings is Claude policy
   () => harnesses.claude({ model: "opus", settings: "/etc/claude.json" }),
+  // @ts-expect-error projectConfigRoot is Claude policy
+  () => harnesses.claude({ model: "opus", projectConfigRoot: "/elsewhere" }),
   // @ts-expect-error plugins is Claude policy
   () => harnesses.claude({ model: "opus", plugins: [] }),
   // @ts-expect-error skills takes jigs' folder paths, not Claude Code's skill filter
   () => harnesses.claude({ model: "opus", skills: "all" }),
-  // @ts-expect-error mcpServers takes jigs' shape with a probe, not the provider's
+  // @ts-expect-error mcpServers takes jigs' shape with a probe, not the SDK's
   () => harnesses.claude({ model: "opus", mcpServers: { s: { type: "stdio", command: "x" } } }),
 ];
 const codexPolicyRejected = [
@@ -231,7 +233,7 @@ const codexPolicyRejected = [
   () => harnesses.codex({ model: "gpt-5.5", persistExtendedHistory: true }),
   // @ts-expect-error configOverrides is Codex policy
   () => harnesses.codex({ model: "gpt-5.5", configOverrides: {} }),
-  // @ts-expect-error mcpServers takes jigs' shape with a probe, not the provider's
+  // @ts-expect-error mcpServers takes jigs' shape with a probe, not the SDK's
   () => harnesses.codex({ model: "gpt-5.5", mcpServers: { s: { transport: "stdio" } } }),
 ];
 // Functions cannot cross into a step, so no callback is a descriptor key.
@@ -240,8 +242,8 @@ const functionsRejected = [
   () => harnesses.claude({ model: "opus", stderr: () => {} }),
   // @ts-expect-error a hook is a function, however deep it sits
   () => harnesses.claude({ model: "opus", hooks: { PreToolUse: [{ hooks: [async () => ({})] }] } }),
-  // @ts-expect-error a logger is an object of functions
-  () => harnesses.claude({ model: "opus", logger: false }),
+  // @ts-expect-error a controller is an object of functions
+  () => harnesses.claude({ model: "opus", abortController: new AbortController() }),
   // @ts-expect-error a tool-approval callback is not data
   () => harnesses.claude({ model: "opus", canUseTool: async () => ({ behavior: "allow" }) }),
   // @ts-expect-error a callback is not data
@@ -250,7 +252,7 @@ const functionsRejected = [
   () => harnesses.codex({ model: "gpt-5.5", logger: false }),
 ];
 
-test("a descriptor holds only the provider's data settings outside the policy lists", () => {
+test("a descriptor holds only the SDK's or provider's data settings outside the policy lists", () => {
   const claude: ClaudeHarness = harnesses.claude({
     model: "opus",
     effort: "high",

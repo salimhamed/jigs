@@ -27,8 +27,8 @@ test("extractAgentSession reads the session reference the driver names", () => {
   expect(
     extractAgentSession(
       claude,
-      { "claude-code": { sessionId: "s-42" } },
-      { providerKey: "claude-code", field: "sessionId" },
+      { claude: { sessionId: "s-42" } },
+      { providerKey: "claude", field: "sessionId" },
     ),
   ).toEqual({
     harness: "claude",
@@ -52,7 +52,7 @@ test("extractAgentSession reads the Codex app-server threadId", () => {
 });
 
 test("extractAgentSession is best-effort: absent or malformed metadata yields undefined", () => {
-  const ref = { providerKey: "claude-code", field: "sessionId" };
+  const ref = { providerKey: "claude", field: "sessionId" };
   expect(extractAgentSession(claude, undefined, ref)).toBeUndefined();
   expect(extractAgentSession(claude, {}, ref)).toBeUndefined();
   expect(
@@ -62,10 +62,8 @@ test("extractAgentSession is best-effort: absent or malformed metadata yields un
       { providerKey: "codex-app-server", field: "threadId" },
     ),
   ).toBeUndefined();
-  expect(extractAgentSession(claude, { "claude-code": { sessionId: "" } }, ref)).toBeUndefined();
-  expect(
-    extractAgentSession(claude, { "claude-code": { sessionId: "s" } }, undefined),
-  ).toBeUndefined();
+  expect(extractAgentSession(claude, { claude: { sessionId: "" } }, ref)).toBeUndefined();
+  expect(extractAgentSession(claude, { claude: { sessionId: "s" } }, undefined)).toBeUndefined();
 });
 
 test("describeHarness ignores field order, including a nested model source", () => {

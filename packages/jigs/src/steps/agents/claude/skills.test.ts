@@ -1,29 +1,16 @@
 import { existsSync, mkdirSync, readdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
-import { buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
+import { buildAgentRequest, buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
 import { prepareClaudeSkillsPlugin } from "../shared/skills.ts";
 import { makeTmpDir, removeTmpDir } from "../shared/test-fixtures.ts";
+import type { RunRequest } from "../shared/types.ts";
 import { createClaudeDriver } from "./driver.ts";
+import { claudeResult, fakeClaudeQuery } from "./test-fixtures.ts";
 
 const registry = vi.hoisted(() => ({ recordRunDirectory: vi.fn(async () => {}) }));
 vi.mock("../../runtime/registry.ts", () => registry);
-
-// The Claude driver wraps the model it opens, so its settings are read where
-// the driver builds them.
-const claudeSettings = vi.hoisted(() => [] as ClaudeCodeSettings[]);
-vi.mock("ai-sdk-provider-claude-code", async (importOriginal) => {
-  const actual = await importOriginal<typeof import("ai-sdk-provider-claude-code")>();
-  return {
-    ...actual,
-    claudeCode: (modelId: string, settings: ClaudeCodeSettings) => {
-      claudeSettings.push(settings);
-      return actual.claudeCode(modelId, settings);
-    },
-  };
-});
 
 let tmp: string;
 let worktree: string;
@@ -41,101 +28,102 @@ beforeEach(() => {
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "/fake/claude");
 });
 afterEach(() => {
-  claudeSettings.length = 0;
   vi.unstubAllEnvs();
   removeTmpDir(tmp);
 });
 
+let query = fakeClaudeQuery();
+beforeEach(() => {
+  query = fakeClaudeQuery();
+});
+
 const driver = () =>
   createClaudeDriver({
+    query,
     sessionMessages: async () => [{ type: "user" }],
     prepareSkillsPlugin: async (runId, skills) =>
       prepareClaudeSkillsPlugin(runId, skills, { baseDir: pluginBase }),
+    openStepStream: () => undefined,
   });
 const context = () => ({
   metadata: { workflowRunId: "wrun_skills" },
+  deps: {} as never,
   env: {},
   signal: new AbortController().signal,
 });
-const openedSettings = () => {
-  const settings = claudeSettings.at(-1);
-  if (settings === undefined) throw new Error("no claude settings captured");
-  return settings;
+const queried = () => {
+  const call = query.calls.at(-1);
+  if (call === undefined) throw new Error("no Claude query captured");
+  return call.options;
 };
-const settingsOf = (model: unknown) => (model as { settings: ClaudeCodeSettings }).settings;
 
-test("open loads the declared skills as a private plugin that close removes", async () => {
-  const opened = await driver().open?.(
-    { harness: harnesses.claude({ model: "opus", skills: [skill] }), cwd: worktree },
-    context(),
-  );
-  const settings = openedSettings();
-  const plugin = settings.plugins?.[0];
-  expect(plugin).toMatchObject({ type: "local", skipMcpDiscovery: true });
-  expect(existsSync(path.join(plugin?.path ?? "", "skills", "snowflake", "SKILL.md"))).toBe(true);
-  expect(settings.settingSources).toEqual(["project"]);
-  expect(settings.strictMcpConfig).toBe(true);
-  expect(settings.skills).toBeUndefined();
+const runRequest = (skills?: string[]) =>
+  buildAgentRequest({
+    harness: harnesses.claude({ model: "opus", ...(skills === undefined ? {} : { skills }) }),
+    cwd: worktree,
+    prompt: "work",
+  }) as RunRequest;
 
-  await opened?.close();
+test("a run loads the declared skills as a private plugin that it removes afterwards", async () => {
+  let loaded = false;
+  query = fakeClaudeQuery(({ options }) => {
+    const plugin = options.plugins?.[0]?.path ?? "";
+    loaded = existsSync(path.join(plugin, "skills", "snowflake", "SKILL.md"));
+    return [claudeResult()];
+  });
+  await driver().run?.(runRequest([skill]), context());
+
+  const options = queried();
+  expect(options.plugins?.[0]).toMatchObject({ type: "local", skipMcpDiscovery: true });
+  expect(loaded).toBe(true);
+  expect(options.settingSources).toEqual(["project"]);
+  expect(options.strictMcpConfig).toBe(true);
+  expect(options.skills).toBeUndefined();
   expect(readdirSync(path.join(pluginBase, "wrun_skills"))).toEqual([]);
 });
 
 test("the plugin lives in a per-run folder recorded as the run's claude-plugins resource", async () => {
   vi.stubEnv("XDG_DATA_HOME", tmp);
   const runFolder = path.join(tmp, "jigs", "claude-plugins", "wrun_skills");
-  const opened = await createClaudeDriver({
+  await createClaudeDriver({
+    query,
     sessionMessages: async () => [{ type: "user" }],
-  }).open?.(
-    { harness: harnesses.claude({ model: "opus", skills: [skill] }), cwd: worktree },
-    context(),
-  );
+    openStepStream: () => undefined,
+  }).run?.(runRequest([skill]), context());
 
   expect(registry.recordRunDirectory).toHaveBeenCalledWith(
     "claude-plugins",
     "wrun_skills",
     runFolder,
   );
-  expect(path.dirname(openedSettings().plugins?.[0]?.path ?? "")).toBe(runFolder);
-  await opened?.close();
+  expect(path.dirname(queried().plugins?.[0]?.path ?? "")).toBe(runFolder);
   expect(readdirSync(runFolder)).toEqual([]);
 });
 
-test("open without skills builds no plugin", async () => {
-  const opened = await driver().open?.(
-    { harness: harnesses.claude({ model: "opus" }), cwd: worktree },
-    context(),
-  );
-  expect(openedSettings().plugins).toBeUndefined();
-  await opened?.close();
+test("a run without skills builds no plugin", async () => {
+  await driver().run?.(runRequest(), context());
+  expect(queried().plugins).toBeUndefined();
   expect(existsSync(pluginBase)).toBe(false);
 });
 
-test("a failed open removes the plugin it built", async () => {
-  await expect(
-    driver().open?.(
-      {
-        harness: harnesses.claude({ model: "opus", skills: [skill] }),
-        cwd: path.join(tmp, "missing"),
-      },
-      context(),
-    ),
-  ).rejects.toThrow();
+test("a failed run removes the plugin it built", async () => {
+  query = fakeClaudeQuery(() => {
+    throw new Error("Claude Code process failed");
+  });
+  await expect(driver().run?.(runRequest([skill]), context())).rejects.toThrow(
+    "Claude Code process failed",
+  );
   expect(readdirSync(path.join(pluginBase, "wrun_skills"))).toEqual([]);
 });
 
 test("ask builds no plugin even when the descriptor declares skills", async () => {
-  const generateText = vi.fn(async ({ model }: { model: unknown }) => {
-    expect(settingsOf(model).plugins).toBeUndefined();
-    return { text: "hi" };
-  });
   await driver().ask?.(
     buildAskAgentRequest({
       harness: harnesses.claude({ model: "opus", skills: [skill] }),
       prompt: "hi",
     }),
-    { ...context(), deps: { generateText, evaluate: vi.fn() } as never },
+    context(),
   );
-  expect(generateText).toHaveBeenCalledOnce();
+  expect(queried().plugins).toBeUndefined();
   expect(existsSync(pluginBase)).toBe(false);
 });

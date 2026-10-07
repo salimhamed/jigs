@@ -1,13 +1,12 @@
 import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { generateText } from "ai";
-import { getErrorMetadata, isAuthenticationError } from "ai-sdk-provider-claude-code";
 import { afterAll, beforeAll, expect, test, vi } from "vitest";
 import { type ClaudeHarness, harnesses } from "../../../workflow/agents/harness-config.ts";
 import { buildAgentRequest, buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
 import { harnessEnv } from "../shared/env.ts";
 import { executionSeams } from "../shared/seams.ts";
 import { makeTmpDir, removeTmpDir } from "../shared/test-fixtures.ts";
+import type { RunRequest } from "../shared/types.ts";
 import { claudeDriver } from "./driver.ts";
 import { claudeProcessSpawner, claudeStepSettings } from "./process.ts";
 
@@ -62,9 +61,9 @@ test("claudeStepSettings preserves caller policy and wires the isolated launcher
   expect(settings.spawnClaudeCodeProcess).toBeTypeOf("function");
 });
 
-test("the real provider launch isolates ask and run and preserves stderr auth classification", async () => {
-  const { ask, open } = claudeDriver;
-  if (ask === undefined || open === undefined) throw new Error("Claude driver is incomplete");
+test("the real SDK launch isolates ask and run and fails with Claude Code's stderr", async () => {
+  const { ask, run } = claudeDriver;
+  if (ask === undefined || run === undefined) throw new Error("Claude driver is incomplete");
 
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", fixture);
   vi.stubEnv("AWS_SECRET_ACCESS_KEY", "synthetic-aws-secret");
@@ -98,7 +97,7 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
     const record = path.join(tmp, `${testCase.name}-env.json`);
     const context = {
       metadata: { workflowRunId: `run-${testCase.name}` },
-      deps: { ...executionSeams, generateText },
+      deps: executionSeams,
       env: {
         ...harnessEnv([...claudeDriver.envAllowlist(testCase.request), "SYNTHETIC_DECLARED"]),
         JIGS_CLAUDE_TEST_RECORD: record,
@@ -109,17 +108,14 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
     let error: unknown;
     try {
       if (testCase.request.cwd === undefined) await ask(testCase.request, context);
-      else {
-        const opened = await open(testCase.request, context);
-        await generateText({ model: opened.model, prompt: testCase.request.prompt });
-      }
+      else await run(testCase.request, context);
     } catch (caught) {
       error = caught;
     }
 
-    expect(error).toMatchObject({ message: expect.stringContaining("Please run /login") });
-    expect(isAuthenticationError(error), `${testCase.name} stderr classification`).toBe(true);
-    expect(getErrorMetadata(error)?.stderr).toContain("Please run /login");
+    expect(error, testCase.name).toMatchObject({
+      message: expect.stringContaining("Claude Code process failed. stderr: Please run /login"),
+    });
     const launched = JSON.parse(readFileSync(record, "utf8"));
     expect(launched).toMatchObject({
       aws: false,
@@ -137,6 +133,7 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
       "SYNTHETIC_DECLARED",
       "JIGS_CLAUDE_TEST_RECORD",
       "CLAUDE_CODE_ENTRYPOINT",
+      "CLAUDE_CODE_SDK_READS_SESSION_STATE",
     ]);
     expect(
       [...names].filter((name) => !allowed.has(name) && !name.startsWith("CLAUDE_AGENT_SDK_")),
@@ -149,8 +146,8 @@ test("the real provider launch isolates ask and run and preserves stderr auth cl
 });
 
 test("descriptor settings reach the CLI and jigs' policy wins over a smuggled policy key", async () => {
-  const { open } = claudeDriver;
-  if (open === undefined) throw new Error("Claude driver is incomplete");
+  const { run } = claudeDriver;
+  if (run === undefined) throw new Error("Claude driver is incomplete");
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", fixture);
   const record = path.join(tmp, "settings-args.json");
   // A descriptor that skipped its constructor, as a hand-built wire could.
@@ -161,16 +158,14 @@ test("descriptor settings reach the CLI and jigs' policy wins over a smuggled po
   } as ClaudeHarness;
 
   try {
-    const opened = await open(
-      { harness, cwd: worktree },
-      {
+    await expect(
+      run(buildAgentRequest({ harness, cwd: worktree, prompt: "work" }) as RunRequest, {
         metadata: { workflowRunId: "run-settings" },
+        deps: executionSeams,
         env: { ...harnessEnv([]), JIGS_CLAUDE_TEST_RECORD: record },
         signal: new AbortController().signal,
-      },
-    );
-    await expect(generateText({ model: opened.model, prompt: "work" })).rejects.toThrow();
-    await opened.close();
+      }),
+    ).rejects.toThrow();
 
     const { args } = JSON.parse(readFileSync(record, "utf8")) as { args: string[] };
     const flag = (name: string) => args[args.indexOf(name) + 1];
@@ -185,7 +180,7 @@ test("descriptor settings reach the CLI and jigs' policy wins over a smuggled po
 
 function launchFixture(
   stepEnv: Record<string, string>,
-  providerEnv: Record<string, string>,
+  sdkEnv: Record<string, string>,
   args: readonly string[] = [fixture],
   host: NodeJS.ProcessEnv = {},
 ) {
@@ -193,7 +188,7 @@ function launchFixture(
     command: process.execPath,
     args: [...args],
     cwd: process.cwd(),
-    env: { PATH: process.env.PATH ?? "", ...providerEnv },
+    env: { PATH: process.env.PATH ?? "", ...sdkEnv },
     signal: new AbortController().signal,
   });
 }
@@ -205,7 +200,7 @@ function exited(child: ReturnType<typeof launchFixture>) {
   });
 }
 
-test("the launch hook replaces the provider's environment with the step's, keeping only what the SDK added", async () => {
+test("the launch hook replaces the SDK's environment with the step's, keeping only what the SDK added", async () => {
   const record = path.join(tmp, "allowlist-env.json");
   const host = {
     PATH: process.env.PATH ?? "",
@@ -218,7 +213,7 @@ test("the launch hook replaces the provider's environment with the step's, keepi
     { JIGS_CLAUDE_TEST_RECORD: record, JIGS_ALLOWED_TOKEN: "kept" },
     {
       ...host,
-      JIGS_ALLOWED_TOKEN: "provider copy",
+      JIGS_ALLOWED_TOKEN: "SDK copy",
       CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING: "true",
     },
     [fixture],

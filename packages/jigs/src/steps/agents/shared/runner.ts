@@ -204,10 +204,10 @@ export async function openAgentRunner(
 }
 
 /**
- * Open a Claude Code or Codex harness inside a factory's own step, the way the built-in agent
- * step does: the environment allowlist with the factory's `agents.env`, the request and
- * just-in-time checks, the worktree lock, Codex's private home and app server, and the Claude
- * spawn hook. The returned `model` is the live provider, ready for `generateText`.
+ * Open a Codex harness inside a factory's own step, the way the built-in agent step does: the
+ * environment allowlist with the factory's `agents.env`, the request and just-in-time checks, the
+ * worktree lock, and Codex's private home and app server. The returned `model` is the live
+ * provider, ready for `generateText`.
  *
  * @remarks
  * Call it inside a `"use step"` function, never in a workflow. The step can hand the provider a
@@ -215,8 +215,8 @@ export async function openAgentRunner(
  * allowed; pass it through the AI SDK call.
  *
  * It throws `JitCheckError` when a just-in-time check fails, and {@link AgentSessionError} when
- * `resume` names a session this harness cannot resume. Pi has no provider model, so a Pi
- * descriptor throws: run Pi with `runAgent`.
+ * `resume` names a session this harness cannot resume. Claude Code and Pi have no AI SDK provider
+ * model, so their descriptors throw: run them with `runAgent`.
  *
  * It reads the run's status before opening the harness and watches it until `close`. It throws
  * a fatal error instead of opening on a cancelled run, and once the run is cancelled every
