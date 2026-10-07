@@ -9,7 +9,7 @@ import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { Card, PageHeader, StatusDot } from "../components/page.tsx";
 import { ProviderInitials } from "../components/provider.tsx";
-import { Time, TimeAgo } from "../components/time.tsx";
+import { TimeAgo } from "../components/time.tsx";
 import {
   button,
   card,
@@ -229,7 +229,7 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
                       )}
                     </td>
                     <td className="whitespace-nowrap">
-                      <Time iso={message.receivedAt} />
+                      <TimeAgo iso={message.receivedAt} />
                     </td>
                     <td>
                       {message.confirmed ? "Yes" : <span className={warningText}>Pending</span>}
@@ -243,22 +243,25 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
       </section>
 
       {isAdmin && (
-        <Card title="Manage" danger>
-          <Form method="post" className="flex flex-wrap items-end gap-2">
-            <label className="flex flex-col gap-1 text-sm">
-              Name
-              <input
-                name="name"
-                required
-                defaultValue={factory.name}
-                className={`${input} min-w-64`}
-              />
-            </label>
+        <Card title="Name">
+          <Form method="post" className="flex flex-wrap gap-2">
+            <input
+              name="name"
+              required
+              defaultValue={factory.name}
+              aria-label="Name"
+              className={`${input} min-w-64`}
+            />
             <button type="submit" name="intent" value="rename" className={button}>
               <Save className="size-4" />
-              Rename
+              Save
             </button>
           </Form>
+        </Card>
+      )}
+
+      {isAdmin && (
+        <Card danger>
           <div className="flex flex-wrap gap-2">
             <ConfirmForm
               action="/factories/new"
