@@ -33,7 +33,7 @@ export function Layout({ children }: { children: ReactNode }) {
       <body className="min-h-screen bg-white text-zinc-900 antialiased dark:bg-zinc-950 dark:text-zinc-100">
         <ThemeProvider attribute="class" defaultTheme="system" enableSystem>
           {children}
-          <Toaster richColors />
+          <Toaster richColors position="top-center" />
         </ThemeProvider>
         <ScrollRestoration />
         <Scripts />

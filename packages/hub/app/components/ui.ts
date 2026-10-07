@@ -13,6 +13,9 @@ export const dangerButton =
 export const input =
   "rounded-md border border-zinc-300 bg-transparent px-2.5 py-1.5 text-sm dark:border-zinc-700";
 
+/** A native select: room on the right for its arrow. */
+export const select = `${input} pr-8`;
+
 export const card = "rounded-lg border border-zinc-200 dark:border-zinc-800";
 
 export const table =
@@ -23,3 +26,6 @@ export const link = "underline decoration-zinc-400 underline-offset-4 hover:deco
 export const warningText = "text-amber-600 dark:text-amber-400";
 
 export const errorText = "text-red-600 dark:text-red-400";
+
+/** Opens on the provider's site, away from the hub. */
+export const external = { target: "_blank", rel: "noreferrer" } as const;

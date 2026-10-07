@@ -3,19 +3,21 @@ import type { ReactNode } from "react";
 import { data, Form, Link, redirect } from "react-router";
 import { isUuid, removeApp, renameApp, setInstallationName } from "../../src/apps.ts";
 import { setPagerDutyFrom, setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
+import { providerNames } from "../../src/provider-names.ts";
 import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
-import { CopyButton } from "../components/copy-button.tsx";
-import { Card, PageHeader } from "../components/page.tsx";
-import { linearNameHint } from "../components/provider.tsx";
+import { Hint } from "../components/hint.tsx";
+import { Card, Details, PageHeader, UrlRow } from "../components/page.tsx";
+import { TimeAgo } from "../components/time.tsx";
 import {
   button,
   card,
   dangerButton,
   errorText,
+  external,
   input,
   link,
   quietButton,
@@ -111,25 +113,28 @@ const providerTitles: Record<Loaded["provider"], string> = {
 export default function AppPage({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
   const { app, isAdmin } = loaderData;
+  const provider = providerNames[app.provider];
   return (
     <div className="max-w-4xl space-y-6">
-      <PageHeader
-        title={
-          <>
-            {app.name}
-            <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-sm font-normal text-zinc-500 dark:border-zinc-700">
-              {providerTitles[app.provider]}
-            </span>
-          </>
-        }
-        subtitle={<ProviderIds app={app} />}
-        parent={{ to: "/apps", label: "Apps" }}
-      />
+      <div className="space-y-3">
+        <PageHeader
+          title={
+            <>
+              {app.name}
+              <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-sm font-normal text-zinc-500 dark:border-zinc-700">
+                {providerTitles[app.provider]}
+              </span>
+            </>
+          }
+          parent={{ to: "/apps", label: "Apps" }}
+        />
+        <Details items={providerIds(app)} />
+      </div>
       <ProviderSections app={app} isAdmin={isAdmin} />
 
       <Card
         title="Factories"
-        description="They receive this app's events and can ask for its tokens."
+        description="Factories connected to this app receive its events and can act through it. Connect or disconnect factories from each factory's page."
       >
         {app.factories.length === 0 ? (
           <p className="text-sm text-zinc-500">
@@ -140,18 +145,36 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
             .
           </p>
         ) : (
-          <ul className="flex flex-wrap gap-2 text-sm">
-            {app.factories.map((factory) => (
-              <li key={factory.id}>
-                <Link
-                  to={`/factories/${factory.id}`}
-                  className={`${card} block px-3 py-1.5 hover:bg-zinc-50 dark:hover:bg-zinc-900`}
-                >
-                  {factory.name}
-                </Link>
-              </li>
-            ))}
-          </ul>
+          <div className={`${card} overflow-x-auto`}>
+            <table className={table}>
+              <thead>
+                <tr>
+                  <th>Factory</th>
+                  <th>Last seen</th>
+                  <th>Last event from this app</th>
+                </tr>
+              </thead>
+              <tbody>
+                {app.factories.map((factory) => (
+                  <tr key={factory.id}>
+                    <td>
+                      <Link to={`/factories/${factory.id}`} className={link}>
+                        {factory.name}
+                      </Link>
+                    </td>
+                    <td>{factory.lastSeenAt ? <TimeAgo iso={factory.lastSeenAt} /> : "never"}</td>
+                    <td>
+                      {factory.lastEventAt ? (
+                        <TimeAgo iso={factory.lastEventAt} />
+                      ) : (
+                        <span className="text-zinc-500">No events yet</span>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
       </Card>
 
@@ -171,9 +194,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
                 Save
               </button>
             </div>
-            <p className="text-sm text-zinc-500">
-              <NameHint app={app} />
-            </p>
+            <p className="text-sm text-zinc-500">{nameHints[app.provider]}</p>
           </Form>
         </Card>
       )}
@@ -181,11 +202,15 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
       {isAdmin && (
         <Card danger>
           <div className="flex flex-wrap items-center justify-between gap-4">
-            <p className="text-sm">Its factories stop receiving its provider events.</p>
+            <p className="max-w-xl text-sm">
+              Removes this app from the hub. Factories connected to it stop receiving its events and
+              can no longer act through it. The app itself isn't deleted from {provider}; do that on{" "}
+              {provider} if you want.
+            </p>
             <ConfirmForm
               fields={{ intent: "remove" }}
               title={`Remove ${app.name}?`}
-              body="The hub forgets its credentials and installations. Factories connected to it stop receiving its events and can no longer ask for its tokens. Events already received stay in their logs."
+              body="The hub forgets its credentials and installations. Factories connected to it stop receiving its events and can no longer act through it. Events already received stay in their logs."
               confirmLabel="Remove app"
               destructive
               className={dangerButton}
@@ -200,34 +225,30 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
   );
 }
 
-function ProviderIds({ app }: { app: Loaded }) {
+function providerIds(app: Loaded) {
+  const clientId = { label: "Client ID", value: app.clientId, className: "font-mono" };
   switch (app.provider) {
     case "github":
-      return `App ID ${app.appId}, slug ${app.slug}, client ID ${app.clientId}`;
+      return [
+        { label: "App ID", value: app.appId, className: "font-mono" },
+        { label: "Slug", value: app.slug, className: "font-mono" },
+        clientId,
+      ];
     case "slack":
-      return `App ID ${app.appId}, client ID ${app.clientId}`;
+      return [{ label: "App ID", value: app.appId, className: "font-mono" }, clientId];
     default:
-      return `Client ID ${app.clientId}`;
+      return [clientId];
   }
 }
 
-function NameHint({ app }: { app: Loaded }) {
-  switch (app.provider) {
-    case "github":
-      return `A label for people; GitHub never sees it. The App's slug stays ${app.slug}.`;
-    case "linear":
-      return (
-        <>
-          {linearNameHint} Running factories pick up a new name when they next get a Linear token;
-          restart a factory to apply it at once.
-        </>
-      );
-    case "slack":
-      return "Factories see a new name with their next Slack token; restart a factory to apply it at once.";
-    case "pagerduty":
-      return "A label for people; PagerDuty never sees it.";
-  }
-}
+const nameHints: Record<Loaded["provider"], string> = {
+  github: "Only people see this name. Renaming it doesn't change the App on GitHub.",
+  linear:
+    "Match the app's name in Linear: people @mention it by that name, and agents are told it is their own. You can rename the app in Linear's settings any time. Running factories pick up a new name when they next get a Linear token; restart a factory to apply it at once.",
+  slack:
+    "Factories see this as the bot's name from their next Slack token; restart a factory to apply it at once. Renaming it doesn't change the app in Slack.",
+  pagerduty: "Only people see this name. Renaming it doesn't change anything in PagerDuty.",
+};
 
 function ProviderSections({ app, isAdmin }: { app: Loaded; isAdmin: boolean }) {
   switch (app.provider) {
@@ -246,45 +267,89 @@ function ProviderSections({ app, isAdmin }: { app: Loaded; isAdmin: boolean }) {
   }
 }
 
+const shortName = (
+  <>
+    Give each one a short name, such as <code>acme</code>.
+  </>
+);
+
 function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boolean }) {
   return (
     <>
       <ProviderSettings
         provider="GitHub"
-        description="In the App's settings on GitHub: Developer settings, GitHub Apps, then the App."
+        description={
+          <>
+            In the App's settings on GitHub: <strong>Settings</strong> →{" "}
+            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the App.
+          </>
+        }
         urls={[
-          { label: "Webhook URL", value: app.webhookUrl, where: "General, under Webhook." },
-          { label: "Setup URL", value: app.setupUrl, where: "General, under Post installation." },
+          {
+            label: "Webhook URL",
+            value: app.webhookUrl,
+            where: (
+              <>
+                <strong>General</strong>, under <strong>Webhook</strong>.
+              </>
+            ),
+          },
+          {
+            label: "Setup URL",
+            value: app.setupUrl,
+            where: (
+              <>
+                <strong>General</strong>, under <strong>Post installation</strong>.
+              </>
+            ),
+          },
         ]}
         settings={[
-          ["Webhook", "Active on, SSL verification enabled"],
+          [
+            "Webhook",
+            <>
+              <strong>Active</strong> on, <strong>SSL verification</strong> enabled
+            </>,
+          ],
           ["Redirect on update", "On; it is off by default"],
           ["Callback URL", "Leave empty"],
           ["Request user authorization (OAuth) during installation", "Off"],
           [
             "Repository permissions",
             <>
-              Contents, Pull requests, Issues: read and write · Metadata, Checks, Commit statuses:
-              read · every other: No access. Factories push, open, comment on and merge pull
-              requests, create their labels, and read CI with them.
+              <strong>Contents</strong>, <strong>Pull requests</strong>, <strong>Issues</strong>:
+              Read and write · <strong>Metadata</strong>, <strong>Checks</strong>,{" "}
+              <strong>Commit statuses</strong>: Read-only · every other: No access. Factories push,
+              open, comment on and merge pull requests, create their labels, and read CI with them.
             </>,
           ],
           [
             "Subscribe to events",
             <>
-              Pull request, Pull request review, Pull request review comment, Issue comment, Check
-              suite, <span className={warningText}>Status (easy to miss)</span>. These wake the
-              factory runs waiting on a pull request.
+              <strong>Pull request</strong>, <strong>Pull request review</strong>,{" "}
+              <strong>Pull request review comment</strong>, <strong>Issue comment</strong>,{" "}
+              <strong>Check suite</strong>,{" "}
+              <strong className={warningText}>Status (easy to miss)</strong>. These wake the factory
+              runs waiting on a pull request.
             </>,
           ],
           [
             "Where can this GitHub App be installed?",
-            "Only on this account. Otherwise anyone can install it, and their events reach your factories.",
+            <>
+              <strong>Only on this account</strong>. Otherwise anyone can install it, and their
+              events reach your factories.
+            </>,
           ],
         ]}
       />
       <InstallationsCard
         title="Installations"
+        description={
+          <>
+            The GitHub accounts this App is installed on. {shortName} Your factory code uses that
+            name to choose which account to work in.
+          </>
+        }
         action={
           isAdmin && (
             <a href={app.installUrl} className={button}>
@@ -294,7 +359,12 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
           )
         }
         empty="Not installed anywhere yet."
-        columns={["Account", "GitHub installation"]}
+        head={
+          <>
+            <th>Account</th>
+            <th>GitHub installation</th>
+          </>
+        }
         rows={app.installations.map((installation) => ({
           installation,
           cells: (
@@ -315,15 +385,37 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
     <>
       <ProviderSettings
         provider="Linear"
-        description="In the app's settings in Linear: Settings, API, then the app. Replace the placeholders you entered when creating it."
+        description={
+          <>
+            In Linear: <strong>Settings</strong> → <strong>API</strong> →{" "}
+            <strong>OAuth applications</strong> → the app. Replace the hub address you entered when
+            creating it.
+          </>
+        }
         urls={[
-          { label: "Redirect URI", value: app.callbackUrl, where: "Under Redirect URIs." },
-          { label: "Webhook URL", value: app.webhookUrl, where: "Under Webhooks." },
+          {
+            label: "Redirect URI",
+            value: app.callbackUrl,
+            where: (
+              <>
+                Under <strong>Redirect URIs</strong>.
+              </>
+            ),
+          },
+          {
+            label: "Webhook URL",
+            value: app.webhookUrl,
+            where: (
+              <>
+                Under <strong>Webhooks</strong>.
+              </>
+            ),
+          },
         ]}
         settings={[
           ["Webhooks", "On"],
-          ["Data change events", "Comments"],
-          ["App events", "Agent session events"],
+          ["Data change events", <strong key="comments">Comments</strong>],
+          ["App events", <strong key="sessions">Agent session events</strong>],
           ["Every other event", "Off"],
           ["Client credentials", "Off"],
           ["Public", "Off, unless other workspaces should connect to the app"],
@@ -331,7 +423,13 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
       />
       <InstallationsCard
         title="Workspaces"
-        description="A Linear workspace admin approves the app for their workspace. Connect a workspace again to fix one that stopped working."
+        description={
+          <>
+            The Linear workspaces connected to this app. {shortName} Your factory code uses that
+            name to choose which workspace to work in. A Linear workspace admin approves the app for
+            their workspace. Connect a workspace again to fix one that stopped working.
+          </>
+        }
         action={
           isAdmin && (
             <a href={app.connectUrl} className={button}>
@@ -341,7 +439,13 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
           )
         }
         empty="No workspace connected yet."
-        columns={["Workspace", "URL key", "Status"]}
+        head={
+          <>
+            <th>Workspace</th>
+            <th>URL key</th>
+            <th>Status</th>
+          </>
+        }
         rows={app.workspaces.map((workspace) => ({
           installation: workspace,
           cells: (
@@ -369,22 +473,34 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
     <>
       <ProviderSettings
         provider="Slack"
-        description="In the app's settings at api.slack.com/apps."
+        description={
+          <>
+            In the app's settings at{" "}
+            <a href="https://api.slack.com/apps" {...external} className={link}>
+              api.slack.com/apps
+            </a>
+            .
+          </>
+        }
         urls={[
           {
             label: "Request URL",
             value: app.requestUrl,
-            where: "Event Subscriptions, with Enable Events on.",
+            where: (
+              <>
+                <strong>Event Subscriptions</strong>, with <strong>Enable Events</strong> on.
+              </>
+            ),
           },
           {
             label: "Redirect URL",
             value: app.redirectUrl,
             where: (
               <>
-                OAuth &amp; Permissions, under Redirect URLs.{" "}
+                <strong>OAuth &amp; Permissions</strong>, under <strong>Redirect URLs</strong>.{" "}
                 <span className={warningText}>
-                  Choose Save URLs before installing, or the install fails with "redirect_uri did
-                  not match".
+                  Click <strong>Save URLs</strong> before installing, or the install fails with{" "}
+                  <code>redirect_uri did not match</code>.
                 </span>
               </>
             ),
@@ -394,7 +510,12 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
           ["Socket Mode", "Off, or Slack never sends events to the Request URL"],
           ["Subscribe to bot events", <Codes key="events" values={app.events} />],
           ["Token rotation", "Off"],
-          ["Channels", "Invite the bot to each channel factories should hear"],
+          [
+            "Channels",
+            <>
+              Invite the bot to each channel factories should hear: <code>/invite @bot-name</code>
+            </>,
+          ],
         ]}
       />
       <Card
@@ -420,7 +541,13 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
       </Card>
       <InstallationsCard
         title="Workspaces"
-        description="Install the app again after changing its scopes, here rather than from Slack's reinstall banner, so the hub gets the new token."
+        description={
+          <>
+            The Slack workspaces this app is installed in. {shortName} Your factory code uses that
+            name to choose which workspace to work in. Install the app again after changing its
+            scopes, here rather than from Slack's reinstall banner, so the hub gets the new token.
+          </>
+        }
         action={
           isAdmin && (
             <a href={app.installUrl} className={button}>
@@ -430,7 +557,18 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
           )
         }
         empty="Not installed in a workspace yet. If a workspace admin must approve the app, choose Add to Slack again once they have."
-        columns={["Workspace", "Team ID", "Granted scopes"]}
+        head={
+          <>
+            <th>Workspace</th>
+            <th>Team ID</th>
+            <th>
+              <Hint
+                label="Granted scopes"
+                tip="What the workspace approved when the app was installed."
+              />
+            </th>
+          </>
+        }
         rows={app.workspaces.map((workspace) => ({
           installation: workspace,
           cells: (
@@ -469,16 +607,31 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
       )}
       <ProviderSettings
         provider="PagerDuty"
-        description="In PagerDuty, under Integrations."
+        description={
+          <>
+            In PagerDuty, under <strong>Integrations</strong>.
+          </>
+        }
         urls={[
           {
             label: "Webhook URL",
             value: app.webhookUrl,
-            where: "Generic Webhooks (v3): add a subscription delivering here.",
+            where: (
+              <>
+                <strong>Integrations</strong> → <strong>Generic Webhooks (v3)</strong>: add a
+                subscription delivering here.
+              </>
+            ),
           },
         ]}
         settings={[
-          ["App scopes", <Codes key="scopes" values={app.scopes} />],
+          [
+            "App scopes",
+            <>
+              Under <strong>App Registration</strong>, <strong>Scoped OAuth</strong>:{" "}
+              <Codes values={app.scopes} />
+            </>,
+          ],
           ["Subscription scope", "The account, or the services and teams factories watch"],
           ["Event subscription", <Codes key="types" values={app.eventTypes} />],
         ]}
@@ -487,8 +640,21 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
       </ProviderSettings>
       <InstallationsCard
         title="Account"
-        description="PagerDuty records every change, such as a note, as one of the account's users: the From user. The hub checks the account has a user with that email."
-        columns={["Subdomain", "Region", "From"]}
+        description={
+          <>
+            The PagerDuty account this app connects to. Give it a short name, such as{" "}
+            <code>acme</code>. Your factory code uses that name to refer to it. PagerDuty records
+            every change, such as a note, as one of the account's users: the From user. The hub
+            checks the account has a user with that email.
+          </>
+        }
+        head={
+          <>
+            <th>Subdomain</th>
+            <th>Region</th>
+            <th>From</th>
+          </>
+        }
         empty="No account yet."
         rows={app.accounts.map((account) => ({
           installation: account,
@@ -556,7 +722,7 @@ function ProviderSettings({
   children,
 }: {
   provider: string;
-  description: string;
+  description: ReactNode;
   urls: { label: string; value: string; where: ReactNode }[];
   settings: [string, ReactNode][];
   children?: ReactNode;
@@ -565,28 +731,15 @@ function ProviderSettings({
     <Card title={`Set these on ${provider}`} description={description}>
       <div className="space-y-4">
         {urls.map(({ label, value, where }) => (
-          <div key={label} className="grid gap-x-4 gap-y-1 sm:grid-cols-[9rem_1fr]">
-            <span className="pt-1.5 text-sm text-zinc-500">{label}</span>
-            <div className="space-y-1">
-              <div className="flex gap-2">
-                <input
-                  readOnly
-                  value={value}
-                  aria-label={label}
-                  onFocus={(event) => event.target.select()}
-                  className={`${input} min-w-0 grow font-mono`}
-                />
-                <CopyButton text={value} label={label} />
-              </div>
-              <p className="text-sm text-zinc-500">{where}</p>
-            </div>
-          </div>
+          <UrlRow key={label} label={label} value={value}>
+            {where}
+          </UrlRow>
         ))}
       </div>
       <dl className="divide-y divide-zinc-200 border-t border-zinc-200 text-sm dark:divide-zinc-800 dark:border-zinc-800">
         {settings.map(([label, value]) => (
           <div key={label} className="grid gap-x-4 gap-y-1 py-2.5 sm:grid-cols-[16rem_1fr]">
-            <dt className="font-medium">{label}</dt>
+            <dt className="font-semibold">{label}</dt>
             <dd className="text-zinc-600 dark:text-zinc-400">{value}</dd>
           </div>
         ))}
@@ -610,18 +763,19 @@ type Installation = { id: string; installationName: string | null };
 /** Where the app is installed, each with its installation name first. */
 function InstallationsCard({
   title,
-  description = "Factory code refers to an installation by its name.",
+  description,
   action,
   empty,
-  columns,
+  head,
   rows,
   isAdmin,
 }: {
   title: string;
-  description?: string;
+  description: ReactNode;
   action?: ReactNode;
   empty: string;
-  columns: string[];
+  /** The header cells after the installation name's. */
+  head: ReactNode;
   /** Each installation, with its cells after the installation name's. */
   rows: { installation: Installation; cells: ReactNode }[];
   isAdmin: boolean;
@@ -635,10 +789,13 @@ function InstallationsCard({
           <table className={table}>
             <thead>
               <tr>
-                <th>Installation name</th>
-                {columns.map((column) => (
-                  <th key={column}>{column}</th>
-                ))}
+                <th>
+                  <Hint
+                    label="Installation name"
+                    tip="The short name your factory code uses for this installation."
+                  />
+                </th>
+                {head}
               </tr>
             </thead>
             <tbody>

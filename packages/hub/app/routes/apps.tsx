@@ -3,6 +3,7 @@ import { Link } from "react-router";
 import { providerNames } from "../../src/provider-names.ts";
 import { listApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
+import { Hint } from "../components/hint.tsx";
 import { PageHeader } from "../components/page.tsx";
 import { button, card, link, table, warningText } from "../components/ui.ts";
 import type { Route } from "./+types/apps.ts";
@@ -37,8 +38,15 @@ export default function Apps({ loaderData }: Route.ComponentProps) {
               <tr>
                 <th>Name</th>
                 <th>Provider</th>
-                <th>Installed on</th>
-                <th>Factories</th>
+                <th>
+                  <Hint
+                    label="Installed on"
+                    tip="Where the app is installed, shown as installation name (account)."
+                  />
+                </th>
+                <th>
+                  <Hint label="Factories" tip="How many factories are connected to this app." />
+                </th>
               </tr>
             </thead>
             <tbody>

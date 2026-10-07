@@ -36,7 +36,7 @@ export function ConfirmForm({
       </button>
       <dialog
         ref={dialog}
-        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl backdrop:bg-black/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg text-left border border-zinc-200 bg-white p-6 text-zinc-900 shadow-xl backdrop:bg-black/50 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
       >
         <Form
           method="post"

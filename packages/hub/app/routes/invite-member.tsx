@@ -36,8 +36,8 @@ export async function action({ context, request }: Route.ActionArgs) {
 }
 
 const roleChoices: Record<Role, string> = {
-  member: "Can look at everything",
-  admin: "Can also change things",
+  member: "Can see everything and connect factories to apps",
+  admin: "Can also add and change apps, factories and members",
 };
 
 export default function InviteMember({ loaderData, actionData }: Route.ComponentProps) {

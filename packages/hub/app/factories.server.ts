@@ -62,9 +62,12 @@ export function connectCommand(context: AppLoadContext, token: string) {
   return `jigs hub connect ${context.config.publicUrl.origin} ${token}`;
 }
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 50;
 
-/** One page of a factory's messages, newest first, from before `before` when given. */
+/**
+ * One page of a factory's messages, newest first, from before `before` when
+ * given, without their payloads.
+ */
 export async function readEventLog(
   context: AppLoadContext,
   { id: factoryId, cursor }: { id: string; cursor: bigint },
@@ -78,7 +81,6 @@ export async function readEventLog(
       provider: providerEvents.provider,
       name: providerEvents.name,
       receivedAt: providerEvents.receivedAt,
-      payload: providerEvents.payload,
     })
     .from(factoryMessages)
     .leftJoin(providerEvents, eq(providerEvents.id, factoryMessages.providerEventId))
@@ -98,11 +100,41 @@ export async function readEventLog(
       provider: row.provider,
       name: row.name,
       receivedAt: (row.receivedAt ?? row.createdAt).toISOString(),
-      payload: row.payload === null ? null : JSON.stringify(row.payload, null, 2),
       confirmed: row.position <= cursor,
     })),
     older: rows.length > PAGE_SIZE ? String(page.at(-1)?.position) : null,
   };
+}
+
+/** How many messages the hub holds for a factory. */
+export async function countEvents(context: AppLoadContext, factoryId: string) {
+  const [row] = await context.db
+    .select({ count: sql<number>`count(*)::int` })
+    .from(factoryMessages)
+    .where(eq(factoryMessages.factoryId, factoryId));
+  return row?.count ?? 0;
+}
+
+/** The payload of one of the Organization's factory's events, as indented JSON, or `null`. */
+export async function readEventPayload(
+  context: AppLoadContext,
+  organizationId: string,
+  factoryId: string,
+  position: bigint,
+) {
+  const [row] = await context.db
+    .select({ payload: providerEvents.payload })
+    .from(factoryMessages)
+    .innerJoin(factories, eq(factories.id, factoryMessages.factoryId))
+    .innerJoin(providerEvents, eq(providerEvents.id, factoryMessages.providerEventId))
+    .where(
+      and(
+        eq(factoryMessages.position, position),
+        eq(factoryMessages.factoryId, factoryId),
+        eq(factories.organizationId, organizationId),
+      ),
+    );
+  return row ? JSON.stringify(row.payload, null, 2) : null;
 }
 
 /** When the factory was last sent an event of each app, by app id. */

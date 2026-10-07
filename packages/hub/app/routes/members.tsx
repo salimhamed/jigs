@@ -6,7 +6,7 @@ import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { PageHeader } from "../components/page.tsx";
-import { button, card, dangerButton, input, table } from "../components/ui.ts";
+import { button, card, dangerButton, select, table } from "../components/ui.ts";
 import type { Route } from "./+types/members.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -72,7 +72,7 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
     <div className="space-y-8">
       <PageHeader
         title="Members"
-        subtitle="Admins can change things. Members can look."
+        subtitle="Admins manage apps, factories and members. Members can see everything and connect factories to existing apps."
         action={
           isAdmin && (
             <Link to="/members/invite" className={button}>
@@ -157,7 +157,7 @@ function MemberRow({
           <select
             aria-label={`Role of ${member.email}`}
             value={member.role}
-            className={input}
+            className={select}
             onChange={(event) =>
               fetcher.submit(
                 { intent: "role", memberId: member.id, role: event.target.value },

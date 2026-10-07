@@ -7,7 +7,7 @@ factories its bot token.
 ## 1. Create the app in Slack
 
 At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New
-App**. Skip the templates and choose **Blank app**, then name it and pick your
+App** → **From scratch**, not from a manifest, then name it and pick your
 workspace. Under **Basic Information**, note the **App ID**, **Client ID**,
 **Client Secret** and **Signing Secret**.
 

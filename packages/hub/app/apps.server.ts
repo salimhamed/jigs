@@ -1,7 +1,14 @@
 import { pagerDutyScopes } from "@jigs-ai/hub-protocol";
-import { and, asc, eq } from "drizzle-orm";
+import { and, asc, eq, sql } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
-import { apps, assignments, factories, installations } from "../src/db/schema.ts";
+import {
+  apps,
+  assignments,
+  factories,
+  factoryMessages,
+  installations,
+  providerEvents,
+} from "../src/db/schema.ts";
 import {
   type GitHubAppSettings,
   githubInstallUrl,
@@ -71,7 +78,7 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
   });
   if (!app) return null;
   const { origin } = context.config.publicUrl;
-  const [installed, assignedFactories] = await Promise.all([
+  const [installed, assignedFactories, lastEvents] = await Promise.all([
     context.db
       .select({
         id: installations.id,
@@ -85,13 +92,35 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       .where(eq(installations.appId, app.id))
       .orderBy(asc(installations.account)),
     context.db
-      .select({ id: factories.id, name: factories.name })
+      .select({ id: factories.id, name: factories.name, lastSeenAt: factories.lastSeenAt })
       .from(assignments)
       .innerJoin(factories, eq(factories.id, assignments.factoryId))
       .where(eq(assignments.appId, app.id))
       .orderBy(asc(factories.name)),
+    context.db
+      .select({
+        factoryId: factoryMessages.factoryId,
+        receivedAt: sql<Date>`max(${providerEvents.receivedAt})`,
+      })
+      .from(providerEvents)
+      .innerJoin(factoryMessages, eq(factoryMessages.providerEventId, providerEvents.id))
+      .where(eq(providerEvents.appId, app.id))
+      .groupBy(factoryMessages.factoryId),
   ]);
-  const common = { id: app.id, name: app.name, factories: assignedFactories };
+  const lastEventAt = (factoryId: string) => {
+    const last = lastEvents.find((row) => row.factoryId === factoryId);
+    return last ? new Date(last.receivedAt).toISOString() : null;
+  };
+  const common = {
+    id: app.id,
+    name: app.name,
+    factories: assignedFactories.map(({ id, name, lastSeenAt }) => ({
+      id,
+      name,
+      lastSeenAt: lastSeenAt?.toISOString() ?? null,
+      lastEventAt: lastEventAt(id),
+    })),
+  };
   switch (app.provider) {
     case "linear":
       return {

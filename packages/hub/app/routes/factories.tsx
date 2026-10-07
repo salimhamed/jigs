@@ -2,6 +2,8 @@ import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { requireMember } from "../auth.server.ts";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
+import { factoryHints } from "../components/factory-hints.ts";
+import { Hint } from "../components/hint.tsx";
 import { PageHeader, StatusDot } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
@@ -30,7 +32,16 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
     <div className="space-y-6">
       <PageHeader
         title="Factories"
-        subtitle="jigs services that pull events from this hub."
+        subtitle={
+          <>
+            Services you run that act on events from the apps connected to them, such as new pull
+            requests or Slack mentions. Add apps on the{" "}
+            <Link to="/apps" className={link}>
+              Apps page
+            </Link>
+            , then connect them from each factory's page.
+          </>
+        }
         action={
           isAdmin && (
             <Link to="/factories/new" className={button}>
@@ -48,10 +59,18 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
             <thead>
               <tr>
                 <th>Name</th>
-                <th>Last seen</th>
-                <th>jigs</th>
-                <th>Unconfirmed</th>
-                <th>Apps</th>
+                <th>
+                  <Hint label="Last seen" tip={factoryHints.lastSeen} />
+                </th>
+                <th>
+                  <Hint label="Factory version" tip={factoryHints.version} />
+                </th>
+                <th>
+                  <Hint label="Unconfirmed events" tip={factoryHints.unconfirmed} />
+                </th>
+                <th>
+                  <Hint label="Apps" tip={factoryHints.apps} />
+                </th>
                 <th />
               </tr>
             </thead>

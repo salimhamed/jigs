@@ -11,8 +11,8 @@ mention of it, so two factories that share one both act on the same mention.
 
 ## 1. Create the app in Linear
 
-In Linear, under **Settings → API**, create a new application and fill in the
-form:
+In Linear, open **Settings** → **API** → **OAuth applications** → **New** and
+fill in the form:
 
 - **Application icon** and **Application name**: what people see, and the
   name they mention.

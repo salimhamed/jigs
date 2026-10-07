@@ -1,5 +1,8 @@
 import type { ReactNode } from "react";
 import { Link } from "react-router";
+import { CopyButton } from "./copy-button.tsx";
+import { Hint } from "./hint.tsx";
+import { input } from "./ui.ts";
 
 /** A page's title, with the page it sits under, a one-line summary and its main action. */
 export function PageHeader({
@@ -26,7 +29,7 @@ export function PageHeader({
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div className="space-y-1">
           <h1 className="flex items-center gap-3 text-2xl font-semibold">{title}</h1>
-          {subtitle && <p className="text-zinc-500">{subtitle}</p>}
+          {subtitle && <p className="max-w-3xl text-zinc-500">{subtitle}</p>}
         </div>
         {action}
       </div>
@@ -76,5 +79,56 @@ export function StatusDot({ online }: { online: boolean }) {
       aria-label={online ? "Connected" : "Not connected"}
       className={`inline-block size-2 shrink-0 rounded-full ${online ? "bg-emerald-500" : "bg-zinc-400 dark:bg-zinc-600"}`}
     />
+  );
+}
+
+/** Facts about a page's subject in one row: "label value · label value". */
+export function Details({
+  items,
+}: {
+  items: { label: string; value: ReactNode; hint?: ReactNode; className?: string }[];
+}) {
+  return (
+    <dl className="flex flex-wrap gap-x-8 gap-y-1 text-sm">
+      {items.map(({ label, value, hint, className }) => (
+        <div key={label} className="flex gap-1.5">
+          <dt className="text-zinc-500">{hint ? <Hint label={label} tip={hint} /> : label}</dt>
+          <dd className={className}>{value}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+/**
+ * A URL to paste into a provider's settings: its label, the read-only value
+ * with a Copy button, and where it goes when `children` says.
+ */
+export function UrlRow({
+  label,
+  value,
+  children,
+}: {
+  label: string;
+  value: string;
+  children?: ReactNode;
+}) {
+  return (
+    <div className="grid gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
+      <span className="text-sm text-zinc-500 sm:pt-1.5">{label}</span>
+      <div className="min-w-0 space-y-1">
+        <div className="flex gap-2">
+          <input
+            readOnly
+            value={value}
+            aria-label={label}
+            onFocus={(event) => event.target.select()}
+            className={`${input} min-w-0 grow font-mono`}
+          />
+          <CopyButton text={value} label={label} />
+        </div>
+        {children && <p className="text-sm text-zinc-500">{children}</p>}
+      </div>
+    </div>
   );
 }

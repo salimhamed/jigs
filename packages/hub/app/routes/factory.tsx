@@ -1,7 +1,7 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { ChevronRight, KeyRound, Plus, Trash2 } from "lucide-react";
-import { useState } from "react";
-import { data, Form, Link, redirect } from "react-router";
+import { useEffect, useState } from "react";
+import { data, Form, Link, redirect, useFetcher } from "react-router";
 import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
 import { removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
@@ -10,8 +10,9 @@ import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
-import { PageHeader, StatusDot } from "../components/page.tsx";
-import { ProviderInitials } from "../components/provider.tsx";
+import { factoryHints } from "../components/factory-hints.ts";
+import { Hint } from "../components/hint.tsx";
+import { Details, PageHeader, StatusDot } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   card,
@@ -22,8 +23,10 @@ import {
   table,
   warningText,
 } from "../components/ui.ts";
-import { readEventLog, readFactory, readLastEvents } from "../factories.server.ts";
+import { countEvents, readEventLog, readFactory, readLastEvents } from "../factories.server.ts";
 import type { Route } from "./+types/factory.ts";
+import type { loader as eventLoader } from "./factory-event.ts";
+import type { loader as eventsLoader } from "./factory-events.ts";
 
 const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
@@ -33,20 +36,17 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   if (!found) throw notFound();
   const { cursor, ...factory } = found;
   const isAdmin = role === "admin";
-  const query = new URL(request.url).searchParams;
-  if (query.get("tab") === "activity") {
-    const before = query.get("before");
-    const log = await readEventLog(
-      context,
-      { id: factory.id, cursor },
-      before && /^\d{1,19}$/.test(before) ? BigInt(before) : null,
-    );
-    return { tab: "activity" as const, isAdmin, factory, ...log, paged: before !== null };
+  if (new URL(request.url).searchParams.get("tab") === "activity") {
+    const [log, total] = await Promise.all([
+      readEventLog(context, { id: factory.id, cursor }, null),
+      countEvents(context, factory.id),
+    ]);
+    return { tab: "activity" as const, isAdmin, factory, ...log, total };
   }
   const [connected, lastEvents, organizationApps] = await Promise.all([
     assignedApps(context.db, factory.id),
     readLastEvents(context, factory.id),
-    isAdmin ? listApps(context, organizationId) : [],
+    listApps(context, organizationId),
   ]);
   return {
     tab: "settings" as const,
@@ -60,13 +60,18 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request, params }: Route.ActionArgs) {
-  const admin = await requireAdmin(context, request);
-  if ("error" in admin) return admin;
-  const { organizationId } = admin;
   if (!isUuid(params.id)) throw notFound();
   const form = await request.formData();
+  const intent = form.get("intent");
+  // Members connect and disconnect apps; only admins change the factory itself.
+  const caller =
+    intent === "connect" || intent === "disconnect"
+      ? await requireMember(context, request)
+      : await requireAdmin(context, request);
+  if ("error" in caller) return caller;
+  const { organizationId } = caller;
   const appId = String(form.get("appId") ?? "");
-  switch (form.get("intent")) {
+  switch (intent) {
     case "connect":
       if (!isUuid(appId)) return { error: "Choose an app to connect." };
       await assignApp(context.db, organizationId, params.id, appId);
@@ -88,6 +93,8 @@ export async function action({ context, request, params }: Route.ActionArgs) {
   }
 }
 
+const installationsHint = "The names your factory code uses to choose where to work.";
+
 type Loaded = Route.ComponentProps["loaderData"];
 
 export default function Factory({ loaderData, actionData }: Route.ComponentProps) {
@@ -105,22 +112,27 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
           }
           parent={{ to: "/factories", label: "Factories" }}
         />
-        <dl className="flex flex-wrap gap-x-8 gap-y-1 text-sm [&_dt]:text-zinc-500 [&>div]:flex [&>div]:gap-1.5">
-          <div>
-            <dt>Last seen</dt>
-            <dd>{factory.lastSeenAt ? <TimeAgo iso={factory.lastSeenAt} /> : "never"}</dd>
-          </div>
-          <div>
-            <dt>jigs</dt>
-            <dd className="font-mono">{factory.lastSeenVersion ?? "—"}</dd>
-          </div>
-          <div>
-            <dt>Unconfirmed</dt>
-            <dd className={factory.unconfirmed > 0 ? warningText : undefined}>
-              {factory.unconfirmed}
-            </dd>
-          </div>
-        </dl>
+        <Details
+          items={[
+            {
+              label: "Last seen",
+              hint: factoryHints.lastSeen,
+              value: factory.lastSeenAt ? <TimeAgo iso={factory.lastSeenAt} /> : "never",
+            },
+            {
+              label: "Factory version",
+              hint: factoryHints.version,
+              value: factory.lastSeenVersion ?? "—",
+              className: "font-mono",
+            },
+            {
+              label: "Unconfirmed events",
+              hint: factoryHints.unconfirmed,
+              value: factory.unconfirmed,
+              className: factory.unconfirmed > 0 ? warningText : undefined,
+            },
+          ]}
+        />
       </div>
       <nav className="flex gap-6 border-b border-zinc-200 text-sm dark:border-zinc-800">
         <Tab to="?" current={loaderData.tab === "settings"}>
@@ -170,15 +182,16 @@ function SettingsTab({
     <div className="space-y-8">
       <section className="space-y-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <div className="space-y-1">
+          <div className="max-w-2xl space-y-1">
             <h2 className="font-semibold">
               Connected apps <span className="font-normal text-zinc-500">· {connected.length}</span>
             </h2>
             <p className="text-sm text-zinc-500">
-              This factory receives these apps' events and can ask for their tokens.
+              Connecting an app sends its events to this factory and lets the factory act through
+              it, for example opening pull requests through a GitHub App or replying in Slack.
             </p>
           </div>
-          {isAdmin && <ConnectApp factoryName={factory.name} apps={available} />}
+          <ConnectApp factoryName={factory.name} apps={available} />
         </div>
         {connected.length === 0 ? (
           <p className="text-sm text-zinc-500">
@@ -191,8 +204,15 @@ function SettingsTab({
                 <tr>
                   <th>App</th>
                   <th>Provider</th>
-                  <th>Installations</th>
-                  <th>Last event</th>
+                  <th>
+                    <Hint label="Installations" tip={installationsHint} />
+                  </th>
+                  <th>
+                    <Hint
+                      label="Last event"
+                      tip="When this factory last received an event from this app."
+                    />
+                  </th>
                   <th />
                 </tr>
               </thead>
@@ -206,7 +226,6 @@ function SettingsTab({
                   >
                     <td>
                       <span className="flex items-center gap-2.5">
-                        <ProviderInitials provider={app.provider} />
                         <Link to={`/apps/${app.id}`} className={link}>
                           {app.name}
                         </Link>
@@ -227,18 +246,16 @@ function SettingsTab({
                       )}
                     </td>
                     <td className="text-right">
-                      {isAdmin && (
-                        <ConfirmForm
-                          fields={{ intent: "disconnect", appId: app.id }}
-                          title={`Disconnect ${app.name} from ${factory.name}?`}
-                          body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
-                          confirmLabel="Disconnect"
-                          destructive
-                          className={quietButton}
-                        >
-                          Disconnect
-                        </ConfirmForm>
-                      )}
+                      <ConfirmForm
+                        fields={{ intent: "disconnect", appId: app.id }}
+                        title={`Disconnect ${app.name} from ${factory.name}?`}
+                        body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
+                        confirmLabel="Disconnect"
+                        destructive
+                        className={quietButton}
+                      >
+                        Disconnect
+                      </ConfirmForm>
                     </td>
                   </tr>
                 ))}
@@ -361,7 +378,6 @@ function ConnectApp({
           )}
           {shown.map((app) => (
             <li key={app.id} className="flex items-center gap-3 px-4 py-2.5">
-              <ProviderInitials provider={app.provider} />
               <div className="min-w-0 grow">
                 <div className="text-sm">
                   {app.name} <span className="text-zinc-500">{providerNames[app.provider]}</span>
@@ -393,27 +409,29 @@ function ConnectApp({
   );
 }
 
+type Message = Extract<Loaded, { tab: "activity" }>["messages"][number];
+
 function ActivityTab({ loaded }: { loaded: Extract<Loaded, { tab: "activity" }> }) {
-  const { messages, older, paged } = loaded;
+  const { factory, total } = loaded;
+  // Each older page continues from the last position shown, so events arriving meanwhile
+  // never shift or repeat a row; a reload shows the newest again.
+  const [olderPages, setOlderPages] = useState<Message[][]>([]);
+  const more = useFetcher<typeof eventsLoader>();
+  useEffect(() => {
+    const page = more.data?.messages;
+    if (page) setOlderPages((pages) => [...pages, page]);
+  }, [more.data]);
+  const messages = [loaded.messages, ...olderPages].flat();
+  const older = more.data ? more.data.older : loaded.older;
   return (
     <section className="space-y-3">
-      <div className="flex flex-wrap items-end justify-between gap-2">
-        <h2 className="font-semibold">
-          Event log <span className="font-normal text-zinc-500">· newest first</span>
-        </h2>
-        <div className="flex gap-2">
-          {paged && (
-            <Link to="?tab=activity" className={secondaryButton}>
-              Newest
-            </Link>
-          )}
-          {older && (
-            <Link to={`?tab=activity&before=${older}`} className={secondaryButton}>
-              Older
-            </Link>
-          )}
-        </div>
-      </div>
+      <h2 className="font-semibold">
+        Event log{" "}
+        <span className="font-normal text-zinc-500">
+          · {total.toLocaleString("en-US")} events · showing{" "}
+          {messages.length.toLocaleString("en-US")}
+        </span>
+      </h2>
       {messages.length === 0 ? (
         <p className="text-sm text-zinc-500">No events.</p>
       ) : (
@@ -425,34 +443,49 @@ function ActivityTab({ loaded }: { loaded: Extract<Loaded, { tab: "activity" }> 
                 <th>Provider</th>
                 <th>Event</th>
                 <th>Received</th>
-                <th>Confirmed</th>
+                <th>
+                  <Hint
+                    label="Confirmed"
+                    tip="Yes once the factory confirms it received the event. Pending until then."
+                  />
+                </th>
                 <th />
               </tr>
             </thead>
             <tbody>
               {messages.map((message) => (
-                <EventRow key={message.position} message={message} />
+                <EventRow key={message.position} factoryId={factory.id} message={message} />
               ))}
             </tbody>
           </table>
         </div>
       )}
+      {older && (
+        <button
+          type="button"
+          disabled={more.state === "loading"}
+          onClick={() => more.load(`/factories/${factory.id}/events?before=${older}`)}
+          className={secondaryButton}
+        >
+          {more.state === "loading" ? "Loading…" : "Load older events"}
+        </button>
+      )}
     </section>
   );
 }
 
-function EventRow({
-  message,
-}: {
-  message: Extract<Loaded, { tab: "activity" }>["messages"][number];
-}) {
+function EventRow({ factoryId, message }: { factoryId: string; message: Message }) {
   const [open, setOpen] = useState(false);
+  const payload = useFetcher<typeof eventLoader>();
   const expandable = message.kind !== "fellBehind";
-  const toggle = expandable ? () => setOpen(!open) : undefined;
+  const toggle = () => {
+    if (!open && !payload.data) payload.load(`/factories/${factoryId}/events/${message.position}`);
+    setOpen(!open);
+  };
   return (
     <>
       <tr
-        onClick={toggle}
+        onClick={expandable ? toggle : undefined}
         className={
           expandable ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900" : undefined
         }
@@ -482,7 +515,9 @@ function EventRow({
       {open && (
         <tr>
           <td colSpan={6} className="bg-zinc-50 dark:bg-zinc-900/50">
-            <pre className="max-h-96 overflow-auto text-xs">{message.payload}</pre>
+            <pre className="max-h-96 overflow-auto text-xs">
+              {payload.data?.payload ?? "Loading…"}
+            </pre>
           </td>
         </tr>
       )}

@@ -1,15 +1,14 @@
-import { type Provider, providers } from "@jigs-ai/hub-protocol";
+import { type Provider, pagerDutyScopes, providers } from "@jigs-ai/hub-protocol";
 import type { ReactNode } from "react";
 import { Form, Link, redirect } from "react-router";
-import { addGitHubApp } from "../../src/github.ts";
+import { addGitHubApp, githubWebhookPath } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
 import { addPagerDutyApp } from "../../src/pagerduty.ts";
 import { addSlackApp } from "../../src/slack.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
-import { PageHeader } from "../components/page.tsx";
-import { linearNameHint } from "../components/provider.tsx";
-import { button, input, quietButton } from "../components/ui.ts";
+import { PageHeader, UrlRow } from "../components/page.tsx";
+import { button, external, input, link, quietButton, select } from "../components/ui.ts";
 import type { Route } from "./+types/new-app.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -18,7 +17,10 @@ export async function loader({ context, request }: Route.LoaderArgs) {
   return {
     isAdmin: role === "admin",
     provider: providers.find((provider) => provider === chosen) ?? null,
-    hubUrl: context.config.publicUrl.origin,
+    urls: {
+      hub: context.config.publicUrl.origin,
+      githubWebhook: `${context.config.publicUrl.origin}${githubWebhookPath}`,
+    },
   };
 }
 
@@ -77,125 +79,267 @@ export async function action({ context, request }: Route.ActionArgs) {
 type Field = {
   name: string;
   label: string;
-  hint?: string;
+  help?: ReactNode;
   secret?: boolean;
   multiline?: boolean;
   options?: { value: string; label: string }[];
-  wide?: boolean;
 };
+
+type HubUrls = { hub: string; githubWebhook: string };
+
+const generalAbout = (
+  <>
+    On the App's <strong>General</strong> page, under <strong>About</strong>.
+  </>
+);
+
+const slackCredentials = (
+  <>
+    <strong>Basic Information</strong>, under <strong>App Credentials</strong>.
+  </>
+);
 
 const forms: Record<
   Provider,
   {
     card: { title: string; summary: string };
-    intro: (hubUrl: string) => ReactNode;
+    primary: string;
+    steps: (urls: HubUrls) => ReactNode[];
+    note?: ReactNode;
     fields: Field[];
     submit: string;
   }
 > = {
   github: {
     card: { title: "GitHub App", summary: "Repos, PRs, checks" },
-    intro: () => (
+    primary: "Create a GitHub App for your organization first, then copy its details here.",
+    steps: (urls) => [
       <>
-        <p>
-          Create the App on GitHub first, under your organization's Developer settings, then copy
-          its details here.
-        </p>
-        <p className="text-zinc-500">
-          This is not the hub's sign-in app: that one is an OAuth App set in the hub's environment.
-        </p>
-      </>
-    ),
+        On GitHub, open your organization's <strong>Settings</strong> →{" "}
+        <strong>Developer settings</strong> → <strong>GitHub Apps</strong> →{" "}
+        <strong>New GitHub App</strong>.
+      </>,
+      <>
+        Under <strong>Webhook</strong>, set the <strong>Webhook URL</strong> to:
+        <UrlRow label="Webhook URL" value={urls.githubWebhook} />
+      </>,
+      <>
+        Create the App, then copy the details below. The app's page lists the remaining settings
+        once you add it here.
+      </>,
+    ],
+    note: "This App is how factories work on GitHub, such as opening pull requests. It's separate from the GitHub login people use to sign in to this hub.",
     fields: [
-      { name: "name", label: "Name", hint: "Shown on the hub; you can change it later" },
-      { name: "slug", label: "Slug", hint: "From the public page URL, github.com/apps/<slug>" },
-      { name: "appId", label: "App ID", hint: "About section" },
-      { name: "clientId", label: "Client ID", hint: "About section" },
+      {
+        name: "name",
+        label: "Name",
+        help: "What the hub calls this app. Only people see it, and you can change it later.",
+      },
+      {
+        name: "slug",
+        label: "Slug",
+        help: (
+          <>
+            The end of the App's public page address: <code>github.com/apps/&lt;slug&gt;</code>.
+          </>
+        ),
+      },
+      { name: "appId", label: "App ID", help: generalAbout },
+      { name: "clientId", label: "Client ID", help: generalAbout },
       {
         name: "clientSecret",
         label: "Client secret",
-        hint: "Generate a new client secret",
         secret: true,
+        help: (
+          <>
+            On the <strong>General</strong> page, under <strong>Client secrets</strong>, click{" "}
+            <strong>Generate a new client secret</strong>. GitHub shows it only once.
+          </>
+        ),
       },
       {
         name: "webhookSecret",
         label: "Webhook secret",
-        hint: "The Secret you set under Webhook",
         secret: true,
+        help: (
+          <>
+            The secret you entered under <strong>Webhook</strong> when creating the App. If you left
+            it empty, set one on GitHub first.
+          </>
+        ),
       },
       {
         name: "privateKey",
         label: "Private key",
-        hint: "Paste the .pem file's contents",
         multiline: true,
-        wide: true,
+        help: (
+          <>
+            On the <strong>General</strong> page, under <strong>Private keys</strong>, click{" "}
+            <strong>Generate a private key</strong>. Paste the whole contents of the downloaded{" "}
+            <code>.pem</code> file.
+          </>
+        ),
       },
     ],
     submit: "Add GitHub App",
   },
   linear: {
     card: { title: "Linear app", summary: "Issues, agent sessions" },
-    intro: (hubUrl) => (
+    primary: "Create an OAuth application in Linear first, then copy its details here.",
+    steps: (urls) => [
       <>
-        <p>
-          Create an OAuth application in Linear first, under Settings, API, then copy its details
-          here.
-        </p>
-        <p className="text-zinc-500">
-          Linear asks for a Redirect URI and a Webhook URL before the hub has made them. Enter the
-          hub's address, <code>{hubUrl}</code>, for both, then replace them with the URLs the app's
-          page shows once you add it.
-        </p>
-      </>
-    ),
+        In Linear, open <strong>Settings</strong> → <strong>API</strong> →{" "}
+        <strong>OAuth applications</strong> → <strong>New</strong>.
+      </>,
+      <>
+        Linear asks for a <strong>Redirect URI</strong> and a <strong>Webhook URL</strong> before
+        the hub has made them. Enter the hub's address for both for now:
+        <UrlRow label="Hub address" value={urls.hub} />
+      </>,
+      <>
+        Create the application, then copy the details below. The app's page shows the real URLs once
+        you add it here.
+      </>,
+    ],
     fields: [
-      { name: "name", label: "Name", hint: linearNameHint, wide: true },
-      { name: "clientId", label: "Client ID" },
-      { name: "clientSecret", label: "Client secret", secret: true },
-      { name: "webhookSecret", label: "Webhook signing secret", secret: true },
+      {
+        name: "name",
+        label: "Name",
+        help: "Use the app's name in Linear. People @mention it by this name, and agents are told it's their own. You can rename it in Linear later; rename it here to match.",
+      },
+      { name: "clientId", label: "Client ID", help: "On the application's page in Linear." },
+      {
+        name: "clientSecret",
+        label: "Client secret",
+        secret: true,
+        help: "On the application's page in Linear.",
+      },
+      {
+        name: "webhookSecret",
+        label: "Webhook signing secret",
+        secret: true,
+        help: (
+          <>
+            On the application's page, under <strong>Webhooks</strong>, once webhooks are turned on.
+          </>
+        ),
+      },
     ],
     submit: "Add Linear app",
   },
   slack: {
     card: { title: "Slack app", summary: "Mentions, messages" },
-    intro: () => (
-      <p>
-        Create an app at api.slack.com/apps first as a blank app, not from a template, with Socket
-        Mode off. Then copy its details from Basic Information here.
-      </p>
-    ),
+    primary: "Create a Slack app first, then copy its details here.",
+    steps: () => [
+      <>
+        At{" "}
+        <a href="https://api.slack.com/apps" {...external} className={link}>
+          api.slack.com/apps
+        </a>
+        , click <strong>Create New App</strong> → <strong>From scratch</strong>. Don't use a
+        manifest.
+      </>,
+      <>
+        Leave <strong>Socket Mode</strong> off.
+      </>,
+      <>
+        Open <strong>Basic Information</strong>. The details below are under{" "}
+        <strong>App Credentials</strong>.
+      </>,
+    ],
     fields: [
-      { name: "name", label: "Name", hint: "As the app is called in Slack" },
-      { name: "appId", label: "App ID" },
-      { name: "clientId", label: "Client ID" },
-      { name: "clientSecret", label: "Client secret", secret: true },
-      { name: "signingSecret", label: "Signing secret", secret: true },
+      {
+        name: "name",
+        label: "Name",
+        help: "Usually the app's name in Slack. Factories see it as the bot's name.",
+      },
+      { name: "appId", label: "App ID", help: slackCredentials },
+      { name: "clientId", label: "Client ID", help: slackCredentials },
+      {
+        name: "clientSecret",
+        label: "Client secret",
+        secret: true,
+        help: (
+          <>
+            <strong>Basic Information</strong>, under <strong>App Credentials</strong>. Click{" "}
+            <strong>Show</strong> to reveal it.
+          </>
+        ),
+      },
+      {
+        name: "signingSecret",
+        label: "Signing secret",
+        secret: true,
+        help: (
+          <>
+            <strong>Basic Information</strong>, under <strong>App Credentials</strong>. Slack uses
+            it to sign the events it sends the hub.
+          </>
+        ),
+      },
     ],
     submit: "Add Slack app",
   },
   pagerduty: {
-    card: { title: "PagerDuty", summary: "Incidents" },
-    intro: (hubUrl) => (
+    card: { title: "PagerDuty app", summary: "Incidents" },
+    primary: "Register an app in PagerDuty first, then copy its details here.",
+    steps: (urls) => [
       <>
-        <p>
-          Register an app in PagerDuty first, under Integrations, App Registration, with Scoped
-          OAuth and the scopes its page on the hub lists, then copy its details here. The hub checks
-          them by getting a token and finding the from user.
-        </p>
-        <p className="text-zinc-500">
-          PagerDuty asks for a redirect URL the hub never uses: enter the hub's address,{" "}
-          <code>{hubUrl}</code>. The webhook comes after: the app's page shows its URL.
-        </p>
-      </>
-    ),
+        In PagerDuty, open <strong>Integrations</strong> → <strong>App Registration</strong> →{" "}
+        <strong>New App</strong>.
+      </>,
+      <>
+        Choose <strong>Scoped OAuth</strong> and grant <Codes values={pagerDutyScopes} />.
+      </>,
+      <>
+        PagerDuty asks for a <strong>Redirect URL</strong> the hub never uses. Enter the hub's
+        address:
+        <UrlRow label="Hub address" value={urls.hub} />
+      </>,
+      <>
+        Register the app, then copy the details below. You'll add the webhook afterwards; the app's
+        page shows its URL.
+      </>,
+    ],
     fields: [
-      { name: "name", label: "Name", hint: "As the app is called in PagerDuty" },
-      { name: "clientId", label: "Client ID" },
-      { name: "clientSecret", label: "Client secret", secret: true },
-      { name: "subdomain", label: "Account subdomain", hint: "As in <subdomain>.pagerduty.com" },
+      { name: "name", label: "Name", help: "What the hub calls this app. Only people see it." },
+      {
+        name: "clientId",
+        label: "Client ID",
+        help: (
+          <>
+            Shown when you register the app, under <strong>Scoped OAuth</strong>.
+          </>
+        ),
+      },
+      {
+        name: "clientSecret",
+        label: "Client secret",
+        secret: true,
+        help: (
+          <>
+            Shown when you register the app, under <strong>Scoped OAuth</strong>.
+          </>
+        ),
+      },
+      {
+        name: "subdomain",
+        label: "Account subdomain",
+        help: (
+          <>
+            The first part of your PagerDuty address: <code>&lt;subdomain&gt;.pagerduty.com</code>.
+          </>
+        ),
+      },
       {
         name: "region",
         label: "Region",
+        help: (
+          <>
+            Where your account is hosted. Choose EU if you sign in at{" "}
+            <code>app.eu.pagerduty.com</code>.
+          </>
+        ),
         options: [
           { value: "us", label: "US" },
           { value: "eu", label: "EU" },
@@ -204,7 +348,7 @@ const forms: Record<
       {
         name: "from",
         label: "From email",
-        hint: "The account's user that factories make changes as, such as an on-call account",
+        help: "The email of a user in this PagerDuty account, such as a shared on-call user. Notes and other changes factories make show up as this user. The hub checks that the user exists.",
       },
     ],
     submit: "Add PagerDuty app",
@@ -213,7 +357,7 @@ const forms: Record<
 
 export default function NewApp({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
-  const { isAdmin, provider, hubUrl } = loaderData;
+  const { isAdmin, provider, urls } = loaderData;
   return (
     <div className="max-w-4xl space-y-6">
       <PageHeader title="Add an app" parent={{ to: "/apps", label: "Apps" }} />
@@ -239,7 +383,7 @@ export default function NewApp({ loaderData, actionData }: Route.ComponentProps)
             ))}
           </nav>
           {provider ? (
-            <AppForm key={provider} provider={provider} hubUrl={hubUrl} />
+            <AppForm key={provider} provider={provider} urls={urls} />
           ) : (
             <p className="text-zinc-500">Choose the provider of the app you made.</p>
           )}
@@ -249,13 +393,22 @@ export default function NewApp({ loaderData, actionData }: Route.ComponentProps)
   );
 }
 
-function AppForm({ provider, hubUrl }: { provider: Provider; hubUrl: string }) {
-  const { intro, fields, submit } = forms[provider];
+function AppForm({ provider, urls }: { provider: Provider; urls: HubUrls }) {
+  const { primary, steps, note, fields, submit } = forms[provider];
   return (
-    <Form method="post" className="space-y-5">
+    <Form method="post" className="max-w-2xl space-y-6">
       <input type="hidden" name="provider" value={provider} />
-      <div className="space-y-2 text-sm">{intro(hubUrl)}</div>
-      <div className="grid gap-x-6 gap-y-4 sm:grid-cols-2">
+      <div className="space-y-3 text-sm">
+        <p className="font-semibold">{primary}</p>
+        <ol className="list-decimal space-y-3 pl-5 marker:text-zinc-500 [&_li>div]:mt-2">
+          {steps(urls).map((step, index) => (
+            // biome-ignore lint/suspicious/noArrayIndexKey: a provider's steps never reorder.
+            <li key={index}>{step}</li>
+          ))}
+        </ol>
+        {note && <p className="text-zinc-500">{note}</p>}
+      </div>
+      <div className="space-y-5">
         {fields.map((field) => (
           <FieldInput key={field.name} field={field} />
         ))}
@@ -278,7 +431,7 @@ function FieldInput({ field }: { field: Field }) {
       id={field.name}
       name={field.name}
       defaultValue={field.options[0]?.value}
-      className={input}
+      className={select}
     >
       {field.options.map((option) => (
         <option key={option.value} value={option.value}>
@@ -305,14 +458,21 @@ function FieldInput({ field }: { field: Field }) {
     />
   );
   return (
-    <div className={`flex flex-col gap-1 text-sm ${field.wide ? "sm:col-span-2" : ""}`}>
-      <div className="flex flex-wrap justify-between gap-x-4">
-        <label htmlFor={field.name} className="font-medium">
-          {field.label}
-        </label>
-        {field.hint && <span className="text-zinc-500">{field.hint}</span>}
-      </div>
+    <div className="flex flex-col gap-1 text-sm">
+      <label htmlFor={field.name} className="font-medium">
+        {field.label}
+      </label>
+      {field.help && <p className="text-zinc-500">{field.help}</p>}
       {control}
     </div>
   );
+}
+
+function Codes({ values }: { values: readonly string[] }) {
+  return values.map((value, index) => (
+    <span key={value}>
+      {index === 0 ? "" : index === values.length - 1 ? " and " : ", "}
+      <code>{value}</code>
+    </span>
+  ));
 }

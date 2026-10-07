@@ -206,8 +206,10 @@ works once. The person opens the link and signs in with the GitHub account
 whose sign-in email that is. Until then the invite waits under **Pending
 invites**, where an admin can copy its link again or revoke it.
 
-Admins add apps and factories, assign them, invite people and change roles.
-Members see everything but change nothing.
+Admins manage apps, factories and members: they add, rename and remove apps
+and factories, re-issue factory tokens, name installations, invite people and
+change roles. Members can see everything and connect factories to existing
+apps, or disconnect them.
 
 The hub's home page charts, hour by hour over the last 24 hours, the
 webhooks it received and the events it queued for your factories, with a
@@ -243,9 +245,10 @@ confirmed and how many apps it is assigned. A factory's own page has two
 tabs. **Settings** lists its connected apps, with their installations' names
 and when the factory last received an event from each, and lets an admin
 rename the factory, which keeps its token, re-issue its token or remove it.
-**Activity** is its event log: every provider event the hub kept for it, with
-when it arrived and whether the factory has confirmed it. Select an event to
-see its payload.
+**Activity** is its event log, newest first: every provider event the hub kept
+for it, with when it arrived and whether the factory has confirmed it. Select
+an event to see its payload, and choose **Load older events** to see further
+back.
 
 ## Add apps and assign them {#apps}
 
