@@ -1,6 +1,13 @@
 import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
-import { apps, assignments, factories, factoryMessages, providerEvents } from "../src/db/schema.ts";
+import {
+  apps,
+  assignments,
+  factories,
+  factoryMessages,
+  providerEvents,
+  user,
+} from "../src/db/schema.ts";
 
 // A connected factory long-polls at most 30 seconds at a time, and each poll marks it seen.
 const ONLINE_WITHIN_MS = 2 * 60_000;
@@ -13,6 +20,10 @@ const summary = {
   lastSeenAt: factories.lastSeenAt,
   lastSeenVersion: factories.lastSeenVersion,
   cursor: factories.cursor,
+  createdBy: factories.createdBy,
+  addedBy: sql<
+    string | null
+  >`(select ${user.name} from ${user} where ${user.id} = "factories"."created_by")`,
   unconfirmed: sql<number>`(
     select count(*)::int from ${factoryMessages}
     where ${factoryMessages.factoryId} = "factories"."id"

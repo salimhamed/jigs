@@ -3,6 +3,7 @@ import { and, eq } from "drizzle-orm";
 import { type AppLoadContext, redirect } from "react-router";
 import { mayCreateOrganization, pendingInvitation } from "../src/auth.ts";
 import { invitation, organization } from "../src/db/schema.ts";
+import { type FactoryManager, mayManageFactory } from "../src/factories.ts";
 import type { Role } from "../src/roles.ts";
 
 /** The signed-in user, or `null`. */
@@ -55,6 +56,28 @@ async function findMember(context: AppLoadContext, request: Request) {
 export async function requireAdmin(context: AppLoadContext, request: Request) {
   const member = await requireMember(context, request);
   return member.role === "admin" ? member : { error: "Only an admin can do that." };
+}
+
+/** A signed-in member, as the rules for changing factories see them. */
+export const asManager = (member: Awaited<ReturnType<typeof requireMember>>): FactoryManager => ({
+  organizationId: member.organizationId,
+  userId: member.user.id,
+  role: member.role,
+});
+
+/**
+ * {@link requireMember} for a change to one of the Organization's factories:
+ * anyone who may not change it gets `{ error }` to return.
+ */
+export async function requireFactoryManager(
+  context: AppLoadContext,
+  request: Request,
+  factoryId: string,
+) {
+  const member = await requireMember(context, request);
+  return (await mayManageFactory(context.db, asManager(member), factoryId))
+    ? member
+    : { error: "Only an admin or whoever added this factory can change it." };
 }
 
 /** Run a Better Auth call for an action, returning its refusal as `{ error }`. */

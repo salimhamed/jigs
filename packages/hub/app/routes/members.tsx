@@ -52,13 +52,18 @@ export async function action({ context, request }: Route.ActionArgs) {
           body: { memberIdOrEmail: String(form.get("memberId")) },
         }),
       );
-    case "role":
-      return attempt(() =>
+    case "role": {
+      const role = String(form.get("role"));
+      const result = await attempt(() =>
         context.auth.api.updateMemberRole({
           headers,
-          body: { memberId: String(form.get("memberId")), role: String(form.get("role")) },
+          body: { memberId: String(form.get("memberId")), role },
         }),
       );
+      return result.error
+        ? result
+        : { message: `${form.get("name")} is now ${role === "admin" ? "an admin" : "a member"}.` };
+    }
     case "revoke":
       return attempt(() =>
         context.auth.api.cancelInvitation({
@@ -78,7 +83,7 @@ export default function Members({ loaderData, actionData }: Route.ComponentProps
     <div className="space-y-8">
       <PageHeader
         title="Members"
-        subtitle="Admins manage apps, factories and members. Members can see everything and connect factories to existing apps."
+        subtitle="Admins manage apps, members, settings and every factory. Members can see everything, and add and manage their own factories."
         action={
           isAdmin && (
             <Link to="/members/invite" className={button}>
@@ -166,7 +171,12 @@ function MemberRow({
             className={select}
             onChange={(event) =>
               fetcher.submit(
-                { intent: "role", memberId: member.id, role: event.target.value },
+                {
+                  intent: "role",
+                  memberId: member.id,
+                  name: member.name,
+                  role: event.target.value,
+                },
                 { method: "post" },
               )
             }

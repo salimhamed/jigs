@@ -3,10 +3,10 @@ import { ChevronRight, KeyRound, Plus, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { data, Form, Link, redirect, useFetcher } from "react-router";
 import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
-import { removeFactory, renameFactory } from "../../src/factories.ts";
+import { manages, removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
 import { listInstalledApps } from "../apps.server.ts";
-import { requireAdmin, requireMember } from "../auth.server.ts";
+import { asManager, requireFactoryManager, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
@@ -32,17 +32,19 @@ import type { loader as eventsLoader } from "./factory-events.ts";
 const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const { organizationId, role } = await requireMember(context, request);
+  const member = await requireMember(context, request);
+  const { organizationId } = member;
   const found = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
   if (!found) throw notFound();
-  const { cursor, ...factory } = found;
-  const isAdmin = role === "admin";
+  const { cursor, createdBy, ...factory } = found;
+  const isAdmin = member.role === "admin";
+  const canManage = manages(asManager(member), { createdBy });
   if (new URL(request.url).searchParams.get("tab") === "activity") {
     const [log, total] = await Promise.all([
       readEventLog(context, { id: factory.id, cursor }, null),
       countEvents(context, factory.id),
     ]);
-    return { tab: "activity" as const, isAdmin, factory, ...log, total };
+    return { tab: "activity" as const, factory, ...log, total };
   }
   const [connected, lastEvents, organizationApps] = await Promise.all([
     assignedApps(context.db, factory.id),
@@ -52,6 +54,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   return {
     tab: "settings" as const,
     isAdmin,
+    canManage,
     factory,
     connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
     hasApps: organizationApps.length > 0,
@@ -63,11 +66,7 @@ export async function action({ context, request, params }: Route.ActionArgs) {
   if (!isUuid(params.id)) throw notFound();
   const form = await request.formData();
   const intent = form.get("intent");
-  // Members connect and disconnect apps; only admins change the factory itself.
-  const caller =
-    intent === "connect" || intent === "disconnect"
-      ? await requireMember(context, request)
-      : await requireAdmin(context, request);
+  const caller = await requireFactoryManager(context, request, params.id);
   if ("error" in caller) return caller;
   const { organizationId } = caller;
   const appId = String(form.get("appId") ?? "");
@@ -178,7 +177,7 @@ function SettingsTab({
   loaded: Extract<Loaded, { tab: "settings" }>;
   justConnected: string | null;
 }) {
-  const { isAdmin, factory, connected, available, hasApps } = loaded;
+  const { isAdmin, canManage, factory, connected, available, hasApps } = loaded;
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -192,12 +191,14 @@ function SettingsTab({
               it, for example opening pull requests through a GitHub App or replying in Slack.
             </p>
           </div>
-          <ConnectApp
-            factoryName={factory.name}
-            apps={available}
-            hasApps={hasApps}
-            isAdmin={isAdmin}
-          />
+          {canManage && (
+            <ConnectApp
+              factoryName={factory.name}
+              apps={available}
+              hasApps={hasApps}
+              isAdmin={isAdmin}
+            />
+          )}
         </div>
         {connected.length === 0 ? (
           <p className="text-sm text-zinc-500">
@@ -252,16 +253,18 @@ function SettingsTab({
                       )}
                     </td>
                     <td className="text-right">
-                      <ConfirmForm
-                        fields={{ intent: "disconnect", appId: app.id }}
-                        title={`Disconnect ${app.name} from ${factory.name}?`}
-                        body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
-                        confirmLabel="Disconnect"
-                        destructive
-                        className={quietButton}
-                      >
-                        Disconnect
-                      </ConfirmForm>
+                      {canManage && (
+                        <ConfirmForm
+                          fields={{ intent: "disconnect", appId: app.id }}
+                          title={`Disconnect ${app.name} from ${factory.name}?`}
+                          body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
+                          confirmLabel="Disconnect"
+                          destructive
+                          className={quietButton}
+                        >
+                          Disconnect
+                        </ConfirmForm>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -271,7 +274,7 @@ function SettingsTab({
         )}
       </section>
 
-      {isAdmin && (
+      {canManage && (
         <section className="space-y-3">
           <h2 className="font-semibold">General</h2>
           <div className={`${card} divide-y divide-zinc-200 dark:divide-zinc-800`}>
@@ -302,7 +305,7 @@ function SettingsTab({
         </section>
       )}
 
-      {isAdmin && (
+      {canManage && (
         <DangerRow
           label="Remove factory"
           hint="Disconnects it from all apps and drops its unconfirmed events."

@@ -1,6 +1,7 @@
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
-import { requireMember } from "../auth.server.ts";
+import { manages } from "../../src/factories.ts";
+import { asManager, requireMember } from "../auth.server.ts";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
@@ -19,15 +20,18 @@ import { listFactories } from "../factories.server.ts";
 import type { Route } from "./+types/factories.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { organizationId, role } = await requireMember(context, request);
+  const manager = asManager(await requireMember(context, request));
+  const factories = await listFactories(context, manager.organizationId);
   return {
-    isAdmin: role === "admin",
-    factories: await listFactories(context, organizationId),
+    factories: factories.map(({ createdBy, ...factory }) => ({
+      ...factory,
+      canManage: manages(manager, { createdBy }),
+    })),
   };
 }
 
 export default function Factories({ loaderData }: Route.ComponentProps) {
-  const { isAdmin, factories } = loaderData;
+  const { factories } = loaderData;
   return (
     <div className="space-y-6">
       <PageHeader
@@ -43,12 +47,10 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
           </>
         }
         action={
-          isAdmin && (
-            <Link to="/factories/new" className={button}>
-              <Plus className="size-4" />
-              Add factory
-            </Link>
-          )
+          <Link to="/factories/new" className={button}>
+            <Plus className="size-4" />
+            Add factory
+          </Link>
         }
       />
       {factories.length === 0 ? (
@@ -71,6 +73,12 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
                 <th>
                   <Hint label="Apps" tip={factoryHints.apps} />
                 </th>
+                <th>
+                  <Hint
+                    label="Added by"
+                    tip="Who added this factory. They and admins can change it."
+                  />
+                </th>
                 <th />
               </tr>
             </thead>
@@ -91,8 +99,9 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
                     {factory.unconfirmed}
                   </td>
                   <td>{factory.appNames.length}</td>
+                  <td>{factory.addedBy ?? "—"}</td>
                   <td>
-                    {isAdmin && (
+                    {factory.canManage && (
                       <div className="flex justify-end gap-1">
                         <ReissueTokenButton factory={factory} className={quietButton}>
                           <KeyRound className="size-4" />

@@ -206,10 +206,12 @@ works once. The person opens the link and signs in with the GitHub account
 whose sign-in email that is. Until then the invite waits under **Pending
 invites**, where an admin can copy its link again or revoke it.
 
-Admins manage apps, factories and members: they add, rename and remove apps
-and factories, re-issue factory tokens, name installations, invite people and
-change roles. Members can see everything and connect factories to existing
-apps, or disconnect them.
+Admins manage apps, members, settings and every factory: they add, rename and
+remove apps, name installations, invite people, change roles and change any
+factory. Members can see everything, and add and manage their own factories:
+rename them, re-issue their tokens, connect and disconnect their apps, and
+remove them. A factory nobody added, such as one whose member has left, only
+admins can change.
 
 The hub's home page charts, hour by hour over the last 24 hours, the
 webhooks it received and the events it queued for your factories, with a
@@ -217,7 +219,7 @@ total for each provider.
 
 ## Add a factory {#factories}
 
-Under **Factories**, an admin chooses **Add factory** and names it. The hub
+Under **Factories**, any member chooses **Add factory** and names it. The hub
 shows a command with the factory's token, once:
 
 ```sh
@@ -241,9 +243,10 @@ and every event waiting for it.
 
 The factories list shows when each factory last reached the hub, with a green
 dot while it is connected, its jigs version, how many events it has not
-confirmed and how many apps it is assigned. A factory's own page has two
-tabs. **Settings** lists its connected apps, with their installations' names
-and when the factory last received an event from each, and lets an admin
+confirmed, how many apps it is assigned and who added it. A factory's own
+page has two tabs. **Settings** lists its connected apps, with their
+installations' names and when the factory last received an event from each,
+and lets whoever added the factory, or an admin, connect and disconnect apps,
 rename the factory, which keeps its token, re-issue its token or remove it.
 **Activity** is its event log, newest first: every provider event the hub kept
 for it, with when it arrived and whether the factory has confirmed it. Select
