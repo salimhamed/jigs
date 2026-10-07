@@ -304,7 +304,7 @@ test("timer reconciliation is tracked and cancelled during shutdown", async () =
   expect(cancel).toHaveBeenCalled();
 });
 
-test("a scheduled pass logs only when it released, kept or failed something", async () => {
+test("a scheduled pass logs only when it found a finished run", async () => {
   const runs: RunState[] = [run("running")];
   const h = harness(runs);
   let fire: (() => void) | undefined;

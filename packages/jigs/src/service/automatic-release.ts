@@ -173,7 +173,7 @@ export function startAutomaticRelease(
         },
       );
       if (stopped) return;
-      if (report.released + report.kept + report.failed > 0)
+      if (report.considered > 0)
         deps.log(
           `[release] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
         );
