@@ -297,6 +297,10 @@ const triggers = {
 };
 ```
 
+To have Claude Code answer in the session and keep answering replies, call
+`linearAgentConversation` in the run; see
+[Linear conversations](/guide/linear-conversations).
+
 Every factory assigned the app hears every mention of it, and each trigger on
 this source in each of those factories starts its own run. jigs does not pick
 one for you: give each purpose its own Linear app, or split the issues between

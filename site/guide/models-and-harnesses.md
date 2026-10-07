@@ -249,8 +249,9 @@ harness built in the workflow body is checked when its agent starts.
 `harnesses.claude({ model, ...settings })` is a harness for `runAgent` and
 `askAgent`. Install Claude Code, keep `claude` on the service's `PATH` (or set
 `JIGS_CLAUDE_EXECUTABLE`), and run `claude auth login`. Calls use that account.
-jigs runs it unattended with permission prompts bypassed. `askAgent` uses the
-model without tools, MCP servers or filesystem settings.
+jigs drives that `claude` through the Claude Agent SDK and runs it unattended
+with permission prompts bypassed. `askAgent` uses the model without tools, MCP
+servers or filesystem settings.
 
 ## Codex
 

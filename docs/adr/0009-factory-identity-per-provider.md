@@ -39,7 +39,9 @@ identity: jigs cannot tell Linear workspaces apart.
 - Comments post under the plain app name; jigs never uses `createAsUser` to
   look like a person.
 - A parked run recognises a human reply by excluding every comment id it has
-  posted on the ticket, never by author, so detection works in both modes.
+  posted on the ticket, never by author, so detection works in both modes. It
+  also skips every comment that belongs to a Linear agent session, since those
+  are a conversation's ([0016](./0016-linear-agent-conversations.md)).
 - In Linear app mode `jigs doctor` skips the webhook listing, because it needs
   the `admin` scope an app actor cannot hold, and asks the operator to confirm
   the webhook by hand. A second admin credential for this was rejected.

@@ -7,22 +7,31 @@ Workflow code passes only tagged, serializable descriptors built with
 `models.*` and `harnesses.*`. Step-side drivers (`src/steps/agents/drivers`)
 turn a descriptor into a live provider and own its execution, checks,
 environment and session references. `runAgent` and `askAgent` take harnesses;
-`askModel` and `askJev` take model sources. `createAgentRunner` opens a Claude
-Code or Codex harness through the same driver for a factory's own step.
+`askModel` and `askJev` take model sources. `createAgentRunner` opens a Codex
+harness through the same driver for a factory's own step.
 `Driver`, `DriverContext`, `AgentRunner` and the types they reach are a
 published contract whose change is a breaking release.
 
-- **Claude Code and Codex** run through the community AI SDK providers,
-  exact-pinned, each a thin wrapper over the vendor's own runtime and its
-  subscription login. They take a plain `cwd`, so an agent works directly in
-  the run's worktree and loads its project settings and `AGENTS.md`. MCP is
-  the exception ([0005](./0005-mcp-deny-by-default.md)).
+- **Codex** runs through the community AI SDK provider, exact-pinned, a thin
+  wrapper over the vendor's own runtime and its subscription login. **Claude
+  Code** runs through Anthropic's Claude Agent SDK, which drives the installed
+  `claude` on the same login; its descriptor is the SDK's own options minus the
+  keys jigs owns. Both take a plain `cwd`, so an agent works directly in the
+  run's worktree and loads its project settings and `AGENTS.md`. MCP is the
+  exception ([0005](./0005-mcp-deny-by-default.md)).
 - **Pi** runs as a subprocess of the installed binary; Pi owns its agent loop
   and jigs implements no `LanguageModel` for it. Structured output goes only
   through an invocation-private `submit_result` tool that validates against
   the schema; a turn without an accepted call fails even if the reply is JSON.
 
 ## Consequences
+
+- Claude Code moved from its AI SDK provider to the Agent SDK so a step can hold
+  a conversation ([0016](./0016-linear-agent-conversations.md)): the provider
+  ended its stream at the first result, so a reply sent after an answer was
+  lost. Keeping the provider for one-shot steps was rejected as a second way to
+  drive Claude. Claude has no AI SDK model any more, so `createAgentRunner`
+  refuses it, as it does Pi.
 
 - `askAgent` gives the model no tools. Codex is rejected there because it has
   no tool-free mode, and a descriptor naming tools or MCP servers is rejected

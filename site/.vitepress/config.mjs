@@ -60,6 +60,7 @@ export default {
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
           { text: "Waiting and external events", link: "/guide/waiting-and-events" },
           { text: "Slack", link: "/guide/slack" },
+          { text: "Linear conversations", link: "/guide/linear-conversations" },
           { text: "Recipes", link: "/guide/recipes" },
           { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },

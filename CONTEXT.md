@@ -82,6 +82,11 @@ event from the hub, or `jigs poke`.
 a second active run cannot take it.
 _Avoid_: lock, lease
 
+**Session hook**: The hook a conversing run holds for its whole conversation,
+keyed by a token that names the Linear agent session, so a second run cannot
+converse in it. A wake on it makes the run read the session's prompts again.
+_Avoid_: session claim, session lock
+
 ## Resources
 
 **Binding**: A named target repository in `jigs.config.ts`, with its remote,
@@ -154,6 +159,29 @@ _Avoid_: role session, resumeOrRebuild
 **Linear agent session**: Linear's record of one mention of, or assignment to,
 a Linear app; the `linear.agentSessions` source's occurrence. Not an agent
 session.
+
+**Conversation**: One Claude session answering in one Linear agent session, run
+by one run: turns until it goes idle, someone stops it, or a turn fails.
+_Avoid_: chat, thread
+
+**Turn**: One agent call in an agent session or a conversation. A conversation
+turn also takes the replies that arrive while it runs, and ends once Claude has
+answered every message it took.
+
+**Live turn**: A conversation turn running in this service process, which can
+take a reply or a stop directly, without waking the run.
+
+**Prompt**: A message a person sent into a Linear agent session: a reply, or a
+stop when they pressed the stop button. Linear holds every prompt, so a run
+re-reads them rather than trusting a wake to carry one.
+_Avoid_: comment (for the session's own messages)
+
+**Consumed**: A prompt a turn took. The prompt ids a conversation has consumed
+are its cursor: the next turn takes every prompt not among them, so a turn
+retried after a crash neither drops nor repeats one.
+
+**Idle timeout**: How long a conversation waits for a reply before it ends and
+the run goes on (`idleFor`).
 
 **Session reference**: The small plain data that lets a later step resume the
 same harness session.

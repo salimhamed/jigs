@@ -118,6 +118,14 @@ ticket's creator) and the assignee. The operator is the factory's
 rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note.
 Unknown emails are skipped with a warning; the comment still posts.
 
+To let Claude Code answer in Linear's agent panel, trigger the workflow with
+`linear.agentSessions`, provision a worktree, then call
+`linearAgentConversation(input, { harness, cwd })` from `#jigs/routines`. It
+needs a Claude harness. Its `outcome` is `idle` when no one replied for
+`idleFor` (4h by default), `stopped` when someone pressed stop, or `failed`
+when a turn failed. A second run for the same session throws
+`ClaimConflictError`. Session replies never answer `haltForHuman`.
+
 ## Validation ownership
 
 Give the responsible agent the acceptance criteria and repository access. It
