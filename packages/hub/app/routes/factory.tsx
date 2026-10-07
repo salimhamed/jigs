@@ -6,7 +6,7 @@ import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts"
 import { manages, removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
 import { listInstalledApps } from "../apps.server.ts";
-import { asManager, requireFactoryManager, requireMember } from "../auth.server.ts";
+import { requireFactoryManager, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
@@ -38,7 +38,7 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
   if (!found) throw notFound();
   const { cursor, createdBy, ...factory } = found;
   const isAdmin = member.role === "admin";
-  const canManage = manages(asManager(member), { createdBy });
+  const canManage = manages(member, { createdBy });
   if (new URL(request.url).searchParams.get("tab") === "activity") {
     const [log, total] = await Promise.all([
       readEventLog(context, { id: factory.id, cursor }, null),

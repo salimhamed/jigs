@@ -210,8 +210,10 @@ Admins manage apps, members, settings and every factory: they add, rename and
 remove apps, name installations, invite people, change roles and change any
 factory. Members can see everything, and add and manage their own factories:
 rename them, re-issue their tokens, connect and disconnect their apps, and
-remove them. A factory nobody added, such as one whose member has left, only
-admins can change.
+remove them. A member who leaves the Organization loses those rights while
+they are out, though their factories still show them as the one who added
+them. Only admins can change a factory with no recorded creator, such as one
+added before the hub recorded who added factories.
 
 The hub's home page charts, hour by hour over the last 24 hours, the
 webhooks it received and the events it queued for your factories, with a

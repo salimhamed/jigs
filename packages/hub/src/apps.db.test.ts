@@ -50,7 +50,7 @@ dbTest("assigns and unassigns apps from a factory, only within its Organization"
     await newApp("slack", "other"),
   ];
   const { factory } = await newFactory();
-  const foreign = await addFactory(db, "other", "theirs");
+  const foreign = await addFactory(db, "other", "theirs", null);
   const names = async (factoryId: string) =>
     (await assignedApps(db, factoryId)).map((app) => app.name);
 

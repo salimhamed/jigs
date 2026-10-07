@@ -1,7 +1,7 @@
 import { KeyRound, Plus, Trash2 } from "lucide-react";
 import { Link } from "react-router";
 import { manages } from "../../src/factories.ts";
-import { asManager, requireMember } from "../auth.server.ts";
+import { requireMember } from "../auth.server.ts";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
@@ -20,12 +20,12 @@ import { listFactories } from "../factories.server.ts";
 import type { Route } from "./+types/factories.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const manager = asManager(await requireMember(context, request));
-  const factories = await listFactories(context, manager.organizationId);
+  const member = await requireMember(context, request);
+  const factories = await listFactories(context, member.organizationId);
   return {
     factories: factories.map(({ createdBy, ...factory }) => ({
       ...factory,
-      canManage: manages(manager, { createdBy }),
+      canManage: manages(member, { createdBy }),
     })),
   };
 }

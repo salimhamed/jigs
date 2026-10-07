@@ -6,9 +6,9 @@ import { organizationId, setUpTestHub } from "./test-hub.ts";
 const { db } = setUpTestHub();
 
 dbTest("renames a factory, keeping names unique within the Organization", async () => {
-  const { factory } = await addFactory(db, organizationId, "laptop");
-  await addFactory(db, organizationId, "ci");
-  await addFactory(db, "other", "workstation");
+  const { factory } = await addFactory(db, organizationId, "laptop", null);
+  await addFactory(db, organizationId, "ci", null);
+  await addFactory(db, "other", "workstation", null);
 
   expect(await renameFactory(db, organizationId, factory.id, "workstation")).toEqual({
     name: "workstation",

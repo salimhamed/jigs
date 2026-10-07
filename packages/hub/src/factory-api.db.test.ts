@@ -297,7 +297,7 @@ dbTest("fans an event out only to the factories its app is assigned to", async (
   const { factory, token } = await newFactory();
   const unassigned = await newFactory();
   const removed = await newFactory();
-  const foreign = await addFactory(db, "other", "theirs");
+  const foreign = await addFactory(db, "other", "theirs", null);
   const appId = await appFor([factory.id, removed.factory.id, foreign.factory.id]);
   await removeFactory(db, waiters, organizationId, removed.factory.id);
   const assigned = await db

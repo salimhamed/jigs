@@ -1,5 +1,7 @@
+import { and, eq } from "drizzle-orm";
 import { Trash2, UserPlus, X } from "lucide-react";
 import { data, Link, useFetcher } from "react-router";
+import * as schema from "../../src/db/schema.ts";
 import { roles } from "../../src/roles.ts";
 import { attempt, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -42,7 +44,7 @@ export async function loader({ context, request }: Route.LoaderArgs) {
 }
 
 export async function action({ context, request }: Route.ActionArgs) {
-  const { headers } = await requireMember(context, request);
+  const { headers, organizationId } = await requireMember(context, request);
   const form = await request.formData();
   switch (form.get("intent")) {
     case "remove":
@@ -53,16 +55,20 @@ export async function action({ context, request }: Route.ActionArgs) {
         }),
       );
     case "role": {
+      const memberId = String(form.get("memberId"));
       const role = String(form.get("role"));
       const result = await attempt(() =>
-        context.auth.api.updateMemberRole({
-          headers,
-          body: { memberId: String(form.get("memberId")), role },
-        }),
+        context.auth.api.updateMemberRole({ headers, body: { memberId, role } }),
       );
-      return result.error
-        ? result
-        : { message: `${form.get("name")} is now ${role === "admin" ? "an admin" : "a member"}.` };
+      if (result.error) return result;
+      const [changed] = await context.db
+        .select({ name: schema.user.name })
+        .from(schema.member)
+        .innerJoin(schema.user, eq(schema.user.id, schema.member.userId))
+        .where(
+          and(eq(schema.member.id, memberId), eq(schema.member.organizationId, organizationId)),
+        );
+      return { message: `${changed?.name} is now ${role === "admin" ? "an admin" : "a member"}.` };
     }
     case "revoke":
       return attempt(() =>
@@ -174,7 +180,6 @@ function MemberRow({
                 {
                   intent: "role",
                   memberId: member.id,
-                  name: member.name,
                   role: event.target.value,
                 },
                 { method: "post" },

@@ -161,7 +161,7 @@ dbTest("lets a member add and change their own factories only", async () => {
   expect(stored?.createdBy).toBe(alice.id);
 
   await refused(bob.cookie, factoryId);
-  const ownerless = await addFactory(db, "acme", "ci");
+  const ownerless = await addFactory(db, "acme", "ci", null);
   await refused(alice.cookie, ownerless.factory.id);
   await manage(alice.cookie, factoryId, "alice desk");
 });
@@ -170,7 +170,7 @@ dbTest("lets an admin change every factory", async () => {
   const admin = await signedIn("admin");
   const member = await signedIn("member");
   const theirs = await addFactory(db, "acme", "theirs", member.id);
-  const ownerless = await addFactory(db, "acme", "shared");
+  const ownerless = await addFactory(db, "acme", "shared", null);
   await manage(admin.cookie, theirs.factory.id, "theirs renamed");
   await manage(admin.cookie, ownerless.factory.id, "shared renamed");
 });
@@ -194,7 +194,7 @@ dbTest("keeps apps, members and settings to admins", async () => {
     }),
   ).toEqual(adminOnly);
   for (const fields of [
-    { intent: "role", memberId: other.id, name: other.id, role: "admin" },
+    { intent: "role", memberId: other.id, role: "admin" },
     { intent: "remove", memberId: other.id },
   ] as Fields[]) {
     expect(await post(membersAction, member.cookie, "/members", fields)).toMatchObject({
@@ -210,4 +210,13 @@ dbTest("keeps apps, members and settings to admins", async () => {
   expect(organization?.name).toBe("Acme");
   const otherMember = await db.query.member.findFirst({ where: eq(schema.member.id, other.id) });
   expect(otherMember?.role).toBe("member");
+
+  const admin = await signedIn("admin");
+  expect(
+    await post(membersAction, admin.cookie, "/members", {
+      intent: "role",
+      memberId: other.id,
+      role: "admin",
+    }),
+  ).toEqual({ message: `${other.id} is now an admin.` });
 });

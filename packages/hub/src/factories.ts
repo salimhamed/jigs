@@ -24,7 +24,7 @@ export async function addFactory(
   db: HubDatabase,
   organizationId: string,
   name: string,
-  createdBy: string | null = null,
+  createdBy: string | null,
 ): Promise<{ factory: Factory; token: string }> {
   const { token, tokenHash } = newToken();
   const [factory] = await db
@@ -35,29 +35,11 @@ export async function addFactory(
   return { factory, token };
 }
 
-/** A member of an Organization, as far as changing its factories goes. */
-export interface FactoryManager {
-  organizationId: string;
-  userId: string;
-  role: Role;
-}
-
 /** Whether the member may change the factory: an admin may change every one, a member those they added. */
-export const manages = (member: FactoryManager, factory: { createdBy: string | null }) =>
-  member.role === "admin" || (factory.createdBy !== null && factory.createdBy === member.userId);
-
-/** Whether the member may change this factory of their Organization. */
-export async function mayManageFactory(
-  db: HubDatabase,
-  member: FactoryManager,
-  factoryId: string,
-): Promise<boolean> {
-  const factory = await db.query.factories.findFirst({
-    columns: { createdBy: true },
-    where: and(eq(factories.id, factoryId), eq(factories.organizationId, member.organizationId)),
-  });
-  return factory !== undefined && manages(member, factory);
-}
+export const manages = (
+  member: { role: Role; user: { id: string } },
+  factory: { createdBy: string | null },
+) => member.role === "admin" || factory.createdBy === member.user.id;
 
 /** Rename a factory. Names are unique within the Organization. */
 export async function renameFactory(
