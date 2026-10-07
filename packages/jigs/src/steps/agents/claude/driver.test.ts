@@ -1,9 +1,16 @@
 import type { SDKMessage } from "@anthropic-ai/claude-agent-sdk";
-import { expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { harnesses } from "../../../workflow/agents/harness-config.ts";
 import { buildAskAgentRequest } from "../../../workflow/agents/plan.ts";
 import { createClaudeDriver } from "./driver.ts";
 import { fakeClaudeQuery } from "./test-fixtures.ts";
+
+beforeEach(() => {
+  vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "/fake/claude");
+});
+afterEach(() => {
+  vi.unstubAllEnvs();
+});
 
 const assistant = (error?: string) =>
   ({
