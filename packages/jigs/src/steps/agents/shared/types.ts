@@ -6,6 +6,7 @@ import type {
   OutputInterface,
 } from "ai";
 import type { Check } from "../../../checks/check.ts";
+import type { TurnReply, TurnRequest, TurnResult } from "../../../workflow/agents/conversation.ts";
 import type {
   Harness,
   HarnessKind,
@@ -16,6 +17,7 @@ import type { AskJevOptions, JevAnswers, JevQuestions } from "../../../workflow/
 import type { AgentRequest, ModelRequest } from "../../../workflow/agents/plan.ts";
 import type { AgentSessionRef, ModelGeneration } from "../../../workflow/agents/result.ts";
 import type { RunMetadata } from "../../runtime/run-context.ts";
+import type { AgentSourcePart } from "./step-stream.ts";
 
 /**
  * What a driver's call returns: the reply text, provider metadata and any structured output.
@@ -119,6 +121,25 @@ export interface DriverContext {
 }
 
 /**
+ * What a conversation turn reports while it runs: that it started, each piece of agent activity,
+ * and each answer.
+ */
+export type TurnEvent =
+  | { type: "start"; resume: boolean }
+  | { type: "part"; part: AgentSourcePart }
+  | { type: "reply"; reply: TurnReply };
+
+/** Watches a conversation turn. Best effort: a failure here never fails the turn. */
+export type TurnObserver = (event: TurnEvent) => void | Promise<void>;
+
+/** What a driver's `converse` receives: a harness call's context, and where to report the turn. */
+export interface ConverseContext extends DriverContext {
+  signal: AbortSignal;
+  /** Never throws. */
+  observe(event: TurnEvent): void;
+}
+
+/**
  * How jigs runs one harness or model-source kind: its checks, the environment
  * it may see, and how it asks, runs or opens a provider model. Each kind a
  * descriptor can name has exactly one driver.
@@ -130,6 +151,11 @@ export interface Driver<K extends HarnessKind | ModelKind> {
   /** Build the live provider model for a run. Drivers without a provider model implement `run`. */
   open?(target: HarnessTarget, context: OpenContext): Promise<OpenedModel>;
   run?(request: RunRequest, context: DriverContext): Promise<ExecutorGeneration>;
+  /**
+   * Run one turn of a conversation in a worktree, taking more messages while it runs through
+   * the live turn it registers under the request's conversation.
+   */
+  converse?(request: TurnRequest, context: ConverseContext): Promise<TurnResult>;
   decide?<const QUESTIONS extends JevQuestions>(
     request: AskJevOptions<QUESTIONS>,
     context: DriverContext,
