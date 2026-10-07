@@ -114,6 +114,37 @@ export async function teeAgentStream(
   }
 }
 
+/**
+ * Feed parts to the step stream as a harness reports them, for a driver that reads its harness'
+ * output itself. Writing never fails, and `end` never rejects.
+ */
+export function createStreamTap(stream: StepStream, start: AttemptStart) {
+  let controller!: ReadableStreamDefaultController<AgentSourcePart>;
+  const parts = new ReadableStream<AgentSourcePart>({
+    start(c) {
+      controller = c;
+    },
+  });
+  // The driver owns failures; the stream must never reject its call.
+  const drained = teeAgentStream(parts.values(), stream, start).catch(() => {});
+  return {
+    write(part: AgentSourcePart) {
+      try {
+        controller.enqueue(part);
+      } catch {}
+    },
+    async end(error?: unknown) {
+      try {
+        controller.enqueue(
+          error === undefined ? { type: "finish", finishReason: "stop" } : { type: "error", error },
+        );
+        controller.close();
+      } catch {}
+      await drained;
+    },
+  };
+}
+
 function recordOf(part: AgentSourcePart): AgentStreamPart | undefined {
   switch (part.type) {
     case "tool-call":
