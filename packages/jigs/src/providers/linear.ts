@@ -36,6 +36,12 @@ export interface LinearComment {
   user: LinearUser | null;
 }
 
+/** A comment, with the Linear agent session it opened or replies in, if any. */
+export interface LinearThreadComment extends LinearComment {
+  agentSession: { id: string } | null;
+  parent: { agentSession: { id: string } | null } | null;
+}
+
 interface GraphqlBody<T> {
   data?: T;
   errors?: Array<{ message: string; extensions?: { code?: string } }>;
@@ -451,15 +457,23 @@ export function createLinearClient(deps: LinearClientDeps) {
     };
   }
 
-  async function listCommentsSince(issueId: string, sinceIso: string): Promise<LinearComment[]> {
+  async function listCommentsSince(
+    issueId: string,
+    sinceIso: string,
+  ): Promise<LinearThreadComment[]> {
     const data = await linearGraphql<{
-      issue: { comments: { nodes: LinearComment[] } };
+      issue: { comments: { nodes: LinearThreadComment[] } };
     }>(
       // Unpaginated `last: 50` is an accepted cap: wake re-checks only ever
       // need the comments since the previous check.
       `query IssueComments($id: String!) {
         issue(id: $id) {
-          comments(last: 50) { nodes { id body createdAt user { id name } } }
+          comments(last: 50) {
+            nodes {
+              id body createdAt user { id name }
+              agentSession { id } parent { agentSession { id } }
+            }
+          }
         }
       }`,
       { id: issueId },

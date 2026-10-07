@@ -345,6 +345,7 @@ test("listCommentsSince filters strictly after the cursor", async () => {
   });
   const comments = await linear.listCommentsSince("issue-uuid", "2026-08-26T12:00:00Z");
   expect(comments.map((c) => c.id)).toEqual(["c2"]);
+  expect(lastRequest().body.query).toContain("agentSession { id } parent { agentSession { id } }");
 });
 
 test("GraphQL errors throw", async () => {

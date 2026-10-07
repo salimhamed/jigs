@@ -141,10 +141,15 @@ export const checkForTicketHumanReply: CheckForTicketHumanReply = async ({
     sinceIso,
   );
   // Anything the factory's app wrote is not a human's answer, whichever run
-  // posted it.
+  // posted it, and neither is a message to an agent: a mention that opened a
+  // Linear agent session, or a reply in its thread.
   const human = comments.find(
     (comment) =>
-      comment.user !== null && comment.user.id !== app.id && !postedCommentIds.includes(comment.id),
+      comment.user !== null &&
+      comment.user.id !== app.id &&
+      !postedCommentIds.includes(comment.id) &&
+      comment.agentSession == null &&
+      comment.parent?.agentSession == null,
   );
   console.log(
     `[checkForTicketHumanReply] re-check issue=${issueId} since=${sinceIso} found=${human !== undefined}`,

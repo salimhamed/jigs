@@ -30,6 +30,8 @@ const {
         body: string;
         createdAt: string;
         user: { id: string; name: string } | null;
+        agentSession?: { id: string } | null;
+        parent?: { agentSession: { id: string } | null } | null;
       }>,
   ),
   getIssueParticipants: vi.fn(async () => ({
@@ -646,5 +648,52 @@ test("a reply check skips every comment the factory's app wrote, from any run", 
   ).toEqual({
     reply: null,
     cursor: "2026-08-31T12:01:00.000Z",
+  });
+});
+
+test("a reply check skips a mention that opened an agent session and the replies in its thread", async () => {
+  const salim = { id: "user-1", name: "Salim" };
+  const session = { id: "session-1" };
+  listCommentsSince.mockResolvedValueOnce([
+    {
+      id: "mention",
+      body: "@jigs why?",
+      createdAt: "2026-08-31T12:01:00.000Z",
+      user: salim,
+      agentSession: session,
+      parent: null,
+    },
+    {
+      id: "session-reply",
+      body: "and the tests?",
+      createdAt: "2026-08-31T12:02:00.000Z",
+      user: salim,
+      agentSession: null,
+      parent: { agentSession: session },
+    },
+    {
+      id: "answer",
+      body: "go left",
+      createdAt: "2026-08-31T12:03:00.000Z",
+      user: salim,
+      agentSession: null,
+      parent: { agentSession: null },
+    },
+  ]);
+  expect(
+    await checkForTicketHumanReply({
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      since: "2026-08-31T12:00:00.000Z",
+      postedCommentIds: [],
+    }),
+  ).toEqual({
+    reply: {
+      commentId: "answer",
+      body: "go left",
+      author: salim,
+      createdAt: "2026-08-31T12:03:00.000Z",
+    },
+    cursor: "2026-08-31T12:03:00.000Z",
   });
 });
