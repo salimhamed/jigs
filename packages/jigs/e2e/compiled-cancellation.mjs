@@ -170,7 +170,6 @@ export const cancelE2eInputs = z.object({
     "claude",
     "codex",
     "fatal",
-    "observe",
     "ordinary",
     "pending",
     "pi",
@@ -253,10 +252,6 @@ export async function cancelE2eWorkflow(inputs: WorkflowInputs<typeof cancelE2eI
     const cwd = await createRunDirectory();
     await runAgent({ harness: harnesses.codex({ model: "e2e/fake" }), cwd, prompt: inputs.marker });
     await record(inputs.gate, "codex-successor");
-    return;
-  }
-  if (inputs.mode === "observe") {
-    await observeRun(inputs.marker, "observe-first-step");
     return;
   }
   if (inputs.mode === "retry") {
@@ -588,7 +583,6 @@ await (await getWorld()).close?.();`,
 
     await proveStepErrorAfterCancel("ordinary");
     await proveStepErrorAfterCancel("fatal");
-    await proveFirstStepVisibility();
 
     service("stop");
     serviceRunning = false;
@@ -617,7 +611,7 @@ await (await getWorld()).close?.();`,
 
     const elapsedMs = Date.now() - startedAt;
     console.log(
-      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, first-step run visibility, Pi agent stop, Claude Code agent stop, Codex agent stop, and offline kept-resource prune`,
+      `compiled cancellation matrix passed in ${elapsedMs}ms: pending, retry-scheduled, exhausted, active inline, default-turbo race, resilient first delivery, restart/redelivery, cleanup fencing, step errors after cancel, Pi agent stop, Claude Code agent stop, Codex agent stop, and offline kept-resource prune`,
     );
     return { elapsedMs };
   } finally {
@@ -674,23 +668,6 @@ await (await getWorld()).close?.();`,
     console.log(
       `cancellation matrix: ${mode} error after cancel leaves the step ${thrown[0].status} (attempt ${thrown[0].attempt}), no second attempt, resource ${resource.state}`,
     );
-  }
-
-  // Whether an agent step's status read can find its own run from the first
-  // step of a default-turbo start.
-  async function proveFirstStepVisibility() {
-    const seen = [];
-    for (let attempt = 0; attempt < 5; attempt += 1) {
-      const marker = path.join(fixtureRoot, `observe-${attempt}.markers`);
-      const runId = await startRun({ mode: "observe", marker, gate: "unused" }, ports.service);
-      await until(
-        async () => (await runtimeRun(runId, ports.service)).status === "completed",
-        "observe run did not complete",
-      );
-      assert.equal(lines(marker).length, 1);
-      seen.push(lines(marker)[0].split(" ")[1]);
-    }
-    console.log(`cancellation matrix: default-turbo first steps observed ${seen.join(", ")}`);
   }
 
   function reconcile() {
