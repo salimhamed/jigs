@@ -42,7 +42,7 @@ import type {
 import { claudeAuthCheck } from "./checks.ts";
 import { claudeGeneration, claudeStreamParts, resultOutcome } from "./messages.ts";
 import { CLAUDE_ENV, type ClaudeProcessSpawner, claudeStepSettings } from "./process.ts";
-import { startTurn, step, type TurnAction, type TurnInput } from "./turn-state.ts";
+import { accepting, startTurn, step, type TurnAction, type TurnInput } from "./turn-state.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -212,14 +212,6 @@ function inputQueue() {
 // How long a stopped turn waits for Claude Code to confirm the interrupt before closing it.
 const STOP_GRACE_MS = 30_000;
 
-function turnInput(message: SDKMessage): TurnInput | undefined {
-  if (message.type === "assistant") return { type: "assistant", error: message.error };
-  if (message.type === "result") {
-    return { type: "result", uuids: message.user_message_uuids, ...resultOutcome(message) };
-  }
-  return undefined;
-}
-
 export function createClaudeDriver(
   overrides: Partial<ClaudeDriverDependencies> = {},
 ): Driver<"claude"> {
@@ -323,17 +315,21 @@ export function createClaudeDriver(
     const harness = descriptor(request);
     const { cwd, conversation } = request;
     const sessionId = conversationSessionId(conversation);
-    const transcript = await deps.transcript(sessionId, cwd);
+    const opened = startTurn({
+      messages: request.messages,
+      transcript: await deps.transcript(sessionId, cwd),
+      instructions: request.instructions,
+      note: randomUUID(),
+    });
     // A session file without messages, such as one left by a Claude Code killed while it
     // started, would refuse a fresh start under the same id on every retry.
-    if (transcript.size === 0) await deps.discardSession(sessionId, cwd);
+    if (!opened.state.resume) await deps.discardSession(sessionId, cwd);
 
     const input = inputQueue();
     let plugin: SkillsPlugin | undefined;
     let settings: ReturnType<typeof workSettings> | undefined;
     let active: ClaudeQuery | undefined;
     let backstop: ReturnType<typeof setTimeout> | undefined;
-    let raised: unknown;
     let unregister = () => {};
     let finish!: (result: TurnResult) => void;
     let fail!: (error: unknown) => void;
@@ -342,27 +338,17 @@ export function createClaudeDriver(
       fail = reject;
     });
 
-    const opened = startTurn({
-      messages: request.messages,
-      transcript,
-      instructions: request.instructions,
-      note: randomUUID(),
-    });
     let state = opened.state;
     // Observers and the live turn call back in while actions run; each input sees the latest state.
-    const dispatch = (event: TurnInput): TurnAction[] => {
+    const dispatch = (event: TurnInput): void => {
       const next = step(state, event);
       state = next.state;
       for (const action of next.actions) perform(action);
-      return next.actions;
     };
     const perform = (action: TurnAction): void => {
       switch (action.type) {
         case "send":
           input.push(userMessage(action.uuid, action.text));
-          return;
-        case "take-back":
-          dispatch({ type: "withdrawn", uuids: input.drop().map(uuidOf) });
           return;
         case "launch":
           settings = workSettings(
@@ -384,9 +370,6 @@ export function createClaudeDriver(
         case "start-backstop":
           backstop = setTimeout(() => dispatch({ type: "backstop" }), STOP_GRACE_MS);
           return;
-        case "clear-backstop":
-          clearTimeout(backstop);
-          return;
         case "observe":
           context.observe(action.event);
           return;
@@ -398,9 +381,7 @@ export function createClaudeDriver(
           finish(action.result);
           return;
         case "rethrow":
-          fail(raised);
-          return;
-        case "accept":
+          fail(action.error);
           return;
       }
     };
@@ -410,30 +391,35 @@ export function createClaudeDriver(
         for await (const message of query) {
           if (state.phase === "ended") return;
           for (const part of parts(message)) context.observe({ type: "part", part });
-          const event = turnInput(message);
-          if (event !== undefined) dispatch(event);
+          if (message.type === "assistant") dispatch({ type: "assistant", error: message.error });
+          if (message.type === "result") {
+            dispatch({
+              type: "result",
+              uuids: message.user_message_uuids,
+              ...resultOutcome(message),
+            });
+          }
         }
-        raised = new Error("Claude Code ended without a result");
+        throw new Error("Claude Code ended without a result");
       } catch (error) {
-        raised = error;
+        dispatch({ type: "crashed", error, cancelled: context.signal.aborted });
       }
-      const message = raised instanceof Error ? raised.message : String(raised);
-      dispatch({ type: "crashed", message, cancelled: context.signal.aborted });
     };
 
     for (const action of opened.actions) perform(action);
     try {
       unregister = registerLiveTurn(conversation, {
-        inject: (message) =>
-          dispatch({ type: "inject", message }).some((action) => action.type === "accept"),
-        stop: () => {
-          dispatch({ type: "stop" });
+        inject: (message) => {
+          const taken = accepting(state);
+          dispatch({ type: "inject", message });
+          return taken;
         },
+        stop: () => dispatch({ type: "stop", withdrawn: input.drop().map(uuidOf) }),
       });
       if (harness.skills !== undefined && harness.skills.length > 0) {
         plugin = await deps.prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills);
       }
-      dispatch({ type: "ready" });
+      context.observe({ type: "start", resume: state.resume });
       dispatch({ type: "launch" });
       return await outcome;
     } finally {

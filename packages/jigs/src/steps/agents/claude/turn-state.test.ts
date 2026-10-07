@@ -1,6 +1,7 @@
 import { expect, test } from "vitest";
 import type { ConversationMessage } from "../../../workflow/agents/conversation.ts";
 import {
+  accepting,
   RESTART_NOTE,
   startTurn,
   step,
@@ -26,8 +27,7 @@ function feed(first: TurnStep, ...inputs: TurnInput[]): TurnStep {
   return current;
 }
 
-const launched = (fields: Partial<TurnStart> = {}) =>
-  feed(open(fields), { type: "ready" }, { type: "launch" });
+const launched = (fields: Partial<TurnStart> = {}) => step(open(fields).state, { type: "launch" });
 
 const result = (uuids: string[] | undefined, answer = "answer"): TurnInput => ({
   type: "result",
@@ -35,6 +35,7 @@ const result = (uuids: string[] | undefined, answer = "answer"): TurnInput => ({
   answer,
 });
 const inject = (uuid: string): TurnInput => ({ type: "inject", message: message(uuid) });
+const stop = (withdrawn: string[] = []): TurnInput => ({ type: "stop", withdrawn });
 const finished = (actions: TurnAction[]) => actions.find((action) => action.type === "finish");
 
 test("a fresh turn sends each message under its author, led by the instructions", () => {
@@ -68,20 +69,18 @@ test("a replay sends the restart note and only what Claude has not seen", () => 
   });
 });
 
-test("the turn reports its start and launches", () => {
-  const ready = step(open({ transcript: new Set(["earlier"]) }).state, { type: "ready" });
-  expect(ready.actions).toEqual([{ type: "observe", event: { type: "start", resume: true } }]);
-  expect(step(ready.state, { type: "launch" }).actions).toEqual([{ type: "launch" }]);
+test("launch marks the turn launched", () => {
+  const { state, actions } = launched();
+  expect(actions).toEqual([{ type: "launch" }]);
+  expect(state.launched).toBe(true);
 });
 
-test("an injected message is sent once; a repeat is accepted without sending", () => {
+test("an injected message is sent once; a repeat sends nothing", () => {
   const first = step(launched().state, inject("m2"));
-  expect(first.actions).toEqual([
-    { type: "accept" },
-    { type: "send", uuid: "m2", text: "Salim Hamed: text m2" },
-  ]);
-  expect(step(first.state, inject("m2")).actions).toEqual([{ type: "accept" }]);
-  expect(step(first.state, inject("m1")).actions).toEqual([{ type: "accept" }]);
+  expect(first.actions).toEqual([{ type: "send", uuid: "m2", text: "Salim Hamed: text m2" }]);
+  expect(accepting(first.state)).toBe(true);
+  expect(step(first.state, inject("m2")).actions).toEqual([]);
+  expect(step(first.state, inject("m1")).actions).toEqual([]);
 });
 
 test("the last answer closes before it is reported, then finishes", () => {
@@ -107,39 +106,31 @@ test("an answer with messages still pending waits for the follow-up", () => {
 
 test("an ending turn refuses messages", () => {
   const ended = feed(launched(), result(["m1"]));
+  expect(accepting(ended.state)).toBe(false);
   expect(step(ended.state, inject("m2")).actions).toEqual([]);
-  const stopping = feed(launched(), { type: "stop" });
+  const stopping = feed(launched(), stop());
+  expect(accepting(stopping.state)).toBe(false);
   expect(step(stopping.state, inject("m2")).actions).toEqual([]);
 });
 
-test("stop before launch takes back the input and never launches", () => {
-  const stopping = feed(open(), { type: "ready" }, { type: "stop" });
-  expect(stopping.actions).toEqual([{ type: "take-back" }]);
-  const after = feed(stopping, { type: "withdrawn", uuids: ["m1"] }, { type: "launch" });
-  expect(after.actions).toEqual([
+test("stop before launch ends the turn, and the launch after it does nothing", () => {
+  const stopping = step(open().state, stop(["m1"]));
+  expect(stopping.actions).toEqual([
     { type: "close" },
-    { type: "clear-backstop" },
     { type: "finish", result: { outcome: "stopped", replies: [], consumed: [] } },
   ]);
+  expect(step(stopping.state, { type: "launch" }).actions).toEqual([]);
 });
 
-test("stop once launched takes back, interrupts and starts the backstop, once", () => {
-  const stopping = step(launched().state, { type: "stop" });
-  expect(stopping.actions).toEqual([
-    { type: "take-back" },
-    { type: "interrupt" },
-    { type: "start-backstop" },
-  ]);
-  expect(step(stopping.state, { type: "stop" }).actions).toEqual([]);
+test("stop once launched drops the withdrawn, interrupts and starts the backstop, once", () => {
+  const stopping = step(feed(launched(), inject("m2")).state, stop(["m2"]));
+  expect(stopping.actions).toEqual([{ type: "interrupt" }, { type: "start-backstop" }]);
+  expect(stopping.state.pending).toEqual(["m1"]);
+  expect(step(stopping.state, stop()).actions).toEqual([]);
 });
 
 test("stop while Claude Code starts up ends once the receipt cancels the first messages", () => {
-  const done = feed(
-    launched(),
-    { type: "stop" },
-    { type: "withdrawn", uuids: [] },
-    { type: "receipt", cancelled: ["m1"] },
-  );
+  const done = feed(launched(), stop(), { type: "receipt", cancelled: ["m1"] });
   expect(finished(done.actions)).toEqual({
     type: "finish",
     result: { outcome: "stopped", replies: [], consumed: [] },
@@ -147,14 +138,10 @@ test("stop while Claude Code starts up ends once the receipt cancels the first m
 });
 
 test("stop between an answer and its queued follow-up ends once the follow-up is cancelled", () => {
-  const done = feed(
-    launched(),
-    inject("m2"),
-    result(["m1"], "first"),
-    { type: "stop" },
-    { type: "withdrawn", uuids: [] },
-    { type: "receipt", cancelled: ["m2"] },
-  );
+  const done = feed(launched(), inject("m2"), result(["m1"], "first"), stop(), {
+    type: "receipt",
+    cancelled: ["m2"],
+  });
   expect(finished(done.actions)).toEqual({
     type: "finish",
     result: { outcome: "stopped", replies: ["first"], consumed: ["m1"] },
@@ -162,13 +149,7 @@ test("stop between an answer and its queued follow-up ends once the follow-up is
 });
 
 test("a stop that leaves the running turn waits for its interrupted result", () => {
-  const waiting = feed(
-    launched(),
-    inject("m2"),
-    { type: "stop" },
-    { type: "withdrawn", uuids: [] },
-    { type: "receipt", cancelled: ["m2"] },
-  );
+  const waiting = feed(launched(), inject("m2"), stop(), { type: "receipt", cancelled: ["m2"] });
   expect(waiting.actions).toEqual([]);
   const done = step(waiting.state, { type: "result", uuids: ["m1"], failure: "interrupted" });
   expect(finished(done.actions)).toEqual({
@@ -178,14 +159,14 @@ test("a stop that leaves the running turn waits for its interrupted result", () 
 });
 
 test("a stop with no receipt ends at the backstop", () => {
-  const deaf = feed(launched(), { type: "stop" }, { type: "receipt", cancelled: undefined });
+  const deaf = feed(launched(), stop(), { type: "receipt", cancelled: undefined });
   expect(deaf.actions).toEqual([]);
   expect(finished(step(deaf.state, { type: "backstop" }).actions)).toMatchObject({
     result: { outcome: "stopped" },
   });
-  expect(
-    finished(feed(launched(), { type: "stop" }, { type: "interrupt-failed" }).actions),
-  ).toMatchObject({ result: { outcome: "stopped" } });
+  expect(finished(feed(launched(), stop(), { type: "interrupt-failed" }).actions)).toMatchObject({
+    result: { outcome: "stopped" },
+  });
 });
 
 test("a backstop after the turn ended does nothing", () => {
@@ -221,8 +202,12 @@ test("a failed turn keeps the answers and messages before it, naming its error",
 });
 
 test("a crash before any answer fails the step; after one it keeps the answers", () => {
-  const crash: TurnInput = { type: "crashed", message: "process failed", cancelled: false };
-  expect(step(launched().state, crash).actions).toEqual([{ type: "close" }, { type: "rethrow" }]);
+  const error = new Error("process failed");
+  const crash: TurnInput = { type: "crashed", error, cancelled: false };
+  expect(step(launched().state, crash).actions).toEqual([
+    { type: "close" },
+    { type: "rethrow", error },
+  ]);
 
   const answered = feed(launched(), inject("m2"), result(["m1"], "first"));
   expect(finished(step(answered.state, crash).actions)).toEqual({
@@ -231,9 +216,9 @@ test("a crash before any answer fails the step; after one it keeps the answers",
   });
   expect(step(answered.state, { ...crash, cancelled: true }).actions).toEqual([
     { type: "close" },
-    { type: "rethrow" },
+    { type: "rethrow", error },
   ]);
-  const stopping = step(answered.state, { type: "stop" });
+  const stopping = step(answered.state, stop());
   expect(finished(step(stopping.state, crash).actions)).toMatchObject({
     result: { outcome: "stopped" },
   });

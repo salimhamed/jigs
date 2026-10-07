@@ -19,9 +19,9 @@ export interface TurnState {
   consumed: string[];
   replies: string[];
   /** The restart note's uuid, when this turn replays one that died. */
-  note?: string;
+  note?: string | undefined;
   /** The error the last assistant message carried. */
-  errorKind?: string;
+  errorKind?: string | undefined;
 }
 
 /** What opens a turn. `note` is the uuid the restart note gets if the turn is a replay. */
@@ -36,11 +36,8 @@ export interface TurnStart {
 /** What the turn's loop observes. */
 export type TurnInput =
   | { type: "inject"; message: ConversationMessage }
-  | { type: "stop" }
-  /** Messages taken back from the input before Claude read them. */
-  | { type: "withdrawn"; uuids: string[] }
-  /** Ready to launch: the observers hear that the turn starts. */
-  | { type: "ready" }
+  /** `withdrawn` are the messages taken back from the input before Claude read them. */
+  | { type: "stop"; withdrawn: string[] }
   | { type: "launch" }
   | { type: "assistant"; error?: string | undefined }
   | { type: "result"; uuids?: string[] | undefined; answer?: string; failure?: string }
@@ -49,24 +46,20 @@ export type TurnInput =
   | { type: "interrupt-failed" }
   | { type: "backstop" }
   /** The query failed or ended without a result; `cancelled` when the run was cancelled. */
-  | { type: "crashed"; message: string; cancelled: boolean };
+  | { type: "crashed"; error: unknown; cancelled: boolean };
 
 /** What the turn's loop must do, in order. */
 export type TurnAction =
   | { type: "send"; uuid: string; text: string }
-  /** The injected message is taken. */
-  | { type: "accept" }
-  | { type: "take-back" }
   | { type: "launch" }
   | { type: "interrupt" }
   | { type: "start-backstop" }
-  | { type: "clear-backstop" }
   | { type: "observe"; event: TurnEvent }
   /** Unregister the live turn, then close Claude's input. */
   | { type: "close" }
   | { type: "finish"; result: TurnResult }
   /** Fail the step with the error the query raised. */
-  | { type: "rethrow" };
+  | { type: "rethrow"; error: unknown };
 
 export interface TurnStep {
   state: TurnState;
@@ -98,7 +91,7 @@ export function startTurn(start: TurnStart): TurnStep {
     pending,
     consumed,
     replies: [],
-    ...(note === undefined ? {} : { note }),
+    note,
   };
   return { state, actions };
 }
@@ -106,12 +99,7 @@ export function startTurn(start: TurnStart): TurnStep {
 function end(state: TurnState, result: TurnResult, before: TurnAction[] = []): TurnStep {
   return {
     state: { ...state, phase: "ended" },
-    actions: [
-      { type: "close" },
-      ...(state.phase === "stopping" ? [{ type: "clear-backstop" } as const] : []),
-      ...before,
-      { type: "finish", result },
-    ],
+    actions: [{ type: "close" }, ...before, { type: "finish", result }],
   };
 }
 
@@ -126,44 +114,39 @@ const without = (list: string[], drop: readonly string[]) =>
 
 const none = (state: TurnState): TurnStep => ({ state, actions: [] });
 
+/** Whether the turn still takes injected messages. */
+export const accepting = (state: TurnState) => state.phase === "running";
+
 /** Apply one input to a turn. */
 export function step(state: TurnState, input: TurnInput): TurnStep {
   if (state.phase === "ended") return none(state);
   switch (input.type) {
     case "inject": {
-      if (state.phase !== "running") return none(state);
       const { uuid } = input.message;
-      if (state.pending.includes(uuid) || state.consumed.includes(uuid)) {
-        return { state, actions: [{ type: "accept" }] };
+      if (!accepting(state) || state.pending.includes(uuid) || state.consumed.includes(uuid)) {
+        return none(state);
       }
       return {
         state: { ...state, pending: [...state.pending, uuid] },
-        actions: [{ type: "accept" }, { type: "send", uuid, text: authored(input.message) }],
+        actions: [{ type: "send", uuid, text: authored(input.message) }],
       };
     }
     case "stop": {
       if (state.phase !== "running") return none(state);
-      const next: TurnState = { ...state, phase: "stopping" };
-      // Unread messages would reach Claude after the interrupt and run as a new turn.
-      const actions: TurnAction[] = [{ type: "take-back" }];
-      if (state.launched) actions.push({ type: "interrupt" }, { type: "start-backstop" });
-      return { state: next, actions };
-    }
-    case "withdrawn":
-      return none({ ...state, pending: without(state.pending, input.uuids) });
-    case "ready":
-      return {
-        state,
-        actions: [{ type: "observe", event: { type: "start", resume: state.resume } }],
+      // Unread messages are taken back: they would reach Claude after the interrupt and run as
+      // a new turn.
+      const next: TurnState = {
+        ...state,
+        phase: "stopping",
+        pending: without(state.pending, input.withdrawn),
       };
+      if (!state.launched) return stopped(next);
+      return { state: next, actions: [{ type: "interrupt" }, { type: "start-backstop" }] };
+    }
     case "launch":
-      if (state.phase === "stopping") return stopped(state);
       return { state: { ...state, launched: true }, actions: [{ type: "launch" }] };
     case "assistant":
-      return none({
-        ...state,
-        ...(input.error === undefined ? { errorKind: undefined } : { errorKind: input.error }),
-      });
+      return none({ ...state, errorKind: input.error });
     case "result":
       return onResult(state, input);
     case "receipt": {
@@ -182,10 +165,13 @@ export function step(state: TurnState, input: TurnInput): TurnStep {
       if (state.replies.length === 0 || input.cancelled) {
         return {
           state: { ...state, phase: "ended" },
-          actions: [{ type: "close" }, { type: "rethrow" }],
+          actions: [{ type: "close" }, { type: "rethrow", error: input.error }],
         };
       }
-      return failed(state, input.message);
+      return failed(
+        state,
+        input.error instanceof Error ? input.error.message : String(input.error),
+      );
   }
 }
 
