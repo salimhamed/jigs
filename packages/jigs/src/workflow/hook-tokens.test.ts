@@ -1,5 +1,6 @@
 import { expect, test } from "vitest";
 import { describeHookToken, parseHookToken, wakeToken } from "./hook-tokens.ts";
+import { linearSessionToken } from "./linear/agent-session.ts";
 import { needsHumanToken } from "./linear/halt-for-human.ts";
 import { ticketToken } from "./linear/ticket-token.ts";
 import { pullRequestToken } from "./pull-requests/pull-request.ts";
@@ -15,6 +16,7 @@ const pr = pullRequestToken({
   number: 41,
 });
 const thread = slackThreadToken("slack-acme", "C0123ABCD", "1790723244.335019");
+const session = linearSessionToken("linear-acme", "session-1");
 
 test("every kind jigs mints parses back to its parts and provider", () => {
   expect(parseHookToken(claim)).toEqual({
@@ -38,6 +40,12 @@ test("every kind jigs mints parses back to its parts and provider", () => {
     provider: "slack",
     thread: { installationName: "slack-acme", channel: "C0123ABCD", threadTs: "1790723244.335019" },
   });
+  expect(session).toBe("linear:session:linear-acme:session-1");
+  expect(parseHookToken(session)).toEqual({
+    kind: "linear-session",
+    provider: "linear",
+    session: { installationName: "linear-acme", sessionId: "session-1" },
+  });
 });
 
 test("a token jigs did not mint parses to null and describes itself as external", () => {
@@ -57,6 +65,10 @@ test("a minted prefix keeps its kind when the rest is unreadable", () => {
   expect(parseHookToken("jigs:needs-human:onlyone")).toMatchObject({ halt: null });
   expect(parseHookToken("jigs:needs-human:issue-1:comment-1")).toMatchObject({ halt: null });
   expect(parseHookToken("slack:thread:C0123ABCD")).toMatchObject({ thread: null });
+  expect(parseHookToken("linear:session:session-1")).toMatchObject({
+    kind: "linear-session",
+    session: null,
+  });
   expect(parseHookToken("slack:thread:C0123ABCD:1790723244.335019")).toMatchObject({
     thread: null,
   });
@@ -90,4 +102,10 @@ test("every kind describes what it names and what a run holding it waits for", (
     label: "the Slack thread 1790723244.335019 in C0123ABCD",
     reason: "waiting for a reply in the Slack thread 1790723244.335019 in C0123ABCD",
   });
+  expect(describeHookToken(session)).toEqual({
+    kind: "linear-session",
+    label: "Linear agent session session-1",
+    reason: "waiting for a reply in the Linear agent session",
+  });
+  expect(wakeToken(session)).toBe(session);
 });
