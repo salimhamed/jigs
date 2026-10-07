@@ -7,9 +7,13 @@ factories its bot token.
 ## 1. Create the app in Slack
 
 At [api.slack.com/apps](https://api.slack.com/apps), choose **Create New
-App → From scratch**, name it and pick your workspace. Leave **Socket Mode**
-off. Under **Basic Information**, note the **App ID**, **Client ID**,
+App**. Skip the templates and choose **Blank app**, then name it and pick your
+workspace. Under **Basic Information**, note the **App ID**, **Client ID**,
 **Client Secret** and **Signing Secret**.
+
+Under **Settings → Socket Mode**, make sure Socket Mode is **off**. A new app
+can start with it on, and then Slack sends events over a socket the hub never
+opens, not to the hub's Request URL, even when that URL shows as verified.
 
 ## 2. Add the app to the hub
 
@@ -22,9 +26,11 @@ The app's page on the hub shows its **Request URL**, ending in
 `/webhooks/slack`, and its **Redirect URL**, ending in
 `/oauth/slack/<id>/callback`. In the app's settings in Slack:
 
-- Under **Event Subscriptions**, turn events on and set the Request URL.
-  Slack checks it with the hub at once. Under **Subscribe to bot events**, add
-  `message.channels` and `message.groups`, and save.
+- Under **Event Subscriptions**, turn **Enable Events** on and set the
+  Request URL. Slack checks it with the hub at once. Under **Subscribe to bot
+  events**, add `message.channels` and `message.groups`, and choose **Save
+  Changes**. If this page says Socket Mode is enabled and you won't need a
+  Request URL, events are not reaching the hub: turn Socket Mode off.
 - Under **OAuth & Permissions**, add the Redirect URL and save. Leave
   **token rotation** off: the hub keeps the bot token and has no way to
   refresh one that expires.
@@ -54,7 +60,9 @@ Slack's `missing_scope` error.
 
 On the app's page on the hub, choose **Add to Slack** and approve. Some
 workspaces require an admin to approve new apps; Slack asks for approval if
-yours does. The workspace then appears under **Workspaces**, with the scopes
+yours does. Always install from the hub, which keeps the bot token it gets:
+when Slack's own settings show a banner asking you to reinstall the app,
+choose **Add to Slack** on the hub instead. The workspace then appears under **Workspaces**, with the scopes
 it granted. Give it an [installation name](/guide/hub#installation-names),
 such as `slack-acme`, under **Installation name**, and save.
 
