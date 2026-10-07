@@ -44,7 +44,7 @@ Keep them apart: each has its own settings page on GitHub and its own URLs.
 | What it does | Lets people sign in to the hub's web pages. | Lets factories act on GitHub, and sends the hub GitHub's webhooks. |
 | How many | Exactly one per hub. | One or more, added once the hub runs. |
 | Created under | **Developer settings → OAuth Apps** | **Developer settings → GitHub Apps** |
-| Its credentials go | In the hub's environment, as `HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`. | Into the hub's web pages, under **Apps → Add a GitHub App**. |
+| Its credentials go | In the hub's environment, as `HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`. | Into the hub's web pages, under **Apps → Add app → GitHub App**. |
 | URLs it needs | **Homepage URL** and **Redirect URI**, which the hub prints. | **Webhook URL** and **Setup URL**, which the App's page on the hub shows. |
 | Set it up | [First sign-in](#first-sign-in) | [GitHub App](/guide/hub-github) |
 
@@ -199,18 +199,23 @@ this way; after that, the hub is invite-only.
 
 ## Members {#members}
 
-Under **Invites**, an admin invites a person by their GitHub account's
-[sign-in email](#first-sign-in), as an admin or a member. The hub sends no email: copy the invite
-link it shows and send it yourself. The person opens the link and signs in
-with the GitHub account whose sign-in email that is.
+Under **Members**, an admin invites a person by their GitHub account's
+[sign-in email](#first-sign-in), as an admin or a member. The hub sends no
+email: copy the link from **Pending invites** and send it yourself. The person
+opens the link and signs in with the GitHub account whose sign-in email that
+is. An admin can revoke a pending invite there too.
 
 Admins add apps and factories, assign them, invite people and change roles
-under **Members**. Members see everything but change nothing.
+on the same page. Members see everything but change nothing.
+
+The hub's home page charts, hour by hour over the last 24 hours, the
+webhooks it received and the events it delivered to your factories, with a
+total for each provider.
 
 ## Add a factory {#factories}
 
-Under **Factories**, an admin adds a factory by name. The hub shows a command
-with the factory's token, once:
+Under **Factories**, an admin chooses **Add factory** and names it. The hub
+shows a command with the factory's token, once:
 
 ```sh
 jigs hub connect https://hub.example.com <token>
@@ -224,34 +229,39 @@ pnpm exec jigs hub connect https://hub.example.com <token>
 ```
 
 It writes the hub's URL to `jigs.config.ts` and the token to `.env` as
-`JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`.
+`JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`. The page checks every few
+seconds and says once the factory has connected.
 
-If the token is lost, **Re-issue token** makes a new one and stops the old
-one at once. **Remove** deletes the factory and every event waiting for it.
+If the token is lost, **Re-issue token** makes a new one, shows its command
+the same way and stops the old one at once. **Remove** deletes the factory
+and every event waiting for it.
 
-The factories list shows when each factory last reached the hub, its jigs
-version and how many events it has not confirmed. A factory's own page lists
-its assigned apps with their installations' names, and its event log: every
+The factories list shows when each factory last reached the hub, with a green
+dot while it is connected, its jigs version, how many events it has not
+confirmed and how many apps it is assigned. A factory's own page lists its
+assigned apps with their installations' names, and its event log: every
 provider event the hub kept for it, with when it arrived and whether the
-factory has confirmed it.
+factory has confirmed it. Expand an event to see its payload. An admin can
+rename the factory there; it keeps its token.
 
 ## Add apps and assign them {#apps}
 
 An app is your Organization's own identity on a provider: a GitHub App, a
 Linear OAuth app, a Slack app or a PagerDuty app. You create each one by hand
-on the provider, then add it under **Apps**. Its page on the hub shows the
-exact URLs and settings to put back on the provider, and installs or connects
-it.
+on the provider, then add it under **Apps → Add app**. Its page on the hub
+shows the exact URLs and settings to put back on the provider, and installs
+or connects it. An admin can rename an app on its page.
 
 - [GitHub App](/guide/hub-github)
 - [Linear app](/guide/hub-linear)
 - [Slack app](/guide/hub-slack)
 - [PagerDuty app](/guide/hub-pagerduty)
 
-Then, on the app's page under **Factories**, check each factory that should
-use it and save. That is an **assignment**: a factory receives events from,
+Then, on each factory's page under **Assigned apps**, choose the app and
+**Assign app**. That is an **assignment**: a factory receives events from,
 and gets tokens for, only the apps assigned to it. An app can be assigned to
-several factories, and every one of them receives its events.
+several factories, and every one of them receives its events; its page lists
+them.
 
 A factory may be assigned several installations of one provider, including
 several apps in one workspace or GitHub organization. It names the

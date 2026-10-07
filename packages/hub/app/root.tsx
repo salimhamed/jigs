@@ -1,4 +1,3 @@
-import { LogOut } from "lucide-react";
 import { ThemeProvider } from "next-themes";
 import type { ReactNode } from "react";
 import {
@@ -44,51 +43,47 @@ export function Layout({ children }: { children: ReactNode }) {
 }
 
 const navLink = ({ isActive }: { isActive: boolean }) =>
-  isActive ? "font-medium" : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100";
+  `rounded-md px-3 py-1.5 ${
+    isActive
+      ? "bg-zinc-100 font-medium dark:bg-zinc-800"
+      : "text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100"
+  }`;
+
+const pages = [
+  { to: "/", label: "Home" },
+  { to: "/factories", label: "Factories" },
+  { to: "/apps", label: "Apps" },
+  { to: "/members", label: "Members" },
+  { to: "/settings", label: "Settings" },
+];
 
 export default function App() {
   const member = useRouteLoaderData<typeof organizationLoader>("routes/organization");
   return (
     <>
       <header className="border-b border-zinc-200 dark:border-zinc-800">
-        <div className="mx-auto flex h-14 max-w-5xl items-center gap-6 px-4">
+        <div className="mx-auto flex min-h-14 max-w-6xl flex-wrap items-center gap-x-6 gap-y-2 px-4 py-2">
           <span className="font-semibold">{member?.organization ?? "jigs hub"}</span>
-          <nav className="flex flex-1 gap-4 text-sm">
-            {member && (
-              <>
-                <NavLink to="/" end className={navLink}>
-                  Home
+          <nav className="flex flex-1 flex-wrap gap-1 text-sm">
+            {member &&
+              pages.map(({ to, label }) => (
+                <NavLink key={to} to={to} end={to === "/"} className={navLink}>
+                  {label}
                 </NavLink>
-                <NavLink to="/factories" className={navLink}>
-                  Factories
-                </NavLink>
-                <NavLink to="/apps" className={navLink}>
-                  Apps
-                </NavLink>
-                <NavLink to="/members" className={navLink}>
-                  Members
-                </NavLink>
-                <NavLink to="/invites" className={navLink}>
-                  Invites
-                </NavLink>
-                <NavLink to="/settings" className={navLink}>
-                  Settings
-                </NavLink>
-              </>
-            )}
+              ))}
           </nav>
           {member && (
             <Form method="post" action="/sign-out" className="flex items-center gap-2 text-sm">
               <span className="text-zinc-500">{member.user.email}</span>
-              <button type="submit" aria-label="Sign out" className={quietButton}>
-                <LogOut className="size-4" />
+              <button type="submit" className={quietButton}>
+                Sign out
               </button>
             </Form>
           )}
           <ThemeToggle />
         </div>
       </header>
-      <main className="mx-auto max-w-5xl px-4 py-8">
+      <main className="mx-auto max-w-6xl px-4 py-8">
         <Outlet />
       </main>
     </>
@@ -100,7 +95,7 @@ export function ErrorBoundary({ error }: Route.ErrorBoundaryProps) {
     ? `${error.status} ${error.statusText}`
     : "Something went wrong";
   return (
-    <main className="mx-auto max-w-5xl px-4 py-8">
+    <main className="mx-auto max-w-6xl px-4 py-8">
       <h1 className="text-xl font-semibold">{message}</h1>
     </main>
   );

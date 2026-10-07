@@ -34,8 +34,15 @@ Create the app, then note its **Client ID** and **Client secret**.
 
 ## 2. Add the app to the hub
 
-In the hub, under **Apps → Add a Linear app**, enter the app's name as
-Linear shows it, its client ID, client secret and webhook signing secret.
+In the hub, under **Apps → Add app**, choose **Linear app**, and enter the
+app's name as Linear shows it, its client ID, client secret and webhook
+signing secret.
+
+Keep the name the same as the app's name in Linear: it is the name people
+mention, and agents are told it is their own. You can rename the app in
+Linear's settings any time; then rename it on its page on the hub too.
+Running factories learn the new name the next time they get a Linear token;
+restart a factory to apply it at once.
 
 ## 3. Finish the app's settings
 
@@ -60,8 +67,8 @@ it again to fix it.
 
 ## 5. Assign it to factories
 
-Under **Factories** on the app's page, check each factory that should act as
-this app, and save. A factory may be assigned several Linear apps and
+On the page of each factory that should act as this app, under **Assigned
+apps**, choose the app and **Assign app**. A factory may be assigned several Linear apps and
 workspaces, and names the installation it uses in each trigger, step and agent.
 
 In the factory, `pnpm exec jigs doctor` checks that the hub hands it a token

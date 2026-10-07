@@ -11,7 +11,8 @@ An account admin or owner registers the app once per PagerDuty account.
 
 1. In PagerDuty, go to **Integrations → App Registration** and choose
    **New App**. Give it a name such as `jigs`, turn on **OAuth 2.0** and
-   choose **Scoped OAuth**. The redirect URL is never used; any URL will do.
+   choose **Scoped OAuth**. The redirect URL is never used; enter your hub's
+   address.
 2. Grant these permission scopes:
 
    | Scope | What jigs uses it for |
@@ -24,8 +25,8 @@ An account admin or owner registers the app once per PagerDuty account.
 
 ## 2. Add the app to the hub
 
-In the hub, under **Apps → Add a PagerDuty connection**, enter the app's
-name, its client ID and client secret, the account's subdomain (the
+In the hub, under **Apps → Add app**, choose **PagerDuty**, and enter the
+app's name, which only labels it on the hub, its client ID and client secret, the account's subdomain (the
 `<subdomain>` in `<subdomain>.pagerduty.com`), its region, US or EU, and the
 **from email**.
 
@@ -50,13 +51,13 @@ Webhooks (v3)**, add a subscription:
 - **Event subscription**: `incident.triggered`.
 
 PagerDuty shows the subscription's **signing secret** once, when you create
-it. Enter it on the app's page on the hub. Until you do, the hub refuses the
-app's webhooks.
+it. Enter it on the app's page on the hub, which warns at the top until you
+do: until then, the hub refuses the app's webhooks.
 
 ## 4. Assign it to factories
 
-Under **Factories** on the app's page, check each factory that should use
-this app, and save. A factory may be assigned several PagerDuty accounts, and
+On the page of each factory that should use this app, under **Assigned
+apps**, choose the app and **Assign app**. A factory may be assigned several PagerDuty accounts, and
 names the installation it uses in each trigger, step and agent.
 
 A missing scope does not stop the hub from getting a token. It shows up as a

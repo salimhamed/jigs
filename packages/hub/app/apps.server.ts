@@ -29,7 +29,7 @@ import {
   slackWebhookPath,
 } from "../src/slack.ts";
 
-/** An Organization's apps, each with its installations and assigned factories. */
+/** An Organization's apps, each with its installations and how many factories it is assigned to. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
   const rows = await context.db.query.apps.findMany({
     columns: { id: true, provider: true, name: true },
@@ -46,28 +46,27 @@ export async function listApps(context: AppLoadContext, organizationId: string) 
     .where(eq(installations.organizationId, organizationId))
     .orderBy(asc(installations.account));
   const assigned = await context.db
-    .select({ appId: assignments.appId, factory: factories.name })
+    .select({ appId: assignments.appId })
     .from(assignments)
-    .innerJoin(factories, eq(factories.id, assignments.factoryId))
-    .where(eq(factories.organizationId, organizationId))
-    .orderBy(asc(factories.name));
+    .innerJoin(apps, eq(apps.id, assignments.appId))
+    .where(eq(apps.organizationId, organizationId));
   return rows.map((app) => ({
     ...app,
     installations: installed
       .filter((row) => row.appId === app.id)
       .map(({ account, installationName }) => ({ account, installationName })),
-    factories: assigned.filter((row) => row.appId === app.id).map((row) => row.factory),
+    factories: assigned.filter((row) => row.appId === app.id).length,
   }));
 }
 
-/** One app's page: what to set on the provider, its installations and assignments. */
+/** One app's page: what to set on the provider, its installations and the factories it is assigned to. */
 export async function readApp(context: AppLoadContext, organizationId: string, appId: string) {
   const app = await context.db.query.apps.findFirst({
     where: and(eq(apps.id, appId), eq(apps.organizationId, organizationId)),
   });
   if (!app) return null;
   const { origin } = context.config.publicUrl;
-  const [installed, organizationFactories] = await Promise.all([
+  const [installed, assignedFactories] = await Promise.all([
     context.db
       .select({
         id: installations.id,
@@ -81,24 +80,13 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
       .where(eq(installations.appId, app.id))
       .orderBy(asc(installations.account)),
     context.db
-      .select({ id: factories.id, name: factories.name, assigned: assignments.appId })
-      .from(factories)
-      .leftJoin(
-        assignments,
-        and(eq(assignments.factoryId, factories.id), eq(assignments.appId, app.id)),
-      )
-      .where(eq(factories.organizationId, organizationId))
+      .select({ id: factories.id, name: factories.name })
+      .from(assignments)
+      .innerJoin(factories, eq(factories.id, assignments.factoryId))
+      .where(eq(assignments.appId, app.id))
       .orderBy(asc(factories.name)),
   ]);
-  const common = {
-    id: app.id,
-    name: app.name,
-    factories: organizationFactories.map((factory) => ({
-      id: factory.id,
-      name: factory.name,
-      assigned: factory.assigned !== null,
-    })),
-  };
+  const common = { id: app.id, name: app.name, factories: assignedFactories };
   switch (app.provider) {
     case "linear":
       return {
@@ -162,6 +150,7 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
         ...common,
         provider: "github" as const,
         appId: app.externalId,
+        slug: (app.settings as GitHubAppSettings).slug,
         clientId: (app.settings as GitHubAppSettings).clientId,
         installUrl: githubInstallUrl(app),
         webhookUrl: `${origin}${githubWebhookPath}`,

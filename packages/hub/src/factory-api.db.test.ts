@@ -13,7 +13,7 @@ import {
 } from "@jigs-ai/hub-protocol";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, expect } from "vitest";
-import { setAssignments } from "./apps.ts";
+import { assignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
@@ -68,7 +68,7 @@ async function appFor(factoryIds: string[], organization = organizationId) {
     })
     .returning();
   if (!app) throw new Error("expected an app");
-  await setAssignments(db, organization, app.id, factoryIds);
+  for (const factoryId of factoryIds) await assignApp(db, organization, factoryId, app.id);
   appsByFactories.set(key, app.id);
   return app.id;
 }

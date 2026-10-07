@@ -1,7 +1,8 @@
 import { Form } from "react-router";
 import { attempt, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
-import { button, input } from "../components/ui.ts";
+import { PageHeader } from "../components/page.tsx";
+import { card, input, secondaryButton } from "../components/ui.ts";
 import type { Route } from "./+types/settings.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -20,21 +21,25 @@ export async function action({ context, request }: Route.ActionArgs) {
 export default function Settings({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">Settings</h1>
-      <Form method="post" className="flex items-end gap-2">
-        <label className="flex flex-col gap-1 text-sm">
+    <div className="space-y-6">
+      <PageHeader title="Settings" />
+      <Form
+        method="post"
+        className={`${card} flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 p-5`}
+      >
+        <label htmlFor="organization-name" className="w-48 text-sm text-zinc-500">
           Organization name
-          <input
-            name="name"
-            required
-            defaultValue={loaderData.name}
-            disabled={!loaderData.isAdmin}
-            className={input}
-          />
         </label>
+        <input
+          id="organization-name"
+          name="name"
+          required
+          defaultValue={loaderData.name}
+          disabled={!loaderData.isAdmin}
+          className={`${input} min-w-48 grow`}
+        />
         {loaderData.isAdmin && (
-          <button type="submit" className={button}>
+          <button type="submit" className={secondaryButton}>
             Save
           </button>
         )}

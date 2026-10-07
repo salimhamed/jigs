@@ -3,7 +3,7 @@ import { factoryStatusPath, pagerDutyScopes, pagerDutyTokenPath } from "@jigs-ai
 import { eq } from "drizzle-orm";
 import express from "express";
 import { beforeAll, expect } from "vitest";
-import { type App, setAssignments } from "./apps.ts";
+import { type App, assignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { readMessages } from "./messages.ts";
@@ -239,8 +239,8 @@ dbTest("sends a signed event only to the app's factories", async () => {
   const app = await newApp("pd_secret");
   const other = await newApp("pd_other");
   const [assigned, unassigned] = [(await newFactory()).factory, (await newFactory()).factory];
-  await setAssignments(db, organizationId, app.id, [assigned.id]);
-  await setAssignments(db, organizationId, other.id, [unassigned.id]);
+  await assignApp(db, organizationId, assigned.id, app.id);
+  await assignApp(db, organizationId, unassigned.id, other.id);
 
   const payload = triggered();
   expect(await deliver(app, payload, (body) => sign("pd_secret", body))).toBe(200);
@@ -283,8 +283,8 @@ dbTest("mints a token of each named account of the assigned apps on every reques
   const [app, second] = [await newApp(), await newApp()];
   await nameAccount(app, "pd-first");
   await nameAccount(second, "pd-second");
-  await setAssignments(db, organizationId, app.id, [factory.id]);
-  await setAssignments(db, organizationId, second.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, app.id);
+  await assignApp(db, organizationId, factory.id, second.id);
   const first = await requestPagerDutyToken(token, "pd-first");
   expect(first).toEqual({
     status: 200,

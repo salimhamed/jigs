@@ -68,10 +68,14 @@ public page's URL, `https://github.com/apps/<slug>`.
 
 ## 2. Add the App to the hub
 
-In the hub, under **Apps → Add a GitHub App**, enter the App ID, slug, client
-ID, client secret, webhook secret and the `.pem` file's contents. The hub
-checks the private key with GitHub and records every installation the App
-already has.
+In the hub, under **Apps → Add app**, choose **GitHub App**. Enter a name for
+the App on the hub, its slug, App ID, client ID, client secret, webhook
+secret and the `.pem` file's contents. The hub checks the private key with
+GitHub and records every installation the App already has.
+
+The name only labels the App on the hub, and you can change it on the App's
+page. The slug is what the hub installs the App and finds its bot user by,
+and renaming the App on the hub never changes it.
 
 ## 3. Finish the App's settings
 
@@ -98,8 +102,8 @@ Enter it under **Installation name** and save.
 
 ## 5. Assign it to factories
 
-Under **Factories** on the App's page, check each factory that should act as
-this App, and save.
+On the page of each factory that should act as this App, under **Assigned
+apps**, choose the App and **Assign app**.
 
 Each binding in a factory names the installation that reaches its repository
 by its installation name. A factory may be assigned several Apps installed on

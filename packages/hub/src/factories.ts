@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
 import { and, eq } from "drizzle-orm";
-import type { HubDatabase } from "./db/database.ts";
+import { type HubDatabase, isUniqueViolation } from "./db/database.ts";
 import { factories } from "./db/schema.ts";
 import type { MessageWaiters } from "./messages.ts";
 
@@ -28,6 +28,28 @@ export async function addFactory(
     .returning();
   if (!factory) throw new Error("adding a factory returned no row");
   return { factory, token };
+}
+
+/** Rename a factory. Names are unique within the Organization. */
+export async function renameFactory(
+  db: HubDatabase,
+  organizationId: string,
+  factoryId: string,
+  name: string,
+): Promise<{ name: string } | { error: string }> {
+  if (!name) return { error: "Name the factory." };
+  const renamed = await db
+    .update(factories)
+    .set({ name })
+    .where(and(eq(factories.id, factoryId), eq(factories.organizationId, organizationId)))
+    .returning({ id: factories.id })
+    .catch((error: unknown) => {
+      if (isUniqueViolation(error)) return null;
+      throw error;
+    });
+  if (renamed === null) return { error: `A factory is already named ${name}.` };
+  if (renamed.length === 0) return { error: "There is no such factory." };
+  return { name };
 }
 
 /**

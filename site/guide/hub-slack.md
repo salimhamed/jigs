@@ -17,8 +17,10 @@ opens, not to the hub's Request URL, even when that URL shows as verified.
 
 ## 2. Add the app to the hub
 
-In the hub, under **Apps → Add a Slack app**, enter the app's name as Slack
-shows it, and its App ID, client ID, client secret and signing secret.
+In the hub, under **Apps → Add app**, choose **Slack app**, and enter the
+app's name as Slack shows it, and its App ID, client ID, client secret and
+signing secret. The name only labels the app on the hub; you can change it
+on the app's page.
 
 ## 3. Finish the app's settings
 
@@ -31,8 +33,9 @@ The app's page on the hub shows its **Request URL**, ending in
   events**, add `message.channels` and `message.groups`, and choose **Save
   Changes**. If this page says Socket Mode is enabled and you won't need a
   Request URL, events are not reaching the hub: turn Socket Mode off.
-- Under **OAuth & Permissions**, add the Redirect URL and save. Leave
-  **token rotation** off: the hub keeps the bot token and has no way to
+- Under **OAuth & Permissions**, add the Redirect URL and choose **Save
+  URLs**. Without it, installing fails with `redirect_uri did not match`.
+  Leave **token rotation** off: the hub keeps the bot token and has no way to
   refresh one that expires.
 
 ## 4. Choose the bot scopes {#bot-scopes}
@@ -60,7 +63,7 @@ workspace did not grant fails with Slack's `missing_scope` error.
 
 On the app's page on the hub, choose **Add to Slack** and approve. Some
 workspaces require an admin to approve new apps; Slack asks for approval if
-yours does. Always install from the hub, which keeps the bot token it gets:
+yours does, and once an admin has approved it, choose **Add to Slack** again. Always install from the hub, which keeps the bot token it gets:
 when Slack's own settings show a banner asking you to reinstall the app,
 choose **Add to Slack** on the hub instead. The workspace then appears under
 **Workspaces**, with the scopes it granted. Give it an
@@ -72,8 +75,8 @@ Invite the bot to each channel factories should hear, public or private, with
 
 ## 6. Assign it to factories
 
-Under **Factories** on the app's page, check each factory that should use
-this app, and save. A factory may be assigned several Slack apps, even in one
+On the page of each factory that should use this app, under **Assigned
+apps**, choose the app and **Assign app**. A factory may be assigned several Slack apps, even in one
 workspace, and names the installation it uses in each trigger and step; see
 [one Slack app per teammate](/guide/hub#example-per-person).
 
