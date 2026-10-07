@@ -59,6 +59,8 @@ export interface TriggerEngine {
   drain(): Promise<void>;
   /** Start nothing more, and settle once the drain in flight has. */
   stop(): Promise<void>;
+  /** The rows this factory's triggers on `provider` recorded for the occurrence `key`. */
+  recorded(provider: Provider, key: string): Promise<Occurrence[]>;
 }
 
 interface Armed extends ValidTrigger {
@@ -295,6 +297,16 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     stop: () => {
       stopped = true;
       return chain;
+    },
+    async recorded(provider, key) {
+      const rows = await Promise.all(
+        armed
+          .filter((entry) => entry.source.provider === provider)
+          .map((entry) =>
+            store().byAttribute(entry.name, [occurrenceAttribute(slug(), entry.name, key)]),
+          ),
+      );
+      return rows.flat();
     },
     async push(provider, event) {
       await markers();

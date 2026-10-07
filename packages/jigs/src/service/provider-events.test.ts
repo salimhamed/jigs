@@ -21,7 +21,7 @@ import { clearWakes, lastWake } from "./wake.ts";
 
 // What an event is worth is what the SDK's resumeHook answers, so the SDK is
 // what a test stands in for here.
-vi.mock("workflow/api", () => ({ resumeHook: vi.fn() }));
+vi.mock("workflow/api", () => ({ resumeHook: vi.fn(), getHookByToken: vi.fn() }));
 const resumeHookMock = vi.mocked(resumeHook);
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
@@ -301,6 +301,32 @@ test("a Linear agent session goes to the triggers, not to waiting runs", async (
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[events] linear accepted triggers=mentions event=AgentSessionEvent",
   );
+});
+
+test("a prompt in a Linear agent session wakes the run conversing in it, not the triggers", async () => {
+  delivers();
+  const payload = {
+    type: "AgentSessionEvent",
+    action: "prompted",
+    agentSession: { id: "s1" },
+    agentActivity: {
+      id: "activity-1",
+      createdAt: "2026-10-07T00:00:00.000Z",
+      signal: null,
+      content: { type: "prompt", body: "and the tests?" },
+      user: { id: "u1", name: "Ada" },
+    },
+  };
+  expect(
+    await route({
+      provider: "linear",
+      installationName: "acme",
+      name: "AgentSessionEvent",
+      payload,
+    }),
+  ).toEqual({ outcome: "woken" });
+  expect(push).not.toHaveBeenCalled();
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:session:acme:s1", undefined);
 });
 
 test("a Linear agent session no trigger could read is a failure, logged", async () => {

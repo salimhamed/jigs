@@ -14,6 +14,7 @@ import {
 } from "../workflow/pull-requests/pull-request.ts";
 import { slackThreadTokenFromEvent } from "../workflow/slack/thread-token.ts";
 import type { pushEvent } from "./event-triggers/runner.ts";
+import { routeSessionPrompt, type SessionPromptDeps } from "./linear-session-prompts.ts";
 import { wake } from "./wake.ts";
 
 /** What routing reads of an event the hub received. */
@@ -24,6 +25,8 @@ type NamedEvent = RoutedEvent & { installationName: string };
 export interface RouteDeps {
   context: FactoryContext;
   push: typeof pushEvent;
+  /** What a Linear agent session's prompts reach; the service's own by default. */
+  sessionPrompts?: SessionPromptDeps;
 }
 
 /**
@@ -52,7 +55,17 @@ export async function routeProviderEvent(
     case "github":
       return routeGithub(event, deps);
     case "linear":
-      return event.name === "AgentSessionEvent" ? routePush(event, deps) : routeLinear(event);
+      if (event.name !== "AgentSessionEvent") return routeLinear(event);
+      // A session starts a run; every later prompt in it goes to that run.
+      if ((event.payload as { action?: unknown } | null)?.action === "prompted")
+        return {
+          outcome: await routeSessionPrompt(
+            event.installationName,
+            event.payload,
+            deps.sessionPrompts,
+          ),
+        };
+      return routePush(event, deps);
     case "pagerduty":
       return routePush(event, deps);
     case "slack":

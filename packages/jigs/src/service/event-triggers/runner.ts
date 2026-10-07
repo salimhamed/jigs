@@ -6,6 +6,7 @@ import { whenReady } from "../readiness.ts";
 import { onShutdown } from "../shutdown.ts";
 import { createTriggerEngine, type TriggerDeps, type TriggerEngine } from "./engine.ts";
 import type { PushedEvent } from "./sources.ts";
+import type { Occurrence } from "./store.ts";
 
 // How soon an occurrence waiting on the cap notices a run finishing. While
 // nothing waits, each check is one read of the pending rows.
@@ -82,4 +83,9 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
  */
 export async function pushEvent(provider: Provider, event: PushedEvent): Promise<string[]> {
   return running === undefined ? [] : running.push(provider, event);
+}
+
+/** The rows the running event triggers on `provider` recorded for the occurrence `key`. */
+export async function recordedOccurrences(provider: Provider, key: string): Promise<Occurrence[]> {
+  return running === undefined ? [] : running.recorded(provider, key);
 }

@@ -284,6 +284,19 @@ test("an occurrence pushed twice starts one run", async () => {
   });
 });
 
+test("the rows an occurrence was recorded under are found by its key, on its provider only", async () => {
+  const h = harness();
+  await h.engine.arm();
+  h.at(minutes(2));
+  await h.see(occurrenceAt("P1", minutes(1)));
+
+  expect(await h.engine.recorded("github", "P1")).toEqual([
+    expect.objectContaining({ trigger: "pages", state: "started", runId: h.runs[0]?.runId }),
+  ]);
+  expect(await h.engine.recorded("github", "P2")).toEqual([]);
+  expect(await h.engine.recorded("linear", "P1")).toEqual([]);
+});
+
 test("a pushed event is recorded and started, and answers before the run starts", async () => {
   let release: () => void = () => {};
   const gate = new Promise<void>((resolve) => {
