@@ -677,7 +677,10 @@ await (await getWorld()).close?.();`,
   }
 
   // Whether an agent step's status read can find its own run from the first
-  // step of a default-turbo start.
+  // step of a default-turbo start. start() writes run_created and enqueues the
+  // run in parallel, and turbo runs the first step body before run_started
+  // lands, so a read can miss the run; the step then throws and its retry
+  // finds it.
   async function proveFirstStepVisibility() {
     const seen = [];
     for (let attempt = 0; attempt < 5; attempt += 1) {
@@ -687,8 +690,10 @@ await (await getWorld()).close?.();`,
         async () => (await runtimeRun(runId, ports.service)).status === "completed",
         "observe run did not complete",
       );
-      assert.equal(lines(marker).length, 1);
-      seen.push(lines(marker)[0].split(" ")[1]);
+      const observed = lines(marker);
+      assert.match(observed.at(-1), /^observe-first-step run=(pending|running)$/);
+      for (const line of observed.slice(0, -1)) assert.match(line, /run=missing:/);
+      seen.push(observed.map((line) => line.split(" ")[1]).join(" then "));
     }
     console.log(`cancellation matrix: default-turbo first steps observed ${seen.join(", ")}`);
   }
