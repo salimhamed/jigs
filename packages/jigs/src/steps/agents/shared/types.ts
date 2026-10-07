@@ -122,12 +122,12 @@ export interface DriverContext {
 
 /**
  * What a conversation turn reports while it runs: that it started, each piece of agent activity,
- * and that an answer arrived. The answers themselves are in the turn's result.
+ * and each answer as Claude gives it.
  */
 export type TurnEvent =
   | { type: "start"; resume: boolean }
   | { type: "part"; part: AgentSourcePart }
-  | { type: "reply" };
+  | { type: "reply"; text: string };
 
 /** Watches a conversation turn. Best effort: a failure here never fails the turn. */
 export type TurnObserver = (event: TurnEvent) => void | Promise<void>;

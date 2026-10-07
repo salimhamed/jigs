@@ -10,11 +10,7 @@ import {
   type SDKUserMessage,
 } from "@anthropic-ai/claude-agent-sdk";
 import { JigsError } from "../../../errors.ts";
-import type {
-  ConversationMessage,
-  TurnRequest,
-  TurnResult,
-} from "../../../workflow/agents/conversation.ts";
+import type { TurnRequest, TurnResult } from "../../../workflow/agents/conversation.ts";
 import {
   type ClaudeHarness,
   claudePolicyKeys,
@@ -44,8 +40,9 @@ import type {
   RunRequest,
 } from "../shared/types.ts";
 import { claudeAuthCheck } from "./checks.ts";
-import { claudeFailure, claudeGeneration, claudeStreamParts } from "./messages.ts";
+import { claudeGeneration, claudeStreamParts, resultOutcome } from "./messages.ts";
 import { CLAUDE_ENV, type ClaudeProcessSpawner, claudeStepSettings } from "./process.ts";
+import { startTurn, step, type TurnAction, type TurnInput } from "./turn-state.ts";
 
 function mcpServers(
   servers: Record<string, McpServerConfig>,
@@ -157,10 +154,6 @@ function workSettings(
   });
 }
 
-/** What Claude is told when it resumes a turn the service died during. */
-export const RESTART_NOTE =
-  "The service restarted during this turn. Check where you got to and carry on.";
-
 /** The Claude session a conversation holds: a UUID derived from its name. */
 export function conversationSessionId(conversation: string): string {
   const hex = createHash("sha256").update(`jigs.conversation:${conversation}`).digest("hex");
@@ -180,8 +173,6 @@ function userMessage(uuid: string, text: string): SDKUserMessage {
 }
 
 const uuidOf = (message: SDKUserMessage) => (message as { uuid: string }).uuid;
-
-const authored = (message: ConversationMessage) => `${message.author}: ${message.text}`;
 
 /** An input stream Claude reads from while the driver keeps adding to it. */
 function inputQueue() {
@@ -218,49 +209,15 @@ function inputQueue() {
   };
 }
 
-const HALTED = Symbol("halted");
 // How long a stopped turn waits for Claude Code to confirm the interrupt before closing it.
 const STOP_GRACE_MS = 30_000;
-// The most uuids a result names; a longer batch is cut.
-const UUID_CAP = 64;
 
-/**
- * Read a streaming query until `onResult` returns how the turn ended, `halted` resolves, or the
- * query ends or fails, which `onEnd` turns into a result or an error.
- */
-async function readTurn(
-  query: ClaudeQuery,
-  halted: Promise<typeof HALTED>,
-  handlers: {
-    observe: ConverseContext["observe"];
-    onResult(result: SDKResultMessage, errorKind: string | undefined): TurnResult | undefined;
-    onHalt(): TurnResult;
-    onEnd(error: Error): TurnResult;
-  },
-): Promise<TurnResult> {
-  const parts = claudeStreamParts();
-  const messages = query[Symbol.asyncIterator]();
-  let errorKind: string | undefined;
-  try {
-    for (;;) {
-      const next = messages.next();
-      // A halt leaves this read behind; the query is closed and it settles unobserved.
-      next.catch(() => {});
-      const read = await Promise.race([next, halted]);
-      if (read === HALTED) return handlers.onHalt();
-      if (read.done) return handlers.onEnd(new Error("Claude Code ended without a result"));
-      const message = read.value;
-      for (const part of parts(message)) handlers.observe({ type: "part", part });
-      // Only the last assistant message's error explains how a turn ended.
-      if (message.type === "assistant") errorKind = message.error;
-      if (message.type !== "result") continue;
-      const ended = handlers.onResult(message, errorKind);
-      if (ended !== undefined) return ended;
-      errorKind = undefined;
-    }
-  } catch (error) {
-    return handlers.onEnd(error instanceof Error ? error : new Error(String(error)));
+function turnInput(message: SDKMessage): TurnInput | undefined {
+  if (message.type === "assistant") return { type: "assistant", error: message.error };
+  if (message.type === "result") {
+    return { type: "result", uuids: message.user_message_uuids, ...resultOutcome(message) };
   }
+  return undefined;
 }
 
 export function createClaudeDriver(
@@ -367,146 +324,124 @@ export function createClaudeDriver(
     const { cwd, conversation } = request;
     const sessionId = conversationSessionId(conversation);
     const transcript = await deps.transcript(sessionId, cwd);
-    const resume = transcript.size > 0;
     // A session file without messages, such as one left by a Claude Code killed while it
     // started, would refuse a fresh start under the same id on every retry.
-    if (!resume) await deps.discardSession(sessionId, cwd);
+    if (transcript.size === 0) await deps.discardSession(sessionId, cwd);
 
     const input = inputQueue();
-    // Sent and not yet named by any result.
-    const pending = new Set<string>();
-    const consumed = request.messages
-      .filter((message) => transcript.has(message.uuid))
-      .map((message) => message.uuid);
-    const replies: string[] = [];
-    let phase: "running" | "stopping" | "ending" = "running";
-    // Read through a call: stop and end change it from callbacks the compiler cannot see.
-    const now = () => phase;
+    let plugin: SkillsPlugin | undefined;
+    let settings: ReturnType<typeof workSettings> | undefined;
     let active: ClaudeQuery | undefined;
     let backstop: ReturnType<typeof setTimeout> | undefined;
-    let halt!: () => void;
-    const halted = new Promise<typeof HALTED>((resolve) => {
-      halt = () => resolve(HALTED);
+    let raised: unknown;
+    let unregister = () => {};
+    let finish!: (result: TurnResult) => void;
+    let fail!: (error: unknown) => void;
+    const outcome = new Promise<TurnResult>((resolve, reject) => {
+      finish = resolve;
+      fail = reject;
     });
-    const send = (uuid: string, text: string) => {
-      pending.add(uuid);
-      input.push(userMessage(uuid, text));
+
+    const opened = startTurn({
+      messages: request.messages,
+      transcript,
+      instructions: request.instructions,
+      note: randomUUID(),
+    });
+    let state = opened.state;
+    // Observers and the live turn call back in while actions run; each input sees the latest state.
+    const dispatch = (event: TurnInput): TurnAction[] => {
+      const next = step(state, event);
+      state = next.state;
+      for (const action of next.actions) perform(action);
+      return next.actions;
+    };
+    const perform = (action: TurnAction): void => {
+      switch (action.type) {
+        case "send":
+          input.push(userMessage(action.uuid, action.text));
+          return;
+        case "take-back":
+          dispatch({ type: "withdrawn", uuids: input.drop().map(uuidOf) });
+          return;
+        case "launch":
+          settings = workSettings(
+            harness,
+            cwd,
+            context,
+            plugin,
+            state.resume ? { resume: sessionId } : { sessionId },
+          );
+          active = deps.query({ prompt: input.messages(), options: settings });
+          void read(active);
+          return;
+        case "interrupt":
+          void active?.interrupt({ cancelQueued: true }).then(
+            (receipt) => dispatch({ type: "receipt", cancelled: receipt?.cancelled }),
+            () => dispatch({ type: "interrupt-failed" }),
+          );
+          return;
+        case "start-backstop":
+          backstop = setTimeout(() => dispatch({ type: "backstop" }), STOP_GRACE_MS);
+          return;
+        case "clear-backstop":
+          clearTimeout(backstop);
+          return;
+        case "observe":
+          context.observe(action.event);
+          return;
+        case "close":
+          unregister();
+          input.close();
+          return;
+        case "finish":
+          finish(action.result);
+          return;
+        case "rethrow":
+          fail(raised);
+          return;
+        case "accept":
+          return;
+      }
+    };
+    const read = async (query: ClaudeQuery) => {
+      const parts = claudeStreamParts();
+      try {
+        for await (const message of query) {
+          if (state.phase === "ended") return;
+          for (const part of parts(message)) context.observe({ type: "part", part });
+          const event = turnInput(message);
+          if (event !== undefined) dispatch(event);
+        }
+        raised = new Error("Claude Code ended without a result");
+      } catch (error) {
+        raised = error;
+      }
+      const message = raised instanceof Error ? raised.message : String(raised);
+      dispatch({ type: "crashed", message, cancelled: context.signal.aborted });
     };
 
-    // A turn that died after Claude took its message goes on from the transcript, never redone.
-    const note = consumed.length > 0 ? randomUUID() : undefined;
-    if (note !== undefined) send(note, RESTART_NOTE);
-    let lead = resume ? undefined : request.instructions;
-    for (const message of request.messages) {
-      if (transcript.has(message.uuid)) continue;
-      send(
-        message.uuid,
-        lead === undefined ? authored(message) : `${lead}\n\n${authored(message)}`,
-      );
-      lead = undefined;
-    }
-
-    const unregister = registerLiveTurn(conversation, {
-      inject(message) {
-        if (phase !== "running") return false;
-        if (!pending.has(message.uuid) && !consumed.includes(message.uuid)) {
-          send(message.uuid, authored(message));
-        }
-        return true;
-      },
-      stop() {
-        if (phase !== "running") return;
-        phase = "stopping";
-        // Unread messages would reach Claude after the interrupt and run as a new turn.
-        for (const dropped of input.drop()) pending.delete(uuidOf(dropped));
-        if (active === undefined) return;
-        backstop = setTimeout(halt, STOP_GRACE_MS);
-        void active.interrupt({ cancelQueued: true }).then((receipt) => {
-          if (receipt === undefined) return;
-          for (const uuid of receipt.cancelled ?? []) pending.delete(uuid);
-          // What is left is in the interrupted turn, whose result is still to come. Cancelled
-          // messages end with no result at all.
-          if (pending.size === 0) halt();
-        }, halt);
-      },
-    });
-    // Nothing reaches Claude once the turn is ending: a message sent to a closing CLI is lost.
-    const end = () => {
-      phase = "ending";
+    for (const action of opened.actions) perform(action);
+    try {
+      unregister = registerLiveTurn(conversation, {
+        inject: (message) =>
+          dispatch({ type: "inject", message }).some((action) => action.type === "accept"),
+        stop: () => {
+          dispatch({ type: "stop" });
+        },
+      });
+      if (harness.skills !== undefined && harness.skills.length > 0) {
+        plugin = await deps.prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills);
+      }
+      dispatch({ type: "ready" });
+      dispatch({ type: "launch" });
+      return await outcome;
+    } finally {
+      clearTimeout(backstop);
       unregister();
       input.close();
-    };
-    const ended = (outcome: "finished" | "stopped"): TurnResult => {
-      end();
-      return { outcome, replies, consumed };
-    };
-    const failed = (error: string): TurnResult => {
-      end();
-      return { outcome: "failed", error, replies, consumed };
-    };
-
-    const plugin =
-      harness.skills === undefined || harness.skills.length === 0
-        ? undefined
-        : await deps
-            .prepareSkillsPlugin(context.metadata.workflowRunId, harness.skills)
-            .catch((error: unknown) => {
-              end();
-              throw error;
-            });
-    try {
-      context.observe({ type: "start", resume });
-      if (now() === "stopping") return ended("stopped");
-      const settings = workSettings(
-        harness,
-        cwd,
-        context,
-        plugin,
-        resume ? { resume: sessionId } : { sessionId },
-      );
-      try {
-        active = deps.query({ prompt: input.messages(), options: settings });
-        return await readTurn(active, halted, {
-          observe: context.observe,
-          onResult(result, errorKind) {
-            const named = result.user_message_uuids;
-            // Missing, or cut at the SDK's cap: everything sent so far counts as taken, so the
-            // turn cannot wait for a result that will never come.
-            const taken =
-              named === undefined || named.length >= UUID_CAP
-                ? [...pending]
-                : named.filter((uuid) => pending.has(uuid));
-            for (const uuid of taken) {
-              pending.delete(uuid);
-              if (uuid !== note) consumed.push(uuid);
-            }
-            const failure = claudeFailure(result, errorKind);
-            if (now() === "stopping") {
-              if (failure === undefined && result.subtype === "success")
-                replies.push(result.result);
-              return ended("stopped");
-            }
-            if (failure !== undefined) return failed(failure);
-            if (result.subtype === "success") replies.push(result.result);
-            if (pending.size === 0) end();
-            context.observe({ type: "reply" });
-            return now() === "ending" ? ended("finished") : undefined;
-          },
-          onHalt: () => ended("stopped"),
-          onEnd(error) {
-            if (now() === "stopping") return ended("stopped");
-            // Once an answer is out, a retry would give it again.
-            if (replies.length === 0 || context.signal.aborted) throw error;
-            return failed(error.message);
-          },
-        });
-      } finally {
-        clearTimeout(backstop);
-        active?.close();
-        await settings.spawnClaudeCodeProcess.close();
-      }
-    } finally {
-      end();
+      active?.close();
+      await settings?.spawnClaudeCodeProcess.close();
       plugin?.cleanup();
     }
   }

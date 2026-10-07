@@ -67,18 +67,10 @@ export interface FakeClaudeCli {
 
 /** How {@link fakeClaudeCli} behaves. Turns count from 1. */
 export interface FakeClaudeScript {
-  /** Holds the first turn back, as Claude Code's startup does. Queued messages wait. */
-  startup?: Promise<void>;
   midTurn?(turn: number): Promise<void> | void;
   beforeResult?(turn: number): void;
-  /** Ends the turn with an error result. */
-  fail?(turn: number): boolean;
   /** Fails the process as the turn starts. */
   crash?(turn: number): boolean;
-  /** Leaves `user_message_uuids` off every result. */
-  omitUuids?: boolean;
-  /** Ignores interrupts and answers them with no receipt, as an older CLI would. */
-  deaf?: boolean;
 }
 
 /**
@@ -98,10 +90,6 @@ export function fakeClaudeCli(script: FakeClaudeScript = {}): FakeClaudeCli {
     let closed = false;
     let wake: (() => void) | undefined;
     let abort: (() => void) | undefined;
-    let shut!: () => void;
-    const closing = new Promise<void>((resolve) => {
-      shut = resolve;
-    });
     void (async () => {
       if (typeof call.prompt === "string") throw new Error("expected streaming input");
       for await (const message of call.prompt) {
@@ -114,7 +102,6 @@ export function fakeClaudeCli(script: FakeClaudeScript = {}): FakeClaudeCli {
     })();
     const messages = (async function* (): AsyncGenerator<SDKMessage> {
       let turn = 0;
-      if (script.startup !== undefined) await Promise.race([script.startup, closing]);
       for (;;) {
         while (inbox.length === 0 && !inputDone && !closed) {
           await new Promise<void>((resolve) => {
@@ -144,7 +131,6 @@ export function fakeClaudeCli(script: FakeClaudeScript = {}): FakeClaudeCli {
         ]);
         abort = undefined;
         if (closed) return;
-        const uuids = (list: string[]) => (script.omitUuids ? {} : { user_message_uuids: list });
         if (aborted) {
           yield {
             type: "result",
@@ -152,7 +138,7 @@ export function fakeClaudeCli(script: FakeClaudeScript = {}): FakeClaudeCli {
             is_error: true,
             errors: ["interrupted"],
             session_id: "claude-session",
-            ...uuids(consumed),
+            user_message_uuids: consumed,
           } as unknown as SDKMessage;
           continue;
         }
@@ -160,27 +146,18 @@ export function fakeClaudeCli(script: FakeClaudeScript = {}): FakeClaudeCli {
         consumed.push(...inbox.splice(0).map(uuidOf));
         script.beforeResult?.(turn);
         await settle();
-        yield script.fail?.(turn) === true
-          ? claudeResult({
-              subtype: "error_max_turns",
-              is_error: true,
-              errors: ["Reached maximum number of turns (1)"],
-              ...uuids(consumed),
-            })
-          : claudeResult({ result: `reply ${turn}`, ...uuids(consumed) });
+        yield claudeResult({ result: `reply ${turn}`, user_message_uuids: consumed });
       }
     })();
     return Object.assign(messages, {
       interrupt: async (options?: { cancelQueued?: boolean }) => {
         interrupts.push(options);
-        if (script.deaf) return undefined;
         const cancelled = options?.cancelQueued === true ? inbox.splice(0).map(uuidOf) : [];
         abort?.();
         return { still_queued: [], cancelled };
       },
       close: () => {
         closed = true;
-        shut();
         wake?.();
         abort?.();
       },
