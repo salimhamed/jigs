@@ -497,7 +497,8 @@ function EventRow({ factoryId, message }: { factoryId: string; message: Message 
       {open && (
         <tr>
           <td colSpan={6} className="bg-zinc-50 dark:bg-zinc-900/50">
-            <pre className="max-h-96 overflow-auto text-xs">
+            {/* w-0 min-w-full: long payload lines scroll instead of widening the columns. */}
+            <pre className="max-h-96 w-0 min-w-full overflow-auto text-xs">
               {payload.data ? (payload.data.payload ?? "No longer kept.") : "Loading…"}
             </pre>
           </td>

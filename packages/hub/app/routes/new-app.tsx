@@ -10,7 +10,8 @@ import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { Codes } from "../components/codes.tsx";
 import { PageHeader, UrlRow } from "../components/page.tsx";
-import { button, external, input, link, quietButton, select } from "../components/ui.ts";
+import { Select } from "../components/select.tsx";
+import { button, external, input, link, quietButton } from "../components/ui.ts";
 import type { Route } from "./+types/new-app.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -91,7 +92,7 @@ type HubUrls = { hub: string; githubWebhook: string };
 
 const generalAbout = (
   <>
-    On the App's <strong>General</strong> page, under <strong>About</strong>.
+    On the app's <strong>General</strong> page, under <strong>About</strong>.
   </>
 );
 
@@ -126,11 +127,11 @@ const forms: Record<
         <UrlRow label="Webhook URL" value={urls.githubWebhook} />
       </>,
       <>
-        Create the App, then copy the details below. The app's page lists the remaining settings
+        Create the app, then copy the details below. The app's page lists the remaining settings
         once you add it here.
       </>,
     ],
-    note: "This App is how factories work on GitHub, such as opening pull requests. It's separate from the GitHub login people use to sign in to this hub.",
+    note: "This app is how factories work on GitHub, such as opening pull requests. It's separate from the GitHub login people use to sign in to this hub.",
     fields: [
       {
         name: "name",
@@ -142,7 +143,7 @@ const forms: Record<
         label: "Slug",
         help: (
           <>
-            The end of the App's public page address: <code>github.com/apps/&lt;slug&gt;</code>.
+            The end of the app's public page address: <code>github.com/apps/&lt;slug&gt;</code>.
           </>
         ),
       },
@@ -165,7 +166,7 @@ const forms: Record<
         secret: true,
         help: (
           <>
-            The secret you entered under <strong>Webhook</strong> when creating the App. If you left
+            The secret you entered under <strong>Webhook</strong> when creating the app. If you left
             it empty, set one on GitHub first.
           </>
         ),
@@ -384,11 +385,7 @@ export default function NewApp({ loaderData, actionData }: Route.ComponentProps)
               </Link>
             ))}
           </nav>
-          {provider ? (
-            <AppForm key={provider} provider={provider} urls={urls} />
-          ) : (
-            <p className="text-zinc-500">Choose the provider of the app you made.</p>
-          )}
+          {provider && <AppForm key={provider} provider={provider} urls={urls} />}
         </>
       )}
     </div>
@@ -429,18 +426,13 @@ function AppForm({ provider, urls }: { provider: Provider; urls: HubUrls }) {
 
 function FieldInput({ field }: { field: Field }) {
   const control = field.options ? (
-    <select
-      id={field.name}
-      name={field.name}
-      defaultValue={field.options[0]?.value}
-      className={select}
-    >
+    <Select id={field.name} name={field.name} defaultValue={field.options[0]?.value}>
       {field.options.map((option) => (
         <option key={option.value} value={option.value}>
           {option.label}
         </option>
       ))}
-    </select>
+    </Select>
   ) : field.multiline ? (
     <textarea
       id={field.name}

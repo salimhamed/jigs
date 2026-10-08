@@ -66,9 +66,9 @@ export async function addGitHubApp(
   input: GitHubAppInput,
   { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ app: App } | { error: string }> {
-  if (!input.name) return { error: "Name the App." };
+  if (!input.name) return { error: "Name the app." };
   if (!/^\d+$/.test(input.appId)) return { error: "The App ID is a number." };
-  if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the App's URL name." };
+  if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the app's URL name." };
   if (!input.clientId || !input.clientSecret || !input.webhookSecret) {
     return { error: "Enter the client ID, client secret and webhook secret." };
   }
@@ -80,7 +80,7 @@ export async function addGitHubApp(
   const installed = await listInstallations(apiUrl, input.appId, input.privateKey);
   if ("status" in installed) {
     return {
-      error: `GitHub refused App ${input.appId} with this private key (${installed.status}).`,
+      error: `GitHub refused app ${input.appId} with this private key (${installed.status}).`,
     };
   }
   return db.transaction(async (tx) => {
@@ -287,7 +287,7 @@ export function createGitHubRoutes(options: {
     const installationId = String(request.query.installation_id ?? "");
     const app = await findApp(db, "github", String(request.params.appId));
     if (!app || !/^\d+$/.test(installationId)) {
-      response.status(400).type("text").send("GitHub sent no installation of an App on this hub.");
+      response.status(400).type("text").send("GitHub sent no installation of an app on this hub.");
       return;
     }
     const account = await fetchInstallationAccount(

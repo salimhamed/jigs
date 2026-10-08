@@ -18,9 +18,6 @@ export const dangerButton =
 export const input =
   "rounded-md border border-zinc-300 bg-transparent px-2.5 py-1.5 text-sm dark:border-zinc-700";
 
-/** A native select: room on the right for its arrow. */
-export const select = `${input} pr-8`;
-
 export const card = "rounded-lg border border-zinc-200 dark:border-zinc-800";
 
 export const table =

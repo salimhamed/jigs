@@ -239,7 +239,7 @@ function providerIds(app: Loaded) {
 }
 
 const nameHints: Record<Loaded["provider"], string> = {
-  github: "Only people see this name. Renaming it doesn't change the App on GitHub.",
+  github: "Only people see this name. Renaming it doesn't change the app on GitHub.",
   linear:
     "Match the app's name in Linear: people @mention it by that name, and agents are told it is their own. You can rename the app in Linear's settings any time. Running factories pick up a new name when they next get a Linear token; restart a factory to apply it at once.",
   slack:
@@ -277,8 +277,8 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
         provider="GitHub"
         description={
           <>
-            In the App's settings on GitHub: <strong>Settings</strong> →{" "}
-            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the App.
+            In the app's settings on GitHub: <strong>Settings</strong> →{" "}
+            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the app.
           </>
         }
         urls={[
@@ -343,7 +343,7 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
         title="Installations"
         description={
           <>
-            The GitHub accounts this App is installed on. {shortName} Your factory code uses that
+            The GitHub accounts this app is installed on. {shortName} Your factory code uses that
             name to choose which account to work in.
           </>
         }
