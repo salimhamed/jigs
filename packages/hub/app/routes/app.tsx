@@ -555,8 +555,7 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
             "Invite the bot to each channel factories should hear",
             <>
               In Slack itself, not the app's settings: send <code>/invite @bot-name</code> in the
-              channel, or open the channel's details → <strong>Integrations</strong> →{" "}
-              <strong>Add apps</strong>.
+              channel.
             </>,
           ],
         ]}
