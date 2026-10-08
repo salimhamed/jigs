@@ -11,7 +11,7 @@ const { createHook, sleep, hook, timer } = vi.hoisted(() => ({
   timer: { fire: null as (() => void) | null },
   hook: {
     awaited: 0,
-    disposed: 0,
+    disposed: [] as string[],
     conflict: null as { runId: string } | null,
     wake: null as (() => void) | null,
   },
@@ -31,6 +31,8 @@ const inputs: LinearAgentSessionInputs = {
   creator: { id: "u1", name: "Ada", email: "ada@example.com" },
 };
 const ref = { installationName: "acme", sessionId: SESSION };
+const OWNED = `linear:session:acme:${SESSION}`;
+const LISTENING = `linear:listening:acme:${SESSION}`;
 const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 let prompts: LinearAgentPrompt[];
@@ -65,22 +67,23 @@ beforeEach(() => {
   count = 0;
   prompts = [];
   turnResults = [];
-  Object.assign(hook, { awaited: 0, disposed: 0, conflict: null, wake: null });
+  Object.assign(hook, { awaited: 0, disposed: [], conflict: null, wake: null });
   timer.fire = null;
   sleep.mockReset();
   sleep.mockImplementation(() => new Promise<void>((fire) => (timer.fire = () => fire())));
   createHook.mockReset();
-  createHook.mockImplementation(() => ({
+  createHook.mockImplementation(({ token }: { token: string }) => ({
     getConflict: async () => hook.conflict,
     // biome-ignore lint/suspicious/noThenProperty: the SDK's Hook is a thenable
     then: (resolve: (value: unknown) => unknown, reject?: (reason: unknown) => unknown) => {
+      if (token !== LISTENING) throw new Error(`only the listening hook is awaited, not ${token}`);
       hook.awaited += 1;
       return new Promise<unknown>((wake) => {
         hook.wake = () => wake(undefined);
       }).then(resolve, reject);
     },
     dispose: () => {
-      hook.disposed += 1;
+      hook.disposed.push(token);
     },
   }));
   steps = {
@@ -117,7 +120,7 @@ const posts = () => steps.postLinearAgentActivity.mock.calls.map(([request]) => 
 test("answers the mention, links the run, then ends idle after four hours", async () => {
   const done = converse();
   await parked();
-  expect(createHook).toHaveBeenCalledWith({ token: `linear:session:acme:${SESSION}` });
+  expect(createHook.mock.calls).toEqual([[{ token: OWNED }], [{ token: LISTENING }]]);
   expect(steps.setLinearAgentSessionUrls).toHaveBeenCalledWith({ ...ref, urls: [] });
   expect(steps.executeLinearAgentTurn).toHaveBeenCalledExactlyOnceWith({
     ...ref,
@@ -130,7 +133,7 @@ test("answers the mention, links the run, then ends idle after four hours", asyn
   await goIdle();
   expect(await done).toEqual({ outcome: "idle", turns: 1 });
   expect(posts()).toEqual([]);
-  expect(hook.disposed).toBe(1);
+  expect(hook.disposed).toEqual([LISTENING, OWNED]);
 });
 
 test("a reply after a wake runs a follow-up turn past the cursor, then waits afresh", async () => {
@@ -188,7 +191,7 @@ test("a stop found while parked ends with one Stopped., keyed to the stop", asyn
   expect(posts()).toEqual([
     { ...ref, content: { type: "response", body: "Stopped." }, once: `stopped:${stop.id}` },
   ]);
-  expect(hook.disposed).toBe(1);
+  expect(hook.disposed).toHaveLength(2);
 });
 
 test("a stop already in the session ends it before any turn", async () => {
@@ -267,14 +270,14 @@ test("an assignment opens with the assignment, then Linear's prompt context", as
 
 test("an assignment without prompt context opens with a plain message", async () => {
   const done = linearAgentConversation(
-    { ...inputs, comment: null, creator: null },
+    { ...inputs, comment: null },
     { harness: claude, cwd: "/w", instructions: "Be brief." },
     steps,
   );
   await parked();
   expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
     instructions: "Be brief.",
-    opening: { uuid: SESSION, author: "Someone", text: 'AGE-1 "Fix it" was assigned to you.' },
+    opening: { uuid: SESSION, author: "Ada", text: 'AGE-1 "Fix it" was assigned to you.' },
   });
   await goIdle();
   await done;
@@ -303,7 +306,7 @@ test("a turn step that throws posts an error, then fails the run", async () => {
       },
     },
   ]);
-  expect(hook.disposed).toBe(1);
+  expect(hook.disposed).toHaveLength(2);
 });
 
 test("an error that cannot be posted still fails the run with the original error", async () => {

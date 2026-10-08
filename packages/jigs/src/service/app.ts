@@ -18,7 +18,7 @@ import { listResources, type RegistrySql, registrySql } from "../steps/runtime/r
 import { readRunState } from "../steps/runtime/run-state.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { parseHookToken } from "../workflow/hook-tokens.ts";
+import { isOwnershipKind, parseHookToken } from "../workflow/hook-tokens.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
 import { triggerStore } from "./event-triggers/store.ts";
 import { listTriggers, triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
@@ -175,7 +175,10 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
       return;
     }
     const run = getRun(runId);
-    const tokens = await runResourceTokens(world, run.runId);
+    // A token jigs did not mint is poked too: a factory's own workflow may park on it.
+    const tokens = (await heldTokens(world, run.runId)).filter(
+      (token) => !isOwnershipKind(parseHookToken(token)?.kind),
+    );
     if (tokens.length === 0) {
       response.status(409).json({ error: "run has no suspensions to poke" });
       return;
@@ -221,7 +224,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
       response.status(409).json({ error: `run ${runId} is already ${status}`, status });
       return;
     }
-    const claimedTokens = await runResourceTokens(world, runId);
+    const claimedTokens = await heldTokens(world, runId);
     if (status !== "cancelled") {
       try {
         await run.cancel();
@@ -239,7 +242,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
         throw error;
       }
     }
-    const retainedTokens = await runResourceTokens(world, runId);
+    const retainedTokens = await heldTokens(world, runId);
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
@@ -352,12 +355,8 @@ function dashboardPointer(ctx: FactoryContext, runId: string): string {
     : `http://localhost:${port}/run/${runId}`;
 }
 
-// The hooks that name an external resource: what another run can be blocked
-// on, and what a poke can wake. The needs-human marker is neither — the reply
-// that ends that halt lands on the ticket claim beside it.
-async function runResourceTokens(world: AppDeps["world"], runId: string): Promise<string[]> {
+// Every hook the run holds, the locks among them.
+async function heldTokens(world: AppDeps["world"], runId: string): Promise<string[]> {
   const hooks = await (await world()).hooks.list({ runId });
-  return hooks.data
-    .map((hook) => hook.token)
-    .filter((token) => parseHookToken(token)?.kind !== "needs-human");
+  return hooks.data.map((hook) => hook.token);
 }

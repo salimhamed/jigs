@@ -1,9 +1,9 @@
 import { beforeEach, expect, test, vi } from "vitest";
 import type { TicketSnapshot } from "./snapshot.ts";
 
-const { createHook, getConflict } = vi.hoisted(() => ({
+const { createHook, conflicts } = vi.hoisted(() => ({
   createHook: vi.fn(),
-  getConflict: vi.fn(async (): Promise<{ runId: string } | null> => null),
+  conflicts: new Map<string, { runId: string }>(),
 }));
 
 vi.mock("workflow", () => ({ createHook }));
@@ -13,75 +13,112 @@ const { acquireTicket } = await import("./prelude.ts");
 
 const issue = { id: "issue-uuid", identifier: "AGE-471" };
 const snapshot = { id: issue.id, identifier: issue.identifier } as TicketSnapshot;
+const TICKET = "linear:ticket:linear-acme:issue-uuid";
 
-beforeEach(() => {
-  createHook.mockReset();
-  getConflict.mockReset();
-  getConflict.mockResolvedValue(null);
-  createHook.mockImplementation(() => ({ getConflict }));
-});
+let calls: string[];
 
-test("resolves, claims, and snapshots the resolved ticket in order", async () => {
-  const calls: string[] = [];
-  const resolveLinearIssue = vi.fn(
-    async ({ installationName, reference }: { installationName: string; reference: string }) => {
-      calls.push(`resolve:${installationName}:${reference}`);
-      return issue;
-    },
-  );
-
-  createHook.mockImplementation(({ token }: { token: string }) => ({
-    getConflict: async () => {
-      calls.push(`claim:${token}`);
-      return null;
-    },
-  }));
-  const fetchTicketSnapshot = vi.fn(async ({ issueId }: { issueId: string }) => {
+const steps = () => ({
+  resolveLinearIssue: vi.fn(async ({ reference }: { reference: string }) => {
+    calls.push(`resolve:${reference}`);
+    return issue;
+  }),
+  openLinearAgentSession: vi.fn(async ({ issueId }: { issueId: string }) => {
+    calls.push(`open:${issueId}`);
+    return { sessionId: "opened" };
+  }),
+  setLinearAgentSessionUrls: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    calls.push(`urls:${sessionId}`);
+  }),
+  postLinearAgentActivity: vi.fn(async ({ sessionId }: { sessionId: string }) => {
+    calls.push(`thought:${sessionId}`);
+    return {};
+  }),
+  fetchTicketSnapshot: vi.fn(async ({ issueId }: { issueId: string }) => {
     calls.push(`snapshot:${issueId}`);
     return snapshot;
-  });
+  }),
+});
 
-  const result = await acquireTicket(
-    { installationName: "linear-acme", reference: "raw-reference" },
-    {
-      resolveLinearIssue,
-      fetchTicketSnapshot,
+beforeEach(() => {
+  calls = [];
+  conflicts.clear();
+  createHook.mockReset();
+  createHook.mockImplementation(({ token }: { token: string }) => ({
+    getConflict: async () => {
+      calls.push(`hold:${token}`);
+      return conflicts.get(token) ?? null;
     },
-  );
+  }));
+});
+
+test("claims the ticket, opens and holds a session, says it is working, then snapshots", async () => {
+  const s = steps();
+  const result = await acquireTicket({ installationName: "linear-acme", reference: "AGE-471" }, s);
 
   expect(result).toEqual({
-    claim: expect.objectContaining({
+    claim: {
       installationName: "linear-acme",
       issueId: issue.id,
       identifier: issue.identifier,
-    }),
+      token: TICKET,
+      sessionId: "opened",
+      consumedPromptIds: [],
+    },
     snapshot,
   });
   expect(calls).toEqual([
-    "resolve:linear-acme:raw-reference",
-    "claim:linear:ticket:linear-acme:issue-uuid",
+    "resolve:AGE-471",
+    `hold:${TICKET}`,
+    "open:issue-uuid",
+    "hold:linear:session:linear-acme:opened",
+    "thought:opened",
     "snapshot:issue-uuid",
   ]);
-  expect(createHook).toHaveBeenCalledWith({ token: "linear:ticket:linear-acme:issue-uuid" });
-  expect(fetchTicketSnapshot).toHaveBeenCalledWith({
+  expect(s.postLinearAgentActivity).toHaveBeenCalledWith({
     installationName: "linear-acme",
-    issueId: issue.id,
+    sessionId: "opened",
+    content: { type: "thought", body: "Working on AGE-471" },
   });
 });
 
-test("does not fetch a snapshot when another run holds the ticket claim", async () => {
-  getConflict.mockResolvedValue({ runId: "wrun_OWNER" });
-  const fetchTicketSnapshot = vi.fn(async () => snapshot);
+test("a run started from a session holds that session and links it instead of opening one", async () => {
+  const s = steps();
+  const { claim } = await acquireTicket(
+    { installationName: "linear-acme", reference: "AGE-471", session: "given" },
+    s,
+  );
+  expect(claim.sessionId).toBe("given");
+  expect(calls).toEqual([
+    "resolve:AGE-471",
+    `hold:${TICKET}`,
+    "hold:linear:session:linear-acme:given",
+    "urls:given",
+    "thought:given",
+    "snapshot:issue-uuid",
+  ]);
+  expect(s.setLinearAgentSessionUrls).toHaveBeenCalledWith({
+    installationName: "linear-acme",
+    sessionId: "given",
+    urls: [],
+  });
+});
 
+test("a ticket another run holds fails before any session opens", async () => {
+  conflicts.set(TICKET, { runId: "wrun_OWNER" });
+  const s = steps();
   await expect(
-    acquireTicket(
-      { installationName: "linear-acme", reference: "AGE-471" },
-      {
-        resolveLinearIssue: vi.fn(async () => issue),
-        fetchTicketSnapshot,
-      },
-    ),
-  ).rejects.toBeInstanceOf(ClaimConflictError);
+    acquireTicket({ installationName: "linear-acme", reference: "AGE-471" }, s),
+  ).rejects.toThrow(`Linear issue issue-uuid is already claimed by run wrun_OWNER`);
+  expect(s.openLinearAgentSession).not.toHaveBeenCalled();
+  expect(s.fetchTicketSnapshot).not.toHaveBeenCalled();
+});
 
-  expect(fetchTicketSnapshot).not.toHaveBeenCalled();
+test("a session another run holds fails before the run posts in it", async () => {
+  conflicts.set("linear:session:linear-acme:given", { runId: "wrun_CHAT" });
+  const s = steps();
+  await expect(
+    acquireTicket({ installationName: "linear-acme", reference: "AGE-471", session: "given" }, s),
+  ).rejects.toBeInstanceOf(ClaimConflictError);
+  expect(s.setLinearAgentSessionUrls).not.toHaveBeenCalled();
+  expect(s.postLinearAgentActivity).not.toHaveBeenCalled();
 });

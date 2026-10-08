@@ -13,16 +13,21 @@ import type { TicketClaim } from "./claim.ts";
 export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),
-  // What the ticket is about, in plain words, for whoever reads the comment.
+  // What the ticket is about, in plain words, for whoever reads the session.
   about: z.string(),
   questions: z.array(haltQuestionSchema),
   assumptions: z.array(z.string()),
 });
 
 /**
- * A comment jigs posts on the ticket that asks for nothing and suspends
- * nothing. It carries its own words, the way a halt does, so the
+ * A note a ticket run posts in its Linear agent session that asks for nothing
+ * and suspends nothing. It carries its own words, the way a halt does, so the
  * renderer owns the layout and every caller owns what it says.
+ *
+ * @remarks
+ * Linear marks a session stale after about 30 minutes with no activity, and a
+ * stale session hides its Stop button. Before a long quiet wait on people, such
+ * as a pull request waiting for review, post a note with `run: "waiting"`.
  *
  * @group Linear tickets
  */
@@ -39,23 +44,31 @@ export type TicketNote = {
    * user has is skipped with a warning.
    */
   mention?: string[] | undefined;
+  /**
+   * What the run does after this note; omitted, it keeps working.
+   *
+   * @remarks
+   * `"ended"` is the run's final message, success or not; Linear shows the
+   * session as finished. Set it on every way out of the run. `"waiting"` shows the session as awaiting input, which never goes
+   * stale but shows no Stop button. The run does not read replies to a waiting
+   * note, so say in it where people act and how to stop the run.
+   */
+  run?: "waiting" | "ended" | undefined;
 };
 
 /**
- * Posting a note on the ticket that asks for nothing and suspends nothing.
- * Declared here rather than written as `typeof postTicketNote` for the same
- * reason the halt's step contracts are: the routine that calls the step owns the contract.
+ * Posting a note in the run's Linear agent session. Declared here rather than
+ * written as `typeof postTicketNote` for the same reason the halt's step
+ * contract is: the routine that calls the step owns the contract.
  */
 export type PostTicketNote = (request: {
   installationName: string;
   issueId: string;
+  sessionId: string;
   note: TicketNote;
-}) => Promise<{ commentId: string }>;
+}) => Promise<void>;
 
-/**
- * Post a note on a claimed ticket and record its comment on the claim, so a
- * later halt in this run never mistakes it for a human's reply.
- */
+/** Post a note in a claimed ticket's Linear agent session. */
 export async function noteOnTicket(
   claim: TicketClaim,
   note: TicketNote,
@@ -63,7 +76,6 @@ export async function noteOnTicket(
 ): Promise<void> {
   // Destructured for the same reason haltForHuman destructures its steps.
   const { postTicketNote } = deps;
-  const { installationName, issueId } = claim;
-  const { commentId } = await postTicketNote({ installationName, issueId, note });
-  claim.postedCommentIds.push(commentId);
+  const { installationName, issueId, sessionId } = claim;
+  await postTicketNote({ installationName, issueId, sessionId, note });
 }

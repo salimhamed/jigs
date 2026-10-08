@@ -30,7 +30,6 @@ export {
   linearAgentConversation,
 } from "./linear/agent-conversation.ts";
 export { bindLinearSteps, type LinearSteps } from "./linear/bind.ts";
-export { claimTicket } from "./linear/claim.ts";
 export { type AcquireTicketSteps, acquireTicket } from "./linear/prelude.ts";
 export { type PostPullRequestNoteOptions, postPullRequestNote } from "./pull-requests/answers.ts";
 export { bindPullRequestSteps, type PullRequestSteps } from "./pull-requests/bind.ts";

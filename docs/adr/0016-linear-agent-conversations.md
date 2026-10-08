@@ -1,6 +1,12 @@
 # A Linear agent session is one Claude conversation held by one run
 
-Status: accepted
+Status: accepted; the single hook and the halt's comment rule superseded by [0017](./0017-ticket-runs-talk-in-their-linear-agent-session.md)
+
+A run now holds two hooks on its session: the `linear:session:` token for its
+whole life, which only marks it the owner, and a `linear:listening:` token
+while it reads the session, which is the one the service wakes. Ticket runs
+talk in their own Linear agent session and read no ordinary comments, so the
+rule that session comments never answer a ticket halt is gone.
 
 With the hub ([0015](./0015-hub.md)), a mention of a factory's Linear app
 starts a run, but the run only posted plain issue comments: Linear's agent

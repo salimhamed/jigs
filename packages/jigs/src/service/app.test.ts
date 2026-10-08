@@ -7,12 +7,11 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import * as linear from "../providers/linear.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
-import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
+import { linearListeningToken, linearSessionToken } from "../workflow/linear/agent-session.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import * as queue from "./queue.ts";
@@ -432,7 +431,8 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
 });
 
 const CLAIM = ticketToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
-const MARKER = needsHumanToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
+const SESSION = linearSessionToken("acme", "session-1");
+const LISTENING = linearListeningToken("acme", "session-1");
 const PR = pullRequestToken({ installationName: "acme", owner: "acme", repo: "api", number: 41 });
 
 // A running run holding exactly these hooks. The routes below read no other
@@ -457,37 +457,20 @@ const runHolding = (...tokens: string[]) =>
   })();
 
 test("GET /api/runs/:runId says what each park is waiting for, and where to act", async () => {
-  runHolding(CLAIM, MARKER, PR);
-  // The halt's comment is read back from Linear; a Linear nobody can ask
-  // leaves the suspension as the token alone describes it.
-  const asked: string[] = [];
-  vi.spyOn(linear, "linearFor").mockImplementation(
-    (installationName) =>
-      ({
-        getComment: async (commentId: string) => {
-          asked.push(`${installationName} ${commentId}`);
-          return {
-            url: "https://linear.app/acme/issue/AGE-317#comment-c1",
-            body: "Which binding?",
-          };
-        },
-      }) as unknown as linear.LinearClient,
-  );
+  runHolding(CLAIM, SESSION, LISTENING, PR);
 
   const res = await app.request(`/api/runs/${RUN}`);
 
   expect(res.status).toBe(200);
-  // The claim is held for the run's whole life, so it is no suspension and
-  // never appears; the other two explain themselves without a metadata read.
+  // The claim and the session's ownership hook are held for the run's whole
+  // life, so neither is a suspension; the other two explain themselves.
   expect(await res.json()).toMatchObject({
     status: "running",
     suspensions: [
       {
-        token: MARKER,
-        kind: "needs-human",
-        reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
-        url: "https://linear.app/acme/issue/AGE-317#comment-c1",
-        question: "Which binding?",
+        token: LISTENING,
+        kind: "linear-listening",
+        reason: "waiting for a reply in Linear agent session session-1",
       },
       {
         token: PR,
@@ -497,28 +480,6 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
       },
     ],
   });
-  expect(asked).toEqual(["acme c1"]);
-});
-
-test("a halt whose comment Linear will not hand back keeps the park it can state", async () => {
-  runHolding(CLAIM, MARKER);
-  vi.spyOn(linear, "linearFor").mockReturnValue({
-    getComment: async () => {
-      throw new Error("the hub answered 404");
-    },
-  } as unknown as linear.LinearClient);
-
-  const res = await app.request(`/api/runs/${RUN}`);
-
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { suspensions: Array<Record<string, unknown>> };
-  expect(body.suspensions).toEqual([
-    {
-      token: MARKER,
-      kind: "needs-human",
-      reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
-    },
-  ]);
 });
 
 test("a run holding only its ticket claim is not parked", async () => {
@@ -533,49 +494,55 @@ test("a run holding only its ticket claim is not parked", async () => {
   });
 });
 
-test("poke wakes the hooks that name a resource, never the needs-human marker", async () => {
-  runHolding(CLAIM, MARKER);
+test("poke wakes what the run waits on, never a lock it holds", async () => {
+  runHolding(CLAIM, SESSION, LISTENING);
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
   expect(res.status).toBe(200);
-  // The reply that ends a needs-human halt lands on the ticket claim, so the
-  // marker names no channel and resuming it would wake nothing.
-  expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
+  expect(await res.json()).toMatchObject({ poked: [{ token: LISTENING }] });
+});
+
+test("a run holding only its ticket claim has nothing to poke", async () => {
+  runHolding(CLAIM);
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(res.status).toBe(409);
 });
 
 test("a poke that landed is the wake the run's status reports", async () => {
   clearWakes();
-  runHolding(CLAIM);
+  runHolding(PR);
   delivers();
 
   await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
-  expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
+  expect(lastWake(PR, RUN)?.kind).toBe("poke");
 });
 
 test("a poke the World cannot deliver says so instead of calling the wait gone", async () => {
-  runHolding(CLAIM);
+  runHolding(PR);
   resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
   expect(await res.json()).toEqual({
     runId: RUN,
-    poked: [{ token: CLAIM, outcome: "failed", error: "Error: database unavailable" }],
+    poked: [{ token: PR, outcome: "failed", error: "Error: database unavailable" }],
   });
 });
 
 test("a poke whose hook is gone reports it gone", async () => {
-  runHolding(CLAIM);
+  runHolding(PR);
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
-  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: CLAIM, outcome: "gone" }] });
+  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: PR, outcome: "gone" }] });
 });
 
 test("cancel reports observed hook release, retained worktrees, and no queue-deletion count", async () => {
-  runHolding(CLAIM, MARKER);
+  runHolding(CLAIM, LISTENING);
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
@@ -583,7 +550,7 @@ test("cancel reports observed hook release, retained worktrees, and no queue-del
   expect(await res.json()).toEqual({
     runId: RUN,
     cancelled: true,
-    releasedTokens: [CLAIM],
+    releasedTokens: [CLAIM, LISTENING],
     retainedTokens: [],
     worktrees: [],
   });

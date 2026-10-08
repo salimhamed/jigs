@@ -6,13 +6,11 @@ import { z } from "zod";
 import * as factoryContext from "../config/factory-context.ts";
 import * as github from "../providers/github.ts";
 import * as githubAuth from "../providers/github-auth.ts";
-import * as linear from "../providers/linear.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { slackThreadToken } from "../workflow/slack/thread-token.ts";
@@ -150,33 +148,6 @@ test("a run reads the wake it was sent, and never another run's", async () => {
   recordWake(PARK_TOKEN, RUN_A, "hub fell behind", new Date("2026-09-16T10:06:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
     kind: "hub fell behind",
-    at: "2026-09-16T10:06:00.000Z",
-  });
-});
-
-test("a run parked on a human reads the wake its ticket claim was sent", async () => {
-  vi.spyOn(linear, "linearFor").mockReturnValue({
-    getComment: async () => {
-      throw new Error("Linear unavailable");
-    },
-  } as unknown as linear.LinearClient);
-  const halted = describeSuspension(needsHumanToken("acme", "issue-1", "comment-1"));
-  recordWake(
-    ticketToken("acme", "issue-1"),
-    RUN_B,
-    "linear Comment",
-    new Date("2026-09-16T10:05:00Z"),
-  );
-  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toBeUndefined();
-
-  recordWake(
-    ticketToken("acme", "issue-1"),
-    RUN_A,
-    "linear Comment",
-    new Date("2026-09-16T10:06:00Z"),
-  );
-  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toEqual({
-    kind: "linear Comment",
     at: "2026-09-16T10:06:00.000Z",
   });
 });

@@ -1,11 +1,15 @@
 # Resource-scoped hook tokens; webhooks are hints over polling
 
-Status: accepted; ingress and poll superseded by [0015](./0015-hub.md)
+Status: accepted; ingress and poll superseded by [0015](./0015-hub.md); the ticket claim as a wake channel superseded by [0017](./0017-ticket-runs-talk-in-their-linear-agent-session.md)
 
 Every provider event now reaches a factory through its hub, and the factory has
 no ingress, webhook secret or poll: `/ingress/*`, `webhooks` and every
 `*_WEBHOOK_SECRET` are gone. The hook tokens below still name what a provider
 event wakes, and a wake is still a hint the run re-derives.
+
+A ticket claim is now only the exclusivity lock: nothing wakes it. A halted
+ticket run asks in its Linear agent session and listens there, Linear
+`Comment` events wake nothing, and the `jigs:needs-human:` marker is gone.
 
 A run that waits on GitHub or Linear holds a Workflow SDK hook whose token names
 the external resource, not the run: `github:pr:<owner>/<repo>#<number>` for a

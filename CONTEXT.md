@@ -71,21 +71,28 @@ _Avoid_: pause
 **Gate**: A planned suspension, such as waiting for pull-request review, CI or
 closure.
 
-**Needs-human halt**: A suspension that asks a human on the ticket to answer a
-question or fix a problem; a verified reply lets the workflow continue.
+**Needs-human halt**: A suspension that asks a person, in the run's Linear
+agent session, to answer a question or fix a problem; any reply there lets the
+workflow continue.
 _Avoid_: failure, abort
 
 **Wake**: A signal that makes a suspended run recheck its condition: a provider
 event from the hub, or `jigs poke`.
 
 **Claim**: A run-long hold on a ticket, keyed by a hook token that names it, so
-a second active run cannot take it.
+a second active run cannot take it. It carries the Linear agent session the run
+talks to people in. Nothing wakes it.
 _Avoid_: lock, lease
 
-**Session hook**: The hook a conversing run holds for its whole conversation,
-keyed by a token that names the Linear agent session, so a second run cannot
-converse in it. A wake on it makes the run read the session's prompts again.
+**Session hook**: The hook a run holds for its whole life on the Linear agent
+session it talks in, keyed by a token that names the session, so a second run
+cannot take it. It marks the owner; nothing wakes it.
 _Avoid_: session claim, session lock
+
+**Listening hook**: The hook a run holds only while it reads what people send
+in its Linear agent session: during a conversation or a needs-human halt. A
+wake on it makes the run read the session's prompts again. A prompt that
+arrives while the owner holds none waits for the run to listen again.
 
 ## Resources
 
@@ -156,9 +163,15 @@ _Avoid_: executor, injected dependencies
 harness session it holds, and starts fresh when that session is unusable.
 _Avoid_: role session, resumeOrRebuild
 
-**Linear agent session**: Linear's record of one mention of, or assignment to,
-a Linear app; the `linear.agentSessions` source's occurrence. Not an agent
-session.
+**Linear agent session**: Linear's thread between people and a Linear app on
+one issue, opened by a mention of the app, an assignment to it, or a ticket run
+at its claim. One a person opened is the `linear.agentSessions` source's
+occurrence. Not an agent session.
+
+**Ticket note**: A message a ticket run posts in its Linear agent session that
+asks for nothing. Its `run` says what the run does next: an `ended` note ends
+the session, as a response even when the run failed; a `waiting` one leaves
+it awaiting input, so it never goes stale while the run waits on people.
 
 **Conversation**: One Claude session answering in one Linear agent session, run
 by one run: turns until it goes idle, someone stops it, or a turn fails.

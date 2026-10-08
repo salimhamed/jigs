@@ -24,7 +24,6 @@ import {
   waitForSlackReply as waitForSlackReplyRoutine,
 } from "@jigs-ai/jigs/routines";
 import {
-  checkForTicketHumanReply,
   commentOnPullRequest,
   createPullRequest,
   executeAgent,
@@ -36,6 +35,7 @@ import {
   fetchTicketSnapshot,
   listLinearAgentSessionPrompts,
   mergePullRequest,
+  openLinearAgentSession,
   postLinearAgentActivity,
   postTicketHumanInputRequest,
   postTicketNote,
@@ -93,25 +93,28 @@ export const askJev = agents.askJev;
 const linear = bindLinearSteps({
   postTicketHumanInputRequest,
   postTicketNote,
-  checkForTicketHumanReply,
+  listLinearAgentSessionPrompts,
+  postLinearAgentActivity,
 });
 
 /**
- * Ask for help on the Linear ticket and wait for a human reply.
+ * Ask in the ticket's Linear agent session and wait for a reply there.
  *
  * @group Linear and human input
  *
  * @remarks
- * Posts the question on the claimed Linear ticket and waits for a verified human
- * reply. Linear events from the hub recheck the ticket. Answer on the ticket
- * to continue the same run; `jigs poke` only requests a recheck. The comment
- * mentions the operator (or the ticket's creator) and the assignee; list more
- * emails in the halt's `mention`.
+ * Posts the question in the session the claim holds, then waits until someone
+ * answers in it. Messages sent there since the run last read it answer at once.
+ * The question mentions the operator (or the ticket's creator) and the assignee;
+ * list more emails in the halt's `mention`.
  */
 export const haltForHuman = linear.haltForHuman;
 
 /**
- * Post a note on a claimed ticket that asks for nothing and waits for nothing.
+ * Post a note in the ticket's Linear agent session that asks for nothing and waits for nothing.
+ * Set `run: "ended"` on the run's last note, success or not, to end the session. Set
+ * `run: "waiting"` before a long wait on people, so the session shows awaiting input and never
+ * goes stale.
  *
  * @group Linear and human input
  */
@@ -119,12 +122,23 @@ export const noteOnTicket = linear.noteOnTicket;
 
 /**
  * Resolve a Linear ticket in the named Linear installation, claim it, and read its requirements,
- * before any protected work.
+ * before any protected work. The run opens a Linear agent session on the ticket, or takes the
+ * `session` that started it, and talks to people only there.
  *
  * @group Linear and human input
  */
-export const acquireTicket = (ticket: { installationName: string; reference: string }) =>
-  acquireTicketRoutine(ticket, { resolveLinearIssue, fetchTicketSnapshot });
+export const acquireTicket = (ticket: {
+  installationName: string;
+  reference: string;
+  session?: string;
+}) =>
+  acquireTicketRoutine(ticket, {
+    resolveLinearIssue,
+    fetchTicketSnapshot,
+    openLinearAgentSession,
+    postLinearAgentActivity,
+    setLinearAgentSessionUrls,
+  });
 
 export const {
   /**
@@ -253,8 +267,4 @@ export const linearAgentConversation = (
   });
 
 // Routines bound to no step, and the types a workflow names.
-export {
-  type AgentSession,
-  type AgentSessionTurn,
-  claimTicket,
-} from "@jigs-ai/jigs/routines";
+export type { AgentSession, AgentSessionTurn } from "@jigs-ai/jigs/routines";

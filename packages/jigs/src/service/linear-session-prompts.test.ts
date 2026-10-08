@@ -11,7 +11,8 @@ import {
 } from "./linear-session-prompts.ts";
 import type { WakeOutcome } from "./wake.ts";
 
-const TOKEN = "linear:session:acme:session-1";
+const SESSION = "linear:session:acme:session-1";
+const LISTENING = "linear:listening:acme:session-1";
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const OTHER_RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKN";
 
@@ -22,9 +23,11 @@ type Row = Pick<
 
 let turn: { inject: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> } | undefined;
 let wakeOutcome: WakeOutcome;
+let holder: string | null;
 let rows: Row[];
 let statuses: Map<string, string>;
 let answered: boolean;
+let last: { type: string; createdAt: string } | null;
 let timers: Array<{ fire: () => void; ms: number }>;
 let postFailures: number;
 let deps: SessionPromptDeps & {
@@ -39,14 +42,16 @@ const posted = new Map<string, { sessionId: string; body: string }>();
 beforeEach(() => {
   turn = undefined;
   wakeOutcome = { outcome: "gone" };
+  holder = null;
   rows = [];
   statuses = new Map();
   answered = false;
+  last = null;
   timers = [];
   postFailures = 0;
   posted.clear();
   deps = {
-    liveTurn: (token) => (token === TOKEN ? (turn as LiveTurn | undefined) : undefined),
+    liveTurn: (token) => (token === SESSION ? (turn as LiveTurn | undefined) : undefined),
     wake: vi.fn(async () => wakeOutcome),
     linear: () => ({
       postActivityOnce: async (sessionId, content, id) => {
@@ -58,9 +63,11 @@ beforeEach(() => {
           posted.set(id, { sessionId, body: (content as { body: string }).body });
         return { id, createdAt: "" };
       },
-      answeredSince: async () => answered,
+      findActivity: async () => (answered ? { id: "stopped", createdAt: "" } : null),
+      lastAppActivity: async () => last,
     }),
     appName: async () => "jigs",
+    holder: async (token) => (token === SESSION ? holder : null),
     recorded: vi.fn(async () => rows as Occurrence[]),
     withdraw: vi.fn(async (row: Pick<Occurrence, "trigger" | "occurrence">) => {
       const found = rows.find((candidate) => candidate.occurrence === row.occurrence);
@@ -97,12 +104,17 @@ const liveTurn = (accepts = true) => {
 };
 
 let activityCount = 0;
-const prompted = (activity: { signal?: string | null; body?: string } = {}) => {
+const prompted = (
+  activity: { signal?: string | null; body?: string; creatorId?: string | null } = {},
+) => {
   activityCount += 1;
   return {
     type: "AgentSessionEvent",
     action: "prompted",
-    agentSession: { id: "session-1" },
+    agentSession: {
+      id: "session-1",
+      creatorId: activity.creatorId === undefined ? "u1" : activity.creatorId,
+    },
     agentActivity: {
       id: `activity-${activityCount}`,
       createdAt: "2026-10-07T00:00:00.000Z",
@@ -140,7 +152,7 @@ test("a reply goes into the live turn, and the session's hook is woken too", asy
     author: "Ada",
     text: "and the tests?",
   });
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
   expect(deps.recorded).not.toHaveBeenCalled();
   expect(posted.size).toBe(0);
 });
@@ -148,7 +160,99 @@ test("a reply goes into the live turn, and the session's hook is woken too", asy
 test("a reply with no live turn wakes the parked run", async () => {
   wakeOutcome = { outcome: "woken" };
   expect(await route(prompted())).toBe("woken");
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
+  expect(posted.size).toBe(0);
+});
+
+test("a reply the run already took as it stopped listening gets no answer", async () => {
+  holder = RUN;
+  last = { type: "thought", createdAt: "2026-10-07T00:00:01.000Z" };
+  expect(await route(prompted())).toBe("woken");
+  expect(posted.size).toBe(0);
+});
+
+test("a reply to a run that has posted its final response gets no answer", async () => {
+  holder = RUN;
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("woken");
+  expect(posted.size).toBe(0);
+});
+
+test("a reply to a run waiting on people asks again, once, so the session stays awaiting input", async () => {
+  holder = RUN;
+  last = { type: "elicitation", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted();
+  const types: string[] = [];
+  const linear = deps.linear;
+  deps.linear = (name) => {
+    const api = linear(name);
+    return {
+      ...api,
+      postActivityOnce: (sessionId, content, id) => {
+        types.push(content.type);
+        return api.postActivityOnce(sessionId, content, id);
+      },
+    };
+  };
+
+  expect(await route(event)).toBe("woken");
+  expect(await route(event)).toBe("woken");
+
+  expect(types[0]).toBe("elicitation");
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-session-waiting", event.agentActivity.id]),
+      {
+        sessionId: "session-1",
+        body: "I can't take instructions here while I wait; my earlier message says where to act.",
+      },
+    ],
+  ]);
+});
+
+test("a reply to a run that holds the session but is not listening is told it is working, once", async () => {
+  holder = RUN;
+  last = { type: "thought", createdAt: "2026-10-06T00:00:00.000Z" };
+  statuses = new Map([[RUN, "running"]]);
+  const event = prompted();
+
+  expect(await route(event)).toBe("woken");
+  expect(await route(event)).toBe("woken");
+
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-session-working", event.agentActivity.id]),
+      {
+        sessionId: "session-1",
+        body: "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.",
+      },
+    ],
+  ]);
+  expect(deps.recorded).not.toHaveBeenCalled();
+});
+
+test("a stop to a run that is not listening cancels the run holding the session", async () => {
+  holder = RUN;
+  statuses = new Map([[RUN, "running"]]);
+  const stop = stopEvent();
+
+  expect(await route(stop)).toBe("dropped");
+  expect(posted.size).toBe(0);
+  await fireNext(STOP_GRACE_MS);
+
+  expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(RUN);
+  expect([...posted.keys()]).toEqual([stoppedId(stop)]);
+});
+
+test("a stop to a run that ends on its own in the grace period posts no second final message", async () => {
+  holder = RUN;
+  const stop = stopEvent();
+  expect(await route(stop)).toBe("dropped");
+  holder = null;
+  last = { type: "response", createdAt: "2099-01-01T00:00:00.000Z" };
+  await fireNext(STOP_GRACE_MS);
+
+  expect(deps.cancelRun).not.toHaveBeenCalled();
   expect(posted.size).toBe(0);
 });
 
@@ -249,7 +353,7 @@ test("stop interrupts the live turn and wakes the hook; a run that answers is le
 
   expect(live.stop).toHaveBeenCalledOnce();
   expect(live.inject).not.toHaveBeenCalled();
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
   answered = true;
   await fireNext(STOP_GRACE_MS);
   expect(deps.cancelRun).not.toHaveBeenCalled();
@@ -357,4 +461,47 @@ test("a Stopped. that cannot be posted at once is routed again", async () => {
 test("an event that is not a readable prompt is ignored", async () => {
   expect(await route({ type: "AgentSessionEvent", action: "prompted" })).toBe("ignored");
   expect(deps.wake).not.toHaveBeenCalled();
+});
+
+const ENDED_RUN =
+  "This conversation has ended. Assign the issue to @jigs or mention @jigs to start a new run.";
+
+test("a message in an ended ticket run's session is told the run ended, once", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted({ creatorId: null });
+
+  expect(await route(event)).toBe("dropped");
+  expect(await route(event)).toBe("dropped");
+
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-ticket-session-ended", event.agentActivity.id]),
+      { sessionId: "session-1", body: ENDED_RUN },
+    ],
+  ]);
+  expect(deps.recorded).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["a thought", "thought"],
+  ["an elicitation", "elicitation"],
+])(
+  "a ticket run session whose app last posted %s is another factory's live run, and gets no reply",
+  async (_, type) => {
+    last = { type, createdAt: "2026-10-06T00:00:00.000Z" };
+    expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+    expect(posted.size).toBe(0);
+  },
+);
+
+test("a ticket run session with no app activity gets no reply", async () => {
+  expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+  expect(posted.size).toBe(0);
+});
+
+test("a session a person started is answered by its occurrences, not as a ticket run's", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("ignored");
+  expect(deps.recorded).toHaveBeenCalled();
+  expect(posted.size).toBe(0);
 });

@@ -121,6 +121,13 @@ test("the session's links are replaced with exactly the labels and URLs given", 
   });
 });
 
+test("a session is opened on the issue with its links, so Linear starts it at once", async () => {
+  respond({ agentSessionCreateOnIssue: { success: true, agentSession: { id: "session-2" } } });
+  const links = [{ label: "Run", url: "https://jigs.example/runs/r1" }];
+  expect(await agent.createSession("issue-1", links)).toBe("session-2");
+  expect(bodies()[0].variables).toEqual({ input: { issueId: "issue-1", externalUrls: links } });
+});
+
 const prompt = (id: string, createdAt: string, extra: Record<string, unknown> = {}) => ({
   id,
   createdAt,
@@ -178,11 +185,24 @@ test("prompts are read page by page and listed oldest first", async () => {
   expect(bodies().map((body) => body.variables.after)).toEqual([null, "c1"]);
 });
 
-test("a session is answered after a time only by a later response or error", async () => {
-  respond({ agentSession: { activities: { nodes: [{ id: "r1" }] } } });
+test("the app's last activity is its newest non-prompt one, by type, or null before any", async () => {
+  respond({
+    agentSession: {
+      activities: {
+        nodes: [
+          {
+            createdAt: "2026-10-07T00:00:00.000Z",
+            content: { __typename: "AgentActivityElicitationContent" },
+          },
+        ],
+      },
+    },
+  });
   respond({ agentSession: { activities: { nodes: [] } } });
-  expect(await agent.answeredSince("session-1", "2026-10-07T00:00:00.000Z")).toBe(true);
-  expect(await agent.answeredSince("session-1", "2026-10-07T00:00:00.000Z")).toBe(false);
-  expect(bodies()[0].query).toContain('type: { in: ["response", "error"] }');
-  expect(bodies()[0].variables).toEqual({ id: "session-1", since: "2026-10-07T00:00:00.000Z" });
+  expect(await agent.lastAppActivity("session-1")).toEqual({
+    type: "elicitation",
+    createdAt: "2026-10-07T00:00:00.000Z",
+  });
+  expect(await agent.lastAppActivity("session-1")).toBeNull();
+  expect(bodies()[0].query).not.toContain("prompt");
 });

@@ -233,34 +233,6 @@ test("an unroutable GitHub event is ignored", async () => {
   );
 });
 
-const comment = () => {
-  const issueId = crypto.randomUUID();
-  const event: RoutedEvent = {
-    provider: "linear",
-    installationName: "acme",
-    name: "Comment",
-    payload: { action: "create", type: "Comment", data: { id: "c1", body: "reply", issueId } },
-  };
-  return { issueId, event };
-};
-
-test("a Linear comment on an unclaimed issue is dropped", async () => {
-  const { issueId, event } = comment();
-  expect(await route(event)).toEqual({ outcome: "dropped" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] linear dropped reason=no-matching-hook token=linear:ticket:acme:${issueId} event=Comment`,
-  );
-});
-
-test("a Linear comment matching a hook wakes it and logs its token", async () => {
-  delivers();
-  const { issueId, event } = comment();
-  expect(await route(event)).toEqual({ outcome: "woken" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] linear accepted token=linear:ticket:acme:${issueId} event=Comment`,
-  );
-});
-
 test("a Linear event without a body is ignored", async () => {
   expect(
     await route({ provider: "linear", installationName: "acme", name: "", payload: null }),
@@ -270,15 +242,19 @@ test("a Linear event without a body is ignored", async () => {
   expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored reason=unrecognized-shape");
 });
 
-test("an unroutable Linear resource type is ignored", async () => {
-  const payload = { action: "update", type: "Issue", data: { id: "issue-1" } };
-  expect(
-    await route({ provider: "linear", installationName: "acme", name: "Issue", payload }),
-  ).toEqual({
+test.each([
+  [
+    "Comment",
+    { action: "create", type: "Comment", data: { id: "c1", body: "reply", issueId: "i1" } },
+  ],
+  ["Issue", { action: "update", type: "Issue", data: { id: "issue-1" } }],
+])("a Linear %s event outside an agent session wakes nothing", async (name, payload) => {
+  expect(await route({ provider: "linear", installationName: "acme", name, payload })).toEqual({
     outcome: "ignored",
   });
+  expect(resumeHookMock).not.toHaveBeenCalled();
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] linear ignored reason=unrecognized-event event=Issue",
+    `[events] linear ignored reason=unrecognized-event event=${name}`,
   );
 });
 
@@ -326,7 +302,7 @@ test("a prompt in a Linear agent session wakes the run conversing in it, not the
     }),
   ).toEqual({ outcome: "woken" });
   expect(push).not.toHaveBeenCalled();
-  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:session:acme:s1", undefined);
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:listening:acme:s1", undefined);
 });
 
 test("a Linear agent session no trigger could read is a failure, logged", async () => {
@@ -529,7 +505,7 @@ test("a Slack push that fails with no thread woken fails the routing", async () 
 
 test.each([
   ["github", review],
-  ["linear", comment().event.payload],
+  ["linear", { type: "Comment", data: { issueId: "i1" } }],
   ["pagerduty", incidentTriggered()],
   ["slack", callback(reply)],
 ] as const)(

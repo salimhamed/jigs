@@ -14,6 +14,7 @@ export {
   type LinearAgentActivityContent,
   type LinearAgentPrompt,
   listLinearAgentSessionPrompts,
+  openLinearAgentSession,
   postLinearAgentActivity,
   setLinearAgentSessionUrls,
 } from "./agent-sessions.ts";
@@ -27,17 +28,13 @@ export {
   type LinearIssueMatch,
 } from "./issues.ts";
 export {
-  checkForTicketHumanReply,
-  postTicketHumanInputRequest,
-  postTicketNote,
-} from "./needs-human-comments.ts";
-export {
-  type NeedsHumanContext,
-  type RenderNeedsHumanComment,
+  type HumanInputContext,
+  type RenderHumanInputRequest,
   type RenderTicketNote,
-  renderNeedsHumanComment,
+  renderHumanInputRequest,
   renderTicketNote,
   type TicketParticipants,
-} from "./render-comment.ts";
+} from "./render.ts";
 export { resolveLinearIssue } from "./resolve.ts";
 export { setTicketStatus, type TicketStatusResult } from "./status.ts";
+export { postTicketHumanInputRequest, postTicketNote } from "./ticket-session.ts";

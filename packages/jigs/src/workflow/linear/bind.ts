@@ -1,9 +1,8 @@
 import type { TicketClaim } from "./claim.ts";
 import {
-  type CheckForTicketHumanReply,
+  type HaltForHumanDependencies,
   type HaltForHumanFn,
   haltForHuman as haltRoutine,
-  type PostTicketHumanInputRequest,
 } from "./halt-for-human.ts";
 import { noteOnTicket as noteRoutine, type PostTicketNote, type TicketNote } from "./review.ts";
 
@@ -12,10 +11,8 @@ import { noteOnTicket as noteRoutine, type PostTicketNote, type TicketNote } fro
  *
  * @group Factory plumbing
  */
-export interface LinearSteps {
-  postTicketHumanInputRequest: PostTicketHumanInputRequest;
+export interface LinearSteps extends HaltForHumanDependencies {
   postTicketNote: PostTicketNote;
-  checkForTicketHumanReply: CheckForTicketHumanReply;
 }
 
 /**
@@ -27,7 +24,8 @@ export function bindLinearSteps(steps: LinearSteps) {
   const haltForHuman: HaltForHumanFn = (claim, halt) =>
     haltRoutine(claim, halt, {
       postTicketHumanInputRequest: steps.postTicketHumanInputRequest,
-      checkForTicketHumanReply: steps.checkForTicketHumanReply,
+      listLinearAgentSessionPrompts: steps.listLinearAgentSessionPrompts,
+      postLinearAgentActivity: steps.postLinearAgentActivity,
     });
   function noteOnTicket(claim: TicketClaim, note: TicketNote) {
     return noteRoutine(claim, note, { postTicketNote: steps.postTicketNote });

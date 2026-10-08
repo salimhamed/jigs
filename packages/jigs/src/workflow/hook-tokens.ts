@@ -5,16 +5,14 @@ import type { PullRequestRef } from "./pull-requests/pull-request.ts";
 
 /** Prefix for the durable hook that gives one run exclusive ownership of a ticket. */
 export const TICKET_TOKEN_PREFIX = "linear:ticket:";
-// The halt's marker hook. It names no external resource and nothing resumes
-// it: the reply that ends the halt lands on the ticket claim.
-/** Prefix for marker hooks that tell operators which ticket comment needs an answer. */
-export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 /** Prefix for the hook a run parks on while it waits for a reply in a Slack thread. */
 export const SLACK_THREAD_TOKEN_PREFIX = "slack:thread:";
-/** Prefix for the hook a run holds while it converses in a Linear agent session. */
+/** Prefix for the hook that gives one run exclusive ownership of a Linear agent session. */
 export const LINEAR_SESSION_TOKEN_PREFIX = "linear:session:";
+/** Prefix for the hook a run holds while it reads what people send in a Linear agent session. */
+export const LINEAR_LISTENING_TOKEN_PREFIX = "linear:listening:";
 
 /**
  * A hook token jigs minted, taken apart. Every kind names the installation
@@ -28,11 +26,6 @@ export type HookToken =
       provider: "linear";
       ticket: { installationName: string; issueId: string } | null;
     }
-  | {
-      kind: "needs-human";
-      provider: "linear";
-      halt: { installationName: string; issueId: string; commentId: string } | null;
-    }
   | { kind: "pull-request"; provider: "github"; slug: string; pr: PullRequestRef | null }
   | {
       kind: "slack-thread";
@@ -40,7 +33,7 @@ export type HookToken =
       thread: { installationName: string; channel: string; threadTs: string } | null;
     }
   | {
-      kind: "linear-session";
+      kind: "linear-session" | "linear-listening";
       provider: "linear";
       session: { installationName: string; sessionId: string } | null;
     };
@@ -80,20 +73,6 @@ const HOOK_KINDS: { [K in HookKind]: { prefix: string; parse: (rest: string) => 
       };
     },
   },
-  "needs-human": {
-    prefix: NEEDS_HUMAN_TOKEN_PREFIX,
-    parse: (rest) => {
-      const [installationName, issueId, commentId] = parts(rest, 3) ?? [];
-      return {
-        kind: "needs-human",
-        provider: "linear",
-        halt:
-          installationName === undefined || issueId === undefined || commentId === undefined
-            ? null
-            : { installationName, issueId, commentId },
-      };
-    },
-  },
   "pull-request": {
     prefix: PULL_REQUEST_TOKEN_PREFIX,
     parse: (rest) => {
@@ -123,21 +102,26 @@ const HOOK_KINDS: { [K in HookKind]: { prefix: string; parse: (rest: string) => 
       };
     },
   },
-  "linear-session": {
-    prefix: LINEAR_SESSION_TOKEN_PREFIX,
-    parse: (rest) => {
-      const [installationName, sessionId] = parts(rest, 2) ?? [];
-      return {
-        kind: "linear-session",
-        provider: "linear",
-        session:
-          installationName === undefined || sessionId === undefined
-            ? null
-            : { installationName, sessionId },
-      };
-    },
+  "linear-session": { prefix: LINEAR_SESSION_TOKEN_PREFIX, parse: parseSession("linear-session") },
+  "linear-listening": {
+    prefix: LINEAR_LISTENING_TOKEN_PREFIX,
+    parse: parseSession("linear-listening"),
   },
 };
+
+function parseSession(kind: "linear-session" | "linear-listening") {
+  return (rest: string): HookToken => {
+    const [installationName, sessionId] = parts(rest, 2) ?? [];
+    return {
+      kind,
+      provider: "linear",
+      session:
+        installationName === undefined || sessionId === undefined
+          ? null
+          : { installationName, sessionId },
+    };
+  };
+}
 
 /** Take a hook token apart, or null when jigs did not mint it. */
 export function parseHookToken(token: string): HookToken | null {
@@ -147,41 +131,26 @@ export function parseHookToken(token: string): HookToken | null {
   return null;
 }
 
-/** The token whose wake ends a wait on `token`: a halt is woken through its ticket claim, never its marker. */
-export function wakeToken(token: string): string {
-  const parsed = parseHookToken(token);
-  return parsed?.kind === "needs-human" && parsed.halt !== null
-    ? `${TICKET_TOKEN_PREFIX}${parsed.halt.installationName}:${parsed.halt.issueId}`
-    : token;
+/**
+ * Whether a hook of this kind is a lock a run holds for its whole life (a ticket claim or a
+ * Linear agent session's ownership), never something it waits on. Nothing wakes one.
+ */
+export function isOwnershipKind(
+  kind: HookKind | "external" | undefined,
+): kind is "ticket-claim" | "linear-session" {
+  return kind === "ticket-claim" || kind === "linear-session";
 }
 
-/**
- * What a hook token names and what a run holding it waits for. `ticket` is the
- * identifier the run was launched with, so a claim or a halt names the ticket
- * an operator knows rather than the issue UUID inside the token.
- */
-export function describeHookToken(token: string, ticket?: string | null): HookDescription {
+/** What a hook token names and what a run holding it waits for. */
+export function describeHookToken(token: string): HookDescription {
   const parsed = parseHookToken(token);
   switch (parsed?.kind) {
     case "ticket-claim": {
       const label =
-        ticket == null
-          ? parsed.ticket === null
-            ? `a Linear issue this token does not name (${token})`
-            : `Linear issue ${parsed.ticket.issueId}`
-          : `Linear ticket ${ticket}`;
+        parsed.ticket === null
+          ? `a Linear issue this token does not name (${token})`
+          : `Linear issue ${parsed.ticket.issueId}`;
       return { kind: parsed.kind, label, reason: `holding the claim on ${label}` };
-    }
-    case "needs-human": {
-      const where = ticket ?? parsed.halt?.issueId;
-      return {
-        kind: parsed.kind,
-        label: where === undefined ? token : `the question on ${where}`,
-        reason:
-          where === undefined
-            ? `waiting for a human reply, on a ticket this halt marker does not name (${token})`
-            : `waiting for a human reply on ${where}`,
-      };
     }
     case "pull-request": {
       const { owner, repo, number } = parsed.pr ?? {};
@@ -201,7 +170,8 @@ export function describeHookToken(token: string, ticket?: string | null): HookDe
           : `the Slack thread ${parsed.thread.threadTs} in ${parsed.thread.channel}`;
       return { kind: parsed.kind, label, reason: `waiting for a reply in ${label}` };
     }
-    case "linear-session": {
+    case "linear-session":
+    case "linear-listening": {
       const label =
         parsed.session === null
           ? `a Linear agent session this token does not name (${token})`
@@ -209,7 +179,8 @@ export function describeHookToken(token: string, ticket?: string | null): HookDe
       return {
         kind: parsed.kind,
         label,
-        reason: "waiting for a reply in the Linear agent session",
+        reason:
+          parsed.kind === "linear-session" ? `holding ${label}` : `waiting for a reply in ${label}`,
       };
     }
     case undefined:

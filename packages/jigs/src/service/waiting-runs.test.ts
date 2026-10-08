@@ -26,11 +26,9 @@ const held = [
   { runId: "wrun_A", token: "github:pr:acme:acme/api#1" },
   { runId: "wrun_B", token: "github:pr:acme:acme/api#2" },
   { runId: "wrun_C", token: "linear:ticket:acme:abc" },
-  { runId: "wrun_D", token: "linear:ticket:acme:def" },
-  { runId: "wrun_D", token: "jigs:needs-human:acme:def:comment-1" },
-  // A halt marker from another run names no claim this run holds.
-  { runId: "wrun_E", token: "jigs:needs-human:acme:abc:comment-2" },
   { runId: "wrun_F", token: "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719" },
+  { runId: "wrun_G", token: "linear:session:acme:session-1" },
+  { runId: "wrun_G", token: "linear:listening:acme:session-1" },
 ];
 
 function sweepDeps(overrides: WakeWaitingDeps = {}) {
@@ -55,7 +53,7 @@ function sweepDeps(overrides: WakeWaitingDeps = {}) {
   };
 }
 
-test("wakes every waiting run, but only the claim of a run halted on a human", async () => {
+test("wakes every waiting run, never a lock a run holds", async () => {
   clearWakes();
   const { deps, resumed, lines } = sweepDeps();
   expect(await wakeAllWaitingRuns(deps)).toEqual({
@@ -65,13 +63,13 @@ test("wakes every waiting run, but only the claim of a run halted on a human", a
     gone: 0,
     failed: 0,
   });
-  // wrun_C holds its claim but is not halted, so waking it would only queue a
-  // replay; the needs-human marker itself is never resumed.
+  // A ticket claim and a session's ownership hook are locks; a Linear agent
+  // session is read through its listening hook.
   expect(resumed).toEqual([
     "github:pr:acme:acme/api#1",
     "github:pr:acme:acme/api#2",
-    "linear:ticket:acme:def",
     "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
+    "linear:listening:acme:session-1",
   ]);
   expect(lines).toEqual(["[hub] waiting runs: 4 held, 4 woken, 0 mid-turn, 0 gone, 0 failed"]);
   // `jigs status <run-id>` reads this back only for the run that was actually woken.
@@ -80,12 +78,9 @@ test("wakes every waiting run, but only the claim of a run halted on a human", a
 });
 
 test("a run in the middle of a turn is skipped rather than queued behind itself", async () => {
-  const { deps, resumed } = sweepDeps({ busyRuns: async () => ["wrun_A", "wrun_D"] });
+  const { deps, resumed } = sweepDeps({ busyRuns: async () => ["wrun_A", "wrun_F"] });
   expect(await wakeAllWaitingRuns(deps)).toMatchObject({ held: 4, woken: 2, busy: 2 });
-  expect(resumed).toEqual([
-    "github:pr:acme:acme/api#2",
-    "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
-  ]);
+  expect(resumed).toEqual(["github:pr:acme:acme/api#2", "linear:listening:acme:session-1"]);
 });
 
 test("a hook that disappeared is reported; any other failure is warned about", async () => {

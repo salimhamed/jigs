@@ -1,32 +1,22 @@
-// The halt routine: post the question to the ticket, then suspend until a human
-// answers. Every provider call, env read and time read lives in the two step
-// implementations this routine is handed — ../../steps/linear/needs-human-comments.ts —
-// so the body here only sequences memoized step results. Cursors and ids come
-// from step returns, never from Date.now() or the environment.
+// The halt routine: ask in the run's Linear agent session, then suspend until
+// someone answers there. Every provider call lives in the steps this routine is
+// handed, so the body only sequences memoized step results.
 
 import { createHook } from "workflow";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../hook-tokens.ts";
 import type { HaltQuestion } from "../human/questions.ts";
+import type { LinearAgentConversationSteps } from "./agent-conversation.ts";
+import { type LinearAgentPrompt, linearListeningToken } from "./agent-session.ts";
 import type { TicketClaim } from "./claim.ts";
 
-/** Build the marker token for a run's unanswered ticket comment. */
-export function needsHumanToken(
-  installationName: string,
-  issueId: string,
-  commentId: string,
-): string {
-  return `${NEEDS_HUMAN_TOKEN_PREFIX}${installationName}:${issueId}:${commentId}`;
-}
-
 /**
- * What the ticket comment says, in the words a stranger to the repo reads.
- * `headline` is one plain sentence naming what jigs paused and why, `where`
+ * What the question says, in the words a stranger to the repo reads.
+ * `headline` is one plain sentence naming what paused and why, `where`
  * names the routine it paused in so the footer can say so, `about` restates the
  * ticket itself, `notes` are plain bullet lines, and `onReply` decides what
- * the comment asks the human to do: choose between the questions ("continue")
+ * the question asks the human to do: choose between the questions ("continue")
  * or repair something and let the step run again ("retry"). `mention` adds
  * people, by Linear email, to the operator (or the creator) and the assignee
- * the comment already mentions; an email no Linear user has is skipped.
+ * the question already mentions; an email no Linear user has is skipped.
  *
  * @group Human input
  */
@@ -41,12 +31,16 @@ export type Halt = {
 };
 
 /**
- * The first human ticket reply that wakes a halted run.
+ * What people answered in the run's Linear agent session.
+ *
+ * @remarks
+ * Every message sent since the run last read the session counts, including any sent before the
+ * question. `body` holds every message oldest first, each after its author's name; `author` and
+ * `createdAt` are the newest message's.
  *
  * @group Human input
  */
 export interface HumanReply {
-  commentId: string;
   body: string;
   author: { id: string; name: string };
   createdAt: string;
@@ -55,36 +49,32 @@ export interface HumanReply {
 // Declared here rather than written as `typeof postTicketHumanInputRequest`:
 // declaring the contract in workflow/ typechecks the step against the routine and
 // keeps this side free of any value import into steps/.
-/** Durable step contract for posting a question and recording its cursor. */
+/** Durable step contract for asking a question in the run's Linear agent session. */
 export type PostTicketHumanInputRequest = (request: {
   installationName: string;
   issueId: string;
+  sessionId: string;
   halt: Halt;
-}) => Promise<{ commentId: string; postedAt: string }>;
+}) => Promise<void>;
 
-/** Durable step contract for finding a human reply after a cursor, skipping the run's own comments. */
-export type CheckForTicketHumanReply = (request: {
-  installationName: string;
-  issueId: string;
-  since: string;
-  postedCommentIds: readonly string[];
-}) => Promise<{ reply: HumanReply | null; cursor: string }>;
-
-/** Durable operations required to post and resume a human halt. */
-export type HaltForHumanDependencies = {
-  postTicketHumanInputRequest: PostTicketHumanInputRequest;
-  checkForTicketHumanReply: CheckForTicketHumanReply;
-};
+/** Durable operations required to ask and resume a human halt. */
+export type HaltForHumanDependencies = Pick<
+  LinearAgentConversationSteps,
+  "listLinearAgentSessionPrompts" | "postLinearAgentActivity"
+> & { postTicketHumanInputRequest: PostTicketHumanInputRequest };
 
 /** {@link haltForHuman} with its steps already bound, as a workflow calls it. */
 export type HaltForHumanFn = (claim: TicketClaim, halt: Halt) => Promise<HumanReply>;
 
-// Posts the halt to the Linear ticket (@-mentioning the operator, or the
-// creator, and the assignee), then suspends on the claim hook. A wake is a
-// comment event from the hub or `jigs poke`, and either carries nothing: each one re-reads the comment thread from Linear and
-// re-suspends when no human has replied — no agent step executes on an
-// unsatisfied wake.
-/** Post a ticket question and suspend until a human replies to the claim hook. */
+const CONTINUING = "Got it — continuing.";
+
+/**
+ * Ask in the claim's Linear agent session and suspend until someone replies there.
+ *
+ * @remarks
+ * Messages the run has not read yet answer at once, even ones sent before the question. A stop is
+ * no answer: the service cancels the run.
+ */
 export async function haltForHuman(
   claim: TicketClaim,
   halt: Halt,
@@ -93,30 +83,44 @@ export async function haltForHuman(
   // Destructured, never invoked as `deps.postTicketHumanInputRequest(...)`: the SDK
   // serializes a step call's receiver along with its arguments, and this
   // object holds functions.
-  const { checkForTicketHumanReply, postTicketHumanInputRequest } = deps;
-  const { installationName, issueId } = claim;
-  const posted = await postTicketHumanInputRequest({ installationName, issueId, halt });
-  claim.postedCommentIds.push(posted.commentId);
-  // The halt's only signal: the claim hook is held for the run's whole life,
-  // so this marker is what tells `jigs status` the run is parked on a human. Never
-  // awaited — it registers when the run suspends on the claim hook below.
-  const marker = createHook<never>({
-    token: needsHumanToken(installationName, issueId, posted.commentId),
+  const { listLinearAgentSessionPrompts, postLinearAgentActivity, postTicketHumanInputRequest } =
+    deps;
+  const { installationName, issueId, sessionId } = claim;
+  const ref = { installationName, sessionId };
+  // Created before the question so it registers with the question's step: a
+  // reply sent while that step runs still wakes it. Holding it is also what
+  // tells the service, and `jigs status`, that the run is waiting on a person.
+  const listening = createHook<unknown>({
+    token: linearListeningToken(installationName, sessionId),
   });
+  const answer = async (): Promise<HumanReply | null> => {
+    const unread = (await listLinearAgentSessionPrompts(ref)).filter(
+      (prompt) => prompt.signal !== "stop" && !claim.consumedPromptIds.includes(prompt.id),
+    );
+    if (unread.length === 0) return null;
+    claim.consumedPromptIds.push(...unread.map((prompt) => prompt.id));
+    // A person's message puts the session back to pending; a thought makes it active again, so
+    // the run's later notes, and its final one, land on a working session.
+    await postLinearAgentActivity({ ...ref, content: { type: "thought", body: CONTINUING } });
+    return joined(unread);
+  };
   try {
-    let cursor = posted.postedAt;
-    for await (const _hint of claim.hook) {
-      const check = await checkForTicketHumanReply({
-        installationName,
-        issueId,
-        since: cursor,
-        postedCommentIds: [...claim.postedCommentIds],
-      });
-      if (check.reply !== null) return check.reply;
-      cursor = check.cursor;
+    await postTicketHumanInputRequest({ installationName, issueId, sessionId, halt });
+    const early = await answer();
+    if (early !== null) return early;
+    // A wake carries nothing: each one re-reads the session.
+    for await (const _wake of listening) {
+      const reply = await answer();
+      if (reply !== null) return reply;
     }
-    throw new Error("claim hook stopped delivering wakes before a human replied");
+    throw new Error("the listening hook stopped delivering wakes before a human replied");
   } finally {
-    marker.dispose();
+    listening.dispose();
   }
+}
+
+function joined(prompts: LinearAgentPrompt[]): HumanReply {
+  const last = prompts[prompts.length - 1] as LinearAgentPrompt;
+  const body = prompts.map((prompt) => `${prompt.author.name}: ${prompt.body}`).join("\n\n");
+  return { body, author: last.author, createdAt: last.createdAt };
 }

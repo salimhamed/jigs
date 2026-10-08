@@ -97,6 +97,28 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentActivities.nodes[0] ?? null;
   }
 
+  /**
+   * Open a session on an issue as the factory's app, and return its id. Linear keeps a session
+   * the app opened `pending` until it has links, so pass them here.
+   */
+  async function createSession(
+    issueId: string,
+    urls: ReadonlyArray<{ label: string; url: string }>,
+  ): Promise<string> {
+    const data = await graphql<{
+      agentSessionCreateOnIssue: { success: boolean; agentSession: { id: string } };
+    }>(
+      `mutation AgentSessionCreateOnIssue($input: AgentSessionCreateOnIssue!) {
+        agentSessionCreateOnIssue(input: $input) { success agentSession { id } }
+      }`,
+      { input: { issueId, externalUrls: urls.map(({ label, url }) => ({ label, url })) } },
+    );
+    if (!data.agentSessionCreateOnIssue.success) {
+      throw new JigsError(`Linear agentSessionCreateOnIssue failed for issue ${issueId}`);
+    }
+    return data.agentSessionCreateOnIssue.agentSession.id;
+  }
+
   /** Replace the links Linear shows on the session. */
   async function setExternalUrls(
     sessionId: string,
@@ -156,29 +178,40 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return prompts.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  /** Whether the app posted a `response` or an `error`, the activities that end its turn, after `since`. */
-  async function answeredSince(sessionId: string, since: string): Promise<boolean> {
-    const data = await graphql<{ agentSession: { activities: { nodes: Array<{ id: string }> } } }>(
-      `query AgentSessionAnswered($id: String!, $since: DateTimeOrDuration!) {
+  /** The app's newest activity in a session, or null before its first. A person's message is not one. */
+  async function lastAppActivity(
+    sessionId: string,
+  ): Promise<{ type: string; createdAt: string } | null> {
+    const data = await graphql<{
+      agentSession: {
+        activities: { nodes: Array<{ createdAt: string; content: { __typename: string } }> };
+      };
+    }>(
+      `query AgentSessionLastAppActivity($id: String!) {
         agentSession(id: $id) {
           activities(
-            filter: { type: { in: ["response", "error"] }, createdAt: { gt: $since } }
+            filter: { type: { in: ["thought", "action", "elicitation", "response", "error"] } }
             first: 1
-          ) { nodes { id } }
+          ) { nodes { createdAt content { __typename } } }
         }
       }`,
-      { id: sessionId, since },
+      { id: sessionId },
     );
-    return data.agentSession.activities.nodes.length > 0;
+    // Linear returns a session's activities newest first.
+    const last = data.agentSession.activities.nodes[0];
+    if (last === undefined) return null;
+    const type = last.content.__typename.replace(/^AgentActivity|Content$/g, "").toLowerCase();
+    return { type, createdAt: last.createdAt };
   }
 
   return {
     postActivity,
     postActivityOnce,
     findActivity,
+    createSession,
     setExternalUrls,
     listPrompts,
-    answeredSince,
+    lastAppActivity,
   };
 }
 

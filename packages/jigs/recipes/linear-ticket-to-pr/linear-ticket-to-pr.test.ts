@@ -26,6 +26,7 @@ vi.mock("#jigs/steps", async (importOriginal) => ({
   ...(await importOriginal<typeof import("#jigs/steps")>()),
   provisionWorktree: vi.fn(async () => worktree),
   pushBranch: vi.fn(async () => ({ created: false })),
+  setLinearAgentSessionUrls: vi.fn(async () => {}),
   setTicketStatus: vi.fn(async () => ({})),
 }));
 vi.mock("./review-ticket.ts", () => ({
@@ -82,6 +83,7 @@ const claim = {
   installationName: "linear-acme",
   issueId: snapshot.id,
   identifier: snapshot.identifier,
+  sessionId: "session-1",
 } as TicketClaim;
 const handoff: TicketHandoff = { brief: "Use the flag.", snapshot, assumptions: [] };
 
@@ -102,13 +104,38 @@ const statuses = () =>
   });
 const handed = () =>
   vi.mocked(routines.buildAndReview).mock.calls[0]?.[0] as Delivery<Ticket> | undefined;
+const opened = {
+  headline: `Pull request ${pr.url} is open.`,
+  notes: [],
+  closing:
+    "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
+  run: "waiting",
+};
+const merged = {
+  headline: `Merged ${pr.url}.`,
+  notes: [],
+  closing: "",
+  run: "ended",
+};
+const closed = {
+  headline: "Stopped: the pull request was closed, so it won't be merged.",
+  notes: [],
+  closing: "The work is still on branch `acme/abc-123` if you want it back.",
+  run: "ended",
+};
+const failed = {
+  headline: "The run failed. The run's page has the error.",
+  notes: [],
+  closing: "",
+  run: "ended",
+};
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
 const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.calls[0]?.[2];
 
 beforeEach(() => vi.clearAllMocks());
 
 test("a delivered ticket moves through In Progress, In Review and Done", async () => {
-  await expect(run()).resolves.toEqual({ pr: pr.url });
+  await expect(run()).resolves.toEqual({ outcome: "merged", pr: pr.url });
 
   expect(routines.acquireTicket).toHaveBeenCalledWith({
     installationName: "linear-acme",
@@ -136,6 +163,25 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
     approvalCovers: "latest-commit",
   });
   expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(true);
+  expect(posted()).toEqual([opened, merged]);
+  expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[1]).toBeGreaterThan(
+    vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[2] ?? Infinity,
+  );
+});
+
+test("an opened pull request is linked from the ticket's session, then a note waits on people", async () => {
+  await run();
+
+  expect(steps.setLinearAgentSessionUrls).toHaveBeenCalledExactlyOnceWith({
+    installationName: "linear-acme",
+    sessionId: "session-1",
+    urls: [{ label: "Pull request", url: pr.url }],
+  });
+  const linked = vi.mocked(steps.setLinearAgentSessionUrls).mock.invocationCallOrder[0] ?? 0;
+  expect(linked).toBeGreaterThan(
+    vi.mocked(routines.publishPullRequest).mock.invocationCallOrder[0] ?? Infinity,
+  );
+  expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[0]).toBeGreaterThan(linked);
 });
 
 test("a title that is not a conventional commit is sent back to the writer with the problem", async () => {
@@ -155,19 +201,20 @@ test("a second unconventional title stops the run before anything is pushed", as
   });
 
   await expect(run()).rejects.toThrow(
-    "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+    "Stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
   );
 
   expect(posted()).toEqual([
     {
       headline:
-        "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+        "Stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
       notes: [
         "Proposed titles: Add a flag, then Adds a flag",
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing:
         "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
+      run: "ended",
     },
   ]);
   expect(steps.pushBranch).not.toHaveBeenCalled();
@@ -175,11 +222,11 @@ test("a second unconventional title stops the run before anything is pushed", as
   expect(statuses()).toEqual(["In Progress", "Todo"]);
 });
 
-test("any other describe failure fails the run without a ticket note", async () => {
+test("any other describe failure ends the session with the error and fails the run", async () => {
   vi.mocked(routines.describePullRequest).mockRejectedValueOnce(new Error("writer crashed"));
 
   await expect(run()).rejects.toThrow("writer crashed");
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([failed]);
 });
 
 test("the describe prompt asks for a conventional-commit title", () => {
@@ -255,19 +302,22 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
     },
   );
 
-  await expect(run()).resolves.toEqual({ pr: pr.url });
+  await expect(run()).resolves.toEqual({ outcome: "merged", pr: pr.url });
 
   expect(posted()).toEqual([
+    opened,
     {
-      headline: "jigs needs a person to move the pull request for ABC-123 forward.",
+      headline: "The pull request for ABC-123 needs a person to move it forward.",
       notes: [
         "The builder needs a person: Please inspect the conflict.",
         `Pull request: ${pr.url}`,
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing:
-        "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+        "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. The pull request is still being watched: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+      run: "waiting",
     },
+    merged,
   ]);
   expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
 });
@@ -293,6 +343,7 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
   await run();
 
   expect(posted().map((note) => note.notes.slice(0, 3))).toEqual([
+    [],
     [
       "Exhausted 3 attempts for this pull request update.",
       expect.stringMatching(/dirty.*local HEAD is h2.*head is h1.*holds back the merge/),
@@ -308,6 +359,7 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
       `Pull request: ${pr.url}`,
       expect.any(String),
     ],
+    [],
   ]);
 });
 
@@ -325,7 +377,7 @@ test("a blocked merge is noted on the pull request with the delivery's scope, no
 
   await run();
 
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([opened, merged]);
   expect(routines.postPullRequestNote).toHaveBeenCalledWith({
     pr,
     scope: "linearTicketToPr/ABC-123",
@@ -345,18 +397,19 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
   await expect(run()).rejects.toThrow(
-    "jigs stopped work on ABC-123 after 3 review round(s) without an approved change.",
+    "Work on ABC-123 stopped after 3 review round(s) without an approved change.",
   );
 
   expect(posted()).toEqual([
     {
-      headline: "jigs stopped work on ABC-123 after 3 review round(s) without an approved change.",
+      headline: "Work on ABC-123 stopped after 3 review round(s) without an approved change.",
       notes: [
         "Broken",
         "Could not push the branch; the service log has the push error.",
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing: expect.stringContaining("Another run starts over on a new branch"),
+      run: "ended",
     },
   ]);
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
@@ -366,8 +419,8 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
 });
 
 test.each([
-  [1, "jigs stopped work on ABC-123 before review."],
-  [2, "jigs stopped work on ABC-123 in round 2, before its review."],
+  [1, "Work on ABC-123 stopped before review."],
+  [2, "Work on ABC-123 stopped in round 2, before its review."],
 ])("a stop in round %i before its review says so", async (round, headline) => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
     outcome: "stopped",
@@ -383,28 +436,42 @@ test.each([
   );
 });
 
-test("a pull request closed without merging gets a note on the ticket, sets Todo, and fails the run", async () => {
+test("a pull request closed without merging pushes the branch, sets Todo, ends with a note, and completes the run", async () => {
   vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
+  vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
-  await expect(run()).rejects.toThrow("jigs stopped pull request maintenance for ABC-123.");
+  await expect(run()).resolves.toEqual({ outcome: "closed", pr: pr.url });
 
-  expect(posted()[0]).toMatchObject({
-    headline: "jigs stopped pull request maintenance for ABC-123.",
-    notes: expect.arrayContaining([
-      "The pull request was closed unmerged.",
-      `Unfinished pull request: ${pr.url}`,
-    ]),
+  expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
+  expect(posted()[1]).toEqual({
+    ...closed,
+    notes: ["Could not push the latest work; a local copy is kept on the factory's machine."],
   });
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
+  expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[1]).toBeGreaterThan(
+    vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[2] ?? Infinity,
+  );
 });
 
-test("any other failure leaves the ticket alone", async () => {
+test("any other failure leaves the ticket status alone and ends the session pointing at the error", async () => {
   vi.mocked(routines.buildAndReview).mockRejectedValueOnce(new Error("boom"));
 
   await expect(run()).rejects.toThrow("boom");
 
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([failed]);
   expect(statuses()).toEqual(["In Progress"]);
+});
+
+test("an ending whose status change fails ends the session once, as a failure", async () => {
+  vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
+  vi.mocked(steps.setTicketStatus)
+    .mockResolvedValueOnce({} as Awaited<ReturnType<typeof steps.setTicketStatus>>)
+    .mockResolvedValueOnce({} as Awaited<ReturnType<typeof steps.setTicketStatus>>)
+    .mockRejectedValueOnce(new Error("no Todo state"));
+
+  await expect(run()).rejects.toThrow("no Todo state");
+
+  expect(posted()).toEqual([opened, failed]);
 });
 
 test("the reviewer is told no pull request or CI exists yet and to stay off GitHub", () => {

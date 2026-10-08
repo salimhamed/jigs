@@ -111,8 +111,11 @@ export function hookSubject(
         : `Linear ticket ${run.ticket}`;
     return { kind: "claim", label };
   }
+  if (parsed?.kind === "linear-session") {
+    return { kind: "claim", label: describeHookToken(token).label };
+  }
   if (parsed?.kind !== "pull-request") {
-    return { kind: "other", label: describeHookToken(token, run.ticket).label };
+    return { kind: "other", label: describeHookToken(token).label };
   }
   // The token lowercases the repository; the recorded pull request keeps its real name.
   const recorded = run.resources?.find(

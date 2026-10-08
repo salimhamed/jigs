@@ -28,7 +28,7 @@ test("posts plain text that ends in a line naming the run, and returns the note 
   expect(`${call?.method} ${call?.url.pathname}`).toBe("POST /incidents/Q38Z72W5PMTIS1/notes");
   expect(call?.headers.from).toBe("oncall@example.com");
   expect(call?.body).toEqual({
-    note: { content: "Checkout errors started at 06:20.\n\njigs run wrun_01KAB" },
+    note: { content: "Checkout errors started at 06:20.\n\nRun wrun_01KAB" },
   });
 });
 
@@ -44,5 +44,5 @@ test("the note carries no hidden marker", async () => {
   const [call] = calls;
   const content = (call?.body as { note: { content: string } } | undefined)?.note.content ?? "";
   expect(content).not.toMatch(/<!--|<sub>|jigs:v1/);
-  expect(content.split("\n").at(-1)).toBe("jigs run wrun_1");
+  expect(content.split("\n").at(-1)).toBe("Run wrun_1");
 });
