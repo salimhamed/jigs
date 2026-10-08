@@ -252,9 +252,9 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and everything it started are stopped.
 - `jigs service stop`, `jigs down`, `jigs up --restart-service` or an upgrade
-  while `jigs status` shows a pending or running run. `up` asks before a
-  restart cuts off an executing step, and without a terminal refuses until
-  those steps finish; `--force` is the human's call.
+  while a run has a step executing: the stop cuts that step off. A parked run
+  loses nothing. `up` asks before such a restart and without a terminal
+  refuses until those steps finish; `--force` is the human's call.
 - Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
   `jigs up`.

@@ -329,11 +329,6 @@ export async function runCompiledCancellationMatrix({
 
   try {
     await admin.query(`CREATE DATABASE "${database}"`);
-    execFileSync(path.join(factory, "node_modules", ".bin", "bootstrap"), [], {
-      cwd: factory,
-      env,
-      stdio: "ignore",
-    });
     db = new Pool({ connectionString: testUrl.toString(), max: 2 });
 
     service(["up", "--no-doctor"]);

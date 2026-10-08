@@ -409,7 +409,11 @@ test("the wait lasts until /health reports ready, printing the phases on the way
   await startService(deps(root, io));
 
   expect(io.probes).toEqual(Array(6).fill("http://localhost:9100/health"));
-  expect(lines.slice(3)).toEqual(["booting: registry", "booting: cloning forge", "booting: world"]);
+  expect(lines.slice(lines.indexOf("booting: registry"))).toEqual([
+    "booting: registry",
+    "booting: cloning forge",
+    "booting: world",
+  ]);
 });
 
 test("a process that dies while booting fails the start at once, printing its log", async () => {
@@ -428,7 +432,7 @@ test("a process that dies while booting fails the start at once, printing its lo
 
   expect(err?.message).toContain("exited during boot");
   expect(err?.hint).toContain("jigs service logs");
-  expect(lines.slice(3)).toEqual([
+  expect(lines.slice(lines.indexOf("booting: cloning forge"))).toEqual([
     "booting: cloning forge",
     "cloning binding forge",
     "fatal: repo gone",
