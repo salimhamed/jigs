@@ -194,6 +194,29 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentSession.activities.nodes.length > 0;
   }
 
+  /** Whether the app's last activity before `at` was a question, still open when a reply came. */
+  async function askedBefore(sessionId: string, at: string): Promise<boolean> {
+    const data = await graphql<{
+      agentSession: { activities: { nodes: Array<{ content: { __typename: string } }> } };
+    }>(
+      `query AgentSessionAskedBefore($id: String!, $at: DateTimeOrDuration!) {
+        agentSession(id: $id) {
+          activities(
+            filter: {
+              type: { in: ["thought", "action", "elicitation", "response", "error"] }
+              createdAt: { lt: $at }
+            }
+            first: 1
+          ) { nodes { content { __typename } } }
+        }
+      }`,
+      { id: sessionId, at },
+    );
+    // Linear returns a session's activities newest first.
+    const last = data.agentSession.activities.nodes[0];
+    return last?.content.__typename === "AgentActivityElicitationContent";
+  }
+
   return {
     postActivity,
     postActivityOnce,
@@ -202,6 +225,7 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     setExternalUrls,
     listPrompts,
     answeredSince,
+    askedBefore,
   };
 }
 
