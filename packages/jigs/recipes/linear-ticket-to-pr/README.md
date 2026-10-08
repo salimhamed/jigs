@@ -112,8 +112,8 @@ builder; it is not a lifetime limit on PR activity.
 A stop before the pull request opens, or the pull request closing unmerged,
 ends the ticket's session with a note saying what remains, sets `Todo`, and
 fails the run. A merge sets `Done` and ends the session with "Merged" and the
-pull request's link. Any other error ends the session with "The run failed" and
-the error, leaves the ticket's status alone, and fails the run. To keep
+pull request's link. Any other error ends the session with "The run failed",
+which points to the run's page for the error, leaves the ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
 hand; another run starts over on a new branch. Notes name the branch but never
 the local worktree path; `jigs status` shows the path.

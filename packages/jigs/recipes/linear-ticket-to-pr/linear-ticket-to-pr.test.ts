@@ -108,12 +108,12 @@ const merged = {
   closing: "",
   endsRun: "success",
 };
-const failed = (message: string) => ({
-  headline: `The run failed: ${message}`,
+const failed = {
+  headline: "The run failed. The run's page has the error.",
   notes: [],
   closing: "",
   endsRun: "failure",
-});
+};
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
 const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.calls[0]?.[2];
 
@@ -196,7 +196,7 @@ test("any other describe failure ends the session with the error and fails the r
   vi.mocked(routines.describePullRequest).mockRejectedValueOnce(new Error("writer crashed"));
 
   await expect(run()).rejects.toThrow("writer crashed");
-  expect(posted()).toEqual([failed("writer crashed")]);
+  expect(posted()).toEqual([failed]);
 });
 
 test("the describe prompt asks for a conventional-commit title", () => {
@@ -424,7 +424,7 @@ test("any other failure leaves the ticket status alone and ends the session with
 
   await expect(run()).rejects.toThrow("boom");
 
-  expect(posted()).toEqual([failed("boom")]);
+  expect(posted()).toEqual([failed]);
   expect(statuses()).toEqual(["In Progress"]);
 });
 

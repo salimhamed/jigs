@@ -177,7 +177,8 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   } catch (error) {
     if (!ended) {
       await noteOnTicket(claim, {
-        headline: `The run failed: ${error instanceof Error ? error.message : String(error)}`,
+        // The error can name local paths, so it stays in the service log and on the run's page.
+        headline: "The run failed. The run's page has the error.",
         notes: [],
         closing: "",
         endsRun: "failure",
