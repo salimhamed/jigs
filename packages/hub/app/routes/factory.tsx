@@ -7,7 +7,12 @@ import { providerNames } from "../../src/provider-names.ts";
 import { requireFactoryManager, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
-import { ConnectApp } from "../components/connect-app.tsx";
+import {
+  ConnectApp,
+  JustConnected,
+  justConnectedRow,
+  useJustConnected,
+} from "../components/connect-app.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
@@ -154,8 +159,7 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
 
 function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> }) {
   const { isAdmin, canManage, factory, connected, available, hasApps } = loaded;
-  // Every app connected since the page opened stays marked, not only the latest.
-  const [justConnected, setJustConnected] = useState<string[]>([]);
+  const { justConnected, onConnect } = useJustConnected();
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -175,7 +179,7 @@ function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> 
               apps={available}
               hasApps={hasApps}
               isAdmin={isAdmin}
-              onConnect={(appId) => setJustConnected((ids) => [...ids, appId])}
+              onConnect={onConnect}
             />
           )}
         </div>
@@ -201,22 +205,13 @@ function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> 
               </thead>
               <tbody>
                 {connected.map((app) => (
-                  <tr
-                    key={app.id}
-                    className={
-                      justConnected.includes(app.id)
-                        ? "bg-emerald-50 dark:bg-emerald-950/40"
-                        : undefined
-                    }
-                  >
+                  <tr key={app.id} className={justConnected(app.id) ? justConnectedRow : undefined}>
                     <td>
                       <span className="flex items-center gap-2.5">
                         <Link to={`/apps/${app.id}`} className={link}>
                           {app.name}
                         </Link>
-                        {justConnected.includes(app.id) && (
-                          <span className="text-emerald-600 dark:text-emerald-400">Connected</span>
-                        )}
+                        {justConnected(app.id) && <JustConnected />}
                       </span>
                     </td>
                     <td className="text-zinc-500">{providerNames[app.provider]}</td>

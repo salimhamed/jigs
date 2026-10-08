@@ -7,7 +7,12 @@ import { addFactory, reissueToken } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
 import { requireFactoryManager, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
-import { ConnectApp } from "../components/connect-app.tsx";
+import {
+  ConnectApp,
+  JustConnected,
+  justConnectedRow,
+  useJustConnected,
+} from "../components/connect-app.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { InstallationNames } from "../components/installation-names.tsx";
 import { PageHeader, StatusDot } from "../components/page.tsx";
@@ -93,7 +98,7 @@ export default function NewFactory({ actionData }: Route.ComponentProps) {
         </label>
         <div className="flex gap-2">
           <button type="submit" className={button}>
-            Create and get command
+            Create factory
           </button>
           <Link to="/factories" className={quietButton}>
             Cancel
@@ -181,8 +186,9 @@ function ConnectFactory({
           title="Start it"
           description={
             <>
-              Its last check, doctor, flags any app the factory uses that isn't installed, named or
-              connected to it yet. Fix that in the hub, then run <code>pnpm exec jigs doctor</code>.
+              <code>{UP_COMMAND}</code> ends by running doctor, which flags any app the factory uses
+              that isn't installed, named or connected to it yet. Fix that in the hub, then run{" "}
+              <code>pnpm exec jigs doctor</code>.
             </>
           }
         >
@@ -262,9 +268,13 @@ function FactoryApps({ factory }: { factory: { id: string; name: string } }) {
   const apps = useFetcher<typeof appsLoader>();
   const { load } = apps;
   useEffect(() => {
-    load(`/factories/${factory.id}/apps`);
+    const reload = () => load(`/factories/${factory.id}/apps`);
+    reload();
+    // An app added in another tab shows up on coming back.
+    window.addEventListener("focus", reload);
+    return () => window.removeEventListener("focus", reload);
   }, [load, factory.id]);
-  const [justConnected, setJustConnected] = useState<string[]>([]);
+  const { justConnected, onConnect } = useJustConnected();
   const loaded = apps.data;
   if (!loaded) return <p className="text-sm text-zinc-500">Loading apps…</p>;
   if (loaded.gone) return null;
@@ -275,7 +285,8 @@ function FactoryApps({ factory }: { factory: { id: string; name: string } }) {
         apps={loaded.available}
         hasApps={loaded.hasApps}
         isAdmin={loaded.isAdmin}
-        onConnect={(appId) => setJustConnected((ids) => [...ids, appId])}
+        onConnect={onConnect}
+        addAppInNewTab
       />
       {loaded.connected.length === 0 ? (
         <p className="text-sm text-zinc-500">No apps connected yet.</p>
@@ -291,20 +302,11 @@ function FactoryApps({ factory }: { factory: { id: string; name: string } }) {
             </thead>
             <tbody>
               {loaded.connected.map((app) => (
-                <tr
-                  key={app.id}
-                  className={
-                    justConnected.includes(app.id)
-                      ? "bg-emerald-50 dark:bg-emerald-950/40"
-                      : undefined
-                  }
-                >
+                <tr key={app.id} className={justConnected(app.id) ? justConnectedRow : undefined}>
                   <td>
                     <span className="flex items-center gap-2.5">
                       {app.name}
-                      {justConnected.includes(app.id) && (
-                        <span className="text-emerald-600 dark:text-emerald-400">Connected</span>
-                      )}
+                      {justConnected(app.id) && <JustConnected />}
                     </span>
                   </td>
                   <td className="text-zinc-500">{providerNames[app.provider]}</td>

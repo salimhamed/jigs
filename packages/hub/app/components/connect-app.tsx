@@ -1,6 +1,6 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { Plus } from "lucide-react";
-import { useState } from "react";
+import { useCallback, useState } from "react";
 import { Link, useFetcher } from "react-router";
 import { providerNames } from "../../src/provider-names.ts";
 import { useActionToast } from "./action-toast.tsx";
@@ -24,12 +24,15 @@ export function ConnectApp({
   hasApps,
   isAdmin,
   onConnect,
+  addAppInNewTab = false,
 }: {
   factory: { id: string; name: string };
   apps: AvailableApp[];
   hasApps: boolean;
   isAdmin: boolean;
   onConnect: (appId: string) => void;
+  /** For a page that would lose what it shows by navigating away. */
+  addAppInNewTab?: boolean;
 }) {
   const [search, setSearch] = useState("");
   const shown = apps.filter((app) => app.name.toLowerCase().includes(search.toLowerCase()));
@@ -72,7 +75,11 @@ export function ConnectApp({
         {isAdmin && (
           <p className="px-4 py-3 text-sm text-zinc-500">
             Not listed?{" "}
-            <Link to="/apps/new" className={link}>
+            <Link
+              to="/apps/new"
+              className={link}
+              {...(addAppInNewTab ? { target: "_blank", rel: "noreferrer" } : {})}
+            >
               Add an app
             </Link>
           </p>
@@ -117,4 +124,17 @@ function AppRow({
       </fetcher.Form>
     </li>
   );
+}
+
+/** Which apps were connected since the page opened, so each stays marked, not only the latest. */
+export function useJustConnected() {
+  const [ids, setIds] = useState<string[]>([]);
+  const onConnect = useCallback((appId: string) => setIds((ids) => [...ids, appId]), []);
+  return { justConnected: (appId: string) => ids.includes(appId), onConnect };
+}
+
+export const justConnectedRow = "bg-emerald-50 dark:bg-emerald-950/40";
+
+export function JustConnected() {
+  return <span className="text-emerald-600 dark:text-emerald-400">Connected</span>;
 }
