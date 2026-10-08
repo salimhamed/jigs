@@ -63,7 +63,7 @@ an agent. The workspace then appears under **Workspaces**. Give it an
 
 If the hub can no longer refresh a workspace's tokens, for example because
 the app was revoked in Linear, the workspace shows **Stopped working**. An
-admin connects it again to fix it.
+admin fixes it with **Connect it again**, next to the reason.
 
 ## 5. Assign it to factories
 

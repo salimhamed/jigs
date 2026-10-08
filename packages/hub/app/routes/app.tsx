@@ -1,4 +1,4 @@
-import { AlertTriangle, Download, Link2, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, ExternalLink, Link2, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { data, Form, Link, redirect } from "react-router";
 import { isUuid, removeApp, renameApp, setInstallationName } from "../../src/apps.ts";
@@ -266,7 +266,7 @@ function ProviderSections({ app, isAdmin }: { app: Loaded; isAdmin: boolean }) {
 
 const shortName = (
   <>
-    Give each one a short name, such as <code>acme</code>.
+    Give each a short name, such as <code>acme</code>.
   </>
 );
 
@@ -343,19 +343,25 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
         title="Installations"
         description={
           <>
-            The GitHub accounts this app is installed on. {shortName} Your factory code uses that
-            name to choose which account to work in.
+            GitHub accounts this app is installed on. {shortName} Your factory code uses it to pick
+            an account.
           </>
         }
         action={
-          isAdmin && (
+          isAdmin &&
+          (app.installations.length === 0 ? (
             <a href={app.installUrl} className={button}>
               <Download className="size-4" />
               Install on GitHub
             </a>
-          )
+          ) : (
+            <a href={app.installUrl} className={secondaryButton}>
+              <ExternalLink className="size-4" />
+              Manage on GitHub
+            </a>
+          ))
         }
-        empty="Not installed anywhere yet."
+        empty="Not installed yet."
         head={
           <>
             <th>Account</th>
@@ -422,21 +428,24 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
         title="Workspaces"
         description={
           <>
-            The Linear workspaces connected to this app. {shortName} Your factory code uses that
-            name to choose which workspace to work in. A Linear workspace admin approves the app for
-            their workspace.
-            {isAdmin && " Connect a workspace again to fix one that stopped working."}
+            Linear workspaces this app is connected to. {shortName} Your factory code uses it to
+            pick a workspace.
           </>
         }
         action={
-          isAdmin && (
+          isAdmin &&
+          app.workspaces.length === 0 && (
             <a href={app.connectUrl} className={button}>
               <Link2 className="size-4" />
               Connect a Linear workspace
             </a>
           )
         }
-        empty="No workspace connected yet."
+        empty={
+          isAdmin
+            ? "No workspace connected yet. A Linear workspace admin must approve the app when you connect."
+            : "No workspace connected yet."
+        }
         head={
           <>
             <th>Workspace</th>
@@ -454,7 +463,18 @@ function LinearSections({ app, isAdmin }: { app: AppOf<"linear">; isAdmin: boole
                 {workspace.failure === null ? (
                   "Connected"
                 ) : (
-                  <span className={errorText}>Stopped working: {workspace.failure}</span>
+                  <span className={errorText}>
+                    Stopped working: {workspace.failure}
+                    {isAdmin && (
+                      <>
+                        {" "}
+                        <a href={app.connectUrl} className={link}>
+                          Connect it again
+                        </a>
+                        .
+                      </>
+                    )}
+                  </span>
                 )}
               </td>
             </>
@@ -540,14 +560,23 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
         title="Workspaces"
         description={
           <>
-            The Slack workspaces this app is installed in. {shortName} Your factory code uses that
-            name to choose which workspace to work in.
-            {isAdmin &&
-              " Install the app again after changing its scopes, here rather than from Slack's reinstall banner, so the hub gets the new token."}
+            Slack workspaces this app is installed in. {shortName} Your factory code uses it to pick
+            a workspace.
+            {isAdmin && app.workspaces.length > 0 && (
+              <>
+                {" "}
+                After changing the app's scopes,{" "}
+                <a href={app.installUrl} className={link}>
+                  add it to Slack again
+                </a>{" "}
+                here, not from Slack's banner, so the hub gets the new token.
+              </>
+            )}
           </>
         }
         action={
-          isAdmin && (
+          isAdmin &&
+          app.workspaces.length === 0 && (
             <a href={app.installUrl} className={button}>
               <Download className="size-4" />
               Add to Slack
@@ -556,8 +585,8 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
         }
         empty={
           isAdmin
-            ? "Not installed in a workspace yet. If a workspace admin must approve the app, choose Add to Slack again once they have."
-            : "Not installed in a workspace yet."
+            ? "Not installed yet. If a workspace admin must approve the app, choose Add to Slack again once they have."
+            : "Not installed yet."
         }
         head={
           <>

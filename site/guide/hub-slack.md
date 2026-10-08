@@ -57,7 +57,7 @@ for. It starts with every scope jigs uses:
 Every factory's Slack app needs these, so the hub refuses a list that leaves
 one out. Add any other scope a factory's own Slack calls need, such as
 `pins:write`, and save. Install the app again in each workspace after changing
-them, with **Add to Slack** on the hub. A call that needs a scope the
+them, with **add it to Slack again** under **Workspaces** on the hub. A call that needs a scope the
 workspace did not grant fails with Slack's `missing_scope` error.
 
 ## 5. Install the app
@@ -66,8 +66,8 @@ On the app's page on the hub, choose **Add to Slack** and approve. Some
 workspaces require an admin to approve new apps; Slack asks for approval if
 yours does, and once an admin has approved it, choose **Add to Slack** again.
 Always install from the hub, which keeps the bot token it gets: when Slack's
-own settings show a banner asking you to reinstall the app, choose **Add to
-Slack** on the hub instead. The workspace then appears under **Workspaces**,
+own settings show a banner asking you to reinstall the app, choose **add it to
+Slack again** on the hub instead. The workspace then appears under **Workspaces**,
 with the scopes it granted. Give it an [installation
 name](/guide/hub#installation-names), such as `slack-acme`, under
 **Installation name**, and save.
