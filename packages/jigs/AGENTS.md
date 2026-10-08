@@ -30,15 +30,15 @@ has to keep:
   the `Check` shape in `checks/check.ts`.
 - `config/` may not import `steps/`, `service/` or `cli/`.
 - `checks/` may not import `service/` or `cli/`.
-- `build/` is the template and generated-integration writer, used by the CLI
+- `build/` writes the scaffold and the factory's `.jigs/` files, used by the CLI
   and the service build. It may not import `service/` or `cli/`.
 - No value-import cycles.
 - A type used by one module stays in that module. A type used on both sides of
   the workflow/steps line lives in `workflow/`, under the same topic. There is
   no shared types folder.
 - A factory imports the library from the root `@jigs-ai/jigs`. Routines that
-  take steps as arguments go in `src/workflow/routines.ts`, which only the
-  generated `jigs/routines.ts` imports; never add them to the root.
+  take steps as arguments go in `src/workflow/routines.ts`, which only
+  `factory/routines.ts` imports; never add them to the root.
 - Extract a shipped routine only when a recipe and at least one other concrete
   workflow use the same mechanism; single-caller composition stays in the recipe.
 
@@ -49,7 +49,7 @@ process through `processEnv()`. `processEnv()` is never a factory setting: a
 token, key or anything the factory's `.env` can hold goes through `ctx.env`.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
-live in factory code, including the copied recipes
+live in `factory/steps.ts` and in factory code, including the copied recipes
 ([ADR 0006](../../docs/adr/0006-factory-owned-steps.md)). `pnpm e2e` proves it, and
 also scans the built workflow bundle for `node:` specifiers and `process.env`.
 
