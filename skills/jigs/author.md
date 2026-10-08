@@ -173,7 +173,7 @@ workflow; never send a prompt or callback through a durable step argument.
 ### Record a custom resource
 
 After a workflow creates something an operator may need to find, call the
-generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
+`registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
 workflow's result. jigs records its own worktrees, run directories, agent homes,

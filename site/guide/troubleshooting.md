@@ -31,17 +31,17 @@ Read `jigs service logs`. The usual causes:
 Fix the cause and run `jigs up` again. Harness installation and authentication
 are covered in [Models and harnesses](/guide/models-and-harnesses).
 
-## `jigs up` says runs are waiting on steps that no longer exist
+## `jigs up` says runs need workflows or steps that no longer exist
 
-A run that is waiting or running replays the steps it recorded, by
-[identity](/guide/concepts#folders-the-build-creates). When the new build no
-longer has one of them, because you renamed or moved a step or its file, `jigs up`
-stops before starting the service and lists each run with the steps it is
-missing. The running service is left as it was.
+A run that is waiting or running replays its workflow and the steps it
+recorded, by [identity](/guide/concepts#folders-the-build-creates). When the
+new build no longer has one of them, because a workflow or step or its file was
+renamed or moved, `jigs up` stops before starting the service and lists each
+run with what it is missing. By then the build has already been replaced.
 
-Either let those runs finish on the build they started on, then rebuild, or
-cancel each with `pnpm exec jigs cancel <run-id>`. Then run `pnpm exec jigs up`
-again.
+Put back the previous jigs version and code, run `pnpm install` and
+`pnpm exec jigs up`, then let those runs finish or cancel each with
+`pnpm exec jigs cancel <run-id>`. Then make the change again.
 
 ## A library import does not resolve
 

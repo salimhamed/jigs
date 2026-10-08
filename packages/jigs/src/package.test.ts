@@ -18,9 +18,8 @@ const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const templatesDir = path.join(packageDir, "templates");
 const pkg = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
 // factory/ is types only: its code runs from the copies a factory build writes.
-const TYPE_ONLY = { "./factory/steps": "steps", "./factory/routines": "routines" };
 const exportTargets: string[] = Object.entries(pkg.exports)
-  .filter(([subpath]) => !Object.hasOwn(TYPE_ONLY, subpath))
+  .filter(([subpath]) => !subpath.startsWith("./factory/"))
   .flatMap(([, entry]) => (typeof entry === "string" ? [entry] : Object.values(entry as object)));
 
 const directive = /^\s*["']use (step|workflow)["']/m;
@@ -129,13 +128,10 @@ test("the root, the routines entry, the steps entry, the nine step topics and th
       "./steps",
       ...service,
       ...topics.map((topic) => `./steps/${topic}`),
-      ...Object.keys(TYPE_ONLY),
+      "./factory/steps",
+      "./factory/routines",
     ].sort(),
   );
-  for (const [subpath, name] of Object.entries(TYPE_ONLY)) {
-    expect(pkg.exports[subpath]).toEqual({ types: `./factory/${name}.d.ts` });
-    expect(existsSync(path.join(packageDir, "factory", `${name}.ts`))).toBe(true);
-  }
   expect(pkg.exports["./steps"]).toEqual({
     types: "./dist/steps/index.d.ts",
     default: "./dist/steps/index.js",

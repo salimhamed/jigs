@@ -3,7 +3,6 @@ import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { JigsError } from "../../errors.ts";
-import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
@@ -11,20 +10,18 @@ import { columns, detail, displayPath, hint, section, tone } from "../output.ts"
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
-import { type RunListRun, showRuns } from "./run-list.ts";
 import {
   awaitServiceReady,
   ensureServiceCurrent,
   liveServicePid,
   type ServiceOutcome,
 } from "./service.ts";
-import { resolveServiceUrl, ServiceVersionMismatch } from "./service-client.ts";
 import type { ServiceLifecycleDeps, ServiceProcesses } from "./service-process.ts";
 import { serviceLogPath } from "./service-record.ts";
 import { nested, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
-// Where the Workflow SDK's Nitro builder records the step IDs it compiled.
-const BUILD_MANIFEST = "node_modules/.nitro/workflow/manifest.json";
+// Where the Workflow SDK's Nitro builder records the IDs it compiled.
+export const BUILD_MANIFEST = "node_modules/.nitro/workflow/manifest.json";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
@@ -60,7 +57,7 @@ export interface UpDeps {
   processes?: ServiceProcesses;
   prepare?: Prepare;
   migrate?: (url: string) => Promise<void>;
-  strandedRuns?: (worldUrl: string, factoryRoot: string) => Promise<StrandedRun[]>;
+  runsInFlight?: (worldUrl: string) => Promise<InFlightRun[]>;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
 }
@@ -127,13 +124,11 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     // and its own failure; the wait itself is the one `jigs service start`
     // does.
     result.service = await runner.run("service", async (note) => {
-      refuseStrandedRuns(
-        await (deps.strandedRuns ?? strandedRuns)(worldUrl, factoryRoot),
-        deps.out,
-      );
+      const inFlight = await (deps.runsInFlight ?? runsInFlight)(worldUrl);
+      refuseStrandedRuns(inFlight, factoryRoot, deps.out);
       const outcome = await ensureServiceCurrent(lifecycle, {
         restart: options.restart,
-        beforeRestart: () => confirmRestart(factoryRoot, service, deps, options),
+        beforeRestart: () => confirmRestart(inFlight, service, deps, options),
       });
       if (outcome === "unchanged") note("unchanged, not restarted");
       return outcome;
@@ -289,72 +284,89 @@ function publishedPostgresPorts(factoryRoot: string): string {
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
-export interface StrandedRun {
+export interface InFlightRun {
   runId: string;
   workflow: string;
-  missing: string[];
+  status: string;
+  steps: string[];
 }
 
-// The service the build replaces may be stopped or on another jigs, so the
-// World is read directly. Only factory-local IDs: the SDK's own are its contract.
-async function strandedRuns(worldUrl: string, factoryRoot: string): Promise<StrandedRun[]> {
-  const manifest = JSON.parse(readFileSync(path.join(factoryRoot, BUILD_MANIFEST), "utf8")) as {
-    steps: Record<string, Record<string, { stepId: string }>>;
-  };
-  const built = new Set(
-    Object.values(manifest.steps).flatMap((file) => Object.values(file).map((s) => s.stepId)),
-  );
-  const { connectRegistry } = await import("../../steps/runtime/registry.ts");
-  const sql = connectRegistry(worldUrl, { max: 1 });
+// Read from the World, not the service: the service may be stopped, or on
+// another jigs whose run listing this CLI cannot read.
+async function runsInFlight(worldUrl: string): Promise<InFlightRun[]> {
+  const { Client } = (await import("pg")).default;
+  const client = new Client({ connectionString: worldUrl });
+  await client.connect();
   try {
-    const { rows } = await sql.$client.query<{ id: string; workflow: string; step: string }>(
-      `select distinct r.id, r.name as workflow, s.step_name as step
-       from "workflow"."workflow_runs" r join "workflow"."workflow_steps" s on s.run_id = r.id
-       where r.status in ('pending', 'running') and s.step_name like 'step//./%'
-       order by r.id, s.step_name`,
+    const { rows } = await client.query<{
+      id: string;
+      name: string;
+      status: string;
+      steps: string[];
+    }>(
+      `select r.id, r.name, r.status,
+         array_remove(array_agg(distinct s.step_name), null) as steps
+       from "workflow"."workflow_runs" r
+       left join "workflow"."workflow_steps" s on s.run_id = r.id
+       where r.status in ('pending', 'running')
+       group by r.id, r.name, r.status, r.created_at
+       order by r.created_at`,
     );
-    const runs = new Map<string, StrandedRun>();
-    for (const row of rows.filter((row) => !built.has(row.step))) {
-      const run = runs.get(row.id) ?? { runId: row.id, workflow: row.workflow, missing: [] };
-      run.missing.push(row.step);
-      runs.set(row.id, run);
-    }
-    return [...runs.values()];
+    return rows.map((row) => ({
+      runId: row.id,
+      workflow: row.name,
+      status: row.status,
+      steps: row.steps,
+    }));
   } finally {
-    await sql.$client.end();
+    await client.end();
   }
 }
 
-// A waiting or running run replays its recorded steps by ID, and fails on one
-// the new build no longer has.
-function refuseStrandedRuns(runs: StrandedRun[], out: (line: string) => void): void {
+// A waiting or running run replays its workflow and recorded steps by ID, and
+// fails on one the new build no longer has. Only factory-local IDs: the SDK's
+// own are its contract.
+function refuseStrandedRuns(
+  runs: InFlightRun[],
+  factoryRoot: string,
+  out: (line: string) => void,
+): void {
   if (runs.length === 0) return;
-  for (const run of runs) out(`  ${run.runId} ${run.workflow}: ${run.missing.join(", ")}`);
+  type Entries = Record<string, Record<string, { stepId?: string; workflowId?: string }>>;
+  const manifest = JSON.parse(readFileSync(path.join(factoryRoot, BUILD_MANIFEST), "utf8")) as {
+    steps: Entries;
+    workflows: Entries;
+  };
+  const built = new Set(
+    [...Object.values(manifest.steps), ...Object.values(manifest.workflows)].flatMap((file) =>
+      Object.values(file).map((entry) => entry.stepId ?? entry.workflowId),
+    ),
+  );
+  const stranded = runs.flatMap((run) => {
+    const missing = [run.workflow, ...run.steps].filter(
+      (id) => /^(?:step|workflow)\/\/\.\//.test(id) && !built.has(id),
+    );
+    return missing.length === 0 ? [] : [{ run, missing }];
+  });
+  if (stranded.length === 0) return;
+  for (const { run, missing } of stranded) out(`  ${run.runId}: ${missing.join(", ")}`);
   throw new JigsError(
-    `${runs.length} run(s) wait on steps this build no longer has`,
-    "let them finish on the build they started on, or cancel each: `pnpm exec jigs cancel <run-id>`",
+    `${stranded.length} run(s) need workflows or steps this build no longer has`,
+    "put back the previous jigs version and code, then `pnpm install` and `pnpm exec jigs up`\nlet those runs finish, or cancel each: `pnpm exec jigs cancel <run-id>`\nthen try the change again",
   );
 }
 
 async function confirmRestart(
-  factoryRoot: string,
+  inFlight: InFlightRun[],
   service: ResolvedService,
   deps: UpDeps,
   options: UpOptions,
 ): Promise<void> {
-  const inFlight = await listRunsInFlight(factoryRoot);
-  // Warned even under --force: a restart cuts off active steps.
-  const consequence = "a restart cuts off active steps, and parked runs resume on the new bundle";
-  // Every upgrade meets an older service, so asking here would ask every time;
-  // the stranded-run check has already read the World for what would fail.
-  if (inFlight === undefined) {
-    deps.out(
-      `  warning: the running service is another jigs version, so its runs cannot be listed; ${consequence}`,
-    );
-    return;
-  }
   if (inFlight.length === 0) return;
-  deps.out(`  warning: ${inFlight.length} run(s) parked or active; ${consequence}:`);
+  // Warned even under --force: a restart cuts off active steps.
+  deps.out(
+    `  warning: ${inFlight.length} run(s) parked or active; a restart cuts off active steps, and parked runs resume on the new bundle:`,
+  );
   for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
     deps.out(`    ${line}`);
   }
@@ -372,23 +384,4 @@ async function confirmRestart(
       "when the runs finish, run: `pnpm exec jigs up`",
     );
   }
-}
-
-// Empty when the service is unreachable: a service nobody can reach is
-// holding no run this restart could cut off. A service on another jigs
-// version answers in a shape this CLI may not read: undefined, its runs unknown.
-async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[] | undefined> {
-  let runs: RunListRun[];
-  try {
-    // `jigs status` already knows how to find them; it prints, so it is handed a
-    // sink and read for its return value.
-    ({ runs } = await showRuns({
-      serviceUrl: resolveServiceUrl(factoryRoot),
-      out: () => {},
-    }));
-  } catch (err) {
-    if (err instanceof ServiceVersionMismatch) return undefined;
-    return [];
-  }
-  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
 }

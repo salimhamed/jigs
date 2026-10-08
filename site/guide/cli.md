@@ -214,15 +214,13 @@ Use `jigs up` after changing workflow code or configuration:
 - Unchanged install, migration and build work is skipped.
 - The service restarts only when the built bundle or `jigs.config.ts` changes.
   `--restart-service` forces a restart.
-- Before starting the service, `up` stops if a waiting or running run recorded
-  a step the new build no longer has, and names each run and step. Such a run
-  would fail when it resumes. Let it finish on the build it started on, or
-  cancel it, then run `up` again. `--force` does not skip this.
+- Before starting the service, `up` stops if a waiting or running run needs a
+  workflow or step the new build no longer has, and names each run and what it
+  is missing; see [troubleshooting](/guide/troubleshooting). `--force` does not
+  skip this.
 - Parked and active runs are listed before a restart and require confirmation.
   `--force` skips the question but still prints the list; without a terminal,
   the command otherwise refuses.
-- A service running another jigs version cannot list its runs, so `up` warns
-  that its runs are unknown and restarts it.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
@@ -236,8 +234,7 @@ an API they use, and `pnpm typecheck` tells you where.
 
 The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
-naming both versions. `jigs up` and `jigs down` still work, but `jigs up`
-cannot list the old service's runs, so it warns and restarts.
+naming both versions. `jigs up` and `jigs down` still work.
 
 ## Cancelling
 

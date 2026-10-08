@@ -196,11 +196,12 @@ nothing else. Holding it:
 
 To upgrade, set the new `@jigs-ai/jigs` version in `package.json`, run
 `pnpm install`, then `jigs up`; see **Confirm first** when runs are in flight.
-`up` stops, naming the runs, if a waiting or running run recorded a step the
-new build lacks; they must finish or be cancelled first.
+`up` stops, naming the runs, if a waiting or running run needs a workflow or
+step the new build lacks; go back to the previous version, let them finish or
+cancel them, then upgrade again.
 Check `jigs status` before upgrading: once the new jigs is installed, commands
 that talk to the old service fail with a version error until `jigs up` restarts
-it, and `up` restarts it without being able to list its runs.
+it.
 
 ## Parked runs and worktrees
 

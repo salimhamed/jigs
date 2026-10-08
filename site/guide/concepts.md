@@ -53,8 +53,8 @@ export async function hello() {
 export default defineWorkflow({ inputs, workflow: hello });
 ```
 
-`createRunDirectory` is a jigs-provided step. Its generated function already
-contains `"use step"`. `sleep` comes from the Workflow SDK's `workflow` package,
+`createRunDirectory` is a jigs-provided step. Its function in `#jigs/steps`
+already contains `"use step"`. `sleep` comes from the Workflow SDK's `workflow` package,
 which is installed in your factory.
 
 Here is what happens:
@@ -167,7 +167,7 @@ routines to these steps; routines have no durable identities of their own.
 
 Moving or renaming a workflow or step of your own changes its identity; finish
 or cancel affected runs first. `jigs up` stops before a restart that would
-leave a waiting run without a step it recorded. Changing an agent's `output`
+leave a waiting run without its workflow or a step it recorded. Changing an agent's `output`
 schema while runs are in flight can change which agent calls a replay makes,
 because an answer the old schema accepted may now be asked for again; finish or
 cancel those runs first.

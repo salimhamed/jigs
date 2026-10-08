@@ -160,6 +160,6 @@ pnpm exec jigs up
 pnpm typecheck
 ```
 
-`jigs up` stops if a waiting run recorded a step the new build lacks; let it
-finish or cancel it. Library imports come from the root `@jigs-ai/jigs`;
+`jigs up` stops if a waiting run needs a step the new build lacks; go back to
+the previous version, let it finish or cancel it, then upgrade again. Library imports come from the root `@jigs-ai/jigs`;
 routines such as `acquireTicket` or `agentSession` come from `#jigs/routines`.
