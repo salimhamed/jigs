@@ -27,7 +27,7 @@ const resumeHookMock = vi.mocked(resumeHook);
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const delivers = () => resumeHookMock.mockResolvedValueOnce({ runId: RUN } as never);
 
-const context = testFactoryContext({ slug: "factory-test", env: { GITHUB_TOKEN: "gh-token" } });
+const context = testFactoryContext({ slug: "factory-test" });
 const push = vi.fn(triggers.pushEvent);
 const route = (event: RoutedEvent) => routeProviderEvent(event, { context, push });
 

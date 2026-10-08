@@ -208,7 +208,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
 
 test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {
   seedFailures();
-  vi.stubEnv("GITHUB_TOKEN", "rejected-token");
+  vi.stubEnv("JIGS_HUB_TOKEN", "rejected-token");
   vi.stubGlobal("fetch", async () =>
     Response.json({ message: "Bad credentials" }, { status: 401 }),
   );

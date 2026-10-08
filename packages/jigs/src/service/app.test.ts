@@ -103,7 +103,6 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
-  Object.assign(env, { GITHUB_TOKEN: "gh-service-token" });
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
 afterEach(() => {

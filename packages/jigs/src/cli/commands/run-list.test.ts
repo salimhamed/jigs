@@ -182,9 +182,9 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
             at: "2026-08-26T11:00:00.000Z",
             checks: [
               {
-                label: "GitHub identity",
-                reason: "GITHUB_TOKEN is not set",
-                repair: "set GITHUB_TOKEN in the factory repo's .env",
+                label: "GitHub installations",
+                reason: "the hub gave no GitHub token: 401 Unauthorized",
+                repair: "check hub.url in jigs.config.ts and that the hub is running",
               },
             ],
           },
@@ -196,8 +196,8 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
   expect(lines.slice(2)).toEqual([
     "TRIGGER  WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  ACTIVE  FAILED",
     "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
-    "FAIL pages PABC: GitHub identity: GITHUB_TOKEN is not set",
-    "  set GITHUB_TOKEN in the factory repo's .env",
+    "FAIL pages PABC: GitHub installations: the hub gave no GitHub token: 401 Unauthorized",
+    "  check hub.url in jigs.config.ts and that the hub is running",
   ]);
 });
 
