@@ -27,7 +27,7 @@ let holder: string | null;
 let rows: Row[];
 let statuses: Map<string, string>;
 let answered: boolean;
-let asked: boolean;
+let last: { type: string; createdAt: string } | null;
 let timers: Array<{ fire: () => void; ms: number }>;
 let postFailures: number;
 let deps: SessionPromptDeps & {
@@ -46,7 +46,7 @@ beforeEach(() => {
   rows = [];
   statuses = new Map();
   answered = false;
-  asked = false;
+  last = null;
   timers = [];
   postFailures = 0;
   posted.clear();
@@ -64,7 +64,7 @@ beforeEach(() => {
         return { id, createdAt: "" };
       },
       answeredSince: async () => answered,
-      askedBefore: async () => asked,
+      lastAppActivity: async () => last,
     }),
     appName: async () => "jigs",
     holder: async (token) => (token === SESSION ? holder : null),
@@ -104,12 +104,17 @@ const liveTurn = (accepts = true) => {
 };
 
 let activityCount = 0;
-const prompted = (activity: { signal?: string | null; body?: string } = {}) => {
+const prompted = (
+  activity: { signal?: string | null; body?: string; creatorId?: string | null } = {},
+) => {
   activityCount += 1;
   return {
     type: "AgentSessionEvent",
     action: "prompted",
-    agentSession: { id: "session-1" },
+    agentSession: {
+      id: "session-1",
+      creatorId: activity.creatorId === undefined ? "u1" : activity.creatorId,
+    },
     agentActivity: {
       id: `activity-${activityCount}`,
       createdAt: "2026-10-07T00:00:00.000Z",
@@ -159,15 +164,55 @@ test("a reply with no live turn wakes the parked run", async () => {
   expect(posted.size).toBe(0);
 });
 
-test("a reply to the run's open question gets no working note, even after the run stopped listening", async () => {
+test("a reply the run already took as it stopped listening gets no answer", async () => {
   holder = RUN;
-  asked = true;
+  last = { type: "thought", createdAt: "2026-10-07T00:00:01.000Z" };
   expect(await route(prompted())).toBe("woken");
   expect(posted.size).toBe(0);
 });
 
+test("a reply to a run that has posted its final response gets no answer", async () => {
+  holder = RUN;
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("woken");
+  expect(posted.size).toBe(0);
+});
+
+test("a reply to a run waiting on people asks again, once, so the session stays awaiting input", async () => {
+  holder = RUN;
+  last = { type: "elicitation", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted();
+  const types: string[] = [];
+  const linear = deps.linear;
+  deps.linear = (name) => {
+    const api = linear(name);
+    return {
+      ...api,
+      postActivityOnce: (sessionId, content, id) => {
+        types.push(content.type);
+        return api.postActivityOnce(sessionId, content, id);
+      },
+    };
+  };
+
+  expect(await route(event)).toBe("woken");
+  expect(await route(event)).toBe("woken");
+
+  expect(types[0]).toBe("elicitation");
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-session-waiting", event.agentActivity.id]),
+      {
+        sessionId: "session-1",
+        body: "I can't take instructions here while I wait; my earlier message says where to act.",
+      },
+    ],
+  ]);
+});
+
 test("a reply to a run that holds the session but is not listening is told it is working, once", async () => {
   holder = RUN;
+  last = { type: "thought", createdAt: "2026-10-06T00:00:00.000Z" };
   statuses = new Map([[RUN, "running"]]);
   const event = prompted();
 
@@ -404,4 +449,47 @@ test("a Stopped. that cannot be posted at once is routed again", async () => {
 test("an event that is not a readable prompt is ignored", async () => {
   expect(await route({ type: "AgentSessionEvent", action: "prompted" })).toBe("ignored");
   expect(deps.wake).not.toHaveBeenCalled();
+});
+
+const ENDED_RUN =
+  "This conversation has ended. Assign the issue to @jigs or mention @jigs to start a new run.";
+
+test("a message in an ended ticket run's session is told the run ended, once", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted({ creatorId: null });
+
+  expect(await route(event)).toBe("dropped");
+  expect(await route(event)).toBe("dropped");
+
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-ticket-session-ended", event.agentActivity.id]),
+      { sessionId: "session-1", body: ENDED_RUN },
+    ],
+  ]);
+  expect(deps.recorded).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["a thought", "thought"],
+  ["an elicitation", "elicitation"],
+])(
+  "a ticket run session whose app last posted %s is another factory's live run, and gets no reply",
+  async (_, type) => {
+    last = { type, createdAt: "2026-10-06T00:00:00.000Z" };
+    expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+    expect(posted.size).toBe(0);
+  },
+);
+
+test("a ticket run session with no app activity gets no reply", async () => {
+  expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+  expect(posted.size).toBe(0);
+});
+
+test("a session a person started is answered by its occurrences, not as a ticket run's", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("ignored");
+  expect(deps.recorded).toHaveBeenCalled();
+  expect(posted.size).toBe(0);
 });

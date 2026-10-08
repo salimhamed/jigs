@@ -62,10 +62,12 @@ export const postTicketHumanInputRequest = async (
  * reply.
  *
  * @remarks
- * Posts the note as a response, the activity whose mentions notify people. A note that ends the
- * run is the session's final response, or its error for a failure; any other note is followed by
- * a short thought, which keeps the session working so Stop still ends the run. Mentions the same
- * people as {@link postTicketHumanInputRequest}, with the note's `mention` emails as the extras.
+ * A note that ends the run is the session's final response, even for a failure: Linear offers
+ * Retry on a session that ends in an error, and a run that has ended cannot take it. A note
+ * that waits on people is an elicitation, which shows the session as awaiting input. Any other
+ * note is a response followed by a short thought, which keeps the session working so Stop still
+ * ends the run. Mentions in each of them notify. Mentions the same people as
+ * {@link postTicketHumanInputRequest}, with the note's `mention` emails as the extras.
  *
  * @group Human interaction primitives
  */
@@ -80,13 +82,13 @@ export const postTicketNote = async (
     mention: note.mention,
   });
   const linear = linearAgentFor(installationName);
-  const type = note.endsRun === "failure" ? "error" : "response";
+  const type = note.run === "waiting" ? "elicitation" : "response";
   await linear.postActivityOnce(
     sessionId,
     { type, body: render(note, participants) },
     stepPostingId(metadata, sessionId),
   );
-  if (note.endsRun === undefined) {
+  if (note.run === undefined) {
     await linear.postActivityOnce(
       sessionId,
       { type: "thought", body: STILL_WORKING },

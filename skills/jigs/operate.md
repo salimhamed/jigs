@@ -148,7 +148,10 @@ not answer for them, and you do not resume the run by hand. Every message
 anyone sent in the session since the run last read it is the answer, each
 under its author's name. A message sent while the run works, not asking, gets
 an automatic "I'm working…" reply and waits for the run's next question. Stop
-in the session cancels the run, as `jigs cancel` does.
+in the session cancels the run, as `jigs cancel` does. Once a ticket run's pull
+request is open, the session waits for people and shows no Stop: a message there
+gets a reply pointing to the run's earlier message, and closing the pull request,
+or `jigs cancel`, stops the run.
 
 If the reply is there but the run did not wake, because an event was missed:
 

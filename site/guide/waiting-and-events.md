@@ -14,8 +14,10 @@ person replies. It requires the factory's [Linear app](/guide/configuration#line
 and a claimed ticket. Claiming prevents two runs from owning the same ticket,
 and it opens a Linear agent session on the ticket, or takes the one the run
 was started from with `acquireTicket`'s `session` argument. A ticket run talks
-to people only in that session: Linear shows it working, with a Stop button
-that works for the whole run. When the service has a dashboard, an Open button
+to people only in that session. Linear shows it working, with a Stop button,
+while the run works; once the run waits on people, such as a pull request
+review, the session asks for input instead and the run's message says how to
+stop it. When the service has a dashboard, an Open button
 links to the run's page; the dashboard listens on `localhost`, so the link
 opens only on the factory's machine.
 
@@ -61,7 +63,7 @@ export async function askScope(input: WorkflowInputs<typeof inputs>) {
     headline: "Thanks, noted.",
     notes: [reply.body],
     closing: "",
-    endsRun: "success",
+    run: "ended",
   });
   return reply.body;
 }
@@ -80,14 +82,35 @@ replies in the session answers it. Messages sent there before the question
 count too: `reply.body` joins them, each prefixed with its author's name.
 
 `noteOnTicket` posts a note in the session and notifies the people it
-mentions. A note with `endsRun` is the run's last message, as a success or a
-failure; end every way out of a ticket run with one, or Linear keeps showing
-the run as working.
+mentions. Its `run` says what the run does next. A note with `run: "ended"`
+is the run's last message, whether the run succeeded or not, and Linear shows
+the session as finished; end every way out of a ticket run with one, or Linear
+keeps showing the run as working. A ticket run never ends its session as an
+error, because Linear offers Retry on one, and a run that has ended can't take it.
+
+Linear marks a session stale after about 30 minutes with no new activity, and
+a stale session hides its Stop button. Before a long quiet wait on people,
+such as a pull request waiting for review, post a note with
+`run: "waiting"`. It shows the session as awaiting input, which never goes
+stale. Linear shows no Stop button while a session awaits input, and the run
+does not read replies to the note, so say in it where people act, for example
+"comment on the pull request, or close it to stop the run". To show the pull
+request in the session, call the `setLinearAgentSessionUrls` step with
+`[{ label: "Pull request", url }]`; the run's dashboard link stays first.
 
 - **A message sent while the run works** gets the reply "I'm working and
   can't take instructions mid-run; I'll ask here if I need you. Use Stop to end
   the run." The run reads it at its next question. If the run never asks
   again, it never reads the message.
+- **A message sent while the run waits on people**, after a waiting note,
+  gets the reply "I can't take instructions here while I wait; my earlier
+  message says where to act." The reply asks again, so the session stays
+  awaiting input. The run does not read the message.
+- **A message sent after the run ended**, in a session the run opened itself,
+  gets the reply "This conversation has ended. Assign the issue to @app or
+  mention @app to start a new run.", with your Linear app's name. A run
+  started from a person's session (`acquireTicket({ session })`) gets the
+  [conversation's ended reply](/guide/linear-conversations) instead.
 - **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
   and posts "Stopped." The ticket's status stays as it is.
 - **Ordinary comments** on the ticket answer nothing. jigs never posts or

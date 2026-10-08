@@ -19,7 +19,8 @@ import { cancelRun, runStatuses } from "./runs.ts";
 import { wake } from "./wake.ts";
 
 const promptedSchema = z.object({
-  agentSession: z.object({ id: z.string().min(1) }),
+  // No creator: the app opened the session itself, for a ticket run.
+  agentSession: z.object({ id: z.string().min(1), creatorId: z.string().nullish() }),
   agentActivity: z.object({
     id: z.string().min(1),
     createdAt: z.string(),
@@ -43,13 +44,16 @@ const STOPPED = "Stopped.";
 const WORKING =
   "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.";
 
+const WAITING =
+  "I can't take instructions here while I wait; my earlier message says where to act.";
+
 /** What routing a session's prompts reaches. Tests replace it; the service uses the defaults. */
 export interface SessionPromptDeps {
   liveTurn: typeof liveTurn;
   wake: typeof wake;
   linear: (
     installationName: string,
-  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "askedBefore">;
+  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "lastAppActivity">;
   appName: (installationName: string) => Promise<string>;
   /** The run holding this hook token, or null when none does. It may have ended since. */
   holder: (token: string) => Promise<string | null>;
@@ -97,8 +101,9 @@ const pendingStops = new Set<string>();
 /**
  * Hand a `prompted` agent session event to the run that holds the session: into its live turn
  * when one runs in this process, and through its listening hook, so a run reading the session
- * reads it again. A run that holds the session but is not listening is working, and the person
- * is told so. A session whose runs have ended is told so too, and a stop no run takes in time is
+ * reads it again. A run that holds the session but is not listening is working or waiting on
+ * people, and the person is told so. A session whose runs have ended is told so too, including
+ * a session the app opened for a ticket run that has ended, and a stop no run takes in time is
  * ended here.
  */
 export async function routeSessionPrompt(
@@ -142,11 +147,14 @@ export async function routeSessionPrompt(
     if (stop) awaitStop(session, prompt, deps);
     return "woken";
   }
+  const appOpened = !agentSession.creatorId;
   let holder: string | null;
   let state: SessionState | undefined;
   try {
     holder = await deps.holder(token);
-    if (holder === null) state = await sessionState(session, deps, { withdraw: stop });
+    if (holder === null && !appOpened) {
+      state = await sessionState(session, deps, { withdraw: stop });
+    }
   } catch (error) {
     console.log(`[events] linear dropped reason=session-lookup-failed ${at}: ${String(error)}`);
     return "failed";
@@ -157,19 +165,31 @@ export async function routeSessionPrompt(
     return "dropped";
   }
   if (holder !== null) {
-    // The message stays in the session, and the run reads it when it next listens. A reply to
-    // the run's open question can land after the run has already read it and stopped listening;
-    // that one is an answer, so it gets no working note.
+    // The message stays in the session, and the run reads it when it next listens. The app
+    // having posted since the message means the run already took it: a reply to its question
+    // that landed as the run stopped listening. A response last means the run is finishing, so
+    // nothing is posted after its final message. A run left awaiting input is waiting on
+    // people, since a question always listens, so its reply asks again to keep the session
+    // awaiting input.
     try {
       const linear = deps.linear(installationName);
-      if (await linear.askedBefore(session.sessionId, prompt.createdAt)) {
+      const last = await linear.lastAppActivity(session.sessionId);
+      if (last !== null && Date.parse(last.createdAt) > Date.parse(prompt.createdAt)) {
         console.log(`[events] linear accepted ${at} run=${holder} answered`);
         return "woken";
       }
+      if (last?.type === "response") {
+        console.log(`[events] linear accepted ${at} run=${holder} finishing`);
+        return "woken";
+      }
+      const waiting = last?.type === "elicitation";
       await linear.postActivityOnce(
         session.sessionId,
-        { type: "thought", body: WORKING },
-        derivedUuid(["linear-session-working", prompt.id]),
+        waiting ? { type: "elicitation", body: WAITING } : { type: "thought", body: WORKING },
+        derivedUuid([waiting ? "linear-session-waiting" : "linear-session-working", prompt.id]),
+      );
+      console.log(
+        `[events] linear accepted ${at} run=${holder} ${waiting ? "waiting" : "not listening"}`,
       );
     } catch (error) {
       console.error(
@@ -177,9 +197,9 @@ export async function routeSessionPrompt(
       );
       return "failed";
     }
-    console.log(`[events] linear accepted ${at} run=${holder} not listening`);
     return "woken";
   }
+  if (appOpened) return answerEndedTicketRun(session, prompt, at, deps);
   if (state?.state === "open") {
     console.log(`[events] linear dropped reason=run-not-parked ${at}`);
     if (stop) awaitStop(session, prompt, deps);
@@ -204,6 +224,42 @@ export async function routeSessionPrompt(
     console.error(`[linear] could not answer agent session ${session.sessionId}: ${String(error)}`);
     return "failed";
   }
+  return "dropped";
+}
+
+// A session the app opened is a ticket run's, and only an ended run leaves a response as the
+// app's last activity: a live one's is a thought or an elicitation, so another factory's live
+// session is never answered. Factories sharing the app post under the same id, so one reply shows.
+// Accepted risk: a note's response and its "Still working." thought are two posts in one step,
+// so if the thought fails and retries, a factory sharing the app can briefly see a lone response.
+async function answerEndedTicketRun(
+  { installationName, sessionId }: { installationName: string; sessionId: string },
+  prompt: Prompt,
+  at: string,
+  deps: SessionPromptDeps,
+): Promise<PromptRoute> {
+  try {
+    const linear = deps.linear(installationName);
+    const last = await linear.lastAppActivity(sessionId);
+    if (last?.type !== "response") {
+      console.log(`[events] linear ignored reason=not-this-factorys-session ${at}`);
+      return "ignored";
+    }
+    const app = await deps.appName(installationName).catch(() => null);
+    const start =
+      app === null
+        ? "Assign the issue to the app or mention it"
+        : `Assign the issue to @${app} or mention @${app}`;
+    await linear.postActivityOnce(
+      sessionId,
+      { type: "response", body: `This conversation has ended. ${start} to start a new run.` },
+      derivedUuid(["linear-ticket-session-ended", prompt.id]),
+    );
+  } catch (error) {
+    console.error(`[linear] could not answer agent session ${sessionId}: ${String(error)}`);
+    return "failed";
+  }
+  console.log(`[events] linear dropped reason=run-ended ${at}`);
   return "dropped";
 }
 

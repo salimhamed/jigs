@@ -56,16 +56,50 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   and does not notify those a thought mentions (checked live). A response ends
   the app's turn, so a note that does not end the run is followed by a
   `Still working.` thought, which keeps the session active and Stop working.
-  A note with `endsRun` is the session's last activity: a `response` for
-  success, an `error` for failure. A person's message puts the session back to
+  A note with `run: "ended"` is the session's last activity, a `response`
+  whether the run succeeded or failed. It is never an `error`: Linear shows a
+  Retry button on a session that ended in an error, and Retry from a finished
+  ticket run leaves the session stuck thinking, since nothing listens after
+  the run ends (seen live). A conversation keeps its errors, because there
+  Retry is a new message the conversation reads. A person's message puts the session back to
   `pending`, so a halt that takes an answer posts a short thought to make it
   active again before the run's later notes.
+- **A run waiting on people keeps its session awaiting input.** Linear marks
+  a session `stale` after about 30 minutes with no agent activity, and a stale
+  session hides Stop (seen live). A ticket run waiting on its pull request's
+  approval, CI and merge is quiet for hours, so its session went stale. A
+  session in `awaitingInput` after an elicitation does not go stale (35 minutes
+  observed), though Linear shows no Stop while it awaits input (checked live).
+  So a note with `run: "waiting"` is posted as an
+  `elicitation`, which still notifies its mentions, with no `Still working.`
+  after it. The recipe posts one when the pull request opens, saying to comment
+  on the pull request to change anything or close it to stop the run, and for
+  every needs-a-person note while it
+  follows the pull request; it also adds the pull request to the session's
+  `externalUrls`, which is how Linear's docs say to show one. The run does not
+  read replies to such a note. The service tells a message to a run that holds
+  the session but is not listening apart by the app's newest activity: one
+  newer than the message means the run already took it (a reply to a halt that
+  landed as the halt stopped listening), so nothing is posted; an elicitation
+  means the run waits on people, since a halt always listens, so the service
+  replies with an elicitation, "I can't take instructions here while I wait;
+  my earlier message says where to act.", which keeps the session awaiting
+  input (it only knows the run waits, not on what); anything else gets the "I'm working" thought.
+  Rejected: a background loop posting thoughts to keep the session fresh (a
+  timer per run for a display quirk). Accepted gap: a build that runs over 30
+  minutes before the pull request opens can still go stale; a message in the
+  session gets the service's "I'm working" thought, which brings Stop back for
+  a while, and `jigs cancel` always ends the run.
 - **Sessions with no human creator start nothing.** Linear sends the app a
   `created` event for a session it opened itself, with no creator. The
   `linear.agentSessions` source starts no run for it, and the hub posts no
   "Received" acknowledgement. This also skips sessions that automation opened
   without a person; there is no other way to tell the factory's own sessions
-  apart, and no such use is known.
+  apart, and no such use is known. A message in such a session that no run
+  holds gets a final "This conversation has ended." response, once per
+  message, when the app's newest activity is a response, which only an ended
+  ticket run leaves; without it Linear showed "Thinking…" forever, and it has
+  no API to close a session to input.
 - **The comment wake is gone.** Linear `Comment` events wake nothing, and
   nothing wakes a ticket claim. `jigs poke` reaches a listening hook (a halted
   ticket run, or a conversation waiting for its next message) and pull-request
@@ -76,10 +110,13 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
 ## Consequences
 
 - A workflow's questions and notes need a claim, and every way out of a ticket
-  run should end its session with an `endsRun` note, or Linear shows the run
+  run should end its session with an `ended` note, or Linear shows the run
   working after it ended. The `linear-ticket-to-pr` recipe ends it with
-  "Merged <link>.", its stop notes, or "The run failed. The run's page has the
-  error." for an unexpected error. A cancelled run posts nothing beyond the
+  "Merged <link>.", its stop notes (a closed pull request gets "Stopped: the
+  pull request was closed, so jigs won't merge it." and the branch, which it
+  pushes; the run then completes, since the release policy keeps a dirty
+  worktree or unmerged local commits), or "The
+  run failed. The run's page has the error." for an unexpected error. A cancelled run posts nothing beyond the
   service's `Stopped.`.
 - A run started from a session talks in that session; one started any other
   way opens a new one, so one issue can show several sessions over time, one

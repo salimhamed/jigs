@@ -11,8 +11,11 @@ everything there: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
 session. A message sent while the run is working waits for its next question.
 Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
-as it is. Every note mentions the operator (or the ticket's
-creator) and the assignee, so they get a Linear notification.
+as it is. Once the pull request opens, the session links to it and a note
+says it is open and waits on people. That keeps the session awaiting input,
+so Linear never marks it stale however long review takes. To change the work,
+comment on the pull request; to stop the run, close it. Every note mentions the
+operator (or the ticket's creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and
@@ -111,10 +114,17 @@ Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-When the delivery stops before the pull request opens, or the pull request
-closes unmerged, the run ends the ticket's session with a note saying what
-remains, sets `Todo`, and fails. A merge sets `Done` and ends the session with
-"Merged" and the pull request's link. Any other error ends the session with
+Every ending sets the ticket's status before its note, so the note is the
+run's last word. When the delivery stops before the pull request opens, the run
+sets `Todo`, ends the ticket's session with a note saying what remains, and
+fails. When
+the pull request closes unmerged, the note says so and names the branch the
+work is on, the run pushes that branch, sets `Todo`, and completes with
+`{ outcome: "closed" }`. Completing loses nothing: the work is on the pushed
+branch, and the release policy keeps a worktree with uncommitted changes or
+unmerged local commits. A
+merge sets `Done`, ends the session with "Merged" and the pull request's link,
+and completes with `{ outcome: "merged" }`. Any other error ends the session with
 "The run failed", which points to the run's page for the error, leaves the
 ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
@@ -123,7 +133,8 @@ the local worktree path; `jigs status` shows the path.
 
 A pull request that needs a person, because the builder asked, its attempts ran
 out, or the merge was refused, does not stop the run. The workflow posts a
-note in the ticket's session saying what a person needs to do, leaves the
+note in the ticket's session saying what a person needs to do, which also
+waits on people, leaves the
 ticket In Review, and keeps watching: the next change to the pull request picks
 the work back up.
 
@@ -185,7 +196,7 @@ import {
   noteOnTicket,
   publishPullRequest,
 } from "#jigs/routines";
-import { setTicketStatus } from "#jigs/steps";
+import { pushBranch, setTicketStatus } from "#jigs/steps";
 import type { Ticket } from "./prompts.ts";
 
 export async function deliverTicket(
@@ -196,18 +207,24 @@ export async function deliverTicket(
   const { installationName } = claim;
   const built = await buildAndReview(delivery, { rounds: 3 });
   if (built.outcome === "stopped") {
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
       headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
-      endsRun: "failure",
+      run: "ended",
     });
-    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
   }
   const { title, body } = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "In Review" });
+  await noteOnTicket(claim, {
+    headline: `Pull request ${pr.url} is open.`,
+    notes: [],
+    closing: "Comment on the pull request to change anything, or close it to stop the run.",
+    run: "waiting",
+  });
   const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
@@ -217,18 +234,30 @@ export async function deliverTicket(
       noteOnTicket(claim, {
         headline: `${pr.url} needs a person (${facts.reason}).`,
         notes: [facts.detail],
-        closing: "jigs keeps watching the pull request.",
+        closing:
+          "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read.",
+        run: "waiting",
       }),
   });
-  if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
+  if (followed.outcome === "closed") {
+    await pushBranch(delivery.worktree).catch(() => {});
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
+    await noteOnTicket(claim, {
+      headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+      notes: [],
+      closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
+      run: "ended",
+    });
+    return { outcome: "closed" as const, pr: pr.url };
+  }
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
   await noteOnTicket(claim, {
     headline: `Merged ${pr.url}.`,
     notes: [],
     closing: "",
-    endsRun: "success",
+    run: "ended",
   });
-  return { pr: pr.url };
+  return { outcome: "merged" as const, pr: pr.url };
 }
 ```
 

@@ -112,7 +112,9 @@ export const haltForHuman = linear.haltForHuman;
 
 /**
  * Post a note in the ticket's Linear agent session that asks for nothing and waits for nothing.
- * Set `endsRun` on the run's last note to end the session.
+ * Set `run: "ended"` on the run's last note, success or not, to end the session. Set
+ * `run: "waiting"` before a long wait on people, so the session shows awaiting input and never
+ * goes stale.
  *
  * @group Linear and human input
  */

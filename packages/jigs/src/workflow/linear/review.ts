@@ -24,6 +24,11 @@ export const ticketReviewVerdictSchema = z.strictObject({
  * and suspends nothing. It carries its own words, the way a halt does, so the
  * renderer owns the layout and every caller owns what it says.
  *
+ * @remarks
+ * Linear marks a session stale after about 30 minutes with no activity, and a
+ * stale session hides its Stop button. Before a long quiet wait on people, such
+ * as a pull request waiting for review, post a note with `run: "waiting"`.
+ *
  * @group Linear tickets
  */
 export type TicketNote = {
@@ -40,10 +45,15 @@ export type TicketNote = {
    */
   mention?: string[] | undefined;
   /**
-   * Set on the run's last note: it ends the session, as a success or a
-   * failure. Without it the session keeps showing the run as working.
+   * What the run does after this note; omitted, it keeps working.
+   *
+   * @remarks
+   * `"ended"` is the run's final message, success or not; Linear shows the
+   * session as finished. Set it on every way out of the run. `"waiting"` shows the session as awaiting input, which never goes
+   * stale but shows no Stop button. The run does not read replies to a waiting
+   * note, so say in it where people act and how to stop the run.
    */
-  endsRun?: "success" | "failure" | undefined;
+  run?: "waiting" | "ended" | undefined;
 };
 
 /**
