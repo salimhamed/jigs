@@ -436,13 +436,18 @@ test.each([
   );
 });
 
-test("a pull request closed without merging gets a note on the ticket, sets Todo, and completes the run", async () => {
+test("a pull request closed without merging pushes the branch, sets Todo, ends with a note, and completes the run", async () => {
   vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
+  vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
   await expect(run()).resolves.toEqual({ outcome: "closed", pr: pr.url });
 
+  expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
   expect(posted()[1]).toEqual(closed);
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
+  expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[1]).toBeGreaterThan(
+    vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[2] ?? Infinity,
+  );
 });
 
 test("any other failure leaves the ticket status alone and ends the session pointing at the error", async () => {
@@ -454,7 +459,7 @@ test("any other failure leaves the ticket status alone and ends the session poin
   expect(statuses()).toEqual(["In Progress"]);
 });
 
-test("a stop whose status change fails posts no second ending", async () => {
+test("an ending whose status change fails ends the session once, as a failure", async () => {
   vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
   vi.mocked(steps.setTicketStatus)
     .mockResolvedValueOnce({} as Awaited<ReturnType<typeof steps.setTicketStatus>>)
@@ -463,8 +468,7 @@ test("a stop whose status change fails posts no second ending", async () => {
 
   await expect(run()).rejects.toThrow("no Todo state");
 
-  expect(posted().map((note) => note.run)).toEqual(["waiting", "ended"]);
-  expect(posted()[1]).toEqual(closed);
+  expect(posted()).toEqual([opened, failed]);
 });
 
 test("the reviewer is told no pull request or CI exists yet and to stay off GitHub", () => {

@@ -171,6 +171,13 @@ test("a reply the run already took as it stopped listening gets no answer", asyn
   expect(posted.size).toBe(0);
 });
 
+test("a reply to a run that has posted its final response gets no answer", async () => {
+  holder = RUN;
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("woken");
+  expect(posted.size).toBe(0);
+});
+
 test("a reply to a run waiting on people asks again, once, so the session stays awaiting input", async () => {
   holder = RUN;
   last = { type: "elicitation", createdAt: "2026-10-06T00:00:00.000Z" };

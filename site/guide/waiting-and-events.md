@@ -106,9 +106,11 @@ request in the session, call the `setLinearAgentSessionUrls` step with
   gets the reply "I can't take instructions here while I wait; my earlier
   message says where to act." The reply asks again, so the session stays
   awaiting input. The run does not read the message.
-- **A message sent after the run ended** gets the reply "This conversation
-  has ended. Assign the issue to @app or mention @app to start a new run.",
-  with your Linear app's name.
+- **A message sent after the run ended**, in a session the run opened itself,
+  gets the reply "This conversation has ended. Assign the issue to @app or
+  mention @app to start a new run.", with your Linear app's name. A run
+  started from a person's session (`acquireTicket({ session })`) gets the
+  [conversation's ended reply](/guide/linear-conversations) instead.
 - **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
   and posts "Stopped." The ticket's status stays as it is.
 - **Ordinary comments** on the ticket answer nothing. jigs never posts or

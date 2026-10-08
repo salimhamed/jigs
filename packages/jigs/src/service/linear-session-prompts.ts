@@ -167,14 +167,19 @@ export async function routeSessionPrompt(
   if (holder !== null) {
     // The message stays in the session, and the run reads it when it next listens. The app
     // having posted since the message means the run already took it: a reply to its question
-    // that landed as the run stopped listening. A run left awaiting input is waiting on people,
-    // since a question always listens, so its reply asks again to keep the session awaiting
-    // input.
+    // that landed as the run stopped listening. A response last means the run is finishing, so
+    // nothing is posted after its final message. A run left awaiting input is waiting on
+    // people, since a question always listens, so its reply asks again to keep the session
+    // awaiting input.
     try {
       const linear = deps.linear(installationName);
       const last = await linear.lastAppActivity(session.sessionId);
       if (last !== null && Date.parse(last.createdAt) > Date.parse(prompt.createdAt)) {
         console.log(`[events] linear accepted ${at} run=${holder} answered`);
+        return "woken";
+      }
+      if (last?.type === "response") {
+        console.log(`[events] linear accepted ${at} run=${holder} finishing`);
         return "woken";
       }
       const waiting = last?.type === "elicitation";
@@ -225,6 +230,8 @@ export async function routeSessionPrompt(
 // A session the app opened is a ticket run's, and only an ended run leaves a response as the
 // app's last activity: a live one's is a thought or an elicitation, so another factory's live
 // session is never answered. Factories sharing the app post under the same id, so one reply shows.
+// Accepted risk: a note's response and its "Still working." thought are two posts in one step,
+// so if the thought fails and retries, a factory sharing the app can briefly see a lone response.
 async function answerEndedTicketRun(
   { installationName, sessionId }: { installationName: string; sessionId: string },
   prompt: Prompt,

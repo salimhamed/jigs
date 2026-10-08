@@ -114,11 +114,15 @@ Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-When the delivery stops before the pull request opens, the run ends the
-ticket's session with a note saying what remains, sets `Todo`, and fails. When
+Every ending sets the ticket's status before its note, so the note is the
+run's last word. When the delivery stops before the pull request opens, the run
+sets `Todo`, ends the ticket's session with a note saying what remains, and
+fails. When
 the pull request closes unmerged, the note says so and names the branch the
-work is on, the run sets `Todo`, and it completes with `{ outcome: "closed" }`:
-the work is on the pushed branch, so releasing the worktree loses nothing. A
+work is on, the run pushes that branch, sets `Todo`, and completes with
+`{ outcome: "closed" }`. Completing loses nothing: the work is on the pushed
+branch, and the release policy keeps a worktree with uncommitted changes or
+unmerged local commits. A
 merge sets `Done`, ends the session with "Merged" and the pull request's link,
 and completes with `{ outcome: "merged" }`. Any other error ends the session with
 "The run failed", which points to the run's page for the error, leaves the
@@ -192,7 +196,7 @@ import {
   noteOnTicket,
   publishPullRequest,
 } from "#jigs/routines";
-import { setTicketStatus } from "#jigs/steps";
+import { pushBranch, setTicketStatus } from "#jigs/steps";
 import type { Ticket } from "./prompts.ts";
 
 export async function deliverTicket(
@@ -203,13 +207,13 @@ export async function deliverTicket(
   const { installationName } = claim;
   const built = await buildAndReview(delivery, { rounds: 3 });
   if (built.outcome === "stopped") {
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
       headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
       run: "ended",
     });
-    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
   }
   const { title, body } = await describePullRequest(delivery);
@@ -236,13 +240,14 @@ export async function deliverTicket(
       }),
   });
   if (followed.outcome === "closed") {
+    await pushBranch(delivery.worktree).catch(() => {});
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
       headline: "Stopped: the pull request was closed, so jigs won't merge it.",
       notes: [],
       closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
       run: "ended",
     });
-    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     return { outcome: "closed" as const, pr: pr.url };
   }
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });

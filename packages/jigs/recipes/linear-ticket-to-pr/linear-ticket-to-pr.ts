@@ -109,12 +109,17 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
     };
 
+    // An ending sets the ticket's status before its note, so the note is the
+    // run's last word.
+    const end = async (stateName: string, note: TicketNote) => {
+      await setStatus(stateName);
+      await noteOnTicket(claim, { ...note, run: "ended" });
+      ended = true;
+    };
     // A stop leaves the work where it is, ends the ticket's session, and fails
     // the run.
     const stop = async (note: TicketNote): Promise<never> => {
-      await noteOnTicket(claim, { ...note, run: "ended" });
-      ended = true;
-      await setStatus("Todo");
+      await end("Todo", note);
       throw new JigsError(note.headline);
     };
 
@@ -177,22 +182,16 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
             })
           : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
     });
-    // The work is on the pushed branch, so the run completes and its worktree
-    // can be released.
+    // The run completes: its work is pushed to the branch the note names, and
+    // the release policy keeps a dirty worktree or unmerged local commits. A
+    // push error can name local paths, so it stays in the service log.
     if (followed.outcome === "closed") {
-      await noteOnTicket(claim, closedNote(worktree));
-      ended = true;
-      await setStatus("Todo");
+      await pushBranch(worktree).catch(() => {});
+      await end("Todo", closedNote(worktree));
       return { outcome: "closed" as const, pr: pr.url };
     }
 
-    await setStatus("Done");
-    await noteOnTicket(claim, {
-      headline: `Merged ${pr.url}.`,
-      notes: [],
-      closing: "",
-      run: "ended",
-    });
+    await end("Done", { headline: `Merged ${pr.url}.`, notes: [], closing: "" });
     return { outcome: "merged" as const, pr: pr.url };
   } catch (error) {
     if (!ended) {
@@ -294,7 +293,6 @@ const closedNote = (worktree: Worktree): TicketNote => ({
   headline: "Stopped: the pull request was closed, so jigs won't merge it.",
   notes: [],
   closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
-  run: "ended",
 });
 
 const localState = (work: UnpublishedWork) =>
