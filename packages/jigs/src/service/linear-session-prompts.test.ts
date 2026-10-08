@@ -333,7 +333,7 @@ test("a lookup that cannot answer, as while the triggers shut down, is routed ag
 
 test("a wake that could not be delivered is routed again", async () => {
   wakeOutcome = { outcome: "failed", error: "db down" };
-  expect(await route(prompted())).toBe("failed");
+  await expect(route(prompted())).rejects.toThrow("db down");
   expect(posted.size).toBe(0);
 });
 

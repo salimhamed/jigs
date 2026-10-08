@@ -45,37 +45,72 @@ export async function routeProviderEvent(
   deps: RouteDeps,
 ): Promise<RouteResult> {
   const { provider } = event;
-  const name = sanitizeForLog(event.name);
+  const ref = describe(event);
   if (!isNamed(event)) {
-    console.log(`[events] ${provider} ignored reason=no-installation-name event=${name}`);
+    console.log(`[events] ${provider} ignored reason=no-installation-name ${ref}`);
     return { outcome: "ignored" };
   }
+  let refused = false;
   const settle = async (consumer: string, route: () => Promise<RouteResult>) => {
     try {
       return await route();
     } catch (error) {
       if (worthRetrying(error)) {
         console.log(
-          `[events] ${provider} dropped reason=${consumer}-failed event=${name}: ${String(error)}`,
+          `[events] ${provider} dropped reason=${consumer}-failed ${ref}: ${String(error)}`,
         );
         return { outcome: "failed" } as const;
       }
+      refused = true;
       console.error(
-        `[events] ${provider} ignored reason=${consumer}-refused event=${name}: ${String(error)}`,
+        `[events] ${provider} ignored reason=${consumer}-refused ${ref}: ${String(error)}`,
       );
       return { outcome: "ignored" } as const;
     }
   };
   const result = combine(
     await Promise.all([
-      settle("push", () => trigger(event, name, deps)),
-      settle("wake", () => wakeHooks(event, name, deps)),
+      settle("push", () => trigger(event, ref, deps)),
+      settle("wake", () => wakeHooks(event, ref, deps)),
       settle("prompt", async () => ({ outcome: await routeSessionPrompt(event) })),
     ]),
   );
-  if (result.outcome === "ignored") console.log(`[events] ${provider} ignored event=${name}`);
+  if (result.outcome === "ignored" && !refused && !quiet(provider))
+    console.log(`[events] ${provider} ignored ${ref}`);
   return result;
 }
+
+// Most Slack messages start nothing and reply in threads no run waits on, so
+// logging each would flood a busy workspace.
+const quiet = (provider: string) => provider === "slack";
+
+// The event's name and, where the payload carries them, the ids that find it again.
+function describe({ provider, name, payload }: RoutedEvent): string {
+  const ids: Record<string, unknown> =
+    provider === "slack"
+      ? { channel: at(payload, "event", "channel"), ts: at(payload, "event", "ts") }
+      : provider === "linear"
+        ? {
+            session: at(payload, "agentSession", "id"),
+            activity: at(payload, "agentActivity", "id"),
+          }
+        : provider === "pagerduty"
+          ? { incident: at(payload, "event", "data", "id") }
+          : { repo: at(payload, "repository", "full_name"), sha: at(payload, "sha") };
+  const found = Object.entries(ids).filter(([, id]) => typeof id === "string");
+  return [`event=${name}`, ...found.map(([key, id]) => `${key}=${id}`)]
+    .map(sanitizeForLog)
+    .join(" ");
+}
+
+const at = (value: unknown, ...path: string[]): unknown =>
+  path.reduce<unknown>(
+    (found, key) =>
+      typeof found === "object" && found !== null
+        ? (found as Record<string, unknown>)[key]
+        : undefined,
+    value,
+  );
 
 const isNamed = (event: RoutedEvent): event is NamedEvent => event.installationName !== null;
 
@@ -93,29 +128,30 @@ function combine(results: RouteResult[]): RouteResult {
 // The push returns once the occurrence is recorded, never waiting on the start.
 async function trigger(
   { provider, installationName, payload }: NamedEvent,
-  name: string,
+  ref: string,
   deps: RouteDeps,
 ): Promise<RouteResult> {
   const triggers = await deps.push(provider, { installationName, payload });
   if (triggers.length === 0) return { outcome: "ignored" };
-  console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} event=${name}`);
+  console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} ${ref}`);
   return { outcome: "triggered", triggers };
 }
 
 // A wake carries no payload: the suspension primitives re-check provider
 // state on every wake, so nothing downstream reads one.
-async function wakeHooks(event: NamedEvent, name: string, deps: RouteDeps): Promise<RouteResult> {
+async function wakeHooks(event: NamedEvent, ref: string, deps: RouteDeps): Promise<RouteResult> {
   const tokens = await hookTokens(event, deps.context);
   if (tokens === null) return { outcome: "ignored" };
   if (tokens.length === 0) {
-    console.log(`[events] ${event.provider} dropped reason=no-open-pull-request event=${name}`);
+    console.log(`[events] ${event.provider} dropped reason=no-open-pull-request ${ref}`);
     return { outcome: "dropped" };
   }
   const outcomes = await Promise.all(
     tokens.map(async (token) => {
-      const correlation = `token=${sanitizeForLog(token)} event=${name}`;
-      const { outcome } = await wake(token, `${event.provider} ${name}`);
+      const correlation = `token=${sanitizeForLog(token)} ${ref}`;
+      const { outcome } = await wake(token, `${event.provider} ${sanitizeForLog(event.name)}`);
       if (outcome === "woken") console.log(`[events] ${event.provider} accepted ${correlation}`);
+      else if (outcome === "gone" && quiet(event.provider)) return outcome;
       else {
         const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
         console.log(`[events] ${event.provider} dropped reason=${reason} ${correlation}`);

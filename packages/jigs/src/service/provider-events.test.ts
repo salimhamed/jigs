@@ -154,7 +154,9 @@ test("a pending status is ignored without a sha lookup", async () => {
   expect(await route(status("pending"))).toEqual({ outcome: "ignored" });
   expect(fetchMock).not.toHaveBeenCalled();
   expect(resumeHookMock).not.toHaveBeenCalled();
-  expect(log).toHaveBeenCalledExactlyOnceWith("[events] github ignored event=status");
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] github ignored event=status repo=contributor/fork sha=status-sha",
+  );
 });
 
 test("a status with no open PR is dropped without waking anything", async () => {
@@ -167,7 +169,7 @@ test("a status lookup failure fails rather than throws", async () => {
   useGithubClient({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
   expect(await route(status("failure"))).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledWith(
-    "[events] github dropped reason=wake-failed event=status: Error: network down",
+    "[events] github dropped reason=wake-failed event=status repo=contributor/fork sha=status-sha: Error: network down",
   );
 });
 
@@ -271,7 +273,7 @@ test("a created Linear agent session goes to the triggers, and wakes nothing", a
   expect(push).toHaveBeenCalledExactlyOnceWith("linear", { installationName: "acme", payload });
   expect(resumeHookMock).not.toHaveBeenCalled();
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] linear accepted triggers=mentions event=AgentSessionEvent",
+    "[events] linear accepted triggers=mentions event=AgentSessionEvent session=s1",
   );
 });
 
@@ -315,7 +317,7 @@ test("a Linear agent session no trigger could read is a failure, logged", async 
     outcome: "failed",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] linear dropped reason=push-failed event=AgentSessionEvent: Error: issue lookup failed",
+    "[events] linear dropped reason=push-failed event=AgentSessionEvent session=s1: Error: issue lookup failed",
   );
 });
 
@@ -335,7 +337,7 @@ test("a PagerDuty event no trigger takes is ignored", async () => {
   payload.event.event_type = "incident.acknowledged";
   expect(await route(page(payload))).toEqual({ outcome: "ignored" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] pagerduty ignored event=incident.acknowledged",
+    "[events] pagerduty ignored event=incident.acknowledged incident=Q1",
   );
 });
 
@@ -343,7 +345,7 @@ test("a PagerDuty push that fails is a failure, logged", async () => {
   push.mockRejectedValueOnce(new Error("registry unreachable"));
   expect(await route(page())).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[events] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
+    "[events] pagerduty dropped reason=push-failed event=incident.triggered incident=Q1: Error: registry unreachable",
   );
 });
 
@@ -403,7 +405,7 @@ test("an incident.triggered is recorded at once, and its run starts", async () =
 
   expect(await route(page())).toEqual({ outcome: "triggered", triggers: ["pages"] });
   expect(log).toHaveBeenCalledWith(
-    "[events] pagerduty accepted triggers=pages event=incident.triggered",
+    "[events] pagerduty accepted triggers=pages event=incident.triggered incident=Q1",
   );
   expect(memory.state("pages", "Q1")).toMatchObject({ state: "pending" });
   expect(starts).toEqual([]);
@@ -452,14 +454,15 @@ test("a Slack message goes to the triggers and wakes the thread it replies in", 
   });
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(THREAD, undefined);
   expect(lastWake(THREAD, RUN)?.kind).toBe("slack message");
-  expect(log).toHaveBeenCalledWith(`[events] slack accepted token=${THREAD} event=message`);
+  expect(log).toHaveBeenCalledWith(
+    `[events] slack accepted token=${THREAD} event=message channel=C0C5EUZ7P9Q ts=1790723501.000300`,
+  );
 });
 
-test("a reply in a thread no run waits on is dropped", async () => {
+test("a reply in a thread no run waits on, or a message that starts nothing, logs nothing", async () => {
   expect(await route(slack())).toEqual({ outcome: "dropped" });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[events] slack dropped reason=no-matching-hook token=${THREAD} event=message`,
-  );
+  expect(await route(slack({ ...reply, thread_ts: undefined }))).toEqual({ outcome: "ignored" });
+  expect(log).not.toHaveBeenCalled();
 });
 
 test("a top-level message or a bot's reply wakes nothing", async () => {
@@ -474,7 +477,7 @@ test("a Slack wake that fails fails the routing, so the message is routed again"
   push.mockResolvedValueOnce(["questions"]);
   expect(await route(slack())).toEqual({ outcome: "failed" });
   expect(log).toHaveBeenCalledWith(
-    `[events] slack dropped reason=delivery-failed token=${THREAD} event=message`,
+    `[events] slack dropped reason=delivery-failed token=${THREAD} event=message channel=C0C5EUZ7P9Q ts=1790723501.000300`,
   );
 });
 
@@ -492,7 +495,7 @@ test("a push that fails fails the routing even when the event woke a run", async
   expect(await route(slack())).toEqual({ outcome: "failed" });
   expect(resumeHookMock).toHaveBeenCalledOnce();
   expect(log).toHaveBeenCalledWith(
-    "[events] slack dropped reason=push-failed event=message: Error: registry unreachable",
+    "[events] slack dropped reason=push-failed event=message channel=C0C5EUZ7P9Q ts=1790723501.000300: Error: registry unreachable",
   );
 });
 
@@ -513,7 +516,9 @@ test.each([
       outcome: "ignored",
     });
     expect(log).toHaveBeenCalledExactlyOnceWith(
-      `[events] ${provider} ignored reason=no-installation-name event=x`,
+      expect.stringMatching(
+        new RegExp(`^\\[events\\] ${provider} ignored reason=no-installation-name event=x`),
+      ),
     );
     expect(push).not.toHaveBeenCalled();
     expect(resumeHookMock).not.toHaveBeenCalled();
@@ -540,15 +545,16 @@ test("an event a trigger takes and that wakes a run reports the trigger", async 
   expect(resumeHookMock).toHaveBeenCalledOnce();
 });
 
-test("a push refused for good is ignored loudly, not retried", async () => {
+test("a push refused for good is ignored loudly, once, not retried", async () => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
   push.mockRejectedValueOnce(new HubResponseError(404, "no installation"));
   expect(await route(page())).toEqual({ outcome: "ignored" });
   expect(errors).toHaveBeenCalledWith(
     expect.stringContaining(
-      "[events] pagerduty ignored reason=push-refused event=incident.triggered",
+      "[events] pagerduty ignored reason=push-refused event=incident.triggered incident=Q1:",
     ),
   );
+  expect(log).not.toHaveBeenCalled();
 });
 
 test("a session prompt whose wake fails fails the routing", async () => {
@@ -568,4 +574,7 @@ test("a session prompt whose wake fails fails the routing", async () => {
       payload,
     }),
   ).toEqual({ outcome: "failed" });
+  expect(log).toHaveBeenCalledExactlyOnceWith(
+    "[events] linear dropped reason=prompt-failed event=AgentSessionEvent session=s1 activity=a1: Error: could not wake the listening run: Error: world down",
+  );
 });

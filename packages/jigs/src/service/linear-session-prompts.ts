@@ -92,7 +92,7 @@ export const sessionPromptDeps: SessionPromptDeps = {
 };
 
 /** What routing a prompt did, in the outcomes provider event routing reports. Throws when it could not tell. */
-export type PromptRoute = "ignored" | "woken" | "dropped" | "failed";
+export type PromptRoute = "ignored" | "woken" | "dropped";
 
 /**
  * Where a session stands in this factory. `none`: no trigger here started it. `open`: a run of it
@@ -146,11 +146,8 @@ export async function routeSessionPrompt(
     linearListeningToken(installationName, session.sessionId),
     "linear AgentSessionEvent",
   );
+  if (woke.outcome === "failed") throw new Error(`could not wake the listening run: ${woke.error}`);
   const at = `${stop ? "stop" : "reply"} session=${session.sessionId} activity=${prompt.id}`;
-  if (woke.outcome === "failed") {
-    console.log(`[events] linear dropped reason=delivery-failed ${at}`);
-    return "failed";
-  }
   if (live !== undefined || woke.outcome === "woken") {
     console.log(`[events] linear accepted ${at}`);
     if (stop) awaitStop(session, prompt, deps);
