@@ -309,7 +309,7 @@ async function runsInFlight(worldUrl: string): Promise<InFlightRun[]> {
        from "workflow"."workflow_runs" r
        left join "workflow"."workflow_steps" s on s.run_id = r.id
        where r.status in ('pending', 'running')
-       group by r.id, r.name, r.status, r.created_at
+       group by r.id
        order by r.created_at`,
     );
     return rows.map((row) => ({
