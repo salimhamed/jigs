@@ -89,7 +89,9 @@ and check the Webhook URL matches.
 On the App's page on the hub, choose **Install on GitHub**, pick the account,
 and choose its repositories. GitHub returns to the hub, which records the
 installation; it then appears under **Installations**. Install it on every
-account that owns a repository a factory binds.
+account that owns a repository a factory binds; once the App has an
+installation, the button reads **Manage on GitHub** and leads to the same
+place.
 
 Choosing **Only select repositories** keeps the App to the repositories your
 factories bind. **All repositories** works too, but then every factory
