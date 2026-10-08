@@ -310,7 +310,7 @@ const forms: Record<
       {
         name: "name",
         label: "Name",
-        help: "A label for this app in the hub. Factories and PagerDuty never see it.",
+        help: "A label for this app in the hub. Factories and PagerDuty never see it, and you can change it later.",
       },
       {
         name: "clientId",
