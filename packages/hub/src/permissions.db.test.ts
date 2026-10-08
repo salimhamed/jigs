@@ -6,7 +6,7 @@ import { afterAll, beforeAll, expect } from "vitest";
 import { action as appAction } from "../app/routes/app.tsx";
 import { action as factoryAction } from "../app/routes/factory.tsx";
 import { action as inviteAction } from "../app/routes/invite-member.tsx";
-import { action as membersAction } from "../app/routes/members.tsx";
+import { action as membersAction, loader as membersLoader } from "../app/routes/members.tsx";
 import { action as newAppAction } from "../app/routes/new-app.tsx";
 import { action as newFactoryAction } from "../app/routes/new-factory.tsx";
 import { action as settingsAction } from "../app/routes/settings.tsx";
@@ -226,4 +226,36 @@ dbTest("keeps apps, members and settings to admins", async () => {
       role: "admin",
     }),
   ).toEqual({ message: `${other.id} is now an admin.` });
+});
+
+dbTest("keeps invite links to admins", async () => {
+  const admin = await signedIn("admin");
+  const member = await signedIn("member");
+  const created = (await post(inviteAction, admin.cookie, "/members/invite", {
+    email: "invitee@example.com",
+    role: "admin",
+  })) as { invite: { link: string } };
+  const inviteId = new URL(created.invite.link).pathname.split("/").at(-1) ?? "";
+
+  const pendingInvite = async (cookie: string) => {
+    const page = (await membersLoader({
+      request: new Request("http://hub.test/members", { headers: { cookie } }),
+      params: {},
+      context,
+    } as Parameters<typeof membersLoader>[0])) as Awaited<ReturnType<typeof membersLoader>>;
+    return page.invites.find((invite) => invite.email === "invitee@example.com");
+  };
+  expect((await pendingInvite(admin.cookie))?.admin?.id).toBe(inviteId);
+  expect((await pendingInvite(member.cookie))?.admin).toBeNull();
+
+  const get = (path: string) =>
+    auth.handler(
+      new Request(`http://hub.test/api/auth/${path}`, { headers: { cookie: member.cookie } }),
+    );
+  expect((await get("get-session")).status).toBe(200);
+  for (const path of ["organization/get-full-organization", "organization/list-invitations"]) {
+    const response = await get(path);
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain(inviteId);
+  }
 });
