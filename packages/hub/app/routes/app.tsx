@@ -278,7 +278,7 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
         description={
           <>
             In the app's settings on GitHub: <strong>Settings</strong> →{" "}
-            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the App.
+            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the app.
           </>
         }
         urls={[

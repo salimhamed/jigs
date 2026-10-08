@@ -80,7 +80,7 @@ export async function addGitHubApp(
   const installed = await listInstallations(apiUrl, input.appId, input.privateKey);
   if ("status" in installed) {
     return {
-      error: `GitHub refused App ${input.appId} with this private key (${installed.status}).`,
+      error: `GitHub refused app ${input.appId} with this private key (${installed.status}).`,
     };
   }
   return db.transaction(async (tx) => {

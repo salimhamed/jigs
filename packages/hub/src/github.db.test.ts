@@ -503,7 +503,7 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
     .privateKey.export({ type: "pkcs8", format: "pem" })
     .toString();
   expect(await add(organizationId, { privateKey: otherKey })).toEqual({
-    error: "GitHub refused App 424242 with this private key (401).",
+    error: "GitHub refused app 424242 with this private key (401).",
   });
   const added = await add(organizationId);
   if (!("app" in added)) throw new Error(added.error);
