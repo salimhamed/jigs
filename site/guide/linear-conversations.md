@@ -124,9 +124,9 @@ Every factory assigned a Linear app hears every mention of it. For
 conversations, give each factory its own Linear app, or two factories answer
 the same mention in the same thread.
 
-Replies in a session's thread, and the mention that opens one, never answer a
-[paused ticket run](/guide/waiting-and-events#wait-for-a-person) on the same
-issue.
+A [ticket run](/guide/waiting-and-events#wait-for-a-person) opens a session of
+its own on its issue. A session the app opens itself starts no run and gets no
+"Received" reply, and neither does any other session no person started.
 
 ## Known limits
 

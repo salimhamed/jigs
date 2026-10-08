@@ -9,8 +9,9 @@ until it merges.
 The run opens one Linear agent session on the ticket when it starts, and says
 everything there: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
-session. A message sent while the run is working waits for its next question;
-press Stop to end the run. Every note mentions the operator (or the ticket's
+session. A message sent while the run is working waits for its next question.
+Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status as
+it is. Every note mentions the operator (or the ticket's
 creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
@@ -109,7 +110,7 @@ Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-A stop before the pull request opens, or the pull request closing unmerged,
+A delivery that stops before the pull request opens, or the pull request closing unmerged,
 ends the ticket's session with a note saying what remains, sets `Todo`, and
 fails the run. A merge sets `Done` and ends the session with "Merged" and the
 pull request's link. Any other error ends the session with "The run failed",

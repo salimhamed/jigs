@@ -105,18 +105,25 @@ declaration next to its input schema.
 Resolve the ticket, then claim it, then do everything else. The claim is the
 one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
 before claiming can collide with the run that already holds the ticket. Use
-`acquireTicket({ installationName, reference })` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
-starting protected work. The claim carries `installationName`, so `noteOnTicket` and `haltForHuman` take only the claim.
+`acquireTicket({ installationName, reference, session? })` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
+starting protected work. The claim also opens the run's Linear agent session on
+the ticket, or takes `session` when a `linear.agentSessions` trigger started
+the run. The claim carries the session, so `noteOnTicket` and `haltForHuman`
+take only the claim.
 
-Post ticket notes through the claim with `noteOnTicket(claim, note)` rather
-than the `postTicketNote` step. The claim records every comment the run posts,
-and `haltForHuman` skips them all when it looks for a human's reply.
+A ticket run talks to people only in that session; jigs posts and reads no
+ordinary ticket comments. Post notes through the claim with
+`noteOnTicket(claim, note)` rather than the `postTicketNote` step, so
+`haltForHuman` knows which messages the run has read. Give every way out of
+the workflow a note with `endsRun: "success"` or `"failure"`; without one,
+Linear shows the run working after it ended. A message sent while the run
+works waits, unread, for its next `haltForHuman`. Stop cancels the run.
 
-Every jigs comment on a ticket mentions the operator (or, without one, the
+Every question and note mentions the operator (or, without one, the
 ticket's creator) and the assignee. The operator is the factory's
 `linear.operator` in `jigs.config.ts`, and a change takes effect after `jigs up`
 rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note.
-Unknown emails are skipped with a warning; the comment still posts.
+Unknown emails are skipped with a warning; the message still posts.
 
 To let Claude Code answer in Linear's agent panel, trigger the workflow with
 `linear.agentSessions`, provision a worktree, then call
@@ -124,7 +131,7 @@ To let Claude Code answer in Linear's agent panel, trigger the workflow with
 needs a Claude harness. Its `outcome` is `idle` when no one replied for
 `idleFor` (4h by default), `stopped` when someone pressed stop, or `failed`
 when a turn failed. A second run for the same session throws
-`ClaimConflictError`. Session replies never answer `haltForHuman`.
+`ClaimConflictError`.
 
 ## Validation ownership
 

@@ -1,7 +1,7 @@
 # Linear app
 
 Factories act on Linear as a Linear OAuth app your [hub](/guide/hub) holds, so
-their comments and mentions reach people like anyone else's. People can
+their messages and mentions reach people like anyone else's. People can
 mention the app on an issue or assign an issue to it, as they would a
 teammate. The hub receives the app's webhooks, holds each workspace's tokens
 and refreshes them.
@@ -27,8 +27,8 @@ form:
 - **Webhooks**: turn it on. Enter your hub's address as the **Webhook URL**
   for now; you replace it in step 3. Copy the **Webhook signing secret** Linear
   shows below it now.
-- Under the events, tick **Comments** in **Data change events** and **Agent
-  session events** in **App events**. Leave every other event off.
+- Under the events, tick **Agent session events** in **App events**. Leave
+  every other event off.
 
 Create the app, then note its **Client ID** and **Client secret**.
 

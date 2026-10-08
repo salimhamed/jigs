@@ -9,10 +9,13 @@ The factory service must be running to receive events and continue work.
 
 ## Wait for a person
 
-`haltForHuman` currently uses Linear. It asks a question on a ticket, marks the
-run as waiting, then continues the same run when a person replies there. It
-requires [Linear credentials](/guide/configuration#linear-app) and a claimed
-ticket. Claiming prevents multiple runs from independently owning the same ticket.
+`haltForHuman` asks a question in Linear and continues the same run when a
+person replies. It requires the factory's [Linear app](/guide/configuration#linear-app)
+and a claimed ticket. Claiming prevents two runs from owning the same ticket,
+and it opens a Linear agent session on the ticket, or takes the one the run
+was started from with `acquireTicket`'s `session` argument. A ticket run talks
+to people only in that session: Linear shows it working, with an Open button
+that links to the run's page and a Stop button that works for the whole run.
 
 This complete workflow resolves its `ticket` input in the Linear installation
 its `linearInstallation` input names, such as `linear-acme`, claims the ticket, then
@@ -68,13 +71,27 @@ export default defineWorkflow({
 });
 ```
 
-The comment mentions the ticket's creator and assignee, or your
-[`linear.operator`](/guide/configuration#linear-operator) and the assignee. Pass
-`mention: ["dana@example.com"]` in the halt to mention more people.
+The question mentions your [`linear.operator`](/guide/configuration#linear-operator),
+or the ticket's creator without one, and the assignee. Pass
+`mention: ["dana@example.com"]` in the halt to mention more people. Anyone who
+replies in the session answers it. Messages sent there before the question
+count too, and the reply holds each message after its author's name.
 
-Answer the existing question on Linear. Starting a second run does not answer
-it, and neither does a mention of the factory's app or a reply in a [Linear
-conversation](/guide/linear-conversations) on the issue. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
+`noteOnTicket` posts a note in the session and notifies the people it
+mentions. A note with `endsRun` is the run's last message, as a success or a
+failure; end every way out of a ticket run with one, or Linear keeps showing
+the run as working.
+
+- **A message sent while the run works** gets the reply "I'm working and
+  can't take instructions mid-run; I'll ask here if I need you. Use Stop to end
+  the run." The run reads it at its next question. If the run never asks
+  again, it never reads the message.
+- **Stop** cancels the run within about 30 seconds, as `jigs cancel` does,
+  and posts "Stopped." The ticket's status stays as it is.
+- **Ordinary comments** on the ticket answer nothing. jigs never posts or
+  reads them, though an agent with Linear's MCP tools may still comment.
+
+Starting a second run does not answer a question. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
 
 ## Watch a pull request
 

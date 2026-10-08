@@ -40,7 +40,7 @@ the factory, so there is nothing to choose here. The factory names each
 installation it uses by its installation name on the hub, such as
 `github-acme`; ask the user for these names when a step below needs one. Add
 `linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
-comments mention the operator and the assignee rather than the ticket's
+runs' questions and notes mention the operator and the assignee rather than the ticket's
 creator.
 
 `jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
