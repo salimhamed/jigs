@@ -11,6 +11,7 @@ export default [
     route("factories/new", "routes/new-factory.tsx"),
     route("factories/:id", "routes/factory.tsx"),
     route("factories/:id/last-seen", "routes/factory-last-seen.ts"),
+    route("factories/:id/apps", "routes/factory-apps.ts"),
     route("factories/:id/events", "routes/factory-events.ts"),
     route("factories/:id/events/:position", "routes/factory-event.ts"),
     route("apps", "routes/apps.tsx"),
