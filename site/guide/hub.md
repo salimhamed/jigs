@@ -225,7 +225,7 @@ Under **Factories**, any member chooses **Add factory** and names it. The hub
 shows a command with the factory's token, once:
 
 ```sh
-jigs hub connect https://hub.example.com <token>
+pnpm exec jigs hub connect https://hub.example.com <token>
 ```
 
 Run it in the factory's directory, after creating its `.env`:

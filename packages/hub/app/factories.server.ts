@@ -70,7 +70,7 @@ export async function readFactory(
 
 /** The command a factory's owner runs to connect it with its token. */
 export function connectCommand(context: AppLoadContext, token: string) {
-  return `jigs hub connect ${context.config.publicUrl.origin} ${token}`;
+  return `pnpm exec jigs hub connect ${context.config.publicUrl.origin} ${token}`;
 }
 
 const PAGE_SIZE = 50;
