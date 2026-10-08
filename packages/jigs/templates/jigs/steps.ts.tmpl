@@ -95,13 +95,15 @@ export async function executeJev(request: AskJevOptions<JevQuestions>) {
 }
 
 /**
- * Post a request for human input on the ticket. Use haltForHuman() to also wait for a reply.
+ * Ask in the ticket's Linear agent session for human input. Use haltForHuman() to also wait for a
+ * reply.
  *
  * @group Linear and human input
  */
 export async function postTicketHumanInputRequest(request: {
   installationName: string;
   issueId: string;
+  sessionId: string;
   halt: Halt;
 }) {
   "use step";
@@ -114,13 +116,14 @@ export async function postTicketHumanInputRequest(request: {
 }
 
 /**
- * Post a note on the ticket that asks for nothing and waits for nothing.
+ * Post a note in the ticket's Linear agent session that asks for nothing and waits for nothing.
  *
  * @group Linear and human input
  */
 export async function postTicketNote(request: {
   installationName: string;
   issueId: string;
+  sessionId: string;
   note: TicketNote;
 }) {
   "use step";
@@ -130,21 +133,6 @@ export async function postTicketNote(request: {
     { ...getWorkflowMetadata(), stepId: getStepMetadata().stepId },
     definition,
   );
-}
-
-/**
- * Look for a human reply since the last check, excluding every comment the run posted.
- *
- * @group Linear and human input
- */
-export async function checkForTicketHumanReply(request: {
-  installationName: string;
-  issueId: string;
-  since: string;
-  postedCommentIds: readonly string[];
-}) {
-  "use step";
-  return linearOperations.checkForTicketHumanReply(request);
 }
 
 /**
@@ -195,7 +183,21 @@ export async function resolveLinearIssue(request: { installationName: string; re
 }
 
 /**
- * Post a thought, action, response or error into a Linear agent session as the factory's app.
+ * Open a Linear agent session on an issue as the factory's app, linked to this run.
+ *
+ * @group Linear agent sessions
+ */
+export async function openLinearAgentSession(request: {
+  installationName: string;
+  issueId: string;
+}) {
+  "use step";
+  return linearOperations.openLinearAgentSession(request, getWorkflowMetadata());
+}
+
+/**
+ * Post a thought, action, elicitation, response or error into a Linear agent session as the
+ * factory's app.
  *
  * @group Linear agent sessions
  */

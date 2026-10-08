@@ -32,8 +32,7 @@ import {
   type WorkflowInputs,
 } from "@jigs-ai/jigs";
 import { z } from "zod";
-import { claimTicket, haltForHuman } from "#jigs/routines";
-import { resolveLinearIssue } from "#jigs/steps";
+import { acquireTicket, haltForHuman, noteOnTicket } from "#jigs/routines";
 
 const inputs = z.object({
   linearInstallation: installationNameSchema,
@@ -43,12 +42,7 @@ const inputs = z.object({
 export async function askScope(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
   const installationName = input.linearInstallation;
-  const issue = await resolveLinearIssue({ installationName, reference: input.ticket });
-  const claim = await claimTicket({
-    installationName,
-    issueId: issue.id,
-    identifier: issue.identifier,
-  });
+  const { claim } = await acquireTicket({ installationName, reference: input.ticket });
   const reply = await haltForHuman(claim, {
     headline: "A decision is needed before work continues.",
     where: "scope",
@@ -57,6 +51,12 @@ export async function askScope(input: WorkflowInputs<typeof inputs>) {
       options: [{ label: "Active drafts only" }, { label: "Include archived drafts" }],
     }],
     onReply: "continue",
+  });
+  await noteOnTicket(claim, {
+    headline: "Thanks, noted.",
+    notes: [reply.body],
+    closing: "",
+    endsRun: "success",
   });
   return reply.body;
 }

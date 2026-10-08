@@ -29,17 +29,16 @@ export interface LinearUser {
   name: string;
 }
 
+/** A Linear user with their profile link, which mentions them when written into Linear text. */
+export interface LinearProfile extends LinearUser {
+  url: string;
+}
+
 export interface LinearComment {
   id: string;
   body: string;
   createdAt: string;
   user: LinearUser | null;
-}
-
-/** A comment, with the Linear agent session it opened or replies in, if any. */
-export interface LinearThreadComment extends LinearComment {
-  agentSession: { id: string } | null;
-  parent: { agentSession: { id: string } | null } | null;
 }
 
 interface GraphqlBody<T> {
@@ -230,12 +229,12 @@ export function createLinearClient(deps: LinearClientDeps) {
   }
 
   /** The active Linear user with this email, or null when none has it. */
-  async function findUserByEmail(email: string): Promise<LinearUser | null> {
+  async function findUserByEmail(email: string): Promise<LinearProfile | null> {
     // Linear leaves deactivated users out unless includeDisabled is set, so one
     // who left the workspace reads as nobody.
-    const data = await linearGraphql<{ users: { nodes: LinearUser[] } }>(
+    const data = await linearGraphql<{ users: { nodes: LinearProfile[] } }>(
       `query UserByEmail($email: String!) {
-        users(filter: { email: { eqIgnoreCase: $email } }, first: 1) { nodes { id name } }
+        users(filter: { email: { eqIgnoreCase: $email } }, first: 1) { nodes { id name url } }
       }`,
       { email },
     );
@@ -280,14 +279,14 @@ export function createLinearClient(deps: LinearClientDeps) {
   }
 
   async function getIssueParticipants(issueId: string): Promise<{
-    creator: LinearUser | null;
-    assignee: LinearUser | null;
+    creator: LinearProfile | null;
+    assignee: LinearProfile | null;
   }> {
     const data = await linearGraphql<{
-      issue: { creator: LinearUser | null; assignee: LinearUser | null };
+      issue: { creator: LinearProfile | null; assignee: LinearProfile | null };
     }>(
       `query IssueParticipants($id: String!) {
-        issue(id: $id) { creator { id name } assignee { id name } }
+        issue(id: $id) { creator { id name url } assignee { id name url } }
       }`,
       { id: issueId },
     );
@@ -337,24 +336,6 @@ export function createLinearClient(deps: LinearClientDeps) {
       throw new JigsError(`Linear commentCreate failed for issue ${issueId}`);
     }
     return data.commentCreate.comment;
-  }
-
-  /**
-   * A comment by id, or null when none exists. Filters rather than fetching by id, so a missing
-   * comment is an empty answer and not an error.
-   *
-   * @group Resolve and read
-   */
-  async function findComment(id: string): Promise<{ id: string; createdAt: string } | null> {
-    const data = await linearGraphql<{
-      comments: { nodes: Array<{ id: string; createdAt: string }> };
-    }>(
-      `query FindComment($id: ID!) {
-        comments(filter: { id: { eq: $id } }, first: 1) { nodes { id createdAt } }
-      }`,
-      { id },
-    );
-    return data.comments.nodes[0] ?? null;
   }
 
   /** One comment by id: where a human replies to it, and what it says. Linear
@@ -457,30 +438,6 @@ export function createLinearClient(deps: LinearClientDeps) {
     };
   }
 
-  async function listCommentsSince(
-    issueId: string,
-    sinceIso: string,
-  ): Promise<LinearThreadComment[]> {
-    const data = await linearGraphql<{
-      issue: { comments: { nodes: LinearThreadComment[] } };
-    }>(
-      // Unpaginated `last: 50` is an accepted cap: wake re-checks only ever
-      // need the comments since the previous check.
-      `query IssueComments($id: String!) {
-        issue(id: $id) {
-          comments(last: 50) {
-            nodes {
-              id body createdAt user { id name }
-              agentSession { id } parent { agentSession { id } }
-            }
-          }
-        }
-      }`,
-      { id: issueId },
-    );
-    return data.issue.comments.nodes.filter((comment) => comment.createdAt > sinceIso);
-  }
-
   /** The project and labels an issue is filed under. */
   /** Null when the issue is gone or the app cannot see it. */
   async function fetchIssueFiling(issueId: string): Promise<LinearIssueFiling | null> {
@@ -513,11 +470,9 @@ export function createLinearClient(deps: LinearClientDeps) {
     getIssueParticipants,
     fetchIssueSnapshot,
     createComment,
-    findComment,
     getComment,
     createIssueInProject,
     findIssueInProject,
-    listCommentsSince,
   };
 }
 
@@ -541,9 +496,4 @@ export function derivedUuid(parts: readonly string[]): string {
   hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
   const id = hex.join("");
   return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
-}
-
-// Linear renders @-mentions in API-created comments as @[displayName](userId).
-export function mention(user: LinearUser): string {
-  return `@[${user.name}](${user.id})`;
 }

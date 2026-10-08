@@ -1,4 +1,3 @@
-import { createHook, type Hook } from "workflow";
 import { describeHookToken } from "../hook-tokens.ts";
 import { ticketToken } from "./ticket-token.ts";
 
@@ -41,7 +40,8 @@ export class ClaimConflictError extends Error {
 }
 
 /**
- * A ticket held exclusively by the current workflow run.
+ * A ticket held exclusively by the current workflow run, with the Linear agent session the run
+ * talks to people in.
  *
  * @group Linear tickets
  */
@@ -51,43 +51,8 @@ export interface TicketClaim {
   issueId: string;
   identifier: string;
   token: string;
-  hook: Hook<unknown>;
-  /**
-   * Every comment this run has posted on the ticket. A parked run skips these
-   * when it looks for a human's reply.
-   */
-  postedCommentIds: string[];
-}
-
-// Must be the workflow body's first await: getConflict() suspends to commit
-// the hook registration, so a duplicate run fails in seconds, before any paid
-// step. The hook is deliberately not `using`-scoped — it is held for the
-// run's whole life (the SDK auto-disposes it at terminal state) and doubles
-// as haltForHuman()'s wake channel.
-//
-// One hook, on the issue's UUID: an operator naming a run by its ticket
-// identifier is resolved through Linear by the run-ref resolver, so a second
-// hook keyed on the identifier would index nothing.
-/**
- * Claim a Linear ticket, in the Linear installation `installationName` names, for the lifetime of
- * the current workflow run. Only comments from that installation wake the claim.
- *
- * @group Linear tickets
- */
-export async function claimTicket({
-  installationName,
-  issueId,
-  identifier,
-}: {
-  installationName: string;
-  issueId: string;
-  identifier: string;
-}): Promise<TicketClaim> {
-  const token = ticketToken(installationName, issueId);
-  const hook = createHook<unknown>({ token });
-  const conflict = await hook.getConflict();
-  if (conflict !== null) {
-    throw new ClaimConflictError(token, conflict.runId);
-  }
-  return { installationName, issueId, identifier, token, hook, postedCommentIds: [] };
+  /** The Linear agent session this run asks its questions and posts its notes in. */
+  sessionId: string;
+  /** The messages in the session this run has already read. A later question skips them. */
+  consumedPromptIds: string[];
 }

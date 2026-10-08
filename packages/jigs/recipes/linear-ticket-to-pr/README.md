@@ -1,9 +1,17 @@
 # linear-ticket-to-pr
 
 This workflow takes a Linear ticket to a merged pull request. It claims the
-ticket, asks on it when the requirements are unclear, has one agent build the
-change and another review it, opens the pull request, and follows its review
-comments and CI with the same builder session until it merges.
+ticket, asks in the ticket's Linear agent session when the requirements are
+unclear, has one agent build the change and another review it, opens the pull
+request, and follows its review comments and CI with the same builder session
+until it merges.
+
+The run opens one Linear agent session on the ticket when it starts, and says
+everything there: its questions, its notes, and its last word, "Merged" with
+the pull request, or why it stopped. Answer a question by replying in the
+session. A message sent while the run is working waits for its next question;
+press Stop to end the run. Every note mentions the operator (or the ticket's
+creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and
@@ -13,7 +21,7 @@ following the pull request, runs in four jigs routines the workflow calls.
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, the ticket status it sets between phases, and every note it posts. |
 | `prompts.ts` | Every prompt the agents are sent. |
-| `review-ticket.ts` | The ticket review before any code: the reviewer restates the ticket as a brief, or asks on the ticket until it can. |
+| `review-ticket.ts` | The ticket review before any code: the reviewer restates the ticket as a brief, or asks in the ticket's session until it can. |
 
 ## What it needs
 
@@ -60,7 +68,7 @@ Every pull request title is a
 as one squashed commit named after the title, and release tooling and
 title-lint checks read that commit. The writer is told the rule in `prompts.ts`;
 a title that breaks it is sent back once with the problem, and a second bad
-title stops the run before anything is pushed, with a note on the ticket.
+title stops the run before anything is pushed, with a note in the ticket's session.
 
 To allow any title, delete the `check` passed to `describePullRequest` in
 `linear-ticket-to-pr.ts`, along with `titleProblems` and the title rule in the
@@ -102,14 +110,17 @@ Budget settings belong to this recipe and are fixed when the run starts.
 builder; it is not a lifetime limit on PR activity.
 
 A stop before the pull request opens, or the pull request closing unmerged,
-posts a ticket note saying what remains, sets `Todo`, and fails the run. To keep
+ends the ticket's session with a note saying what remains, sets `Todo`, and
+fails the run. A merge sets `Done` and ends the session with "Merged" and the
+pull request's link. Any other error ends the session with "The run failed",
+which points to the run's page for the error, leaves the ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
 hand; another run starts over on a new branch. Notes name the branch but never
 the local worktree path; `jigs status` shows the path.
 
 A pull request that needs a person, because the builder asked, its attempts ran
 out, or the merge was refused, does not stop the run. The workflow posts a
-ticket note saying what a person needs to do, leaves the ticket In Review, and
+note in the ticket's session saying what a person needs to do, leaves the ticket In Review, and
 keeps watching: the next change to the pull request picks the work back up.
 
 ## The agents
@@ -185,6 +196,7 @@ export async function deliverTicket(
       headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
+      endsRun: "failure",
     });
     await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
@@ -206,6 +218,12 @@ export async function deliverTicket(
   });
   if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
+  await noteOnTicket(claim, {
+    headline: `Merged ${pr.url}.`,
+    notes: [],
+    closing: "",
+    endsRun: "success",
+  });
   return { pr: pr.url };
 }
 ```

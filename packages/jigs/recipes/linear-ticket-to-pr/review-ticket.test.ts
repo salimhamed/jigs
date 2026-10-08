@@ -16,7 +16,8 @@ const claim = {
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   identifier: "AGE-313",
   token: "linear:ticket:linear-acme:68bc9696-35d5-442d-ab56-214c8cfefbec",
-  postedCommentIds: [] as string[],
+  sessionId: "session-1",
+  consumedPromptIds: [] as string[],
 } as TicketClaim;
 
 const snapshot: TicketSnapshot = {
@@ -37,7 +38,6 @@ const snapshot: TicketSnapshot = {
 };
 
 const reply: HumanReply = {
-  commentId: "c9",
   body: "cap comments at 100",
   author: { id: "u1", name: "salim" },
   createdAt: "2026-08-26T14:00:00Z",

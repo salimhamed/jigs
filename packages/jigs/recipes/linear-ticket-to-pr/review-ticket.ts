@@ -12,8 +12,8 @@ import { fetchTicketSnapshot } from "#jigs/steps";
 /**
  * What a ticket review hands the builder: the brief plus the snapshot it was written from. The
  * ticket wins wherever the two conflict, so the work is judged against the snapshot, never the
- * brief. `assumptions` is what the review decided for itself; it is posted on the ticket so a
- * person can still correct it.
+ * brief. `assumptions` is what the review decided for itself; it is posted in the ticket's session
+ * so a person can still correct it.
  */
 export type TicketHandoff = {
   brief: string;
@@ -21,7 +21,7 @@ export type TicketHandoff = {
   assumptions: string[];
 };
 
-/** Review a ticket until it is actionable, asking on the ticket when a decision is missing. */
+/** Review a ticket until it is actionable, asking in its session when a decision is missing. */
 export async function reviewTicket(options: {
   claim: TicketClaim;
   snapshot: TicketSnapshot;
@@ -55,7 +55,7 @@ export async function reviewTicket(options: {
       return { brief, snapshot, assumptions };
     }
 
-    // Only the questions reach the ticket; the brief the next round writes is what the builder reads.
+    // Only the questions reach the session; the brief the next round writes is what the builder reads.
     await haltForHuman(claim, {
       headline: `jigs paused work on **${snapshot.identifier}** and needs your answers before it writes any code.`,
       where: "ticket review",
@@ -63,7 +63,8 @@ export async function reviewTicket(options: {
       questions,
       onReply: "continue",
     });
-    // The reply lands on the ticket, so the next round reads it afresh.
+    // Linear stores the question and each reply as threaded comments on the
+    // ticket, so the next round reads them in a fresh snapshot.
     snapshot = await fetchTicketSnapshot({
       installationName: claim.installationName,
       issueId: snapshot.id,

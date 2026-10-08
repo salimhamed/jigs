@@ -15,7 +15,7 @@ vi.mock("../runtime/run-context.ts", () => ({ dashboardRunUrl }));
 
 const { listLinearAgentSessionPrompts, postLinearAgentActivity, setLinearAgentSessionUrls } =
   await import("./agent-sessions.ts");
-const { stepPostingId } = await import("./needs-human-comments.ts");
+const { stepPostingId } = await import("./agent-sessions.ts");
 const { onceActivityId } = await import("../../providers/linear-agent.ts");
 
 const metadata = { workflowRunId: "wrun_01M26", workflowName: "chat", stepId: "step_01" };

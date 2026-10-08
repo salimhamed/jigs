@@ -4,7 +4,6 @@
 # These addresses come from the factory's named workflow and step functions.
 # Renaming a factory file or function deliberately changes its address; merely
 # upgrading the jigs library must not. Review intended renames before recording.
-step//./jigs/steps//checkForTicketHumanReply
 step//./jigs/steps//commentOnPullRequest
 step//./jigs/steps//createPullRequest
 step//./jigs/steps//createRunDirectory
@@ -19,6 +18,7 @@ step//./jigs/steps//fetchTicketSnapshot
 step//./jigs/steps//listLinearAgentSessionPrompts
 step//./jigs/steps//markPullRequestReady
 step//./jigs/steps//mergePullRequest
+step//./jigs/steps//openLinearAgentSession
 step//./jigs/steps//postIncidentNote
 step//./jigs/steps//postLinearAgentActivity
 step//./jigs/steps//postSlackMessage

@@ -97,6 +97,28 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentActivities.nodes[0] ?? null;
   }
 
+  /**
+   * Open a session on an issue as the factory's app, and return its id. Linear keeps a session
+   * the app opened `pending` until it has links, so pass them here.
+   */
+  async function createSession(
+    issueId: string,
+    urls: ReadonlyArray<{ label: string; url: string }>,
+  ): Promise<string> {
+    const data = await graphql<{
+      agentSessionCreateOnIssue: { success: boolean; agentSession: { id: string } };
+    }>(
+      `mutation AgentSessionCreateOnIssue($input: AgentSessionCreateOnIssue!) {
+        agentSessionCreateOnIssue(input: $input) { success agentSession { id } }
+      }`,
+      { input: { issueId, externalUrls: urls.map(({ label, url }) => ({ label, url })) } },
+    );
+    if (!data.agentSessionCreateOnIssue.success) {
+      throw new JigsError(`Linear agentSessionCreateOnIssue failed for issue ${issueId}`);
+    }
+    return data.agentSessionCreateOnIssue.agentSession.id;
+  }
+
   /** Replace the links Linear shows on the session. */
   async function setExternalUrls(
     sessionId: string,
@@ -176,6 +198,7 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     postActivity,
     postActivityOnce,
     findActivity,
+    createSession,
     setExternalUrls,
     listPrompts,
     answeredSince,
