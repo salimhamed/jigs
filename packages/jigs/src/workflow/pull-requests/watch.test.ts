@@ -158,11 +158,30 @@ test("conflicts fail before fetching, and dispose the hook", async () => {
   expect(hook.disposed).toBe(1);
 });
 
-test("reader failures dispose the hook", async () => {
-  const watcher = watchPullRequest(pr, async () => {
+test("a failed read is tried again on the next wake", async () => {
+  const fetch = vi
+    .fn<() => Promise<PullRequestSnapshot>>()
+    .mockRejectedValueOnce(new Error("GitHub API 500"))
+    .mockResolvedValue(snapshot());
+  const next = watchPullRequest(pr, fetch).next();
+  await flush();
+  expect(hook.awaited).toBe(1);
+  hook.wake?.();
+  expect((await next).value).toEqual(snapshot());
+  expect(fetch).toHaveBeenCalledTimes(2);
+});
+
+test("twelve failed reads in a row fail the watch and dispose the hook", async () => {
+  const fetch = vi.fn(async () => {
     throw new Error("GitHub unavailable");
   });
-  await expect(watcher.next()).rejects.toThrow("GitHub unavailable");
+  const next = watchPullRequest(pr, fetch).next();
+  for (let wake = 0; wake < 11; wake += 1) {
+    await flush();
+    hook.wake?.();
+  }
+  await expect(next).rejects.toThrow("GitHub unavailable");
+  expect(fetch).toHaveBeenCalledTimes(12);
   expect(hook.disposed).toBe(1);
 });
 

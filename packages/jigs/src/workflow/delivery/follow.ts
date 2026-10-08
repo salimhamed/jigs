@@ -124,6 +124,9 @@ interface Following<W> {
  * 30 seconds apart. Returns outcome `merged`, or `closed` when it closes unmerged. Nothing
  * is pushed on the way out.
  *
+ * While it waits, a read of the pull request that fails is tried again on the next wake, so a
+ * GitHub outage does not end the run; 12 failed reads in a row do.
+ *
  * @group Pull request delivery
  */
 export async function followPullRequestToOutcome<W>(
