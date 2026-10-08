@@ -367,5 +367,11 @@ async function endUntakenStop(
     );
     await deps.cancelRun(runId);
   }
+  // A run that ended on its own during the grace period already posted its final message.
+  if (runs.size === 0) {
+    const last = await linear.lastAppActivity(session.sessionId);
+    if ((last?.type === "response" || last?.type === "error") && last.createdAt > stop.createdAt)
+      return;
+  }
   await postStopped(session, stop, deps);
 }

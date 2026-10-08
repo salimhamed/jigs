@@ -244,6 +244,18 @@ test("a stop to a run that is not listening cancels the run holding the session"
   expect([...posted.keys()]).toEqual([stoppedId(stop)]);
 });
 
+test("a stop to a run that ends on its own in the grace period posts no second final message", async () => {
+  holder = RUN;
+  const stop = stopEvent();
+  expect(await route(stop)).toBe("dropped");
+  holder = null;
+  last = { type: "response", createdAt: "2099-01-01T00:00:00.000Z" };
+  await fireNext(STOP_GRACE_MS);
+
+  expect(deps.cancelRun).not.toHaveBeenCalled();
+  expect(posted.size).toBe(0);
+});
+
 test("a reply a live turn takes stands even when no hook is held", async () => {
   liveTurn();
   expect(await route(prompted())).toBe("woken");
