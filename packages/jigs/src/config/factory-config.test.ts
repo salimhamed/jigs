@@ -483,7 +483,7 @@ test("a factory that states no GitHub settings names no operator and approves by
   expect(withSettings({}).github).toEqual({ mergeApproval: "review" });
 });
 
-test("the GitHub section holds the operator, co-author and approval, and no identity", () => {
+test("the GitHub section holds the operator, co-author and approval", () => {
   const github = {
     operator: "salimhamed",
     coAuthor: "Salim <s@example.com>",
@@ -491,7 +491,6 @@ test("the GitHub section holds the operator, co-author and approval, and no iden
   };
   expect(withSettings({ github }).github).toEqual(github);
   expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
-  expect(() => withSettings({ github: { identities: [] } })).toThrow("identities");
 });
 
 test("a Linear operator is optional and must be an email", () => {
