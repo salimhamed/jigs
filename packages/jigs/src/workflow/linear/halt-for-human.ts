@@ -10,7 +10,7 @@ import type { TicketClaim } from "./claim.ts";
 
 /**
  * What the question says, in the words a stranger to the repo reads.
- * `headline` is one plain sentence naming what jigs paused and why, `where`
+ * `headline` is one plain sentence naming what paused and why, `where`
  * names the routine it paused in so the footer can say so, `about` restates the
  * ticket itself, `notes` are plain bullet lines, and `onReply` decides what
  * the question asks the human to do: choose between the questions ("continue")
