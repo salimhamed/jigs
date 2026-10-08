@@ -30,13 +30,13 @@ jigs doctor           # the check catalog, in the service's own environment
 `jigs doctor` is an HTTP call into the service, not a local check — if the
 service is down it cannot answer, and starting the service is the first repair.
 Every failing check prints its own repair line; follow that rather than
-improvising. `jigs service start` returns once the World is up and every
-binding is cloned — a minute the first time, each phase printed as it goes —
-so "could not reach the jigs service" after a start that said "started" is a
-real failure; read `jigs service logs`. A start that fails because the process
-exited is what a binding whose clone fails does, and the error names the log.
-A start that gives up after five minutes leaves the process running, so check
-`jigs service status` before repairing anything.
+improvising. `jigs up` returns once the World is up and every binding is
+cloned — a minute the first time, each phase printed as it goes — so "could not
+reach the jigs service" after an `up` that succeeded is a real failure; read
+`jigs service logs`. A `FAIL ready` because the process exited is what a
+binding whose clone fails does, and the error names the log. One that gives up
+after five minutes leaves the process running, so check `jigs service status`
+before repairing anything.
 
 `jigs service status` is also where the dashboard URL comes from. Do not guess
 the port. A service that is down comes back with `jigs up`, which also
@@ -251,9 +251,10 @@ Confirm these actions when the current request has not already authorized them:
   remain for automatic release or offline maintenance.
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and everything it started are stopped.
-- `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
-  an upgrade while `jigs status` shows a pending or running run. `up` asks
-  before restarting over one; `--force` is the human's call.
+- `jigs service stop`, `jigs down`, `jigs up --restart-service` or an upgrade
+  while `jigs status` shows a pending or running run. `up` asks before a
+  restart cuts off an executing step, and without a terminal refuses until
+  those steps finish; `--force` is the human's call.
 - Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
   `jigs up`.

@@ -87,15 +87,13 @@ jigs keeps each binding's clone and worktrees under
 
 ## Service
 
-Use `jigs up` and `jigs down` for ordinary startup and shutdown. Direct service
-commands are useful for restarting after `.env` edits, inspecting logs or
-managing only the service.
+Use `jigs up` and `jigs down` to start and stop the factory, and
+`jigs up --restart-service` to restart after `.env` edits. The commands below
+inspect or stop only the service.
 
 | Command | What it does |
 | --- | --- |
-| `jigs service start` | Start the service from the current build and wait until it is ready. |
 | `jigs service stop` | Stop the service and everything it started, giving in-flight work up to 10 seconds to finish. Postgres keeps running. |
-| `jigs service restart` | Stop, then start. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |
 
@@ -105,12 +103,12 @@ The service hosts its own dashboard. Do not run the Workflow SDK's
 
 ### Stopping the service
 
-`jigs service stop`, `jigs service restart`, `jigs down` and a restart inside
-`jigs up` all stop the service the same way, on macOS and Linux. They stop the
-service and every process it started, such as running agents, their commands
-and anything those commands started. Each gets a termination signal and up to
-10 seconds to exit; whatever is still running after that is killed. An agent's
-step that was cut off runs again after the next start.
+`jigs service stop`, `jigs down` and a restart inside `jigs up` all stop the
+service the same way, on macOS and Linux. They stop the service and every
+process it started, such as running agents, their commands and anything those
+commands started. Each gets a termination signal and up to 10 seconds to exit;
+whatever is still running after that is killed. An agent's step that was cut
+off runs again after the next start.
 
 If a process survives, the command fails and lists its process ID and command
 so you can end it yourself.
@@ -218,9 +216,11 @@ Use `jigs up` after changing workflow code or configuration:
   workflow or step the new build no longer has, and names each run and what it
   is missing; see [troubleshooting](/guide/troubleshooting). `--force` does not
   skip this.
-- Parked and active runs are listed before a restart and require confirmation.
+- Runs with a step executing are listed before a restart and require
+  confirmation, because the restart cuts that step off and it runs again. Runs
+  parked on a hook, sleep or wake are not asked about: they lose nothing.
   `--force` skips the question but still prints the list; without a terminal,
-  the command otherwise refuses.
+  the command refuses, so retry when those steps finish.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs

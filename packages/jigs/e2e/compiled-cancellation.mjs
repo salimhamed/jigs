@@ -310,6 +310,10 @@ export async function runCompiledCancellationMatrix({
   let serviceRunning = false;
   const fixtureRoot = path.join(scratch, "compiled-cancel");
   const dataHome = path.join(fixtureRoot, "data");
+  const noDocker = path.join(fixtureRoot, "no-docker");
+  mkdirSync(noDocker, { recursive: true });
+  writeFileSync(path.join(noDocker, "docker"), "#!/bin/sh\nexit 0\n");
+  chmodSync(path.join(noDocker, "docker"), 0o755);
   const env = runtimeEnv(testUrl.toString(), dataHome, ports);
   let serviceEnv = env;
 
@@ -332,7 +336,7 @@ export async function runCompiledCancellationMatrix({
     });
     db = new Pool({ connectionString: testUrl.toString(), max: 2 });
 
-    service("start");
+    service(["up", "--no-doctor"]);
     serviceRunning = true;
 
     const delayed = await reachScheduledRetry("delayed", fixtureRoot, ports.service, db);
@@ -351,10 +355,10 @@ export async function runCompiledCancellationMatrix({
 
     // The delayed delivery survives a clean process boundary. Waking it after
     // restart drives the generated handler for an already-cancelled run.
-    service("stop");
+    service(["service", "stop"]);
     serviceRunning = false;
     await wakeRun(db, delayed.runId);
-    service("start");
+    service(["up", "--no-doctor"]);
     serviceRunning = true;
     await until(
       async () => (await jobsFor(db, delayed.runId)).length === 0,
@@ -584,7 +588,7 @@ await (await getWorld()).close?.();`,
     await proveStepErrorAfterCancel("ordinary");
     await proveStepErrorAfterCancel("fatal");
 
-    service("stop");
+    service(["service", "stop"]);
     serviceRunning = false;
     assertNoRecordedProcess(dataHome);
 
@@ -617,7 +621,7 @@ await (await getWorld()).close?.();`,
   } finally {
     if (serviceRunning) {
       try {
-        service("stop");
+        service(["service", "stop"]);
       } catch {
         killRecordedProcesses(dataHome);
       }
@@ -700,7 +704,7 @@ await (await getWorld()).close?.();`,
       OPENROUTER_API_KEY: "e2e-never-sent",
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service("start");
+    service(["up", "--no-doctor"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
@@ -774,7 +778,7 @@ await (await getWorld()).close?.();`,
     );
     await Promise.all([cancelled.completion, survivor.completion]);
 
-    service("stop");
+    service(["service", "stop"]);
     serviceRunning = false;
     serviceEnv = env;
     console.log(
@@ -797,7 +801,7 @@ await (await getWorld()).close?.();`,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service("start");
+    service(["up", "--no-doctor"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
@@ -864,7 +868,7 @@ await (await getWorld()).close?.();`,
     );
     await Promise.all([cancelled.completion, survivor.completion]);
 
-    service("stop");
+    service(["service", "stop"]);
     serviceRunning = false;
     serviceEnv = env;
     console.log(
@@ -889,7 +893,7 @@ await (await getWorld()).close?.();`,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service("start");
+    service(["up", "--no-doctor"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
@@ -962,7 +966,7 @@ await (await getWorld()).close?.();`,
     );
     await Promise.all([cancelled.completion, survivor.completion]);
 
-    service("stop");
+    service(["service", "stop"]);
     serviceRunning = false;
     serviceEnv = env;
     console.log(
@@ -970,13 +974,13 @@ await (await getWorld()).close?.();`,
     );
   }
 
-  function service(action) {
-    const result = runCli(["service", action], serviceEnv, {
-      allowFailure: true,
-      timeout: SERVICE_TIMEOUT_MS,
-    });
+  // The World is this test's database, so the factory's compose Postgres is
+  // never started: `jigs up` gets a docker that does nothing.
+  function service(args) {
+    const commandEnv = { ...serviceEnv, PATH: `${noDocker}${path.delimiter}${serviceEnv.PATH}` };
+    const result = runCli(args, commandEnv, { allowFailure: true, timeout: SERVICE_TIMEOUT_MS });
     if (result.status !== 0) {
-      throw new Error(`jigs service ${action} failed\n${result.output}\n${serviceLogs(dataHome)}`);
+      throw new Error(`jigs ${args.join(" ")} failed\n${result.output}\n${serviceLogs(dataHome)}`);
     }
   }
 

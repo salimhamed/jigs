@@ -277,7 +277,7 @@ export interface WorldStartGateDeps {
 // Like the other gates: a World that cannot start — a WORKFLOW_TARGET_WORLD
 // that does not resolve, a migration missing, a database gone since the
 // registry gate — would otherwise be a console.error from nitro and a process
-// that stays up with `ready` never true, so `jigs service start` waits out its
+// that stays up with `ready` never true, so `jigs up` waits out its
 // whole budget on it.
 /** Start and take ownership of the Workflow World, exiting cleanly on failure. */
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {

@@ -47,7 +47,7 @@ test("selection is the service, its descendants in any group, and orphans still 
 });
 
 test("stopping the service from inside it is refused", () => {
-  const ps = `${PS}  750   710   760 S    node /usr/bin/jigs service restart\n`;
+  const ps = `${PS}  750   710   760 S    node /usr/bin/jigs up\n`;
   expect(() => selectServiceProcesses(parsePs(ps), service, { self: 750 })).toThrow(
     "refusing to stop the service from inside it",
   );

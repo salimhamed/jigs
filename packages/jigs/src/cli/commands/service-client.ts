@@ -39,7 +39,7 @@ export async function serviceFetch(
   } catch {
     throw new JigsError(
       `could not reach the jigs service at ${base}`,
-      "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs service start`",
+      "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs up`",
     );
   }
   const version = res.headers.get(VERSION_HEADER);

@@ -72,19 +72,6 @@ function reportStarted(out: (line: string) => void, { pid, service }: Launched):
   }
 }
 
-/** Starts the service and waits until it reports itself ready. */
-export async function startService(deps: ServiceLifecycleDeps): Promise<void> {
-  const launched = await launch(deps);
-  if (launched === undefined) return;
-  await awaitReady(deps, launched.service.slug, launched.service.serviceUrl, launched.pid);
-  reportStarted(deps.out, launched);
-}
-
-export async function restartService(deps: ServiceLifecycleDeps): Promise<void> {
-  await stopService(deps);
-  await startService(deps);
-}
-
 export type ServiceOutcome = "started" | "restarted" | "unchanged";
 
 /**
@@ -116,16 +103,13 @@ export async function ensureServiceCurrent(
   return outcome;
 }
 
-/**
- * Waits for the recorded service to report itself ready. What `start` does
- * before it says "started", for a caller that spawned without waiting.
- */
+/** Waits for the recorded service to report itself ready. */
 export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
   const { slug, serviceUrl } = resolveService(factoryContextAt(deps.cwd));
   const recorded = readServiceRecord(slug).process;
   if (recorded === undefined || recorded.exited) {
-    throw new JigsError(`not running: ${slug}`, "start it: `pnpm exec jigs service start`");
+    throw new JigsError(`not running: ${slug}`, "start it: `pnpm exec jigs up`");
   }
   const pid = recorded.processGroup;
   if (!processes.signal(pid, 0)) throw failedBoot(slug, pid, out);
@@ -269,7 +253,7 @@ export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: numbe
   if (!existsSync(file)) {
     throw new JigsError(
       `no service log at ${file}`,
-      "this factory's service has not run yet, so start it: `pnpm exec jigs service start`",
+      "this factory's service has not run yet, so start it: `pnpm exec jigs up`",
     );
   }
   const tail = tailLines(file, options.lines ?? LOG_LINES);

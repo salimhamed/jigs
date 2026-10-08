@@ -65,7 +65,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
 
   // Liveness, plus how far the boot has got; dependency verification is
   // preflight's job. Nitro serves this route before the plugins have run, so
-  // `ready` — not the 200 — is what `jigs service start` waits on. With a
+  // `ready` — not the 200 — is what `jigs up` waits on. With a
   // service per factory repo, `factoryRoot` is the only thing that says which
   // factory answers here, and `pid` which process.
   app.get("/health", (_request, response) =>

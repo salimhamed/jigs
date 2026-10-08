@@ -177,13 +177,14 @@ test("a changed bundle restarts the service; --restart-service forces one", asyn
   expect(io.procs.spawns).toHaveLength(3);
 });
 
-test("a restart over in-flight runs asks first, refuses without a TTY, and stays owed", async () => {
+test("a restart over an executing step asks first, refuses without a TTY, and stays owed", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const root = factory({ port: await fakeService(io.procs) });
   await up(root, io);
   io.exec.bundle = "bundle v2";
   const runsInFlight = async () => [
-    { runId: "wrun_01", workflow: "example", status: "running", steps: [] },
+    { runId: "wrun_01", workflow: "example", steps: [], executing: true },
+    { runId: "wrun_02", workflow: "parked", steps: [], executing: false },
   ];
 
   lines = [];
@@ -192,6 +193,7 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   expect(statuses(noTty).at(-1)).toBe("service:failed");
   expect(noTty.steps.at(-1)?.repair).toContain("--force");
   expect(lines.join("\n")).toContain("wrun_01");
+  expect(lines.join("\n")).not.toContain("wrun_02");
   expect(io.procs.spawns).toHaveLength(1);
 
   // The refused restart rebuilt the bundle on disk; what the service runs is
@@ -204,7 +206,7 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   const confirm = vi.fn(async (_question: string) => true);
   const agreed = await up(root, io, { runsInFlight, confirm });
   expect(agreed.service).toBe("restarted");
-  expect(confirm.mock.calls[0]?.[0]).toContain("1 in-flight run(s)");
+  expect(confirm.mock.calls[0]?.[0]).toContain("1 run(s) with a step executing");
   expect(io.procs.spawns).toHaveLength(2);
 
   io.exec.bundle = "bundle v3";
@@ -212,7 +214,22 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   const forced = await up(root, io, { runsInFlight }, { force: true });
   expect(forced.service).toBe("restarted");
   expect(io.procs.spawns).toHaveLength(3);
-  expect(lines.join("\n")).toMatch(/warning: 1 run\(s\) parked or active.*\n.*wrun_01/);
+  expect(lines.join("\n")).toMatch(/warning: 1 run\(s\) have a step executing.*\n.*wrun_01/);
+});
+
+test("parked runs restart without asking", async () => {
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const root = factory({ port: await fakeService(io.procs) });
+  await up(root, io);
+  io.exec.bundle = "bundle v2";
+  const runsInFlight = async () => [
+    { runId: "wrun_01", workflow: "example", steps: [], executing: false },
+  ];
+
+  lines = [];
+  const result = await up(root, io, { runsInFlight });
+  expect(result.service).toBe("restarted");
+  expect(lines.join("\n")).not.toContain("warning");
 });
 
 test("runs needing a workflow or step the new build lacks stop the service step and are named", async () => {
@@ -225,8 +242,8 @@ test("runs needing a workflow or step the new build lacks stop the service step 
     {
       runId: "wrun_01",
       workflow: "workflow//./workflows/gone//gone",
-      status: "running",
       steps: ["step//./.jigs/steps//gone", "step//@workflow/core/runtime/run@5.1.0//Run#cancel"],
+      executing: false,
     },
   ]);
   const result = await up(root, io, { runsInFlight }, { force: true });

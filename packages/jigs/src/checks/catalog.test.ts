@@ -105,7 +105,7 @@ test("formatFailures indents every repair line under its failure and skips the p
         label: "check C",
         ok: false,
         reason: "worse",
-        repair: "set C in .env\nthen: `pnpm exec jigs service restart`",
+        repair: "set C in .env\nthen: `pnpm exec jigs up --restart-service`",
       },
     ],
   });
@@ -115,7 +115,7 @@ test("formatFailures indents every repair line under its failure and skips the p
       "  → fix A",
       "check C: worse",
       "  → set C in .env",
-      "    then: `pnpm exec jigs service restart`",
+      "    then: `pnpm exec jigs up --restart-service`",
     ].join("\n"),
   );
 });

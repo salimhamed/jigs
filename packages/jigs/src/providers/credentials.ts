@@ -7,7 +7,7 @@ import { JigsError } from "../errors.ts";
 // The service belongs to a factory repo, so its environment file is that
 // repo's own .env and the restart is the CLI verb that supervises it.
 export const SERVICE_ENV_FILE = "the factory repo's .env";
-export const RESTART_SERVICE = "pnpm exec jigs service restart";
+export const RESTART_SERVICE = "pnpm exec jigs up --restart-service";
 
 export type EnvLookup = (name: string) => string | undefined;
 

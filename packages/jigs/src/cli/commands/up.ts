@@ -6,7 +6,7 @@ import { JigsError } from "../../errors.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
-import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
+import { columns, detail, displayPath, hint, section } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
@@ -120,9 +120,8 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       }),
     );
 
-    // The spawn and the wait are two steps here, so each gets its own line
-    // and its own failure; the wait itself is the one `jigs service start`
-    // does.
+    // The spawn and the wait are two steps, so each gets its own line and
+    // its own failure.
     result.service = await runner.run("service", async (note) => {
       const inFlight = await (deps.runsInFlight ?? runsInFlight)(worldUrl);
       refuseStrandedRuns(inFlight, factoryRoot, deps.out);
@@ -287,8 +286,8 @@ function publishedPostgresPorts(factoryRoot: string): string {
 export interface InFlightRun {
   runId: string;
   workflow: string;
-  status: string;
   steps: string[];
+  executing: boolean;
 }
 
 // Read from the World, not the service: the service may be stopped, or on
@@ -301,11 +300,12 @@ async function runsInFlight(worldUrl: string): Promise<InFlightRun[]> {
     const { rows } = await client.query<{
       id: string;
       name: string;
-      status: string;
       steps: string[];
+      executing: boolean;
     }>(
-      `select r.id, r.name, r.status,
-         array_remove(array_agg(distinct s.step_name), null) as steps
+      `select r.id, r.name,
+         array_remove(array_agg(distinct s.step_name), null) as steps,
+         coalesce(bool_or(s.status = 'running'), false) as executing
        from "workflow"."workflow_runs" r
        left join "workflow"."workflow_steps" s on s.run_id = r.id
        where r.status in ('pending', 'running')
@@ -315,8 +315,8 @@ async function runsInFlight(worldUrl: string): Promise<InFlightRun[]> {
     return rows.map((row) => ({
       runId: row.id,
       workflow: row.name,
-      status: row.status,
       steps: row.steps,
+      executing: row.executing,
     }));
   } finally {
     await client.end();
@@ -356,32 +356,33 @@ function refuseStrandedRuns(
   );
 }
 
+// A parked run loses nothing to a restart; an executing step is cut off and
+// runs again from its start.
 async function confirmRestart(
   inFlight: InFlightRun[],
   service: ResolvedService,
   deps: UpDeps,
   options: UpOptions,
 ): Promise<void> {
-  if (inFlight.length === 0) return;
-  // Warned even under --force: a restart cuts off active steps.
-  deps.out(
-    `  warning: ${inFlight.length} run(s) parked or active; a restart cuts off active steps, and parked runs resume on the new bundle:`,
-  );
-  for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
+  const busy = inFlight.filter((run) => run.executing);
+  if (busy.length === 0) return;
+  // Warned even under --force: the restart cuts their steps off.
+  deps.out(`  warning: ${busy.length} run(s) have a step executing, which a restart cuts off:`);
+  for (const line of columns(busy.map((run) => [run.runId, run.workflow]))) {
     deps.out(`    ${line}`);
   }
-  const runs = `${inFlight.length} in-flight run(s)`;
+  const runs = `${busy.length} run(s) with a step executing`;
   if (options.force === true) return;
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${runs} without confirmation`,
-      "restart anyway: `pnpm exec jigs up --force`\nor cancel each run first: `pnpm exec jigs cancel <run-id>`",
+      "retry when their steps finish: `pnpm exec jigs up`\nor cut that work off: `pnpm exec jigs up --force`",
     );
   }
   if (!(await deps.confirm(`restart ${service.slug} over ${runs}?`))) {
     throw new JigsError(
       "restart declined, so the service still runs the previous bundle",
-      "when the runs finish, run: `pnpm exec jigs up`",
+      "when their steps finish, run: `pnpm exec jigs up`",
     );
   }
 }

@@ -236,7 +236,7 @@ test("health names the factory and the process that answer here, and the injecte
   expect(await res.json()).toMatchObject({
     ok: true,
     // No startService has run here, so the boot has not begun: live,
-    // but not what `jigs service start` waits for.
+    // but not what `jigs up` waits for.
     ready: false,
     phase: "starting",
     factoryRoot: "/factories/acme",

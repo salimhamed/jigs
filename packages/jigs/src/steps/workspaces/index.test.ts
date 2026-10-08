@@ -157,7 +157,7 @@ test("a binding with no clone is refused, naming the restart that makes one", as
     (err: unknown) => err,
   );
   expect(String(failure)).toContain(`binding api has no clone at ${repoDir}`);
-  expect((failure as { hint?: string }).hint).toContain("jigs service restart");
+  expect((failure as { hint?: string }).hint).toContain("jigs up --restart-service");
   expect(memoryRows).toEqual([]);
 });
 
