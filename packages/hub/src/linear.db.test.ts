@@ -441,7 +441,7 @@ dbTest("leaves a session the app opened itself unacknowledged, and sends it on",
   const workspace = newWorkspace();
   await connect(linear.app, workspace);
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, linear.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, linear.app.id);
   const before = activities.length;
   const created = sessionCreated(workspace, crypto.randomUUID());
   const own = { ...created, agentSession: { ...created.agentSession, creator: null } };
