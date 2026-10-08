@@ -6,6 +6,7 @@ import {
   type LinearAgentActivityContent,
   type LinearAgentPrompt,
   type LinearAgentTurnRequest,
+  linearListeningToken,
   linearSessionToken,
   stopAnswerKey,
 } from "./agent-session.ts";
@@ -89,11 +90,14 @@ export async function linearAgentConversation(
     sessionId: session.session,
   };
   const token = linearSessionToken(ref.installationName, ref.sessionId);
-  // Created once and held for the whole conversation: owning it makes this run the session's one
-  // conversation, and each wake makes it read the session again.
-  const hook = createHook<unknown>({ token });
-  const conflict = await hook.getConflict();
+  // Both held for the whole conversation: owning the session hook makes this run the session's
+  // one conversation, and each wake of the listening hook makes it read the session again.
+  const owned = createHook<unknown>({ token });
+  const conflict = await owned.getConflict();
   if (conflict !== null) throw new ClaimConflictError(token, conflict.runId);
+  const listening = createHook<unknown>({
+    token: linearListeningToken(ref.installationName, ref.sessionId),
+  });
 
   const linking = steps
     .setLinearAgentSessionUrls({ ...ref, urls: [] })
@@ -109,7 +113,7 @@ export async function linearAgentConversation(
   const assigned = `${issue.identifier} "${issue.title}" was assigned to you.`;
   let opening: ConversationMessage | undefined = {
     uuid: session.session,
-    author: session.creator?.name ?? "Someone",
+    author: session.creator.name,
     text:
       comment !== null
         ? (promptContext ?? comment)
@@ -141,7 +145,7 @@ export async function linearAgentConversation(
         // sleep's overloads take a duration string or milliseconds, but not their union.
         const wait = sleep as (duration: typeof idleFor) => Promise<void>;
         idle ??= wait(idleFor).then(() => "idle" as const);
-        if ((await Promise.race([hook.then(() => "woken" as const), idle])) === "idle") {
+        if ((await Promise.race([listening.then(() => "woken" as const), idle])) === "idle") {
           return { outcome: "idle", turns };
         }
         continue;
@@ -172,7 +176,8 @@ export async function linearAgentConversation(
     );
     throw error;
   } finally {
-    hook.dispose();
+    listening.dispose();
+    owned.dispose();
     await linking;
   }
 }

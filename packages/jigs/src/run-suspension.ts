@@ -10,7 +10,7 @@ import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-request
  */
 export interface RunSuspension {
   token: string;
-  kind: Exclude<HookKind, "ticket-claim"> | "external";
+  kind: Exclude<HookKind, "ticket-claim" | "linear-session"> | "external";
   /** What the run is waiting for, in the words an operator acts on. */
   reason: string;
   /** Where to go and act: the pull request, or the ticket comment that asked. */
@@ -34,8 +34,8 @@ export interface RunSuspension {
  * What a run holding this hook is waiting for, or null when the hook is no
  * park at all. The token is the whole answer: it names what the run is waiting
  * on, so nothing has to be written down beside it. The ticket claim and a
- * Linear agent session's hook are held for the run's whole life and so say
- * nothing about waiting; every other hook is
+ * Linear agent session's ownership hook are held for the run's whole life and
+ * so say nothing about waiting; every other hook is
  * something the run waits on, including a token jigs has never seen. `jigs status`,
  * `jigs watch` and `jigs cancel` all read this one function, or a run one calls
  * suspended is one another refuses to confirm.

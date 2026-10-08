@@ -47,8 +47,8 @@ export interface LinearAgentSessionInputs {
    * around the request, or null if Linear sent none.
    */
   promptContext: string | null;
-  /** The person who started the session, or null when an automation did. */
-  creator: { id: string; name: string; email: string } | null;
+  /** The person who started the session. */
+  creator: { id: string; name: string; email: string };
 }
 
 /**
@@ -70,7 +70,8 @@ export const linear = {
    * give each purpose its own Linear app, or split the issues between triggers
    * with `teams`, `projects` and `labels`. The hub's first reply appears even
    * when the filters skip a session and no run starts, so make the filters
-   * match what the app is for. Sessions not on an issue start no run.
+   * match what the app is for. Sessions not on an issue, and sessions the app
+   * opened itself, start no run.
    *
    * @example
    * ```ts

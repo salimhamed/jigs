@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { describeSuspension } from "./run-suspension.ts";
-import { linearSessionToken } from "./workflow/linear/agent-session.ts";
+import { linearListeningToken, linearSessionToken } from "./workflow/linear/agent-session.ts";
 import { needsHumanToken } from "./workflow/linear/halt-for-human.ts";
 import { ticketToken } from "./workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "./workflow/pull-requests/pull-request.ts";
@@ -9,7 +9,7 @@ import { slackThreadToken } from "./workflow/slack/thread-token.ts";
 // Read through the minters, never through a token spelled out here: a reason
 // derived from a prefix the minters no longer produce degrades to the generic
 // one, and a test carrying its own copy of the prefix would stay green.
-test("a ticket claim or a session hook is not a park, and every other hook explains itself", () => {
+test("a ticket claim or a session's ownership hook is not a park, and every other hook explains itself", () => {
   expect(describeSuspension(ticketToken("linear-acme", crypto.randomUUID()))).toBeNull();
   expect(describeSuspension(linearSessionToken("linear-acme", crypto.randomUUID()))).toBeNull();
   expect(
@@ -37,6 +37,11 @@ test("a ticket claim or a session hook is not a park, and every other hook expla
     token: "slack:thread:slack-acme:C0123ABCD:1790723244.335019",
     kind: "slack-thread",
     reason: "waiting for a reply in the Slack thread 1790723244.335019 in C0123ABCD",
+  });
+  expect(describeSuspension(linearListeningToken("linear-acme", "session-1"))).toEqual({
+    token: "linear:listening:linear-acme:session-1",
+    kind: "linear-listening",
+    reason: "waiting for a reply in Linear agent session session-1",
   });
   // A workflow of its own that parks on createHook({ token }) is parked too,
   // so parkedness can never depend on jigs recognizing the token.

@@ -326,7 +326,7 @@ test("a prompt in a Linear agent session wakes the run conversing in it, not the
     }),
   ).toEqual({ outcome: "woken" });
   expect(push).not.toHaveBeenCalled();
-  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:session:acme:s1", undefined);
+  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith("linear:listening:acme:s1", undefined);
 });
 
 test("a Linear agent session no trigger could read is a failure, logged", async () => {

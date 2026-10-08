@@ -48,7 +48,7 @@ const inputs = z.object({
   issue: z.object({ id: z.string(), identifier: z.string(), title: z.string(), url: z.string() }),
   comment: z.string().nullable(),
   promptContext: z.string().nullable(),
-  creator: z.object({ id: z.string(), name: z.string(), email: z.string() }).nullable(),
+  creator: z.object({ id: z.string(), name: z.string(), email: z.string() }),
 });
 const agents = { assistant: harnesses.claude({ model: "opus" }) };
 

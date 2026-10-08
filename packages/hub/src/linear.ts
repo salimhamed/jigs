@@ -179,7 +179,7 @@ export function createLinearRoutes(options: {
       action?: string;
       organizationId?: string;
       webhookTimestamp?: number;
-      agentSession?: { id?: string };
+      agentSession?: { id?: string; creator?: unknown };
     }>(body, response);
     if (!payload) return;
     if (
@@ -217,6 +217,8 @@ export function createLinearRoutes(options: {
       name === "AgentSessionEvent" &&
       payload.action === "created" &&
       sessionId &&
+      // A session with no creator is one the app opened itself, for a run already at work in it.
+      payload.agentSession?.creator &&
       appendedTo.length > 0
     ) {
       // Linear marks a session unresponsive unless an activity follows within ten

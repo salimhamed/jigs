@@ -31,6 +31,8 @@ const held = [
   // A halt marker from another run names no claim this run holds.
   { runId: "wrun_E", token: "jigs:needs-human:acme:abc:comment-2" },
   { runId: "wrun_F", token: "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719" },
+  { runId: "wrun_G", token: "linear:session:acme:session-1" },
+  { runId: "wrun_G", token: "linear:listening:acme:session-1" },
 ];
 
 function sweepDeps(overrides: WakeWaitingDeps = {}) {
@@ -59,21 +61,23 @@ test("wakes every waiting run, but only the claim of a run halted on a human", a
   clearWakes();
   const { deps, resumed, lines } = sweepDeps();
   expect(await wakeAllWaitingRuns(deps)).toEqual({
-    held: 4,
-    woken: 4,
+    held: 5,
+    woken: 5,
     busy: 0,
     gone: 0,
     failed: 0,
   });
   // wrun_C holds its claim but is not halted, so waking it would only queue a
-  // replay; the needs-human marker itself is never resumed.
+  // replay; the needs-human marker itself is never resumed. A Linear agent
+  // session is read through its listening hook, never its ownership hook.
   expect(resumed).toEqual([
     "github:pr:acme:acme/api#1",
     "github:pr:acme:acme/api#2",
     "linear:ticket:acme:def",
     "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
+    "linear:listening:acme:session-1",
   ]);
-  expect(lines).toEqual(["[hub] waiting runs: 4 held, 4 woken, 0 mid-turn, 0 gone, 0 failed"]);
+  expect(lines).toEqual(["[hub] waiting runs: 5 held, 5 woken, 0 mid-turn, 0 gone, 0 failed"]);
   // `jigs status <run-id>` reads this back only for the run that was actually woken.
   expect(lastWake("github:pr:acme:acme/api#1", "wrun_A")?.kind).toBe("hub fell behind");
   expect(lastWake("github:pr:acme:acme/api#1", "wrun_B")).toBeUndefined();
@@ -81,10 +85,11 @@ test("wakes every waiting run, but only the claim of a run halted on a human", a
 
 test("a run in the middle of a turn is skipped rather than queued behind itself", async () => {
   const { deps, resumed } = sweepDeps({ busyRuns: async () => ["wrun_A", "wrun_D"] });
-  expect(await wakeAllWaitingRuns(deps)).toMatchObject({ held: 4, woken: 2, busy: 2 });
+  expect(await wakeAllWaitingRuns(deps)).toMatchObject({ held: 5, woken: 3, busy: 2 });
   expect(resumed).toEqual([
     "github:pr:acme:acme/api#2",
     "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
+    "linear:listening:acme:session-1",
   ]);
 });
 

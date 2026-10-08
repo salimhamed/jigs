@@ -277,8 +277,7 @@ the app at work while the run starts. Each run gets:
 - `promptContext`: Linear's formatted context for the session, with the issue,
   its description and the comments around the request, or `null` if Linear
   sent none.
-- `creator`: the `id`, `name` and `email` of who started it, or `null` for an
-  automation.
+- `creator`: the `id`, `name` and `email` of who started it.
 
 `teams` takes team keys such as `ENG` or team ids, `projects` takes project
 ids or the id at the end of a project's URL, and `labels` takes label names.

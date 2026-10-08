@@ -1,11 +1,18 @@
-// A reply or a stop in a Linear agent session goes to the run conversing in it.
-// The session's token keys both that run's hook and its live turn.
+// A reply or a stop in a Linear agent session goes to the run that holds the
+// session: into its live turn, or through its listening hook while it reads
+// the session. The session's own token keys the live turn and finds the run.
 
+import { getHookByToken } from "workflow/api";
+import { HookNotFoundError } from "workflow/errors";
 import { z } from "zod";
 import { derivedUuid, linearFor } from "../providers/linear.ts";
 import { type LinearAgentApi, linearAgentFor, onceActivityId } from "../providers/linear-agent.ts";
 import { liveTurn } from "../steps/agents/shared/live-turns.ts";
-import { linearSessionToken, stopAnswerKey } from "../workflow/linear/agent-session.ts";
+import {
+  linearListeningToken,
+  linearSessionToken,
+  stopAnswerKey,
+} from "../workflow/linear/agent-session.ts";
 import { recordedOccurrences, withdrawOccurrence } from "./event-triggers/runner.ts";
 import type { Occurrence } from "./event-triggers/store.ts";
 import { cancelRun, runStatuses } from "./runs.ts";
@@ -33,12 +40,17 @@ const STOP_RETRY_MS = [5_000, 15_000];
 
 const STOPPED = "Stopped.";
 
+const WORKING =
+  "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.";
+
 /** What routing a session's prompts reaches. Tests replace it; the service uses the defaults. */
 export interface SessionPromptDeps {
   liveTurn: typeof liveTurn;
   wake: typeof wake;
   linear: (installationName: string) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince">;
   appName: (installationName: string) => Promise<string>;
+  /** The run holding this hook token, or null when none does. It may have ended since. */
+  holder: (token: string) => Promise<string | null>;
   recorded: typeof recordedOccurrences;
   withdraw: typeof withdrawOccurrence;
   runStatuses: typeof runStatuses;
@@ -51,6 +63,14 @@ export const sessionPromptDeps: SessionPromptDeps = {
   wake,
   linear: (installationName) => linearAgentFor(installationName),
   appName: async (installationName) => (await linearFor(installationName).appUser()).name,
+  holder: async (token) => {
+    try {
+      return (await getHookByToken(token)).runId;
+    } catch (error) {
+      if (HookNotFoundError.is(error)) return null;
+      throw error;
+    }
+  },
   recorded: recordedOccurrences,
   withdraw: withdrawOccurrence,
   runStatuses,
@@ -73,9 +93,10 @@ type SessionState = { state: "none" | "ended" } | { state: "open"; liveRuns: str
 const pendingStops = new Set<string>();
 
 /**
- * Hand a `prompted` agent session event to the run conversing in the session: into its live turn
- * when one runs in this process, and through its hook either way, so a parked run reads the
- * session again. A session whose runs have ended is told so, and a stop no run takes in time is
+ * Hand a `prompted` agent session event to the run that holds the session: into its live turn
+ * when one runs in this process, and through its listening hook, so a run reading the session
+ * reads it again. A run that holds the session but is not listening is working, and the person
+ * is told so. A session whose runs have ended is told so too, and a stop no run takes in time is
  * ended here.
  */
 export async function routeSessionPrompt(
@@ -104,31 +125,60 @@ export async function routeSessionPrompt(
       text: prompt.content.body ?? "",
     });
   // Woken even when the live turn took the message: one that fails drops the
-  // messages after it, and the wake makes the parked run read them again.
-  const woke = await deps.wake(token, "linear AgentSessionEvent");
+  // messages after it, and the wake makes the listening run read them again.
+  const woke = await deps.wake(
+    linearListeningToken(installationName, session.sessionId),
+    "linear AgentSessionEvent",
+  );
   const at = `${stop ? "stop" : "reply"} session=${session.sessionId} activity=${prompt.id}`;
   if (woke.outcome === "failed") {
     console.log(`[events] linear dropped reason=delivery-failed ${at}`);
     return "failed";
   }
-  const reached = live !== undefined || woke.outcome === "woken";
-  if (reached && !stop) {
+  if (live !== undefined || woke.outcome === "woken") {
     console.log(`[events] linear accepted ${at}`);
+    if (stop) awaitStop(session, prompt, deps);
     return "woken";
   }
-  let state: SessionState;
+  let holder: string | null;
+  let state: SessionState | undefined;
   try {
-    state = await sessionState(session, deps, { withdraw: stop });
+    holder = await liveHolder(token, deps);
+    if (holder === null) state = await sessionState(session, deps, { withdraw: stop });
   } catch (error) {
     console.log(`[events] linear dropped reason=session-lookup-failed ${at}: ${String(error)}`);
     return "failed";
   }
-  if (reached || state.state === "open") {
-    console.log(`[events] linear ${reached ? "accepted" : "dropped reason=run-not-parked"} ${at}`);
-    if (stop) awaitStop(session, prompt, deps);
-    return reached ? "woken" : "dropped";
+  if (holder !== null && stop) {
+    console.log(`[events] linear dropped reason=run-not-listening ${at} run=${holder}`);
+    awaitStop(session, prompt, deps);
+    return "dropped";
   }
-  if (state.state === "none") {
+  if (holder !== null) {
+    // The message stays in the session, and the run reads it when it next listens.
+    try {
+      await deps
+        .linear(installationName)
+        .postActivityOnce(
+          session.sessionId,
+          { type: "thought", body: WORKING },
+          derivedUuid(["linear-session-working", prompt.id]),
+        );
+    } catch (error) {
+      console.error(
+        `[linear] could not answer agent session ${session.sessionId}: ${String(error)}`,
+      );
+      return "failed";
+    }
+    console.log(`[events] linear accepted ${at} run=${holder} not listening`);
+    return "woken";
+  }
+  if (state?.state === "open") {
+    console.log(`[events] linear dropped reason=run-not-parked ${at}`);
+    if (stop) awaitStop(session, prompt, deps);
+    return "dropped";
+  }
+  if (state?.state === "none") {
     console.log(`[events] linear ignored reason=not-this-factorys-session ${at}`);
     return "ignored";
   }
@@ -149,6 +199,15 @@ export async function routeSessionPrompt(
   }
   return "dropped";
 }
+
+// A hook outlives its run for a while, so its holder counts only while the run is live.
+async function liveHolder(token: string, deps: SessionPromptDeps): Promise<string | null> {
+  const runId = await deps.holder(token);
+  if (runId === null) return null;
+  return isLive((await deps.runStatuses([runId])).get(runId)) ? runId : null;
+}
+
+const isLive = (status: string | undefined) => status === "pending" || status === "running";
 
 async function endedMessage(installationName: string, deps: SessionPromptDeps): Promise<string> {
   const app = await deps.appName(installationName).catch(() => null);
@@ -192,9 +251,7 @@ async function sessionState(
   }
   const runIds = rows.flatMap((row) => (row.runId === null ? [] : [row.runId]));
   const statuses = await deps.runStatuses(runIds);
-  const liveRuns = runIds.filter((runId) =>
-    ["pending", "running"].includes(statuses.get(runId) ?? ""),
-  );
+  const liveRuns = runIds.filter((runId) => isLive(statuses.get(runId)));
   return liveRuns.length > 0 || unstarted ? { state: "open", liveRuns } : { state: "ended" };
 }
 
@@ -204,9 +261,9 @@ const mayStillStart = (row: Occurrence) =>
   (row.state === "failed" && row.attemptedAt !== null && row.runId === null);
 
 // A run that takes the stop posts its own final activity. When none has after
-// the grace period, the service cancels every run of the session, since a
-// cancelled run runs no more code, and posts the final activity Linear waits
-// for to leave `stopping`.
+// the grace period, the service cancels the run holding the session and every
+// live run of it a trigger started, since a cancelled run runs no more code,
+// and posts the final activity Linear waits for to leave `stopping`.
 function awaitStop(
   session: { installationName: string; sessionId: string },
   stop: Prompt,
@@ -240,8 +297,14 @@ async function endUntakenStop(
 ): Promise<void> {
   const linear = deps.linear(session.installationName);
   if (await linear.answeredSince(session.sessionId, stop.createdAt)) return;
+  const holder = await liveHolder(
+    linearSessionToken(session.installationName, session.sessionId),
+    deps,
+  );
   const state = await sessionState(session, deps, { withdraw: true });
-  for (const runId of state.state === "open" ? state.liveRuns : []) {
+  const runs = new Set(holder === null ? [] : [holder]);
+  for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
+  for (const runId of runs) {
     console.log(
       `[linear] cancelling run ${runId}: it did not take the stop in session ${session.sessionId}`,
     );

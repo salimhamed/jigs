@@ -231,7 +231,11 @@ const sessionCreated = (workspace: Workspace, sessionId: string) => ({
   organizationId: workspace.id,
   oauthClientId: "client",
   appUserId: workspace.userId,
-  agentSession: { id: sessionId, issue: { id: "issue-1", identifier: "ENG-1" } },
+  agentSession: {
+    id: sessionId,
+    issue: { id: "issue-1", identifier: "ENG-1" },
+    creator: { id: "user-1", name: "Ada" },
+  },
   promptContext: '<issue identifier="ENG-1"></issue>',
   webhookId: "webhook-2",
   webhookTimestamp: Date.now(),
@@ -430,6 +434,21 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
     "AgentSessionEvent",
     "AgentSessionEvent",
   ]);
+});
+
+dbTest("leaves a session the app opened itself unacknowledged, and sends it on", async () => {
+  const linear = await newApp();
+  const workspace = newWorkspace();
+  await connect(linear.app, workspace);
+  const { factory } = await newFactory();
+  await setAssignments(db, organizationId, linear.app.id, [factory.id]);
+  const before = activities.length;
+  const created = sessionCreated(workspace, crypto.randomUUID());
+  const own = { ...created, agentSession: { ...created.agentSession, creator: null } };
+  expect(await deliver(linear, own)).toBe(200);
+  await new Promise((resolve) => setTimeout(resolve, 100));
+  expect(activities.length).toBe(before);
+  expect(await eventNames(factory.id)).toEqual(["AgentSessionEvent"]);
 });
 
 dbTest("leaves a new agent session to Linear when no factory hears of it", async () => {

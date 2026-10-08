@@ -1,6 +1,6 @@
 import { expect, test } from "vitest";
 import { describeHookToken, parseHookToken, wakeToken } from "./hook-tokens.ts";
-import { linearSessionToken } from "./linear/agent-session.ts";
+import { linearListeningToken, linearSessionToken } from "./linear/agent-session.ts";
 import { needsHumanToken } from "./linear/halt-for-human.ts";
 import { ticketToken } from "./linear/ticket-token.ts";
 import { pullRequestToken } from "./pull-requests/pull-request.ts";
@@ -17,6 +17,7 @@ const pr = pullRequestToken({
 });
 const thread = slackThreadToken("slack-acme", "C0123ABCD", "1790723244.335019");
 const session = linearSessionToken("linear-acme", "session-1");
+const listening = linearListeningToken("linear-acme", "session-1");
 
 test("every kind jigs mints parses back to its parts and provider", () => {
   expect(parseHookToken(claim)).toEqual({
@@ -43,6 +44,11 @@ test("every kind jigs mints parses back to its parts and provider", () => {
   expect(session).toBe("linear:session:linear-acme:session-1");
   expect(parseHookToken(session)).toEqual({
     kind: "linear-session",
+    provider: "linear",
+    session: { installationName: "linear-acme", sessionId: "session-1" },
+  });
+  expect(parseHookToken(listening)).toEqual({
+    kind: "linear-listening",
     provider: "linear",
     session: { installationName: "linear-acme", sessionId: "session-1" },
   });
@@ -105,7 +111,12 @@ test("every kind describes what it names and what a run holding it waits for", (
   expect(describeHookToken(session)).toEqual({
     kind: "linear-session",
     label: "Linear agent session session-1",
-    reason: "waiting for a reply in the Linear agent session",
+    reason: "holding Linear agent session session-1",
+  });
+  expect(describeHookToken(listening)).toEqual({
+    kind: "linear-listening",
+    label: "Linear agent session session-1",
+    reason: "waiting for a reply in Linear agent session session-1",
   });
   expect(wakeToken(session)).toBe(session);
 });
