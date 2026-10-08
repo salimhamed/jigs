@@ -16,13 +16,7 @@ import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
 import { showRuns } from "./commands/run-list.ts";
-import {
-  restartService,
-  serviceLogs,
-  serviceStatus,
-  startService,
-  stopService,
-} from "./commands/service.ts";
+import { serviceLogs, serviceStatus, stopService } from "./commands/service.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
@@ -78,9 +72,7 @@ Start and stop:
   down                      Stop the service and Postgres; data is kept
 
 Service process:
-  service start             Start the service from the existing build
   service stop              Stop the service; Postgres keeps running
-  service restart           Stop and start the service
   service status            Report whether the service is running
   service logs              Show recent service output
 
@@ -160,7 +152,7 @@ program
     "take this factory from any state to a running service (env, install, compose, bootstrap, build, start, doctor)",
   )
   .option("--restart-service", "restart the service even when the bundle is unchanged")
-  .option("--force", "restart over in-flight runs without asking")
+  .option("--force", "restart over executing steps without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
   .action(async (options: { restartService?: boolean; force?: boolean; doctor: boolean }) => {
     // Every step has already printed its own FAIL line and repair, so the
@@ -365,24 +357,10 @@ const service = program
   .description("supervise this factory's service process; Postgres is left running");
 
 service
-  .command("start")
-  .description("start this factory's service process in the background")
-  .action(async () => {
-    await startService({ cwd: process.cwd(), out });
-  });
-
-service
   .command("stop")
   .description("stop this factory's service process and everything it started, dashboard included")
   .action(async () => {
     await stopService({ cwd: process.cwd(), out });
-  });
-
-service
-  .command("restart")
-  .description("stop then start this factory's service process")
-  .action(async () => {
-    await restartService({ cwd: process.cwd(), out });
   });
 
 service

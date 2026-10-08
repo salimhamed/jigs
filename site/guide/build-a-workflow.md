@@ -420,4 +420,3 @@ ticket notes for stops and for a pull request that needs a person.
 A run parked in `followPullRequestToOutcome` replays the routines' steps when
 it wakes. A jigs release that changes those steps is a breaking release, and
 its notes say so: let parked runs finish, or cancel them, before upgrading.
-`jigs up` lists parked and active runs before it restarts the service.

@@ -109,7 +109,7 @@ is up.
 
 `jigs up` is also the command after every change to the factory's code.
 `--restart-service` forces a restart; `--force` skips the question about
-in-flight runs.
+runs with a step executing.
 
 Then:
 

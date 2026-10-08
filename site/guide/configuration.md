@@ -7,7 +7,7 @@ configuration file.
 | You changed | Run |
 | --- | --- |
 | Workflow code or `jigs.config.ts` | `pnpm exec jigs up` |
-| `.env` | `pnpm exec jigs service restart` |
+| `.env` | `pnpm exec jigs up --restart-service` |
 
 The service reads `.env` when it starts. Here is a complete `jigs.config.ts`
 for a factory with the generated `hello` workflow and an `app` binding. Replace

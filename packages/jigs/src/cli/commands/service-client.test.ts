@@ -65,7 +65,7 @@ test("an unreachable service names the url and the lifecycle verbs", async () =>
   );
   expect(failure?.message).toContain("http://svc.test:9100");
   expect(failure?.hint).toBe(
-    "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs service start`",
+    "check whether it is running: `pnpm exec jigs service status`\nstart it: `pnpm exec jigs up`",
   );
 });
 

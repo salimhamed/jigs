@@ -35,7 +35,7 @@ test("a declared secret that is not set fails with the .env repair", async () =>
       ok: false,
       reason: "SNOWFLAKE_TOKEN is not set in the service's environment",
       repair:
-        "set SNOWFLAKE_TOKEN in the factory repo's .env, then: `pnpm exec jigs service restart`",
+        "set SNOWFLAKE_TOKEN in the factory repo's .env, then: `pnpm exec jigs up --restart-service`",
     },
   ]);
 });

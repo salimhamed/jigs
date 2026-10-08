@@ -1219,7 +1219,6 @@ if (hub === undefined) {
     service: CANCEL_PORT,
     dashboard: CANCEL_DASHBOARD_PORT,
   });
-  build();
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,

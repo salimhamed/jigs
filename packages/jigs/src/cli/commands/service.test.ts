@@ -15,10 +15,8 @@ import { layoutProblems } from "../output-layout.ts";
 import {
   awaitServiceReady,
   ensureServiceCurrent,
-  restartService,
   serviceLogs,
   serviceStatus,
-  startService,
   stopService,
 } from "./service.ts";
 import {
@@ -162,6 +160,12 @@ test("resource maintenance exclusion closes the service restart race", async () 
     release();
   }
 });
+
+// What `jigs up` does for the service: spawn, then wait for ready.
+async function startService(d: ReturnType<typeof deps>): Promise<void> {
+  await ensureServiceCurrent(d, { beforeRestart: async () => {} });
+  await awaitServiceReady(d);
+}
 
 const failure = (run: Promise<void>) =>
   run.then(
@@ -380,15 +384,6 @@ test("start refuses when the factory has not built its service", async () => {
   expect(io.spawns).toHaveLength(0);
 });
 
-test("start on a live service does not spawn a second process", async () => {
-  const root = builtFactory();
-  const io = fake();
-  await startService(deps(root, io));
-  await startService(deps(root, io));
-  expect(io.spawns).toHaveLength(1);
-  expect(lines.at(-1)).toContain("already running");
-});
-
 test("start replaces a record whose process is gone", async () => {
   const root = builtFactory();
   recordService(factorySlug(root), 9);
@@ -400,7 +395,7 @@ test("start replaces a record whose process is gone", async () => {
 
 // A 200 from /health is not enough: nitro answers it before the plugins that
 // clone the bindings and start the World have run.
-test("start says started only once /health reports ready, printing the phases on the way", async () => {
+test("the wait lasts until /health reports ready, printing the phases on the way", async () => {
   const root = builtFactory();
   const io = fake([
     null,
@@ -414,13 +409,10 @@ test("start says started only once /health reports ready, printing the phases on
   await startService(deps(root, io));
 
   expect(io.probes).toEqual(Array(6).fill("http://localhost:9100/health"));
-  expect(lines).toEqual([
+  expect(lines.slice(lines.indexOf("booting: registry"))).toEqual([
     "booting: registry",
     "booting: cloning forge",
     "booting: world",
-    expect.stringContaining("started"),
-    "  dashboard  http://localhost:9200",
-    expect.stringContaining("  logs       "),
   ]);
 });
 
@@ -440,7 +432,11 @@ test("a process that dies while booting fails the start at once, printing its lo
 
   expect(err?.message).toContain("exited during boot");
   expect(err?.hint).toContain("jigs service logs");
-  expect(lines).toEqual(["booting: cloning forge", "cloning binding forge", "fatal: repo gone"]);
+  expect(lines.slice(lines.indexOf("booting: cloning forge"))).toEqual([
+    "booting: cloning forge",
+    "cloning binding forge",
+    "fatal: repo gone",
+  ]);
   expect(io.probes).toHaveLength(1);
   // Nothing is left to supervise.
   expect(recorded(root)?.exited).toBe(true);
@@ -534,23 +530,7 @@ test("awaitServiceReady without a record says the service is not running", async
   const root = builtFactory();
   const err = await failure(awaitServiceReady(deps(root, fake())));
   expect(err?.message).toContain("not running");
-  expect(err?.hint).toContain("jigs service start");
-});
-
-test("restart waits for the new process to be ready too", async () => {
-  const root = builtFactory();
-  const io = fake([READY, booting("world"), READY]);
-  await startService(deps(root, io));
-  exitsOnTerm(io);
-  lines = [];
-
-  await restartService(deps(root, io));
-
-  expect(io.spawns).toHaveLength(2);
-  expect(io.probes).toHaveLength(3);
-  expect(lines[0]).toContain("stopped");
-  expect(lines[1]).toBe("booting: world");
-  expect(lines[2]).toContain("started");
+  expect(err?.hint).toContain("jigs up");
 });
 
 test("stop terminates the recorded pid and clears the record", async () => {
@@ -831,7 +811,7 @@ test("status does not attribute an earlier run's signal to a later silent death"
   writeFileSync(log, "Received 'SIGHUP'; attempting global graceful shutdown...\n");
   io.alive.clear();
 
-  await restartService(d);
+  await startService(d);
   io.alive.clear();
   lines = [];
   serviceStatus({ ...d, now: () => new Date("2026-09-16T12:00:00Z") });
@@ -852,7 +832,7 @@ test("service logs print the tail of the process's own output", () => {
   expect(lines.at(-1)).toContain("tail -f");
 });
 
-test("service logs before a first start point at jigs service start", () => {
+test("service logs before a first start point at jigs up", () => {
   const root = builtFactory();
   const err = (() => {
     try {
@@ -863,7 +843,7 @@ test("service logs before a first start point at jigs service start", () => {
     return undefined;
   })();
   expect(err?.message).toMatch(/no service log at/);
-  expect(err?.hint).toContain("jigs service start");
+  expect(err?.hint).toContain("jigs up");
 });
 
 // Every test's output, passing or failing, keeps to the shared layout.
