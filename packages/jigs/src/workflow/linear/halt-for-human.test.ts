@@ -69,7 +69,7 @@ test("listens before asking, waits through empty wakes, then takes the reply and
   const reply = await haltForHuman(claim, HALT, deps);
 
   expect(reply).toEqual({
-    body: "left",
+    body: "Ada: left",
     author: { id: "u1", name: "Ada" },
     createdAt: "2026-10-07T10:01:00Z",
   });

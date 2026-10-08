@@ -62,9 +62,10 @@ export const postTicketHumanInputRequest = async (
  * reply.
  *
  * @remarks
- * Posts a thought, or, for a note that ends the run, the session's final response or error.
- * Mentions the same people as {@link postTicketHumanInputRequest}, with the note's `mention`
- * emails as the extras.
+ * Posts the note as a response, the activity whose mentions notify people. A note that ends the
+ * run is the session's final response, or its error for a failure; any other note is followed by
+ * a short thought, which keeps the session working so Stop still ends the run. Mentions the same
+ * people as {@link postTicketHumanInputRequest}, with the note's `mention` emails as the extras.
  *
  * @group Human interaction primitives
  */
@@ -78,12 +79,21 @@ export const postTicketNote = async (
     operator: definition.linear?.operator,
     mention: note.mention,
   });
-  const type =
-    note.endsRun === undefined ? "thought" : note.endsRun === "success" ? "response" : "error";
-  await linearAgentFor(installationName).postActivityOnce(
+  const linear = linearAgentFor(installationName);
+  const type = note.endsRun === "failure" ? "error" : "response";
+  await linear.postActivityOnce(
     sessionId,
     { type, body: render(note, participants) },
     stepPostingId(metadata, sessionId),
   );
+  if (note.endsRun === undefined) {
+    await linear.postActivityOnce(
+      sessionId,
+      { type: "thought", body: STILL_WORKING },
+      stepPostingId(metadata, `${sessionId}:working`),
+    );
+  }
   console.log(`[postTicketNote] posted ${type} session=${sessionId} issue=${issueId}`);
 };
+
+const STILL_WORKING = "Still working.";

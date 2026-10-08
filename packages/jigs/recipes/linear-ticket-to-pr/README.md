@@ -10,7 +10,8 @@ The run opens one Linear agent session on the ticket when it starts, and says
 everything there: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
 session. A message sent while the run is working waits for its next question;
-press Stop to end the run.
+press Stop to end the run. Every note mentions the operator (or the ticket's
+creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and
@@ -111,7 +112,8 @@ builder; it is not a lifetime limit on PR activity.
 A stop before the pull request opens, or the pull request closing unmerged,
 ends the ticket's session with a note saying what remains, sets `Todo`, and
 fails the run. A merge sets `Done` and ends the session with "Merged" and the
-pull request's link. To keep
+pull request's link. Any other error ends the session with "The run failed" and
+the error, leaves the ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
 hand; another run starts over on a new branch. Notes name the branch but never
 the local worktree path; `jigs status` shows the path.

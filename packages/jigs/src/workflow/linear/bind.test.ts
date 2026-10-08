@@ -64,7 +64,7 @@ test("custom steps receive only serializable halt data and no step-object receiv
     },
   });
   expect(await linear.haltForHuman(claim(), halt)).toEqual({
-    body: "continue",
+    body: "Human: continue",
     author: prompt.author,
     createdAt: prompt.createdAt,
   });

@@ -310,10 +310,9 @@ test("a question is an elicitation in the session, under an id derived from the 
 });
 
 test.each([
-  [undefined, "thought"],
   ["success", "response"],
   ["failure", "error"],
-] as const)("a note that ends the run %s is a %s", async (endsRun, type) => {
+] as const)("a note that ends the run as a %s is the session's final %s", async (endsRun, type) => {
   await postTicketNote(
     {
       installationName: "linear-acme",
@@ -329,6 +328,27 @@ test.each([
     { type, body: body() },
     stepPostingId(context, "session-1"),
   );
+});
+
+test("any other note is a response, so its mentions notify, then a thought keeps the session working", async () => {
+  await postTicketNote(
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      sessionId: "session-1",
+      note: { headline: "Done.", notes: [], closing: "" },
+    },
+    context,
+    definition,
+  );
+  expect(postActivityOnce.mock.calls).toEqual([
+    ["session-1", { type: "response", body: body() }, stepPostingId(context, "session-1")],
+    [
+      "session-1",
+      { type: "thought", body: "Still working." },
+      stepPostingId(context, "session-1:working"),
+    ],
+  ]);
 });
 
 const users: Record<string, { id: string; name: string; url: string }> = {

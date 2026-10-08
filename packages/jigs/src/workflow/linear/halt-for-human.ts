@@ -45,7 +45,7 @@ export type Halt = {
  *
  * @remarks
  * Every message sent since the run last read the session counts, including any sent before the
- * question. Several messages are joined oldest first, each after its author's name; `author` and
+ * question. `body` holds every message oldest first, each after its author's name; `author` and
  * `createdAt` are the newest message's.
  *
  * @group Human input
@@ -131,9 +131,6 @@ export async function haltForHuman(
 
 function joined(prompts: LinearAgentPrompt[]): HumanReply {
   const last = prompts[prompts.length - 1] as LinearAgentPrompt;
-  const body =
-    prompts.length === 1
-      ? last.body
-      : prompts.map((prompt) => `${prompt.author.name}: ${prompt.body}`).join("\n\n");
+  const body = prompts.map((prompt) => `${prompt.author.name}: ${prompt.body}`).join("\n\n");
   return { body, author: last.author, createdAt: last.createdAt };
 }

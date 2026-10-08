@@ -32,7 +32,7 @@ import {
   type WorkflowInputs,
 } from "@jigs-ai/jigs";
 import { z } from "zod";
-import { acquireTicket, haltForHuman } from "#jigs/routines";
+import { acquireTicket, haltForHuman, noteOnTicket } from "#jigs/routines";
 
 const inputs = z.object({
   linearInstallation: installationNameSchema,
@@ -51,6 +51,12 @@ export async function askScope(input: WorkflowInputs<typeof inputs>) {
       options: [{ label: "Active drafts only" }, { label: "Include archived drafts" }],
     }],
     onReply: "continue",
+  });
+  await noteOnTicket(claim, {
+    headline: "Thanks, noted.",
+    notes: [reply.body],
+    closing: "",
+    endsRun: "success",
   });
   return reply.body;
 }

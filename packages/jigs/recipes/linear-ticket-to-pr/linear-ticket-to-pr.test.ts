@@ -108,6 +108,12 @@ const merged = {
   closing: "",
   endsRun: "success",
 };
+const failed = (message: string) => ({
+  headline: `The run failed: ${message}`,
+  notes: [],
+  closing: "",
+  endsRun: "failure",
+});
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
 const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.calls[0]?.[2];
 
@@ -186,11 +192,11 @@ test("a second unconventional title stops the run before anything is pushed", as
   expect(statuses()).toEqual(["In Progress", "Todo"]);
 });
 
-test("any other describe failure fails the run without a ticket note", async () => {
+test("any other describe failure ends the session with the error and fails the run", async () => {
   vi.mocked(routines.describePullRequest).mockRejectedValueOnce(new Error("writer crashed"));
 
   await expect(run()).rejects.toThrow("writer crashed");
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([failed("writer crashed")]);
 });
 
 test("the describe prompt asks for a conventional-commit title", () => {
@@ -413,13 +419,26 @@ test("a pull request closed without merging gets a note on the ticket, sets Todo
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
 });
 
-test("any other failure leaves the ticket alone", async () => {
+test("any other failure leaves the ticket status alone and ends the session with the error", async () => {
   vi.mocked(routines.buildAndReview).mockRejectedValueOnce(new Error("boom"));
 
   await expect(run()).rejects.toThrow("boom");
 
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([failed("boom")]);
   expect(statuses()).toEqual(["In Progress"]);
+});
+
+test("a stop whose status change fails posts no second ending", async () => {
+  vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
+  vi.mocked(steps.setTicketStatus)
+    .mockResolvedValueOnce({} as Awaited<ReturnType<typeof steps.setTicketStatus>>)
+    .mockResolvedValueOnce({} as Awaited<ReturnType<typeof steps.setTicketStatus>>)
+    .mockRejectedValueOnce(new Error("no Todo state"));
+
+  await expect(run()).rejects.toThrow("no Todo state");
+
+  expect(posted().map((note) => note.endsRun)).toEqual(["failure"]);
+  expect(posted()[0]?.headline).toBe("jigs stopped pull request maintenance for ABC-123.");
 });
 
 test("the reviewer is told no pull request or CI exists yet and to stay off GitHub", () => {

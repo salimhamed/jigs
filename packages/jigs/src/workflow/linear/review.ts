@@ -41,7 +41,7 @@ export type TicketNote = {
   mention?: string[] | undefined;
   /**
    * Set on the run's last note: it ends the session, as a success or a
-   * failure. Without it the note shows as progress.
+   * failure. Without it the session keeps showing the run as working.
    */
   endsRun?: "success" | "failure" | undefined;
 };
