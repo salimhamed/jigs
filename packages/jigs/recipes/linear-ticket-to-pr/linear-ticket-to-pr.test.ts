@@ -210,7 +210,7 @@ test("a second unconventional title stops the run before anything is pushed", as
         "Stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
       notes: [
         "Proposed titles: Add a flag, then Adds a flag",
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing:
         "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
@@ -311,7 +311,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
       notes: [
         "The builder needs a person: Please inspect the conflict.",
         `Pull request: ${pr.url}`,
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing:
         "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. The pull request is still being watched: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
@@ -406,7 +406,7 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
       notes: [
         "Broken",
         "Could not push the branch; the service log has the push error.",
-        "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
+        "The work is on branch `acme/abc-123`; a local copy is kept on the factory's machine.",
       ],
       closing: expect.stringContaining("Another run starts over on a new branch"),
       run: "ended",

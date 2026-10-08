@@ -238,9 +238,9 @@ const titleProblems = (title: string) =>
       ];
 
 // Notes name the branch, never the local worktree path: they are posted where
-// anyone on the ticket can read them, and `jigs status` shows the path.
+// anyone on the ticket can read them, and the operator can look the path up.
 const workLocation = (worktree: Worktree) =>
-  `The work is on branch \`${worktree.branch}\`, in the run's local worktree, which \`jigs status\` lists.`;
+  `The work is on branch \`${worktree.branch}\`; a local copy is kept on the factory's machine.`;
 
 function stoppedNote(
   key: string,
@@ -251,7 +251,7 @@ function stoppedNote(
   const why = {
     "rounds-exhausted": stopped.findings,
     uncommitted: [
-      "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it).",
+      "The builder left uncommitted changes in the local copy kept on the factory's machine.",
     ],
     "no-commits": [`The builder committed nothing new on branch \`${worktree.branch}\`.`],
   }[stopped.reason];
