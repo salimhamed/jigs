@@ -18,6 +18,11 @@ import type { Occurrence } from "./event-triggers/store.ts";
 import { cancelRun, runStatuses } from "./runs.ts";
 import { wake } from "./wake.ts";
 
+const headSchema = z.object({
+  type: z.literal("AgentSessionEvent"),
+  action: z.literal("prompted"),
+});
+
 const promptedSchema = z.object({
   // No creator: the app opened the session itself, for a ticket run.
   agentSession: z.object({ id: z.string().min(1), creatorId: z.string().nullish() }),
@@ -86,7 +91,7 @@ export const sessionPromptDeps: SessionPromptDeps = {
   },
 };
 
-/** What routing a prompt did, in the outcomes provider event routing reports. */
+/** What routing a prompt did, in the outcomes provider event routing reports. Throws when it could not tell. */
 export type PromptRoute = "ignored" | "woken" | "dropped" | "failed";
 
 /**
@@ -104,13 +109,17 @@ const pendingStops = new Set<string>();
  * reads it again. A run that holds the session but is not listening is working or waiting on
  * people, and the person is told so. A session whose runs have ended is told so too, including
  * a session the app opened for a ticket run that has ended, and a stop no run takes in time is
- * ended here.
+ * ended here. Any other event is ignored.
  */
 export async function routeSessionPrompt(
-  installationName: string,
-  payload: unknown,
+  {
+    provider,
+    installationName,
+    payload,
+  }: { provider: string; installationName: string; payload: unknown },
   deps: SessionPromptDeps = sessionPromptDeps,
 ): Promise<PromptRoute> {
+  if (provider !== "linear" || !headSchema.safeParse(payload).success) return "ignored";
   const parsed = promptedSchema.safeParse(payload);
   if (!parsed.success) {
     console.error(
@@ -148,17 +157,11 @@ export async function routeSessionPrompt(
     return "woken";
   }
   const appOpened = !agentSession.creatorId;
-  let holder: string | null;
-  let state: SessionState | undefined;
-  try {
-    holder = await deps.holder(token);
-    if (holder === null && !appOpened) {
-      state = await sessionState(session, deps, { withdraw: stop });
-    }
-  } catch (error) {
-    console.log(`[events] linear dropped reason=session-lookup-failed ${at}: ${String(error)}`);
-    return "failed";
-  }
+  const holder = await deps.holder(token);
+  const state =
+    holder === null && !appOpened
+      ? await sessionState(session, deps, { withdraw: stop })
+      : undefined;
   if (holder !== null && stop) {
     console.log(`[events] linear dropped reason=run-not-listening ${at} run=${holder}`);
     awaitStop(session, prompt, deps);
@@ -171,32 +174,25 @@ export async function routeSessionPrompt(
     // nothing is posted after its final message. A run left awaiting input is waiting on
     // people, since a question always listens, so its reply asks again to keep the session
     // awaiting input.
-    try {
-      const linear = deps.linear(installationName);
-      const last = await linear.lastAppActivity(session.sessionId);
-      if (last !== null && Date.parse(last.createdAt) > Date.parse(prompt.createdAt)) {
-        console.log(`[events] linear accepted ${at} run=${holder} answered`);
-        return "woken";
-      }
-      if (last?.type === "response") {
-        console.log(`[events] linear accepted ${at} run=${holder} finishing`);
-        return "woken";
-      }
-      const waiting = last?.type === "elicitation";
-      await linear.postActivityOnce(
-        session.sessionId,
-        waiting ? { type: "elicitation", body: WAITING } : { type: "thought", body: WORKING },
-        derivedUuid([waiting ? "linear-session-waiting" : "linear-session-working", prompt.id]),
-      );
-      console.log(
-        `[events] linear accepted ${at} run=${holder} ${waiting ? "waiting" : "not listening"}`,
-      );
-    } catch (error) {
-      console.error(
-        `[linear] could not answer agent session ${session.sessionId}: ${String(error)}`,
-      );
-      return "failed";
+    const linear = deps.linear(installationName);
+    const last = await linear.lastAppActivity(session.sessionId);
+    if (last !== null && Date.parse(last.createdAt) > Date.parse(prompt.createdAt)) {
+      console.log(`[events] linear accepted ${at} run=${holder} answered`);
+      return "woken";
     }
+    if (last?.type === "response") {
+      console.log(`[events] linear accepted ${at} run=${holder} finishing`);
+      return "woken";
+    }
+    const waiting = last?.type === "elicitation";
+    await linear.postActivityOnce(
+      session.sessionId,
+      waiting ? { type: "elicitation", body: WAITING } : { type: "thought", body: WORKING },
+      derivedUuid([waiting ? "linear-session-waiting" : "linear-session-working", prompt.id]),
+    );
+    console.log(
+      `[events] linear accepted ${at} run=${holder} ${waiting ? "waiting" : "not listening"}`,
+    );
     return "woken";
   }
   if (appOpened) return answerEndedTicketRun(session, prompt, at, deps);
@@ -210,20 +206,15 @@ export async function routeSessionPrompt(
     return "ignored";
   }
   console.log(`[events] linear dropped reason=conversation-ended ${at}`);
-  try {
-    if (stop) await postStopped(session, prompt, deps);
-    else
-      await deps
-        .linear(installationName)
-        .postActivityOnce(
-          session.sessionId,
-          { type: "response", body: await endedMessage(installationName, deps) },
-          derivedUuid(["linear-session-ended", prompt.id]),
-        );
-  } catch (error) {
-    console.error(`[linear] could not answer agent session ${session.sessionId}: ${String(error)}`);
-    return "failed";
-  }
+  if (stop) await postStopped(session, prompt, deps);
+  else
+    await deps
+      .linear(installationName)
+      .postActivityOnce(
+        session.sessionId,
+        { type: "response", body: await endedMessage(installationName, deps) },
+        derivedUuid(["linear-session-ended", prompt.id]),
+      );
   return "dropped";
 }
 
@@ -238,27 +229,22 @@ async function answerEndedTicketRun(
   at: string,
   deps: SessionPromptDeps,
 ): Promise<PromptRoute> {
-  try {
-    const linear = deps.linear(installationName);
-    const last = await linear.lastAppActivity(sessionId);
-    if (last?.type !== "response") {
-      console.log(`[events] linear ignored reason=not-this-factorys-session ${at}`);
-      return "ignored";
-    }
-    const app = await deps.appName(installationName).catch(() => null);
-    const start =
-      app === null
-        ? "Assign the issue to the app or mention it"
-        : `Assign the issue to @${app} or mention @${app}`;
-    await linear.postActivityOnce(
-      sessionId,
-      { type: "response", body: `This conversation has ended. ${start} to start a new run.` },
-      derivedUuid(["linear-ticket-session-ended", prompt.id]),
-    );
-  } catch (error) {
-    console.error(`[linear] could not answer agent session ${sessionId}: ${String(error)}`);
-    return "failed";
+  const linear = deps.linear(installationName);
+  const last = await linear.lastAppActivity(sessionId);
+  if (last?.type !== "response") {
+    console.log(`[events] linear ignored reason=not-this-factorys-session ${at}`);
+    return "ignored";
   }
+  const app = await deps.appName(installationName).catch(() => null);
+  const start =
+    app === null
+      ? "Assign the issue to the app or mention it"
+      : `Assign the issue to @${app} or mention @${app}`;
+  await linear.postActivityOnce(
+    sessionId,
+    { type: "response", body: `This conversation has ended. ${start} to start a new run.` },
+    derivedUuid(["linear-ticket-session-ended", prompt.id]),
+  );
   console.log(`[events] linear dropped reason=run-ended ${at}`);
   return "dropped";
 }

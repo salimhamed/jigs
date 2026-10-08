@@ -34,12 +34,14 @@ const callbackSchema = z.object({
   event: z.object({ type: z.literal("message"), channel: z.string(), ts: z.string() }).loose(),
 });
 
+const isNewPost = (message: SlackMessage) =>
+  NEW_POST_SUBTYPES.has(message.subtype) &&
+  (message.thread_ts === undefined || message.thread_ts === message.ts);
+
 // The bot's own posts are skipped by author, which ADR 0011 allows because
 // the factory's app only ever acts as itself. A post under a custom username
 // carries only the app's id.
 function startsRun(message: SlackMessage, bot: SlackBot, mentionsOnly: boolean): boolean {
-  if (!NEW_POST_SUBTYPES.has(message.subtype)) return false;
-  if (message.thread_ts !== undefined && message.thread_ts !== message.ts) return false;
   if (message.user === bot.userId || message.app_id === bot.appId) return false;
   return !mentionsOnly || (message.text ?? "").includes(`<@${bot.userId}>`);
 }
@@ -61,7 +63,7 @@ function slackSource(mentionsOnly: boolean): Source<Params> {
       if (callback === undefined) return null;
       const message = callback.event as SlackMessageEvent;
       if (!channels.includes(message.channel)) return null;
-      if (!CHANNEL_TYPES.has(message.channel_type ?? "")) return null;
+      if (!CHANNEL_TYPES.has(message.channel_type ?? "") || !isNewPost(message)) return null;
       return startsRun(message, await slackBot(installationName), mentionsOnly)
         ? occurred(installationName, message.channel, message.ts)
         : null;

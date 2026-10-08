@@ -16,6 +16,7 @@ import {
   OCCURRENCE_ATTRIBUTE,
   runStatuses,
 } from "../runs.ts";
+import { worthRetrying } from "../worth-retrying.ts";
 import { tally } from "./capacity.ts";
 import {
   type PushedEvent,
@@ -312,15 +313,20 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     },
     withdraw: (row) => store().withdraw(row.trigger, row.occurrence),
     async push(provider, event) {
+      const watching = armed.filter((entry) => entry.source.provider === provider);
+      if (watching.length === 0) return [];
       await markers();
       const taken: string[] = [];
       const failures: unknown[] = [];
-      for (const entry of armed) {
-        if (entry.source.provider !== provider) continue;
+      for (const entry of watching) {
         try {
           const pushed = await entry.source.fromPush(entry.params, event);
           if (pushed !== null && (await observe(entry, pushed))) taken.push(entry.name);
         } catch (error) {
+          if (!worthRetrying(error)) {
+            log(`[trigger] ${entry.name} passed over an event it cannot read: ${String(error)}`);
+            continue;
+          }
           failures.push(error);
           log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
         }

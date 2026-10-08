@@ -127,7 +127,8 @@ const prompted = (
 };
 const stopEvent = () => prompted({ signal: "stop", body: "stop" });
 
-const route = (payload: unknown) => routeSessionPrompt("acme", payload, deps);
+const route = (payload: unknown) =>
+  routeSessionPrompt({ provider: "linear", installationName: "acme", payload }, deps);
 const settle = () => new Promise((resolve) => setImmediate(resolve));
 const fireNext = async (ms?: number) => {
   const timer = timers.shift();
@@ -286,7 +287,7 @@ test("an ended message that cannot be posted is routed again", async () => {
   statuses = new Map([[RUN, "completed"]]);
   postFailures = 1;
   const event = prompted();
-  expect(await route(event)).toBe("failed");
+  await expect(route(event)).rejects.toThrow("Linear is down");
   expect(await route(event)).toBe("dropped");
   expect(posted.size).toBe(1);
 });
@@ -326,7 +327,7 @@ test("a reply while the session's run may still start waits for it to read the s
 
 test("a lookup that cannot answer, as while the triggers shut down, is routed again", async () => {
   deps.recorded.mockRejectedValueOnce(new Error("the event triggers have shut down"));
-  expect(await route(prompted())).toBe("failed");
+  await expect(route(prompted())).rejects.toThrow("shut down");
   expect(posted.size).toBe(0);
 });
 
@@ -455,11 +456,19 @@ test("a Stopped. that cannot be posted at once is routed again", async () => {
   rows = [row()];
   statuses = new Map([[RUN, "cancelled"]]);
   postFailures = 1;
-  expect(await route(stopEvent())).toBe("failed");
+  await expect(route(stopEvent())).rejects.toThrow("Linear is down");
 });
 
 test("an event that is not a readable prompt is ignored", async () => {
   expect(await route({ type: "AgentSessionEvent", action: "prompted" })).toBe("ignored");
+  expect(await route({ ...prompted(), action: "created" })).toBe("ignored");
+  expect(await route({ type: "Comment", action: "create", data: { id: "c1" } })).toBe("ignored");
+  expect(
+    await routeSessionPrompt(
+      { provider: "slack", installationName: "acme", payload: prompted() },
+      deps,
+    ),
+  ).toBe("ignored");
   expect(deps.wake).not.toHaveBeenCalled();
 });
 

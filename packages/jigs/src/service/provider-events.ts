@@ -1,12 +1,12 @@
-// Route a verified provider event to the runs it concerns: wake the hooks it
-// names, or hand it to the event triggers. Callers have already checked where
-// the event came from; nothing here sees a request, a raw body or a signature.
+// Route a verified provider event to everything in the factory that may want
+// it: the event triggers, the runs its hook tokens wake, and the run holding a
+// Linear agent session it prompts. Each passes over what is not its own.
+// Callers have already checked where the event came from; nothing here sees a
+// request, a raw body or a signature.
 
-import type { Provider, ProviderEvent } from "@jigs-ai/hub-protocol";
+import type { ProviderEvent } from "@jigs-ai/hub-protocol";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
-import { GitHubApiError } from "../providers/github-http.ts";
-import { HubResponseError } from "../providers/hub.ts";
 import {
   pullRequestToken,
   tokenFromGitHubPayload,
@@ -15,6 +15,7 @@ import { slackThreadTokenFromEvent } from "../workflow/slack/thread-token.ts";
 import type { pushEvent } from "./event-triggers/runner.ts";
 import { routeSessionPrompt } from "./linear-session-prompts.ts";
 import { wake } from "./wake.ts";
+import { worthRetrying } from "./worth-retrying.ts";
 
 /** What routing reads of an event the hub received. */
 export type RoutedEvent = Pick<ProviderEvent, "provider" | "installationName" | "name" | "payload">;
@@ -35,149 +36,122 @@ export type RouteResult =
   | { outcome: "triggered"; triggers: string[] };
 
 /**
- * Wake the runs a provider event concerns, or start the ones its triggers take.
- * An event from an installation with no name on the hub concerns none of them.
+ * Hand a provider event to the triggers, the hooks it wakes and the agent
+ * session it prompts, and report what came of it. An event from an
+ * installation with no name on the hub concerns none of them.
  */
 export async function routeProviderEvent(
   event: RoutedEvent,
   deps: RouteDeps,
 ): Promise<RouteResult> {
+  const { provider } = event;
+  const name = sanitizeForLog(event.name);
   if (!isNamed(event)) {
-    console.log(
-      `[events] ${event.provider} ignored reason=no-installation-name event=${sanitizeForLog(event.name)}`,
-    );
+    console.log(`[events] ${provider} ignored reason=no-installation-name event=${name}`);
     return { outcome: "ignored" };
   }
-  switch (event.provider) {
-    case "github":
-      return routeGithub(event, deps);
-    case "linear":
-      if (event.name !== "AgentSessionEvent") return routeLinear(event);
-      // A session starts a run; every later prompt in it goes to that run.
-      if ((event.payload as { action?: unknown } | null)?.action === "prompted")
-        return { outcome: await routeSessionPrompt(event.installationName, event.payload) };
-      return routePush(event, deps);
-    case "pagerduty":
-      return routePush(event, deps);
-    case "slack":
-      return routeSlack(event, deps);
-  }
+  const settle = async (consumer: string, route: () => Promise<RouteResult>) => {
+    try {
+      return await route();
+    } catch (error) {
+      if (worthRetrying(error)) {
+        console.log(
+          `[events] ${provider} dropped reason=${consumer}-failed event=${name}: ${String(error)}`,
+        );
+        return { outcome: "failed" } as const;
+      }
+      console.error(
+        `[events] ${provider} ignored reason=${consumer}-refused event=${name}: ${String(error)}`,
+      );
+      return { outcome: "ignored" } as const;
+    }
+  };
+  const result = combine(
+    await Promise.all([
+      settle("push", () => trigger(event, name, deps)),
+      settle("wake", () => wakeHooks(event, name, deps)),
+      settle("prompt", async () => ({ outcome: await routeSessionPrompt(event) })),
+    ]),
+  );
+  if (result.outcome === "ignored") console.log(`[events] ${provider} ignored event=${name}`);
+  return result;
 }
 
 const isNamed = (event: RoutedEvent): event is NamedEvent => event.installationName !== null;
 
-async function routeGithub({ installationName, name, payload }: NamedEvent, deps: RouteDeps) {
-  const event = sanitizeForLog(name);
-  if (event === "status") {
-    const status = githubStatus(payload);
-    if (status === null) {
-      console.log(`[events] github ignored reason=unrecognized-event event=${event}`);
-      return { outcome: "ignored" } as const;
-    }
-    if (status.state === "pending") {
-      console.log(`[events] github ignored reason=pending-status event=${event}`);
-      return { outcome: "ignored" } as const;
-    }
-    let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
-    try {
-      prs = await findOpenPullRequestsByHeadSha(
-        { installationName, ...status.repository },
-        status.sha,
-        deps.context,
-      );
-    } catch (error) {
-      if (refusedForGood(error)) {
-        console.error(
-          `[events] github ignored reason=status-lookup-refused event=${event}: ${String(error)}`,
-        );
-        return { outcome: "ignored" } as const;
-      }
-      console.log(`[events] github dropped reason=status-lookup-failed event=${event}`);
-      return { outcome: "failed" } as const;
-    }
-    if (prs.length === 0) {
-      console.log(`[events] github dropped reason=no-open-pull-request event=${event}`);
-      return { outcome: "dropped" } as const;
-    }
-    return wakeAndLog("github", prs.map(pullRequestToken), event);
-  }
-  const token = tokenFromGitHubPayload(installationName, payload);
-  if (token === null) {
-    console.log(`[events] github ignored reason=unrecognized-event event=${event}`);
-    return { outcome: "ignored" } as const;
-  }
-  return wakeAndLog("github", [token], event);
+// Any failure routes the event again: a trigger records an occurrence once
+// however often it arrives, and a wake only makes a run recheck.
+function combine(results: RouteResult[]): RouteResult {
+  const has = (outcome: RouteResult["outcome"]) => results.some((r) => r.outcome === outcome);
+  const triggers = results.flatMap((r) => (r.outcome === "triggered" ? r.triggers : []));
+  if (has("failed")) return { outcome: "failed" };
+  if (triggers.length > 0) return { outcome: "triggered", triggers };
+  if (has("woken")) return { outcome: "woken" };
+  return { outcome: has("dropped") ? "dropped" : "ignored" };
 }
 
-// Outside an agent session, a Linear event concerns no run.
-function routeLinear({ name, payload }: NamedEvent) {
-  const reason = payload === null ? "unrecognized-shape" : "unrecognized-event";
-  const event = name === "" ? "" : ` event=${sanitizeForLog(name)}`;
-  console.log(`[events] linear ignored reason=${reason}${event}`);
-  return { outcome: "ignored" } as const;
-}
-
-// PagerDuty events and Linear agent sessions start runs rather than wake them.
 // The push returns once the occurrence is recorded, never waiting on the start.
-async function routePush(
-  { provider, installationName, name, payload }: NamedEvent,
-  deps: RouteDeps,
-) {
-  const event = `event=${sanitizeForLog(name)}`;
-  let triggers: string[];
-  try {
-    triggers = await deps.push(provider, { installationName, payload });
-  } catch (error) {
-    console.log(`[events] ${provider} dropped reason=push-failed ${event}: ${String(error)}`);
-    return { outcome: "failed" } as const;
-  }
-  if (triggers.length === 0) {
-    console.log(`[events] ${provider} ignored reason=no-new-occurrence ${event}`);
-    return { outcome: "ignored" } as const;
-  }
-  console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} ${event}`);
-  return { outcome: "triggered", triggers } as const;
-}
-
-// Slack sends the Events API body; its `event` is the message. A message can
-// both start runs and answer a thread a run waits on. A wake that landed stands
-// even when a trigger could not read the event; a wake that failed routes the
-// message again, which starts no run twice.
-async function routeSlack(
-  { installationName, name, payload }: NamedEvent,
+async function trigger(
+  { provider, installationName, payload }: NamedEvent,
+  name: string,
   deps: RouteDeps,
 ): Promise<RouteResult> {
-  const message = (payload as { event?: unknown } | null)?.event;
-  const token = slackThreadTokenFromEvent(installationName, message);
-  const [triggers, woke] = await Promise.all([
-    deps.push("slack", { installationName, payload }).catch((error: unknown) => {
-      const { channel, ts } = (message ?? {}) as { channel?: unknown; ts?: unknown };
-      console.log(
-        `[events] slack dropped reason=push-failed channel=${String(channel)} ts=${String(ts)}: ${String(error)}`,
-      );
-      return null;
-    }),
-    token === null ? null : wakeAndLog("slack", [token], sanitizeForLog(name)),
-  ]);
-  if (woke?.outcome === "failed" || (triggers === null && woke?.outcome !== "woken"))
-    return { outcome: "failed" };
-  if (triggers !== null && triggers.length > 0) return { outcome: "triggered", triggers };
-  return woke ?? { outcome: "ignored" };
+  const triggers = await deps.push(provider, { installationName, payload });
+  if (triggers.length === 0) return { outcome: "ignored" };
+  console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} event=${name}`);
+  return { outcome: "triggered", triggers };
 }
 
-// An answer that routing the event again would only get again: the hub does
-// not give this factory the installation; or GitHub refused the request itself
-// rather than its credential or its rate limit.
-function refusedForGood(error: unknown): boolean {
-  if (error instanceof HubResponseError) return error.status === 404;
-  return (
-    error instanceof GitHubApiError &&
-    !error.rateLimited &&
-    error.status >= 400 &&
-    error.status < 500 &&
-    error.status !== 401 &&
-    error.status !== 429
+// A wake carries no payload: the suspension primitives re-check provider
+// state on every wake, so nothing downstream reads one.
+async function wakeHooks(event: NamedEvent, name: string, deps: RouteDeps): Promise<RouteResult> {
+  const tokens = await hookTokens(event, deps.context);
+  if (tokens === null) return { outcome: "ignored" };
+  if (tokens.length === 0) {
+    console.log(`[events] ${event.provider} dropped reason=no-open-pull-request event=${name}`);
+    return { outcome: "dropped" };
+  }
+  const outcomes = await Promise.all(
+    tokens.map(async (token) => {
+      const correlation = `token=${sanitizeForLog(token)} event=${name}`;
+      const { outcome } = await wake(token, `${event.provider} ${name}`);
+      if (outcome === "woken") console.log(`[events] ${event.provider} accepted ${correlation}`);
+      else {
+        const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
+        console.log(`[events] ${event.provider} dropped reason=${reason} ${correlation}`);
+      }
+      return outcome;
+    }),
   );
+  if (outcomes.includes("woken")) return { outcome: "woken" };
+  return { outcome: outcomes.includes("failed") ? "failed" : "dropped" };
+}
+
+// The hook tokens an event wakes, or null when it is not one that wakes. A
+// GitHub status names only a commit, so it wakes the open pull requests at it.
+// Slack sends the Events API body; its `event` is the message.
+async function hookTokens(
+  { provider, installationName, name, payload }: NamedEvent,
+  context: FactoryContext,
+): Promise<string[] | null> {
+  if (provider === "slack") {
+    const message = (payload as { event?: unknown } | null)?.event;
+    const token = slackThreadTokenFromEvent(installationName, message);
+    return token === null ? null : [token];
+  }
+  if (provider !== "github") return null;
+  if (name !== "status") {
+    const token = tokenFromGitHubPayload(installationName, payload);
+    return token === null ? null : [token];
+  }
+  const status = githubStatus(payload);
+  if (status === null || status.state === "pending") return null;
+  const prs = await findOpenPullRequestsByHeadSha(
+    { installationName, ...status.repository },
+    status.sha,
+    context,
+  );
+  return prs.map(pullRequestToken);
 }
 
 function sanitizeForLog(value: string): string {
@@ -204,29 +178,4 @@ function githubStatus(payload: unknown): {
     typeof repo === "string"
     ? { sha, state, repository: { owner, repo } }
     : null;
-}
-
-// A wake carries no payload: the suspension primitives re-check provider
-// state on every wake, so nothing downstream reads one.
-async function wakeAndLog(
-  provider: Provider,
-  tokens: string[],
-  event: string,
-): Promise<RouteResult> {
-  const outcomes = await Promise.all(
-    tokens.map(async (token) => {
-      const correlation = `token=${sanitizeForLog(token)} event=${event}`;
-      const { outcome } = await wake(token, `${provider} ${event}`);
-      if (outcome === "woken") console.log(`[events] ${provider} accepted ${correlation}`);
-      // Most Slack thread replies are in threads no run waits on.
-      else if (outcome === "gone" && provider === "slack") return outcome;
-      else {
-        const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
-        console.log(`[events] ${provider} dropped reason=${reason} ${correlation}`);
-      }
-      return outcome;
-    }),
-  );
-  if (outcomes.includes("woken")) return { outcome: "woken" };
-  return { outcome: outcomes.includes("failed") ? "failed" : "dropped" };
 }
