@@ -14,8 +14,8 @@ Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
 as it is. Once the pull request opens, the session links to it and a note
 says it is open and waits on people. That keeps the session awaiting input,
 so Linear never marks it stale however long review takes. To change the work,
-comment on the pull request; to stop the run, close it. Every note mentions the operator (or the ticket's
-creator) and the assignee, so they get a Linear notification.
+comment on the pull request; to stop the run, close it. Every note mentions the
+operator (or the ticket's creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and

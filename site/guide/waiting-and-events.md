@@ -14,8 +14,10 @@ person replies. It requires the factory's [Linear app](/guide/configuration#line
 and a claimed ticket. Claiming prevents two runs from owning the same ticket,
 and it opens a Linear agent session on the ticket, or takes the one the run
 was started from with `acquireTicket`'s `session` argument. A ticket run talks
-to people only in that session: Linear shows it working, with a Stop button
-that works for the whole run. When the service has a dashboard, an Open button
+to people only in that session. Linear shows it working, with a Stop button,
+while the run works; once the run waits on people, such as a pull request
+review, the session asks for input instead and the run's message says how to
+stop it. When the service has a dashboard, an Open button
 links to the run's page; the dashboard listens on `localhost`, so the link
 opens only on the factory's machine.
 

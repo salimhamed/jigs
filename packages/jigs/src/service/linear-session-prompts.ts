@@ -101,8 +101,8 @@ const pendingStops = new Set<string>();
  * Hand a `prompted` agent session event to the run that holds the session: into its live turn
  * when one runs in this process, and through its listening hook, so a run reading the session
  * reads it again. A run that holds the session but is not listening is working or waiting on
- * people, and the person is told so. A session whose runs have ended is told so too, and a stop no run takes in time is
- * ended here.
+ * people, and the person is told so. A session whose runs have ended is told so too, and a
+ * stop no run takes in time is ended here.
  */
 export async function routeSessionPrompt(
   installationName: string,
