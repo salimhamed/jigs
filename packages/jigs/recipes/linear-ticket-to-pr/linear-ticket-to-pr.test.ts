@@ -135,7 +135,7 @@ const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.call
 beforeEach(() => vi.clearAllMocks());
 
 test("a delivered ticket moves through In Progress, In Review and Done", async () => {
-  await expect(run()).resolves.toEqual({ pr: pr.url });
+  await expect(run()).resolves.toEqual({ outcome: "merged", pr: pr.url });
 
   expect(routines.acquireTicket).toHaveBeenCalledWith({
     installationName: "linear-acme",
@@ -302,7 +302,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
     },
   );
 
-  await expect(run()).resolves.toEqual({ pr: pr.url });
+  await expect(run()).resolves.toEqual({ outcome: "merged", pr: pr.url });
 
   expect(posted()).toEqual([
     opened,
@@ -436,10 +436,10 @@ test.each([
   );
 });
 
-test("a pull request closed without merging gets a note on the ticket, sets Todo, and fails the run", async () => {
+test("a pull request closed without merging gets a note on the ticket, sets Todo, and completes the run", async () => {
   vi.mocked(routines.followPullRequestToOutcome).mockResolvedValueOnce({ outcome: "closed" });
 
-  await expect(run()).rejects.toThrow(closed.headline);
+  await expect(run()).resolves.toEqual({ outcome: "closed", pr: pr.url });
 
   expect(posted()[1]).toEqual(closed);
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);

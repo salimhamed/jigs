@@ -19,7 +19,8 @@ import { cancelRun, runStatuses } from "./runs.ts";
 import { wake } from "./wake.ts";
 
 const promptedSchema = z.object({
-  agentSession: z.object({ id: z.string().min(1) }),
+  // No creator: the app opened the session itself, for a ticket run.
+  agentSession: z.object({ id: z.string().min(1), creatorId: z.string().nullish() }),
   agentActivity: z.object({
     id: z.string().min(1),
     createdAt: z.string(),
@@ -101,8 +102,9 @@ const pendingStops = new Set<string>();
  * Hand a `prompted` agent session event to the run that holds the session: into its live turn
  * when one runs in this process, and through its listening hook, so a run reading the session
  * reads it again. A run that holds the session but is not listening is working or waiting on
- * people, and the person is told so. A session whose runs have ended is told so too, and a
- * stop no run takes in time is ended here.
+ * people, and the person is told so. A session whose runs have ended is told so too, including
+ * a session the app opened for a ticket run that has ended, and a stop no run takes in time is
+ * ended here.
  */
 export async function routeSessionPrompt(
   installationName: string,
@@ -145,11 +147,14 @@ export async function routeSessionPrompt(
     if (stop) awaitStop(session, prompt, deps);
     return "woken";
   }
+  const appOpened = !agentSession.creatorId;
   let holder: string | null;
   let state: SessionState | undefined;
   try {
     holder = await deps.holder(token);
-    if (holder === null) state = await sessionState(session, deps, { withdraw: stop });
+    if (holder === null && !appOpened) {
+      state = await sessionState(session, deps, { withdraw: stop });
+    }
   } catch (error) {
     console.log(`[events] linear dropped reason=session-lookup-failed ${at}: ${String(error)}`);
     return "failed";
@@ -189,6 +194,7 @@ export async function routeSessionPrompt(
     }
     return "woken";
   }
+  if (appOpened) return answerEndedTicketRun(session, prompt, at, deps);
   if (state?.state === "open") {
     console.log(`[events] linear dropped reason=run-not-parked ${at}`);
     if (stop) awaitStop(session, prompt, deps);
@@ -213,6 +219,40 @@ export async function routeSessionPrompt(
     console.error(`[linear] could not answer agent session ${session.sessionId}: ${String(error)}`);
     return "failed";
   }
+  return "dropped";
+}
+
+// A session the app opened is a ticket run's, and only an ended run leaves a response as the
+// app's last activity: a live one's is a thought or an elicitation, so another factory's live
+// session is never answered. Factories sharing the app post under the same id, so one reply shows.
+async function answerEndedTicketRun(
+  { installationName, sessionId }: { installationName: string; sessionId: string },
+  prompt: Prompt,
+  at: string,
+  deps: SessionPromptDeps,
+): Promise<PromptRoute> {
+  try {
+    const linear = deps.linear(installationName);
+    const last = await linear.lastAppActivity(sessionId);
+    if (last?.type !== "response") {
+      console.log(`[events] linear ignored reason=not-this-factorys-session ${at}`);
+      return "ignored";
+    }
+    const app = await deps.appName(installationName).catch(() => null);
+    const start =
+      app === null
+        ? "Assign the issue to the app or mention it"
+        : `Assign the issue to @${app} or mention @${app}`;
+    await linear.postActivityOnce(
+      sessionId,
+      { type: "response", body: `This conversation has ended. ${start} to start a new run.` },
+      derivedUuid(["linear-ticket-session-ended", prompt.id]),
+    );
+  } catch (error) {
+    console.error(`[linear] could not answer agent session ${sessionId}: ${String(error)}`);
+    return "failed";
+  }
+  console.log(`[events] linear dropped reason=run-ended ${at}`);
   return "dropped";
 }
 

@@ -117,8 +117,10 @@ builder; it is not a lifetime limit on PR activity.
 When the delivery stops before the pull request opens, the run ends the
 ticket's session with a note saying what remains, sets `Todo`, and fails. When
 the pull request closes unmerged, the note says so and names the branch the
-work is on, and the run also sets `Todo` and fails. A merge sets `Done` and ends the session with
-"Merged" and the pull request's link. Any other error ends the session with
+work is on, the run sets `Todo`, and it completes with `{ outcome: "closed" }`:
+the work is on the pushed branch, so releasing the worktree loses nothing. A
+merge sets `Done`, ends the session with "Merged" and the pull request's link,
+and completes with `{ outcome: "merged" }`. Any other error ends the session with
 "The run failed", which points to the run's page for the error, leaves the
 ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
@@ -240,7 +242,8 @@ export async function deliverTicket(
       closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
       run: "ended",
     });
-    throw new JigsError(`${pr.url} was closed unmerged`);
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
+    return { outcome: "closed" as const, pr: pr.url };
   }
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
   await noteOnTicket(claim, {
@@ -249,7 +252,7 @@ export async function deliverTicket(
     closing: "",
     run: "ended",
   });
-  return { pr: pr.url };
+  return { outcome: "merged" as const, pr: pr.url };
 }
 ```
 

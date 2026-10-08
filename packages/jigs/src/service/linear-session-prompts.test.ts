@@ -104,12 +104,17 @@ const liveTurn = (accepts = true) => {
 };
 
 let activityCount = 0;
-const prompted = (activity: { signal?: string | null; body?: string } = {}) => {
+const prompted = (
+  activity: { signal?: string | null; body?: string; creatorId?: string | null } = {},
+) => {
   activityCount += 1;
   return {
     type: "AgentSessionEvent",
     action: "prompted",
-    agentSession: { id: "session-1" },
+    agentSession: {
+      id: "session-1",
+      creatorId: activity.creatorId === undefined ? "u1" : activity.creatorId,
+    },
     agentActivity: {
       id: `activity-${activityCount}`,
       createdAt: "2026-10-07T00:00:00.000Z",
@@ -437,4 +442,47 @@ test("a Stopped. that cannot be posted at once is routed again", async () => {
 test("an event that is not a readable prompt is ignored", async () => {
   expect(await route({ type: "AgentSessionEvent", action: "prompted" })).toBe("ignored");
   expect(deps.wake).not.toHaveBeenCalled();
+});
+
+const ENDED_RUN =
+  "This conversation has ended. Assign the issue to @jigs or mention @jigs to start a new run.";
+
+test("a message in an ended ticket run's session is told the run ended, once", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted({ creatorId: null });
+
+  expect(await route(event)).toBe("dropped");
+  expect(await route(event)).toBe("dropped");
+
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-ticket-session-ended", event.agentActivity.id]),
+      { sessionId: "session-1", body: ENDED_RUN },
+    ],
+  ]);
+  expect(deps.recorded).not.toHaveBeenCalled();
+});
+
+test.each([
+  ["a thought", "thought"],
+  ["an elicitation", "elicitation"],
+])(
+  "a ticket run session whose app last posted %s is another factory's live run, and gets no reply",
+  async (_, type) => {
+    last = { type, createdAt: "2026-10-06T00:00:00.000Z" };
+    expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+    expect(posted.size).toBe(0);
+  },
+);
+
+test("a ticket run session with no app activity gets no reply", async () => {
+  expect(await route(prompted({ creatorId: null }))).toBe("ignored");
+  expect(posted.size).toBe(0);
+});
+
+test("a session a person started is answered by its occurrences, not as a ticket run's", async () => {
+  last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };
+  expect(await route(prompted())).toBe("ignored");
+  expect(deps.recorded).toHaveBeenCalled();
+  expect(posted.size).toBe(0);
 });

@@ -95,7 +95,11 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   `linear.agentSessions` source starts no run for it, and the hub posts no
   "Received" acknowledgement. This also skips sessions that automation opened
   without a person; there is no other way to tell the factory's own sessions
-  apart, and no such use is known.
+  apart, and no such use is known. A message in such a session that no run
+  holds gets a final "This conversation has ended." response, once per
+  message, when the app's newest activity is a response, which only an ended
+  ticket run leaves; without it Linear showed "Thinking…" forever, and it has
+  no API to close a session to input.
 - **The comment wake is gone.** Linear `Comment` events wake nothing, and
   nothing wakes a ticket claim. `jigs poke` reaches a listening hook (a halted
   ticket run, or a conversation waiting for its next message) and pull-request
@@ -109,7 +113,8 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   run should end its session with an `ended` note, or Linear shows the run
   working after it ended. The `linear-ticket-to-pr` recipe ends it with
   "Merged <link>.", its stop notes (a closed pull request gets "Stopped: the
-  pull request was closed, so jigs won't merge it." and the branch), or "The
+  pull request was closed, so jigs won't merge it." and the branch, and the run
+  completes, since its work is on the pushed branch), or "The
   run failed. The run's page has the error." for an unexpected error. A cancelled run posts nothing beyond the
   service's `Stopped.`.
 - A run started from a session talks in that session; one started any other

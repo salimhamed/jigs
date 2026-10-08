@@ -177,7 +177,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
             })
           : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
     });
-    if (followed.outcome === "closed") return stop(closedNote(worktree));
+    // The work is on the pushed branch, so the run completes and its worktree
+    // can be released.
+    if (followed.outcome === "closed") {
+      await noteOnTicket(claim, closedNote(worktree));
+      ended = true;
+      await setStatus("Todo");
+      return { outcome: "closed" as const, pr: pr.url };
+    }
 
     await setStatus("Done");
     await noteOnTicket(claim, {
@@ -186,7 +193,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       closing: "",
       run: "ended",
     });
-    return { pr: pr.url };
+    return { outcome: "merged" as const, pr: pr.url };
   } catch (error) {
     if (!ended) {
       await noteOnTicket(claim, {
@@ -287,6 +294,7 @@ const closedNote = (worktree: Worktree): TicketNote => ({
   headline: "Stopped: the pull request was closed, so jigs won't merge it.",
   notes: [],
   closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
+  run: "ended",
 });
 
 const localState = (work: UnpublishedWork) =>
