@@ -3,24 +3,19 @@ name: release
 on:
   push:
     branches: [main]
-  # Preview releases from the hub branch; the `preview` job below.
-  workflow_dispatch:
 
 permissions:
   contents: write
   pull-requests: write
   issues: write
 
-# Main pushes queue instead of racing release-please. Previews queue apart:
-# a run waiting in a group replaces the one already waiting there, so sharing
-# the group could drop a pending main run.
+# Main pushes queue instead of racing release-please.
 concurrency:
-  group: release-${{ github.event_name }}
+  group: release
   cancel-in-progress: false
 
 jobs:
   release-please:
-    if: ${{ github.event_name == 'push' }}
     runs-on: ubuntu-latest
     outputs:
       releases_created: ${{ steps.release.outputs.releases_created }}
@@ -124,69 +119,4 @@ jobs:
             else
               (cd "$dir" && npm publish --access public)
             fi
-          done
-
-  # Publishes @jigs-ai/jigs and @jigs-ai/hub from the hub branch as
-  # X.(Y+1).0-hub.N under the `hub` dist-tag, never `latest`. The version is
-  # set in this checkout only and never committed.
-  preview:
-    if: ${{ github.event_name == 'workflow_dispatch' }}
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    steps:
-      - name: Refuse any ref but hub
-        if: ${{ github.ref != 'refs/heads/hub' }}
-        env:
-          REF: ${{ github.ref }}
-        run: |
-          echo "previews publish from the hub branch only, not $REF" >&2
-          exit 1
-      - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: pnpm
-          registry-url: https://registry.npmjs.org
-      - run: pnpm install --frozen-lockfile
-      - name: Set the preview version
-        run: |
-          set -euo pipefail
-          IFS=. read -r major minor _ < <(node -p "require('./packages/jigs/package.json').version")
-          prefix="$major.$((minor + 1)).0-hub."
-          # Past both packages' previews, so every run publishes a fresh,
-          # matching pair; a partial failure just burns a number. Before the
-          # hub's first publish, npm has no versions of it.
-          jigs="$(npm view @jigs-ai/jigs versions --json)"
-          hub="$(npm view @jigs-ai/hub versions --json 2>/dev/null)" || hub='[]'
-          n="$(JIGS="$jigs" HUB="$hub" PREFIX="$prefix" node -e '
-            const { JIGS, HUB, PREFIX } = process.env;
-            const ns = [JIGS, HUB]
-              .flatMap((list) => [].concat(JSON.parse(list)))
-              .filter((v) => v.startsWith(PREFIX))
-              .map((v) => Number(v.slice(PREFIX.length)))
-              .filter(Number.isInteger);
-            console.log(ns.length ? Math.max(...ns) + 1 : 0);
-          ')"
-          version="$prefix$n"
-          for dir in packages/jigs packages/hub; do
-            (cd "$dir" && npm pkg set version="$version")
-          done
-          echo "preview version: $version"
-      - run: pnpm build
-      - run: pnpm run docs
-      - name: Ensure npm supports trusted publishing
-        run: |
-          set -euo pipefail
-          if ! node -e 'const [a,b,c]=process.argv[1].split(".").map(Number);process.exit(a>11||(a===11&&(b>5||(b===5&&c>=1)))?0:1)' "$(npm -v)"; then
-            npm install -g npm@11
-          fi
-          npm -v
-      - name: Publish to npm
-        run: |
-          set -euo pipefail
-          for dir in packages/hub packages/jigs; do
-            (cd "$dir" && npm publish --tag hub --access public)
           done
