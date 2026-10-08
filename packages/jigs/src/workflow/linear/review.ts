@@ -48,12 +48,12 @@ export type TicketNote = {
    * What the run does after this note; omitted, it keeps working.
    *
    * @remarks
-   * `"succeeded"` and `"failed"` end the session, so set one on the run's last
-   * note. `"waiting"` shows the session as awaiting input, which never goes
+   * `"ended"` is the run's final message, success or not; Linear shows the
+   * session as finished. Set it on every way out of the run. `"waiting"` shows the session as awaiting input, which never goes
    * stale but shows no Stop button. The run does not read replies to a waiting
    * note, so say in it where people act and how to stop the run.
    */
-  run?: "waiting" | "succeeded" | "failed" | undefined;
+  run?: "waiting" | "ended" | undefined;
 };
 
 /**

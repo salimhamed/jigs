@@ -109,10 +109,10 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
     };
 
-    // A stop leaves the work where it is, ends the ticket's session with a
-    // failure, and fails the run.
+    // A stop leaves the work where it is, ends the ticket's session, and fails
+    // the run.
     const stop = async (note: TicketNote): Promise<never> => {
-      await noteOnTicket(claim, { ...note, run: "failed" });
+      await noteOnTicket(claim, { ...note, run: "ended" });
       ended = true;
       await setStatus("Todo");
       throw new JigsError(note.headline);
@@ -177,14 +177,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
             })
           : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
     });
-    if (followed.outcome === "closed") return stop(closedNote(key, worktree, pr.url));
+    if (followed.outcome === "closed") return stop(closedNote(worktree));
 
     await setStatus("Done");
     await noteOnTicket(claim, {
       headline: `Merged ${pr.url}.`,
       notes: [],
       closing: "",
-      run: "succeeded",
+      run: "ended",
     });
     return { pr: pr.url };
   } catch (error) {
@@ -194,7 +194,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
         headline: "The run failed. The run's page has the error.",
         notes: [],
         closing: "",
-        run: "failed",
+        run: "ended",
       }).catch(() => {});
     }
     throw error;
@@ -283,17 +283,10 @@ const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): 
     "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
 });
 
-// Nothing is pushed on the way out: unpublished local work stays for the person taking over.
-const closedNote = (key: string, worktree: Worktree, url: string): TicketNote => ({
-  headline: `jigs stopped pull request maintenance for ${key}.`,
-  notes: [
-    "The pull request was closed unmerged.",
-    `Unfinished pull request: ${url}`,
-    "Local work was retained without an automatic push.",
-    workLocation(worktree),
-  ],
-  closing:
-    "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
+const closedNote = (worktree: Worktree): TicketNote => ({
+  headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+  notes: [],
+  closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
 });
 
 const localState = (work: UnpublishedWork) =>

@@ -56,8 +56,12 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   and does not notify those a thought mentions (checked live). A response ends
   the app's turn, so a note that does not end the run is followed by a
   `Still working.` thought, which keeps the session active and Stop working.
-  A note with `run: "succeeded"` or `run: "failed"` is the session's last
-  activity: a `response` for success, an `error` for failure. A person's message puts the session back to
+  A note with `run: "ended"` is the session's last activity, a `response`
+  whether the run succeeded or failed. It is never an `error`: Linear shows a
+  Retry button on a session that ended in an error, and Retry from a finished
+  ticket run leaves the session stuck thinking, since nothing listens after
+  the run ends (seen live). A conversation keeps its errors, because there
+  Retry is a new message the conversation reads. A person's message puts the session back to
   `pending`, so a halt that takes an answer posts a short thought to make it
   active again before the run's later notes.
 - **A run waiting on people keeps its session awaiting input.** Linear marks
@@ -102,10 +106,11 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
 ## Consequences
 
 - A workflow's questions and notes need a claim, and every way out of a ticket
-  run should end its session with a `succeeded` or `failed` note, or Linear shows the run
+  run should end its session with an `ended` note, or Linear shows the run
   working after it ended. The `linear-ticket-to-pr` recipe ends it with
-  "Merged <link>.", its stop notes, or "The run failed. The run's page has the
-  error." for an unexpected error. A cancelled run posts nothing beyond the
+  "Merged <link>.", its stop notes (a closed pull request gets "Stopped: the
+  pull request was closed, so jigs won't merge it." and the branch), or "The
+  run failed. The run's page has the error." for an unexpected error. A cancelled run posts nothing beyond the
   service's `Stopped.`.
 - A run started from a session talks in that session; one started any other
   way opens a new one, so one issue can show several sessions over time, one

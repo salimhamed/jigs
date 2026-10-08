@@ -114,9 +114,10 @@ Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-When the delivery stops before the pull request opens, or the pull request
-closes unmerged, the run ends the ticket's session with a note saying what
-remains, sets `Todo`, and fails. A merge sets `Done` and ends the session with
+When the delivery stops before the pull request opens, the run ends the
+ticket's session with a note saying what remains, sets `Todo`, and fails. When
+the pull request closes unmerged, the note says so and names the branch the
+work is on, and the run also sets `Todo` and fails. A merge sets `Done` and ends the session with
 "Merged" and the pull request's link. Any other error ends the session with
 "The run failed", which points to the run's page for the error, leaves the
 ticket's status alone, and fails the run. To keep
@@ -204,7 +205,7 @@ export async function deliverTicket(
       headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
-      run: "failed",
+      run: "ended",
     });
     await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
@@ -232,13 +233,21 @@ export async function deliverTicket(
         run: "waiting",
       }),
   });
-  if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
+  if (followed.outcome === "closed") {
+    await noteOnTicket(claim, {
+      headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+      notes: [],
+      closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
+      run: "ended",
+    });
+    throw new JigsError(`${pr.url} was closed unmerged`);
+  }
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
   await noteOnTicket(claim, {
     headline: `Merged ${pr.url}.`,
     notes: [],
     closing: "",
-    run: "succeeded",
+    run: "ended",
   });
   return { pr: pr.url };
 }

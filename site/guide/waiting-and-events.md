@@ -61,7 +61,7 @@ export async function askScope(input: WorkflowInputs<typeof inputs>) {
     headline: "Thanks, noted.",
     notes: [reply.body],
     closing: "",
-    run: "succeeded",
+    run: "ended",
   });
   return reply.body;
 }
@@ -80,9 +80,11 @@ replies in the session answers it. Messages sent there before the question
 count too: `reply.body` joins them, each prefixed with its author's name.
 
 `noteOnTicket` posts a note in the session and notifies the people it
-mentions. Its `run` says what the run does next. A note with
-`run: "succeeded"` or `run: "failed"` is the run's last message; end every way
-out of a ticket run with one, or Linear keeps showing the run as working.
+mentions. Its `run` says what the run does next. A note with `run: "ended"`
+is the run's last message, whether the run succeeded or not, and Linear shows
+the session as finished; end every way out of a ticket run with one, or Linear
+keeps showing the run as working. A ticket run never ends its session as an
+error, because Linear offers Retry on one, and a run that has ended can't take it.
 
 Linear marks a session stale after about 30 minutes with no new activity, and
 a stale session hides its Stop button. Before a long quiet wait on people,

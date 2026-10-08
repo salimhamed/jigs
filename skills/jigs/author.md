@@ -115,8 +115,9 @@ A ticket run talks to people only in that session; jigs posts and reads no
 ordinary ticket comments. Post notes through the claim with
 `noteOnTicket(claim, note)` rather than the `postTicketNote` step: the claim
 already carries the installation, issue and session the step needs. Give every way out of
-the workflow a note with `run: "succeeded"` or `"failed"`; without one,
-Linear shows the run working after it ended. Linear marks a session stale
+the workflow a note with `run: "ended"`, for success and failure alike; without
+one, Linear shows the run working after it ended. Never end a ticket run's
+session as an error: Linear offers Retry on it, which an ended run can't take. Linear marks a session stale
 after about 30 quiet minutes and hides Stop, so before a long wait on people,
 such as a pull request in review, post a note with `run: "waiting"`: the
 session shows awaiting input and never goes stale, though Linear shows no Stop

@@ -169,8 +169,8 @@ at its claim. One a person opened is the `linear.agentSessions` source's
 occurrence. Not an agent session.
 
 **Ticket note**: A message a ticket run posts in its Linear agent session that
-asks for nothing. Its `run` says what the run does next: a `succeeded` or
-`failed` note ends the session; a `waiting` one leaves it awaiting input, so it
+asks for nothing. Its `run` says what the run does next: an `ended` note ends
+the session, as a response even when the run failed; a `waiting` one leaves it awaiting input, so it
 never goes stale while the run waits on people.
 
 **Conversation**: One Claude session answering in one Linear agent session, run

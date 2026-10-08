@@ -310,8 +310,7 @@ test("a question is an elicitation in the session, under an id derived from the 
 });
 
 test.each([
-  ["succeeded", "response"],
-  ["failed", "error"],
+  ["ended", "response"],
   ["waiting", "elicitation"],
 ] as const)(
   "a note after which the run is %s is a %s, with no thought after it",
