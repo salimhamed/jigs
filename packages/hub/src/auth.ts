@@ -1,6 +1,7 @@
 import { hkdfSync } from "node:crypto";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
+import { createAuthMiddleware } from "better-auth/api";
 import { organization } from "better-auth/plugins";
 import { adminAc, memberAc } from "better-auth/plugins/organization/access";
 import { and, eq, gt } from "drizzle-orm";
@@ -77,6 +78,14 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
           },
         },
       },
+    },
+    hooks: {
+      // The web app calls the Organization endpoints server-side, behind the hub's own role
+      // checks. Over HTTP they would hand any member what only admins may see, such as invite
+      // links. Only an HTTP call carries a request.
+      before: createAuthMiddleware(async (ctx) => {
+        if (ctx.request && ctx.path.startsWith("/organization/")) throw new APIError("NOT_FOUND");
+      }),
     },
     plugins: [
       organization({

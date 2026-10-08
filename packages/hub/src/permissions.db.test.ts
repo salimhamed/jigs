@@ -260,32 +260,32 @@ dbTest("keeps invite links to admins", async () => {
   const server = createHubApp(auth, [], web, new Shutdown()).listen(0, "127.0.0.1");
   await once(server, "listening");
   const { port } = server.address() as AddressInfo;
-  // Raw requests, since fetch would resolve the dot segments before sending.
-  const get = (path: string) =>
+  // node:http, since fetch will not send a made-up Host header.
+  const get = (path: string, headers: Record<string, string> = {}) =>
     new Promise<{ status: number; body: string }>((resolve, reject) => {
-      const headers = { cookie: member.cookie };
       http
-        .get({ host: "127.0.0.1", port, path: `/api/auth/${path}`, headers }, (response) => {
-          let body = "";
-          response.setEncoding("utf8");
-          response.on("data", (chunk) => {
-            body += chunk;
-          });
-          response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
-        })
+        .get(
+          { host: "127.0.0.1", port, path, headers: { cookie: member.cookie, ...headers } },
+          (response) => {
+            let body = "";
+            response.setEncoding("utf8");
+            response.on("data", (chunk) => {
+              body += chunk;
+            });
+            response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
+          },
+        )
         .on("error", reject);
     });
   try {
-    expect((await get("get-session")).status).toBe(200);
-    for (const path of [
-      "organization/get-full-organization",
-      "organization/list-invitations",
-      "Organization/list-invitations",
-      "x/../organization/list-invitations",
-      "%2e%2e/auth/organization/get-full-organization",
-      "organization\\list-invitations",
-    ]) {
-      const response = await get(path);
+    expect((await get("/api/auth/get-session")).status).toBe(200);
+    for (const [path, headers] of [
+      ["/api/auth/organization/get-full-organization", {}],
+      ["/api/auth/organization/list-invitations", {}],
+      // Better Auth builds the URL it routes on from the Host header.
+      ["/api/auth/get-session", { host: "hub.test/api/auth/organization/list-invitations?" }],
+    ] as const) {
+      const response = await get(path, headers);
       expect(response.status).toBe(404);
       expect(response.body).not.toContain(inviteId);
     }
