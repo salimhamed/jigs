@@ -176,13 +176,6 @@ test("a reply to a run that holds the session but is not listening is told it is
   expect(deps.recorded).not.toHaveBeenCalled();
 });
 
-test("a session hook whose run has ended is no holder", async () => {
-  holder = RUN;
-  statuses = new Map([[RUN, "completed"]]);
-  expect(await route(prompted())).toBe("ignored");
-  expect(posted.size).toBe(0);
-});
-
 test("a stop to a run that is not listening cancels the run holding the session", async () => {
   holder = RUN;
   statuses = new Map([[RUN, "running"]]);

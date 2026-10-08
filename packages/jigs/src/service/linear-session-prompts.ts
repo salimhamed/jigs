@@ -143,7 +143,7 @@ export async function routeSessionPrompt(
   let holder: string | null;
   let state: SessionState | undefined;
   try {
-    holder = await liveHolder(token, deps);
+    holder = await deps.holder(token);
     if (holder === null) state = await sessionState(session, deps, { withdraw: stop });
   } catch (error) {
     console.log(`[events] linear dropped reason=session-lookup-failed ${at}: ${String(error)}`);
@@ -198,13 +198,6 @@ export async function routeSessionPrompt(
     return "failed";
   }
   return "dropped";
-}
-
-// A hook outlives its run for a while, so its holder counts only while the run is live.
-async function liveHolder(token: string, deps: SessionPromptDeps): Promise<string | null> {
-  const runId = await deps.holder(token);
-  if (runId === null) return null;
-  return isLive((await deps.runStatuses([runId])).get(runId)) ? runId : null;
 }
 
 const isLive = (status: string | undefined) => status === "pending" || status === "running";
@@ -297,10 +290,7 @@ async function endUntakenStop(
 ): Promise<void> {
   const linear = deps.linear(session.installationName);
   if (await linear.answeredSince(session.sessionId, stop.createdAt)) return;
-  const holder = await liveHolder(
-    linearSessionToken(session.installationName, session.sessionId),
-    deps,
-  );
+  const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
   const state = await sessionState(session, deps, { withdraw: true });
   const runs = new Set(holder === null ? [] : [holder]);
   for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
