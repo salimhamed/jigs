@@ -236,8 +236,8 @@ async function allowedMergeMethod(pr: PullRequestRef): Promise<MergeMethod> {
   const method = METHOD_PREFERENCE.find((candidate) => allowed.has(candidate));
   if (method !== undefined) return method;
   throw new JigsError(
-    `GitHub allows no merge method on ${pr.owner}/${pr.repo} that jigs can use`,
-    "enable squash merging, merge commits or rebase merging in the repository's settings, and give jigs' GitHub credential write access to it",
+    `GitHub allows none of squash, merge commit or rebase merging on ${pr.owner}/${pr.repo}`,
+    "enable squash merging, merge commits or rebase merging in the repository's settings, and give the factory's GitHub App write access to it",
   );
 }
 

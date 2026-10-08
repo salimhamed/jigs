@@ -209,7 +209,7 @@ export async function deliverTicket(
   if (built.outcome === "stopped") {
     await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
-      headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
+      headline: `Work on ${delivery.key} stopped (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
       run: "ended",
@@ -243,7 +243,7 @@ export async function deliverTicket(
     await pushBranch(delivery.worktree).catch(() => {});
     await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
-      headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+      headline: "Stopped: the pull request was closed, so it won't be merged.",
       notes: [],
       closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
       run: "ended",

@@ -72,7 +72,7 @@ beforeEach(() => {
 });
 
 const questions: Halt = {
-  headline: "jigs paused work on **AI-659** and needs your answers before it writes any code.",
+  headline: "Work on **AI-659** is paused: your answers are needed before any code is written.",
   where: "ticket review",
   about:
     "When the tests run inside Docker, the files they leave behind are owned by the wrong user. Nobody can delete them afterwards without special permissions.",
@@ -117,7 +117,7 @@ test("a two-question halt renders as numbered questions with lettered options", 
   );
 
   expect(body()).toBe(
-    `https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana — jigs paused work on **AI-659** and needs your answers before it writes any code.
+    `https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana — Work on **AI-659** is paused: your answers are needed before any code is written.
 
 **What this ticket is about.** When the tests run inside Docker, the files they leave behind are owned by the wrong user. Nobody can delete them afterwards without special permissions.
 
@@ -170,7 +170,7 @@ test("a retry halt renders its notes and asks for any reply at all", async () =>
   expect(body()).toBe(
     `https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana — jigs could not start a step on **AI-659** because a check failed.
 
-Once this is fixed, reply here with anything and jigs will try the step again.
+Once this is fixed, reply here with anything and the step will be tried again.
 
 ---
 
@@ -200,7 +200,7 @@ test("the creator and the assignee are one mention when they are one person", as
     definition,
   );
   expect(body().split("\n")[0]).toBe(
-    "https://linear.app/acme/profiles/salim — jigs paused work on **AI-659** and needs your answers before it writes any code.",
+    "https://linear.app/acme/profiles/salim — Work on **AI-659** is paused: your answers are needed before any code is written.",
   );
 });
 
@@ -220,7 +220,7 @@ test("an unassigned ticket greets its creator alone", async () => {
     definition,
   );
   expect(body().split("\n")[0]).toBe(
-    "https://linear.app/acme/profiles/salim — jigs paused work on **AI-659** and needs your answers before it writes any code.",
+    "https://linear.app/acme/profiles/salim — Work on **AI-659** is paused: your answers are needed before any code is written.",
   );
 });
 
@@ -237,7 +237,7 @@ test("a ticket with nobody on it gets the headline without a dangling dash", asy
     definition,
   );
   expect(body().split("\n")[0]).toBe(
-    "jigs paused work on **AI-659** and needs your answers before it writes any code.",
+    "Work on **AI-659** is paused: your answers are needed before any code is written.",
   );
 });
 
@@ -249,13 +249,13 @@ test("a note greets the participants, bullets its lines, and closes with what to
       sessionId: "session-1",
       note: {
         headline:
-          "jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:",
+          "Starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:",
         notes: [
           "Only the validate script changes.",
           "The build folder is created before Docker starts.",
         ],
         closing:
-          "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
+          "Work is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
       },
     },
     context,
@@ -263,12 +263,12 @@ test("a note greets the participants, bullets its lines, and closes with what to
   );
 
   expect(body()).toBe(
-    `https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana — jigs is starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:
+    `https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana — Starting work on AI-659. Before writing code, the reviewer read the ticket and made these assumptions:
 
 - Only the validate script changes.
 - The build folder is created before Docker starts.
 
-jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.
+Work is going ahead with these assumptions. To change one, comment on the pull request once it opens.
 `,
   );
 });
@@ -286,7 +286,7 @@ test("a factory's own renderer replaces the message without replacing the step",
     (halt) => `just: ${halt.headline}`,
   );
   expect(body()).toBe(
-    "just: jigs paused work on **AI-659** and needs your answers before it writes any code.",
+    "just: Work on **AI-659** is paused: your answers are needed before any code is written.",
   );
 });
 

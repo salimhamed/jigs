@@ -238,9 +238,9 @@ const titleProblems = (title: string) =>
       ];
 
 // Notes name the branch, never the local worktree path: they are posted where
-// anyone on the ticket can read them, and `jigs status` shows the path.
+// anyone on the ticket can read them, and the operator can look the path up.
 const workLocation = (worktree: Worktree) =>
-  `The work is on branch \`${worktree.branch}\`, in the run's local worktree, which \`jigs status\` lists.`;
+  `The work is on branch \`${worktree.branch}\`; a local copy is kept on the factory's machine.`;
 
 function stoppedNote(
   key: string,
@@ -251,17 +251,17 @@ function stoppedNote(
   const why = {
     "rounds-exhausted": stopped.findings,
     uncommitted: [
-      "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it).",
+      "The builder left uncommitted changes in the local copy kept on the factory's machine.",
     ],
     "no-commits": [`The builder committed nothing new on branch \`${worktree.branch}\`.`],
   }[stopped.reason];
   return {
     headline:
       stopped.reason === "rounds-exhausted"
-        ? `jigs stopped work on ${key} after ${stopped.round} review round(s) without an approved change.`
+        ? `Work on ${key} stopped after ${stopped.round} review round(s) without an approved change.`
         : stopped.round === 1
-          ? `jigs stopped work on ${key} before review.`
-          : `jigs stopped work on ${key} in round ${stopped.round}, before its review.`,
+          ? `Work on ${key} stopped before review.`
+          : `Work on ${key} stopped in round ${stopped.round}, before its review.`,
     notes: [
       ...why,
       ...(pushed ? [] : ["Could not push the branch; the service log has the push error."]),
@@ -277,20 +277,20 @@ const openedNote = (url: string): TicketNote => ({
   notes: [],
   closing:
     mergedBy === "jigs"
-      ? "jigs merges it once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run."
+      ? "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run."
       : "It's yours to merge once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
   run: "waiting",
 });
 
 const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): TicketNote => ({
-  headline: `jigs stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
+  headline: `Stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
   notes: [`Proposed titles: ${titles.join(", then ")}`, workLocation(worktree)],
   closing:
     "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
 });
 
 const closedNote = (worktree: Worktree): TicketNote => ({
-  headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+  headline: "Stopped: the pull request was closed, so it won't be merged.",
   notes: [],
   closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
 });
@@ -331,10 +331,10 @@ function needsHumanNote(
 ): TicketNote {
   const why = needsHumanWhy(attempts, facts);
   return {
-    headline: `jigs needs a person to move the pull request for ${key} forward.`,
+    headline: `The pull request for ${key} needs a person to move it forward.`,
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
-      "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+      "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. The pull request is still being watched: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
     run: "waiting",
   };
 }

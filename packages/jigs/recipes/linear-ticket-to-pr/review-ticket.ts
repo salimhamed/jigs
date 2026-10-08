@@ -46,10 +46,10 @@ export async function reviewTicket(options: {
       // A note, not a halt: the run keeps going, and a correction now lands on the pull request.
       if (assumptions.length > 0) {
         await noteOnTicket(claim, {
-          headline: `jigs is starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and made these assumptions:`,
+          headline: `Starting work on ${snapshot.identifier}. Before writing code, the reviewer read the ticket and made these assumptions:`,
           notes: assumptions,
           closing:
-            "jigs is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
+            "Work is going ahead with these assumptions. To change one, comment on the pull request once it opens.",
         });
       }
       return { brief, snapshot, assumptions };
@@ -57,7 +57,7 @@ export async function reviewTicket(options: {
 
     // Only the questions reach the session; the brief the next round writes is what the builder reads.
     await haltForHuman(claim, {
-      headline: `jigs paused work on **${snapshot.identifier}** and needs your answers before it writes any code.`,
+      headline: `Work on **${snapshot.identifier}** is paused: your answers are needed before any code is written.`,
       where: "ticket review",
       ...(about === "" ? {} : { about }),
       questions,

@@ -116,7 +116,7 @@ export const renderHumanInputRequest: RenderHumanInputRequest = (halt, context, 
   }
   sections.push(
     halt.onReply === "retry"
-      ? "Once this is fixed, reply here with anything and jigs will try the step again."
+      ? "Once this is fixed, reply here with anything and the step will be tried again."
       : "Reply here with your choices, for example `1a, 2b`. Plain words or a question are fine too. Any reply wakes the run.",
   );
   for (const [index, question] of (halt.questions ?? []).entries()) {

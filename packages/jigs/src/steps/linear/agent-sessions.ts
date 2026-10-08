@@ -24,7 +24,7 @@ export function stepPostingId(
 
 const runLinks = (metadata: RunMetadata, urls: Array<{ label: string; url: string }>) => {
   const dashboard = dashboardRunUrl(metadata.workflowRunId);
-  return dashboard === undefined ? urls : [{ label: "jigs run", url: dashboard }, ...urls];
+  return dashboard === undefined ? urls : [{ label: "Run", url: dashboard }, ...urls];
 };
 
 /**

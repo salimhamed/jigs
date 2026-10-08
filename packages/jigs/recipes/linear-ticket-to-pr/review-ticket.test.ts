@@ -173,7 +173,7 @@ test("a needs-human verdict asks the questions and the about on the ticket, neve
   const call = fake.humanCalls[0];
   expect(call?.claim).toBe(claim);
   expect(call?.halt).toEqual({
-    headline: "jigs paused work on **AGE-313** and needs your answers before it writes any code.",
+    headline: "Work on **AGE-313** is paused: your answers are needed before any code is written.",
     where: "ticket review",
     about: "The tests leave files nobody can delete.",
     questions: [

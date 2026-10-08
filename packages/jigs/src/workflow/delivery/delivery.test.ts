@@ -655,7 +655,7 @@ test("an approved green PR GitHub blocks needs a person once per head; a marked 
     ["h1", "h2"].map((headSha) => ({
       reason: "merge-blocked",
       headSha,
-      detail: expect.stringMatching(/approved and CI is green.*keeps watching/s),
+      detail: expect.stringMatching(/approved and CI is green.*still being watched/s),
     })),
   );
   expect(posted.flatMap(parseMarkers)).toEqual(

@@ -59,7 +59,7 @@ function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha
 }
 
 const BLOCKED =
-  "GitHub blocks the merge although the pull request is approved and CI is green. Most likely the account jigs merges as does not meet a branch rule: push restrictions that leave it out, or a required check or reviewer still missing. Add the account to the rule, or merge by hand; jigs keeps watching.";
+  "GitHub blocks the merge although the pull request is approved and CI is green. Most likely the account that merges does not meet a branch rule: push restrictions that leave it out, or a required check or reviewer still missing. Add the account to the rule, or merge by hand; the pull request is still being watched.";
 
 /** Why a merge did not happen, and whether a later wake could change it. */
 export interface MergeRefusal {
@@ -132,7 +132,7 @@ export function mergeRefusal(
   // snapshot jigs cannot tell which, so the reason names both.
   if (snapshot.ci === "none") {
     return {
-      reason: `no checks have reported on ${expectedHeadSha}; CI may not have started yet, or the repository has none, and jigs won't merge without CI`,
+      reason: `no checks have reported on ${expectedHeadSha}; CI may not have started yet, or the repository has none, and the pull request won't be merged without CI`,
       transient: true,
     };
   }
