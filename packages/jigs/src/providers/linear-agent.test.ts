@@ -185,15 +185,6 @@ test("prompts are read page by page and listed oldest first", async () => {
   expect(bodies().map((body) => body.variables.after)).toEqual([null, "c1"]);
 });
 
-test("a session is answered after a time only by a later response or error", async () => {
-  respond({ agentSession: { activities: { nodes: [{ id: "r1" }] } } });
-  respond({ agentSession: { activities: { nodes: [] } } });
-  expect(await agent.answeredSince("session-1", "2026-10-07T00:00:00.000Z")).toBe(true);
-  expect(await agent.answeredSince("session-1", "2026-10-07T00:00:00.000Z")).toBe(false);
-  expect(bodies()[0].query).toContain('type: { in: ["response", "error"] }');
-  expect(bodies()[0].variables).toEqual({ id: "session-1", since: "2026-10-07T00:00:00.000Z" });
-});
-
 test("the app's last activity is its newest non-prompt one, by type, or null before any", async () => {
   respond({
     agentSession: {

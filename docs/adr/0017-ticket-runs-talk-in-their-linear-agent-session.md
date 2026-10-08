@@ -113,7 +113,7 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   run should end its session with an `ended` note, or Linear shows the run
   working after it ended. The `linear-ticket-to-pr` recipe ends it with
   "Merged <link>.", its stop notes (a closed pull request gets "Stopped: the
-  pull request was closed, so jigs won't merge it." and the branch, which it
+  pull request was closed, so it won't be merged." and the branch, which it
   pushes; the run then completes, since the release policy keeps a dirty
   worktree or unmerged local commits), or "The
   run failed. The run's page has the error." for an unexpected error. A cancelled run posts nothing beyond the
