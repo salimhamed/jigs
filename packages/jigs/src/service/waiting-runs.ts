@@ -28,6 +28,9 @@ function waitingOn(hooks: HeldHook[]): HeldHook[] {
         // Nothing resumes the marker; the reply lands on the claim beside it.
         case "needs-human":
           return false;
+        // The session's owner reads it only through its listening hook.
+        case "linear-session":
+          return false;
         // A ticket claim is held for the run's whole life, but only a run halted
         // on a human is waiting on it. Waking the claim of a run parked anywhere
         // else would queue a replay and a stale hint.

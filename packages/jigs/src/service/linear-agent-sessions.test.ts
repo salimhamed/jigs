@@ -82,14 +82,21 @@ test("a mention starts a run with the session, its issue, the comment and who as
   expect(source.describe(pushed?.inputs ?? {})).toBe(`linear ENG-42 session ${SESSION}`);
 });
 
-test("an assignment starts a run with no comment, and an automation's with no creator", async () => {
+test("an assignment starts a run with no comment", async () => {
   const assigned = withSession({}, { comment: null, commentId: null });
   expect((await source.fromPush(ACME, from(assigned)))?.inputs).toMatchObject({
     session: SESSION,
     comment: null,
   });
-  const automated = withSession({}, { creator: null, creatorId: null });
-  expect((await source.fromPush(ACME, from(automated)))?.inputs).toMatchObject({ creator: null });
+});
+
+test("a session the app opened itself, with no creator, starts no run", async () => {
+  expect(
+    await source.fromPush(ACME, from(withSession({}, { creator: null, creatorId: null }))),
+  ).toBeNull();
+  expect(
+    await source.fromPush(ACME, from(withSession({}, { creator: undefined, creatorId: null }))),
+  ).toBeNull();
 });
 
 test("a prompt context missing or of an unexpected shape still starts a run, without it", async () => {

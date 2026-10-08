@@ -175,7 +175,10 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
       return;
     }
     const run = getRun(runId);
-    const tokens = await runResourceTokens(world, run.runId);
+    // Nothing wakes a session's ownership hook; its run listens on another.
+    const tokens = (await runResourceTokens(world, run.runId)).filter(
+      (token) => parseHookToken(token)?.kind !== "linear-session",
+    );
     if (tokens.length === 0) {
       response.status(409).json({ error: "run has no suspensions to poke" });
       return;

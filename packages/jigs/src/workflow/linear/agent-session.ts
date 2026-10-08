@@ -1,24 +1,35 @@
 // What workflow code and the Linear agent steps share about a Linear agent
-// session: the hook token a conversation holds, and the activities it posts
+// session: the hook tokens a run holds for it, and the activities it posts
 // and reads.
 
 import type { ConversationMessage } from "../agents/conversation.ts";
 import type { Harness } from "../agents/harness-config.ts";
-import { LINEAR_SESSION_TOKEN_PREFIX } from "../hook-tokens.ts";
+import { LINEAR_LISTENING_TOKEN_PREFIX, LINEAR_SESSION_TOKEN_PREFIX } from "../hook-tokens.ts";
 
 /**
- * Build the hook token for a Linear agent session in one Linear installation. A run conversing in
- * the session holds it, and its live turn is registered under it.
+ * Build the hook token that makes one run the owner of a Linear agent session in one Linear
+ * installation. Its live turn is registered under it.
  *
  * @remarks
- * The run must create this hook once, as its first wait, and hold it for the whole conversation,
- * as a ticket claim is held: that is what makes it the session's one owner, and why a run holding
- * it is not reported as waiting. Before every wait on it, the run reads the session's prompts
- * again, because a wake carries nothing and a reply that arrived before the hook existed woke no
- * one.
+ * The run creates this hook once and holds it for its whole life, as a ticket claim is held:
+ * holding it makes the run the session's one owner, and it is how the service finds that run.
+ * Nothing wakes it; a run reads the session through {@link linearListeningToken}.
  */
 export function linearSessionToken(installationName: string, sessionId: string): string {
   return `${LINEAR_SESSION_TOKEN_PREFIX}${installationName}:${sessionId}`;
+}
+
+/**
+ * Build the hook token a run holds while it reads what people send in a Linear agent session.
+ *
+ * @remarks
+ * The service wakes it for each message. A message that arrives while the session's owner holds
+ * no such hook is not read until the run listens again. Before every wait on it, the run reads
+ * the session's prompts again, because a wake carries nothing and a reply that arrived before
+ * the hook existed woke no one.
+ */
+export function linearListeningToken(installationName: string, sessionId: string): string {
+  return `${LINEAR_LISTENING_TOKEN_PREFIX}${installationName}:${sessionId}`;
 }
 
 /**

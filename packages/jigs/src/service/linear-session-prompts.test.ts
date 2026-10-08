@@ -11,7 +11,8 @@ import {
 } from "./linear-session-prompts.ts";
 import type { WakeOutcome } from "./wake.ts";
 
-const TOKEN = "linear:session:acme:session-1";
+const SESSION = "linear:session:acme:session-1";
+const LISTENING = "linear:listening:acme:session-1";
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 const OTHER_RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKN";
 
@@ -22,6 +23,7 @@ type Row = Pick<
 
 let turn: { inject: ReturnType<typeof vi.fn>; stop: ReturnType<typeof vi.fn> } | undefined;
 let wakeOutcome: WakeOutcome;
+let holder: string | null;
 let rows: Row[];
 let statuses: Map<string, string>;
 let answered: boolean;
@@ -39,6 +41,7 @@ const posted = new Map<string, { sessionId: string; body: string }>();
 beforeEach(() => {
   turn = undefined;
   wakeOutcome = { outcome: "gone" };
+  holder = null;
   rows = [];
   statuses = new Map();
   answered = false;
@@ -46,7 +49,7 @@ beforeEach(() => {
   postFailures = 0;
   posted.clear();
   deps = {
-    liveTurn: (token) => (token === TOKEN ? (turn as LiveTurn | undefined) : undefined),
+    liveTurn: (token) => (token === SESSION ? (turn as LiveTurn | undefined) : undefined),
     wake: vi.fn(async () => wakeOutcome),
     linear: () => ({
       postActivityOnce: async (sessionId, content, id) => {
@@ -61,6 +64,7 @@ beforeEach(() => {
       answeredSince: async () => answered,
     }),
     appName: async () => "jigs",
+    holder: async (token) => (token === SESSION ? holder : null),
     recorded: vi.fn(async () => rows as Occurrence[]),
     withdraw: vi.fn(async (row: Pick<Occurrence, "trigger" | "occurrence">) => {
       const found = rows.find((candidate) => candidate.occurrence === row.occurrence);
@@ -140,7 +144,7 @@ test("a reply goes into the live turn, and the session's hook is woken too", asy
     author: "Ada",
     text: "and the tests?",
   });
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
   expect(deps.recorded).not.toHaveBeenCalled();
   expect(posted.size).toBe(0);
 });
@@ -148,8 +152,41 @@ test("a reply goes into the live turn, and the session's hook is woken too", asy
 test("a reply with no live turn wakes the parked run", async () => {
   wakeOutcome = { outcome: "woken" };
   expect(await route(prompted())).toBe("woken");
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
   expect(posted.size).toBe(0);
+});
+
+test("a reply to a run that holds the session but is not listening is told it is working, once", async () => {
+  holder = RUN;
+  statuses = new Map([[RUN, "running"]]);
+  const event = prompted();
+
+  expect(await route(event)).toBe("woken");
+  expect(await route(event)).toBe("woken");
+
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-session-working", event.agentActivity.id]),
+      {
+        sessionId: "session-1",
+        body: "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.",
+      },
+    ],
+  ]);
+  expect(deps.recorded).not.toHaveBeenCalled();
+});
+
+test("a stop to a run that is not listening cancels the run holding the session", async () => {
+  holder = RUN;
+  statuses = new Map([[RUN, "running"]]);
+  const stop = stopEvent();
+
+  expect(await route(stop)).toBe("dropped");
+  expect(posted.size).toBe(0);
+  await fireNext(STOP_GRACE_MS);
+
+  expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(RUN);
+  expect([...posted.keys()]).toEqual([stoppedId(stop)]);
 });
 
 test("a reply a live turn takes stands even when no hook is held", async () => {
@@ -249,7 +286,7 @@ test("stop interrupts the live turn and wakes the hook; a run that answers is le
 
   expect(live.stop).toHaveBeenCalledOnce();
   expect(live.inject).not.toHaveBeenCalled();
-  expect(deps.wake).toHaveBeenCalledWith(TOKEN, expect.any(String));
+  expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
   answered = true;
   await fireNext(STOP_GRACE_MS);
   expect(deps.cancelRun).not.toHaveBeenCalled();

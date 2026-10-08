@@ -1,6 +1,6 @@
-// The `linear.agentSessions` source: every Linear agent session created on an
-// issue, by a mention of the factory's app or an assignment to it, is one
-// occurrence, keyed by the session's id, read off the event the hub passes on.
+// The `linear.agentSessions` source: every Linear agent session a person
+// created on an issue, by a mention of the factory's app or an assignment to
+// it, is one occurrence, keyed by the session's id, read off the event the hub passes on.
 
 import { z } from "zod";
 import { HubResponseError } from "../providers/hub.ts";
@@ -89,8 +89,9 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
       return null;
     }
     const { agentSession, promptContext } = created.data;
-    const { issue } = agentSession;
-    if (!issue) return null;
+    const { issue, creator } = agentSession;
+    // A session with no creator is one the app opened itself, for a run already working on it.
+    if (!issue || !creator) return null;
     if (
       params.teams &&
       !params.teams.some((team) => [issue.team.key, issue.team.id].includes(team))
@@ -109,14 +110,13 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
         return null;
       if (params.labels && !params.labels.some((label) => labels.includes(label))) return null;
     }
-    const { creator } = agentSession;
     const inputs = {
       session: agentSession.id,
       installationName,
       issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
       comment: agentSession.comment?.body ?? null,
       promptContext: promptContext ?? null,
-      creator: creator ? { id: creator.id, name: creator.name, email: creator.email } : null,
+      creator: { id: creator.id, name: creator.name, email: creator.email },
     } satisfies LinearAgentSessionInputs;
     return { key: agentSession.id, inputs, at: new Date(agentSession.createdAt) };
   },
