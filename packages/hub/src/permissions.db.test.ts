@@ -1,5 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { once } from "node:events";
+import http from "node:http";
 import type { AddressInfo } from "node:net";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
@@ -258,19 +259,35 @@ dbTest("keeps invite links to admins", async () => {
   const web: WebApp = { handlers: [notFound], close: async () => {} };
   const server = createHubApp(auth, [], web, new Shutdown()).listen(0, "127.0.0.1");
   await once(server, "listening");
-  const hubUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const { port } = server.address() as AddressInfo;
+  // Raw requests, since fetch would resolve the dot segments before sending.
   const get = (path: string) =>
-    fetch(`${hubUrl}/api/auth/${path}`, { headers: { cookie: member.cookie } });
+    new Promise<{ status: number; body: string }>((resolve, reject) => {
+      const headers = { cookie: member.cookie };
+      http
+        .get({ host: "127.0.0.1", port, path: `/api/auth/${path}`, headers }, (response) => {
+          let body = "";
+          response.setEncoding("utf8");
+          response.on("data", (chunk) => {
+            body += chunk;
+          });
+          response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
+        })
+        .on("error", reject);
+    });
   try {
     expect((await get("get-session")).status).toBe(200);
     for (const path of [
       "organization/get-full-organization",
       "organization/list-invitations",
       "Organization/list-invitations",
+      "x/../organization/list-invitations",
+      "%2e%2e/auth/organization/get-full-organization",
+      "organization\\list-invitations",
     ]) {
       const response = await get(path);
       expect(response.status).toBe(404);
-      expect(await response.text()).not.toContain(inviteId);
+      expect(response.body).not.toContain(inviteId);
     }
   } finally {
     server.close();
