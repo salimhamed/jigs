@@ -186,8 +186,11 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     // the release policy keeps a dirty worktree or unmerged local commits. A
     // push error can name local paths, so it stays in the service log.
     if (followed.outcome === "closed") {
-      await pushBranch(worktree).catch(() => {});
-      await end("Todo", closedNote(worktree));
+      const pushed = await pushBranch(worktree).then(
+        () => true,
+        () => false,
+      );
+      await end("Todo", closedNote(worktree, pushed));
       return { outcome: "closed" as const, pr: pr.url };
     }
 
@@ -289,9 +292,11 @@ const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): 
     "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
 });
 
-const closedNote = (worktree: Worktree): TicketNote => ({
+const closedNote = (worktree: Worktree, pushed: boolean): TicketNote => ({
   headline: "Stopped: the pull request was closed, so it won't be merged.",
-  notes: [],
+  notes: pushed
+    ? []
+    : ["Could not push the latest work; a local copy is kept on the factory's machine."],
   closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
 });
 

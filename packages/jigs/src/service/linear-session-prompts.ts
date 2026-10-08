@@ -53,7 +53,7 @@ export interface SessionPromptDeps {
   wake: typeof wake;
   linear: (
     installationName: string,
-  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "lastAppActivity">;
+  ) => Pick<LinearAgentApi, "postActivityOnce" | "findActivity" | "lastAppActivity">;
   appName: (installationName: string) => Promise<string>;
   /** The run holding this hook token, or null when none does. It may have ended since. */
   holder: (token: string) => Promise<string | null>;
@@ -352,7 +352,11 @@ async function endUntakenStop(
   deps: SessionPromptDeps,
 ): Promise<void> {
   const linear = deps.linear(session.installationName);
-  if (await linear.answeredSince(session.sessionId, stop.createdAt)) return;
+  // Only the stop's own answer counts: a ticket run's ordinary notes are responses too.
+  if (
+    (await linear.findActivity(onceActivityId(session.sessionId, stopAnswerKey(stop.id)))) !== null
+  )
+    return;
   const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
   const state = await sessionState(session, deps, { withdraw: true });
   const runs = new Set(holder === null ? [] : [holder]);

@@ -443,7 +443,10 @@ test("a pull request closed without merging pushes the branch, sets Todo, ends w
   await expect(run()).resolves.toEqual({ outcome: "closed", pr: pr.url });
 
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
-  expect(posted()[1]).toEqual(closed);
+  expect(posted()[1]).toEqual({
+    ...closed,
+    notes: ["Could not push the latest work; a local copy is kept on the factory's machine."],
+  });
   expect(statuses()).toEqual(["In Progress", "In Review", "Todo"]);
   expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[1]).toBeGreaterThan(
     vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[2] ?? Infinity,

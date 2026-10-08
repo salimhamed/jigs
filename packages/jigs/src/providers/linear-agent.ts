@@ -178,22 +178,6 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return prompts.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
   }
 
-  /** Whether the app posted a `response` or an `error`, the activities that end its turn, after `since`. */
-  async function answeredSince(sessionId: string, since: string): Promise<boolean> {
-    const data = await graphql<{ agentSession: { activities: { nodes: Array<{ id: string }> } } }>(
-      `query AgentSessionAnswered($id: String!, $since: DateTimeOrDuration!) {
-        agentSession(id: $id) {
-          activities(
-            filter: { type: { in: ["response", "error"] }, createdAt: { gt: $since } }
-            first: 1
-          ) { nodes { id } }
-        }
-      }`,
-      { id: sessionId, since },
-    );
-    return data.agentSession.activities.nodes.length > 0;
-  }
-
   /** The app's newest activity in a session, or null before its first. A person's message is not one. */
   async function lastAppActivity(
     sessionId: string,
@@ -227,7 +211,6 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     createSession,
     setExternalUrls,
     listPrompts,
-    answeredSince,
     lastAppActivity,
   };
 }

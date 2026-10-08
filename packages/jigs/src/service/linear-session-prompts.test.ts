@@ -63,7 +63,7 @@ beforeEach(() => {
           posted.set(id, { sessionId, body: (content as { body: string }).body });
         return { id, createdAt: "" };
       },
-      answeredSince: async () => answered,
+      findActivity: async () => (answered ? { id: "stopped", createdAt: "" } : null),
       lastAppActivity: async () => last,
     }),
     appName: async () => "jigs",
