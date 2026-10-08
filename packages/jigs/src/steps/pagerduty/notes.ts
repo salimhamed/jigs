@@ -6,7 +6,7 @@ import { pagerDutyFor } from "../../providers/pagerduty.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 
 function renderIncidentNote(content: string, metadata: RunMetadata): string {
-  return `${content.trimEnd()}\n\njigs run ${metadata.workflowRunId}`;
+  return `${content.trimEnd()}\n\nRun ${metadata.workflowRunId}`;
 }
 
 /**

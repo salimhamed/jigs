@@ -123,7 +123,7 @@ test("the session's links are replaced with exactly the labels and URLs given", 
 
 test("a session is opened on the issue with its links, so Linear starts it at once", async () => {
   respond({ agentSessionCreateOnIssue: { success: true, agentSession: { id: "session-2" } } });
-  const links = [{ label: "jigs run", url: "https://jigs.example/runs/r1" }];
+  const links = [{ label: "Run", url: "https://jigs.example/runs/r1" }];
   expect(await agent.createSession("issue-1", links)).toBe("session-2");
   expect(bodies()[0].variables).toEqual({ input: { issueId: "issue-1", externalUrls: links } });
 });

@@ -13,7 +13,7 @@ export interface JigsLabel {
 
 /** Every label jigs relies on. `jigs bind` makes sure each one exists on the repository. */
 export const JIGS_LABELS: readonly JigsLabel[] = [
-  { name: APPROVED_LABEL, color: "1d76db", description: "Approves this pull request for jigs" },
+  { name: APPROVED_LABEL, color: "1d76db", description: "Approves this pull request for merging" },
 ];
 
 export interface EnsureRepoLabelOptions {

@@ -108,7 +108,7 @@ const opened = {
   headline: `Pull request ${pr.url} is open.`,
   notes: [],
   closing:
-    "jigs merges it once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
+    "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
   run: "waiting",
 };
 const merged = {
@@ -118,7 +118,7 @@ const merged = {
   run: "ended",
 };
 const closed = {
-  headline: "Stopped: the pull request was closed, so jigs won't merge it.",
+  headline: "Stopped: the pull request was closed, so it won't be merged.",
   notes: [],
   closing: "The work is still on branch `acme/abc-123` if you want it back.",
   run: "ended",
@@ -201,13 +201,13 @@ test("a second unconventional title stops the run before anything is pushed", as
   });
 
   await expect(run()).rejects.toThrow(
-    "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+    "Stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
   );
 
   expect(posted()).toEqual([
     {
       headline:
-        "jigs stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
+        "Stopped before opening a pull request for ABC-123: its title is not a conventional commit.",
       notes: [
         "Proposed titles: Add a flag, then Adds a flag",
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
@@ -307,14 +307,14 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
   expect(posted()).toEqual([
     opened,
     {
-      headline: "jigs needs a person to move the pull request for ABC-123 forward.",
+      headline: "The pull request for ABC-123 needs a person to move it forward.",
       notes: [
         "The builder needs a person: Please inspect the conflict.",
         `Pull request: ${pr.url}`,
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing:
-        "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+        "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. The pull request is still being watched: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
       run: "waiting",
     },
     merged,
@@ -397,12 +397,12 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
   vi.mocked(steps.pushBranch).mockRejectedValueOnce(new Error("remote denied"));
 
   await expect(run()).rejects.toThrow(
-    "jigs stopped work on ABC-123 after 3 review round(s) without an approved change.",
+    "Work on ABC-123 stopped after 3 review round(s) without an approved change.",
   );
 
   expect(posted()).toEqual([
     {
-      headline: "jigs stopped work on ABC-123 after 3 review round(s) without an approved change.",
+      headline: "Work on ABC-123 stopped after 3 review round(s) without an approved change.",
       notes: [
         "Broken",
         "Could not push the branch; the service log has the push error.",
@@ -419,8 +419,8 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
 });
 
 test.each([
-  [1, "jigs stopped work on ABC-123 before review."],
-  [2, "jigs stopped work on ABC-123 in round 2, before its review."],
+  [1, "Work on ABC-123 stopped before review."],
+  [2, "Work on ABC-123 stopped in round 2, before its review."],
 ])("a stop in round %i before its review says so", async (round, headline) => {
   vi.mocked(routines.buildAndReview).mockResolvedValueOnce({
     outcome: "stopped",

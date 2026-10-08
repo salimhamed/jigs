@@ -95,6 +95,6 @@ describe.skipIf(!configured)("PagerDuty incident steps, live", () => {
     });
     const { notes } = (await res.json()) as { notes: Array<{ id: string; content: string }> };
     const posted = notes.find((note) => note.id === noteId);
-    expect(posted?.content).toBe(`jigs live test note.\n\njigs run ${runId}`);
+    expect(posted?.content).toBe(`jigs live test note.\n\nRun ${runId}`);
   });
 });

@@ -64,7 +64,7 @@ test("the run's dashboard leads the session's links when the service hosts one",
     metadata,
   );
   expect(api.setExternalUrls).toHaveBeenCalledWith("s1", [
-    { label: "jigs run", url: "http://localhost:3000/run/wrun_01M26" },
+    { label: "Run", url: "http://localhost:3000/run/wrun_01M26" },
     pr,
   ]);
   await setLinearAgentSessionUrls(

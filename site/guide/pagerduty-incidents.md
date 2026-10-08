@@ -15,7 +15,7 @@ what the agent found to the incident as a note. It needs the factory's
 - `postIncidentNote({ installationName, incidentId, content })` adds a note and
   returns its `noteId`. The note is attributed to the from user set on the
   installation in the hub, and ends in a line such
-  as `jigs run wrun_01K…`, so a responder can find the run with `jigs status`.
+  as `Run wrun_01K…`, so a responder can find the run with `jigs status`.
   PagerDuty shows markup as literal text, so write plain sentences.
 
 `postIncidentNote` is tried only once. If PagerDuty's reply is lost, the note
