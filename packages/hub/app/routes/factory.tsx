@@ -152,8 +152,9 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
       />
       {loaderData.tab === "settings" ? (
         <SettingsTab
+          key={factory.id}
           loaded={loaderData}
-          justConnected={(actionData && "connected" in actionData && actionData.connected) || null}
+          connectedNow={(actionData && "connected" in actionData && actionData.connected) || null}
         />
       ) : (
         // A new first page means new events arrived; the older pages shown are then stale.
@@ -165,12 +166,17 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
 
 function SettingsTab({
   loaded,
-  justConnected,
+  connectedNow,
 }: {
   loaded: Extract<Loaded, { tab: "settings" }>;
-  justConnected: string | null;
+  connectedNow: string | null;
 }) {
   const { isAdmin, canManage, factory, connected, available, hasApps } = loaded;
+  // Every app connected since the page opened stays marked, not only the latest.
+  const [justConnected, setJustConnected] = useState<string[]>([]);
+  useEffect(() => {
+    if (connectedNow) setJustConnected((ids) => [...ids, connectedNow]);
+  }, [connectedNow]);
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -218,7 +224,9 @@ function SettingsTab({
                   <tr
                     key={app.id}
                     className={
-                      app.id === justConnected ? "bg-emerald-50 dark:bg-emerald-950/40" : undefined
+                      justConnected.includes(app.id)
+                        ? "bg-emerald-50 dark:bg-emerald-950/40"
+                        : undefined
                     }
                   >
                     <td>
@@ -226,7 +234,7 @@ function SettingsTab({
                         <Link to={`/apps/${app.id}`} className={link}>
                           {app.name}
                         </Link>
-                        {app.id === justConnected && (
+                        {justConnected.includes(app.id) && (
                           <span className="text-emerald-600 dark:text-emerald-400">Connected</span>
                         )}
                       </span>
