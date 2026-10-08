@@ -8,27 +8,6 @@
       "when": 1791262369924,
       "tag": "0000_init",
       "breakpoints": true
-    },
-    {
-      "idx": 1,
-      "version": "7",
-      "when": 1791404983604,
-      "tag": "0001_provider_events_received_index",
-      "breakpoints": true
-    },
-    {
-      "idx": 2,
-      "version": "7",
-      "when": 1791404984288,
-      "tag": "0002_github_app_slug",
-      "breakpoints": true
-    },
-    {
-      "idx": 3,
-      "version": "7",
-      "when": 1791416206903,
-      "tag": "0003_factory_created_by",
-      "breakpoints": true
     }
   ]
 }
