@@ -97,18 +97,19 @@ export function retryAfterSeconds(res: Response, fallback = 1): number {
 }
 
 /**
- * The rate-limit waits of one call. `wait(seconds)` waits out a limit and says whether to send the
- * call again: not for a wait over a minute, nor past the third. `watch` ends a wait early with its
- * signal's reason, such as the run's cancellation; `null` waits regardless.
+ * The waits of one call. `wait(seconds)` waits out a rate limit, or another `reason` to send again,
+ * and says whether to send the call again: not for a wait over a minute, nor past the third. `watch`
+ * ends a wait early with its signal's reason, such as the run's cancellation; `null` waits
+ * regardless.
  */
 export function rateLimitWaits(
   provider: Provider,
   watch: WaitSignal | null,
   sleep: Sleep = realSleep,
-): { wait(seconds: number): Promise<boolean> } {
+): { wait(seconds: number, reason?: string): Promise<boolean> } {
   let waited = 0;
   return {
-    async wait(seconds) {
+    async wait(seconds, reason = "rate limit") {
       if (seconds > MAX_RATE_LIMIT_WAIT_SECONDS || waited >= RATE_LIMIT_RETRIES) return false;
       waited += 1;
       const ms = seconds * 1000;
@@ -116,7 +117,7 @@ export function rateLimitWaits(
         await sleep(ms);
         return true;
       }
-      const run = await watch(`waiting out ${PROVIDER_NAMES[provider]}'s rate limit`);
+      const run = await watch(`waiting out ${PROVIDER_NAMES[provider]}'s ${reason}`);
       try {
         if (run?.signal.aborted) throw abortReason(run.signal);
         await abortable(sleep(ms, run?.signal), run?.signal);

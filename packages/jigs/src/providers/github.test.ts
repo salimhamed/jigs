@@ -792,6 +792,34 @@ test("a secondary rate limit is waited out and the call retried", async () => {
   expect(sleeps).toEqual([7000]);
 });
 
+test("a read GitHub fails on is sent again, up to three times", async () => {
+  const { sleep, sleeps } = fakeSleep();
+  github = fakeGithub({ sleep });
+  github
+    .reply(new Response("", { status: 502 }))
+    .reply(new Response("", { status: 500 }))
+    .reply(json({ title: "after the outage" }));
+  expect(await fetchPrTitle(pr)).toBe("after the outage");
+  expect(sleeps).toEqual([5000, 5000]);
+});
+
+test("a read GitHub keeps failing on fails after three waits", async () => {
+  const { sleep, sleeps } = fakeSleep();
+  github = fakeGithub({ sleep });
+  for (let call = 0; call < 4; call += 1) github.reply(new Response("", { status: 503 }));
+  await expect(fetchPrTitle(pr)).rejects.toThrow("GitHub API 503");
+  expect(sleeps).toEqual([5000, 5000, 5000]);
+});
+
+test("a write GitHub fails on is not sent again", async () => {
+  const { sleep, sleeps } = fakeSleep();
+  github = fakeGithub({ sleep });
+  github.reply(new Response("", { status: 502 }));
+  await expect(postPrComment(pr, "CI is still red")).rejects.toThrow("GitHub API 502");
+  expect(github.calls).toHaveLength(1);
+  expect(sleeps).toEqual([]);
+});
+
 test("a primary rate limit that resets past a minute fails at once as a GitHubApiError", async () => {
   const { sleep, sleeps } = fakeSleep();
   github = fakeGithub({ sleep });
