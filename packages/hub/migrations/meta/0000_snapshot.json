@@ -1,5 +1,5 @@
 {
-  "id": "e558de9f-e8b0-493d-a986-523a870acf7c",
+  "id": "70cbf492-60cd-41e1-ac11-21cf39b93107",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -332,6 +332,12 @@
           "notNull": true,
           "default": "now()"
         },
+        "created_by": {
+          "name": "created_by",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "last_seen_at": {
           "name": "last_seen_at",
           "type": "timestamp with time zone",
@@ -365,6 +371,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "factories_created_by_user_id_fk": {
+          "name": "factories_created_by_user_id_fk",
+          "tableFrom": "factories",
+          "tableTo": "user",
+          "columnsFrom": [
+            "created_by"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -978,7 +997,29 @@
           "notNull": false
         }
       },
-      "indexes": {},
+      "indexes": {
+        "provider_events_organization_received_idx": {
+          "name": "provider_events_organization_received_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "received_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        }
+      },
       "foreignKeys": {
         "provider_events_organization_id_organization_id_fk": {
           "name": "provider_events_organization_id_organization_id_fk",

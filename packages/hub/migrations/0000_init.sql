@@ -39,6 +39,7 @@ CREATE TABLE "factories" (
 	"name" text NOT NULL,
 	"token_hash" text NOT NULL,
 	"created_at" timestamp with time zone DEFAULT now() NOT NULL,
+	"created_by" text,
 	"last_seen_at" timestamp with time zone,
 	"last_seen_version" text,
 	"cursor" bigint DEFAULT 0 NOT NULL,
@@ -150,6 +151,7 @@ ALTER TABLE "apps" ADD CONSTRAINT "apps_organization_id_organization_id_fk" FORE
 ALTER TABLE "assignments" ADD CONSTRAINT "assignments_app_id_apps_id_fk" FOREIGN KEY ("app_id") REFERENCES "public"."apps"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "assignments" ADD CONSTRAINT "assignments_factory_id_factories_id_fk" FOREIGN KEY ("factory_id") REFERENCES "public"."factories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "factories" ADD CONSTRAINT "factories_organization_id_organization_id_fk" FOREIGN KEY ("organization_id") REFERENCES "public"."organization"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
+ALTER TABLE "factories" ADD CONSTRAINT "factories_created_by_user_id_fk" FOREIGN KEY ("created_by") REFERENCES "public"."user"("id") ON DELETE set null ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "factory_messages" ADD CONSTRAINT "factory_messages_factory_id_factories_id_fk" FOREIGN KEY ("factory_id") REFERENCES "public"."factories"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "factory_messages" ADD CONSTRAINT "factory_messages_provider_event_id_provider_events_id_fk" FOREIGN KEY ("provider_event_id") REFERENCES "public"."provider_events"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "installations" ADD CONSTRAINT "installations_app_organization_fk" FOREIGN KEY ("app_id","organization_id") REFERENCES "public"."apps"("id","organization_id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
@@ -170,5 +172,6 @@ CREATE INDEX "invitation_organizationId_idx" ON "invitation" USING btree ("organ
 CREATE INDEX "invitation_email_idx" ON "invitation" USING btree ("email");--> statement-breakpoint
 CREATE INDEX "member_organizationId_idx" ON "member" USING btree ("organization_id");--> statement-breakpoint
 CREATE INDEX "member_userId_idx" ON "member" USING btree ("user_id");--> statement-breakpoint
+CREATE INDEX "provider_events_organization_received_idx" ON "provider_events" USING btree ("organization_id","received_at");--> statement-breakpoint
 CREATE INDEX "session_userId_idx" ON "session" USING btree ("user_id");--> statement-breakpoint
 CREATE INDEX "verification_identifier_idx" ON "verification" USING btree ("identifier");
