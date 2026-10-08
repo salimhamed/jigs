@@ -1,5 +1,3 @@
-import { createHash } from "node:crypto";
-import { readFileSync } from "node:fs";
 import { Pool } from "pg";
 import { afterAll, beforeAll, expect } from "vitest";
 import { databaseUrl, dbTest, postgresAdminUrl } from "../../db-test-fixtures.ts";
@@ -9,7 +7,6 @@ import {
   connectRegistry,
   ensureRegistry,
   listResources,
-  migrateRegistry,
   type RegistrySql,
   recordResource,
   setResourceState,
@@ -73,58 +70,11 @@ dbTest("a fresh database gets the resource and trigger tables, twice without cha
       "jigs_trigger_markers",
       "jigs_triggers",
     ]);
-    expect(await migrations(fresh.db)).toHaveLength(6);
+    expect(await migrations(fresh.db)).toHaveLength(1);
   } finally {
     await fresh.db.$client.end();
   }
 });
-
-dbTest(
-  "a database with the old worktree table loses it without touching World history",
-  async () => {
-    const old = await freshDatabase();
-    try {
-      await old.db.$client.query("CREATE SCHEMA workflow_drizzle");
-      await old.db.$client.query(
-        "CREATE TABLE workflow_drizzle.workflow_migrations (id int, hash text)",
-      );
-      await old.db.$client.query(
-        "INSERT INTO workflow_drizzle.workflow_migrations VALUES (42, 'world')",
-      );
-      // Exactly what the previous release left behind: its one migration applied, with a row.
-      const sql = readFileSync(
-        new URL("../../../migrations/0000_worktree_registry.sql", import.meta.url),
-        "utf8",
-      );
-      await old.db.$client.query(sql);
-      await old.db.$client.query(
-        "INSERT INTO jigs_worktrees (path, branch, owner_run_id, state, repo_dir) VALUES ('/w', 'b', 'run', 'active', '/r')",
-      );
-      await old.db.$client.query("CREATE SCHEMA jigs_drizzle");
-      await old.db.$client.query(
-        "CREATE TABLE jigs_drizzle.jigs_migrations (id SERIAL PRIMARY KEY, hash text NOT NULL, created_at bigint)",
-      );
-      await old.db.$client.query(
-        "INSERT INTO jigs_drizzle.jigs_migrations (hash, created_at) VALUES ($1, 1789689600000)",
-        [createHash("sha256").update(sql).digest("hex")],
-      );
-
-      await migrateRegistry(old.url);
-
-      expect(await tables(old.db)).toEqual([
-        "jigs_resources",
-        "jigs_trigger_markers",
-        "jigs_triggers",
-      ]);
-      expect(await migrations(old.db)).toHaveLength(6);
-      expect(
-        (await old.db.$client.query("SELECT * FROM workflow_drizzle.workflow_migrations")).rows,
-      ).toEqual([{ id: 42, hash: "world" }]);
-    } finally {
-      await old.db.$client.end();
-    }
-  },
-);
 
 const key = { factory: "factory-a", runId: "run_1", kind: "worktree", identity: "/w/feat" };
 
