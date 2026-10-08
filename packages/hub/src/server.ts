@@ -31,6 +31,11 @@ function authApp(auth: HubAuth): Express {
   app.disable("x-powered-by");
   app.set("trust proxy", "loopback, uniquelocal");
   const handler = toNodeHandler(auth);
+  // The web app calls the Organization endpoints server-side, behind the hub's own role checks.
+  // Over HTTP they would hand any member what only admins may see, such as invite links.
+  app.all("/api/auth/organization/*splat", (_request, response) => {
+    response.sendStatus(404);
+  });
   app.all("/api/auth/*splat", (request, response) => {
     if (request.ip) request.headers["x-forwarded-for"] = request.ip;
     return handler(request, response);

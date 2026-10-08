@@ -1,12 +1,15 @@
 import { randomBytes } from "node:crypto";
+import { once } from "node:events";
+import type { AddressInfo } from "node:net";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
+import type { RequestHandler } from "express";
 import type { AppLoadContext } from "react-router";
 import { afterAll, beforeAll, expect } from "vitest";
 import { action as appAction } from "../app/routes/app.tsx";
 import { action as factoryAction } from "../app/routes/factory.tsx";
 import { action as inviteAction } from "../app/routes/invite-member.tsx";
-import { action as membersAction } from "../app/routes/members.tsx";
+import { action as membersAction, loader as membersLoader } from "../app/routes/members.tsx";
 import { action as newAppAction } from "../app/routes/new-app.tsx";
 import { action as newFactoryAction } from "../app/routes/new-factory.tsx";
 import { action as settingsAction } from "../app/routes/settings.tsx";
@@ -18,6 +21,9 @@ import * as schema from "./db/schema.ts";
 import { dbTest, testDatabase } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 import { MessageWaiters } from "./messages.ts";
+import { createHubApp } from "./server.ts";
+import { Shutdown } from "./shutdown.ts";
+import type { WebApp } from "./web.ts";
 
 const database = testDatabase();
 const db = connectDatabase(database.url);
@@ -226,4 +232,47 @@ dbTest("keeps apps, members and settings to admins", async () => {
       role: "admin",
     }),
   ).toEqual({ message: `${other.id} is now an admin.` });
+});
+
+dbTest("keeps invite links to admins", async () => {
+  const admin = await signedIn("admin");
+  const member = await signedIn("member");
+  const created = (await post(inviteAction, admin.cookie, "/members/invite", {
+    email: "invitee@example.com",
+    role: "admin",
+  })) as { invite: { link: string } };
+  const inviteId = new URL(created.invite.link).pathname.split("/").at(-1) ?? "";
+
+  const pendingInvite = async (cookie: string) => {
+    const page = (await membersLoader({
+      request: new Request("http://hub.test/members", { headers: { cookie } }),
+      params: {},
+      context,
+    } as Parameters<typeof membersLoader>[0])) as Awaited<ReturnType<typeof membersLoader>>;
+    return page.invites.find((invite) => invite.email === "invitee@example.com");
+  };
+  expect((await pendingInvite(admin.cookie))?.admin?.id).toBe(inviteId);
+  expect((await pendingInvite(member.cookie))?.admin).toBeNull();
+
+  const notFound: RequestHandler = (_request, response) => void response.sendStatus(404);
+  const web: WebApp = { handlers: [notFound], close: async () => {} };
+  const server = createHubApp(auth, [], web, new Shutdown()).listen(0, "127.0.0.1");
+  await once(server, "listening");
+  const hubUrl = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
+  const get = (path: string) =>
+    fetch(`${hubUrl}/api/auth/${path}`, { headers: { cookie: member.cookie } });
+  try {
+    expect((await get("get-session")).status).toBe(200);
+    for (const path of [
+      "organization/get-full-organization",
+      "organization/list-invitations",
+      "Organization/list-invitations",
+    ]) {
+      const response = await get(path);
+      expect(response.status).toBe(404);
+      expect(await response.text()).not.toContain(inviteId);
+    }
+  } finally {
+    server.close();
+  }
 });
