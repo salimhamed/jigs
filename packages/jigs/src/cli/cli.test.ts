@@ -50,9 +50,6 @@ test("init scaffolds through the CLI parser, and bind records its binding", () =
 
 test("renamed value flags reach validation instead of falling back to defaults", () => {
   const cwd = tmpdir();
-  expect(run(cwd, "upgrade", "--to-version", "latest").stderr).toContain(
-    "--to-version takes an exact version",
-  );
   expect(run(cwd, "watch", "--poll-interval-seconds", "0").stderr).toContain(
     "--poll-interval-seconds must be a positive number",
   );
@@ -77,7 +74,7 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
       "Repositories:",
       "Recipes:",
       "Resources:",
-      "Generated code:",
+      "Build:",
       "Options:",
     ]);
     expect(noArgs.stdout).toMatch(/^ {2}down {2,}Stop the service and Postgres; data is kept$/m);
@@ -129,9 +126,8 @@ test("repository and recipe command help uses explicit placeholders", () => {
   expect(run(cwd, "recipe", "add", "--help").stdout).toContain("<recipe-name>");
 });
 
-test("upgrade and service command help uses explicit placeholders", () => {
+test("service command help uses explicit placeholders", () => {
   const cwd = tmpdir();
-  expect(run(cwd, "upgrade", "--help").stdout).toContain("<version>");
   expect(run(cwd, "service", "logs", "--help").stdout).toContain("<line-count>");
 });
 

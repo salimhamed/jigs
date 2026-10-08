@@ -26,7 +26,6 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 | `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
 | `jigs doctor` | Check configuration, credentials and tools against the running service. |
 | `jigs hub connect <url> <token>` | Point the factory at its [hub](/guide/configuration#hub): the URL into `jigs.config.ts`, the token into `.env`. |
-| `jigs upgrade` | Move the factory to the latest jigs and bring it up. |
 
 ## Runs
 
@@ -207,7 +206,6 @@ unit also kills the service and its agents, so stop the factory with
 | Command | What it does |
 | --- | --- |
 | `jigs build` | Compile the workflows into the service bundle. `jigs up` runs it for you. |
-| `jigs generate` | Refresh the generated `jigs/steps.ts` and `jigs/routines.ts` from the installed jigs version. |
 
 ## `jigs up` on a running service
 
@@ -216,28 +214,27 @@ Use `jigs up` after changing workflow code or configuration:
 - Unchanged install, migration and build work is skipped.
 - The service restarts only when the built bundle or `jigs.config.ts` changes.
   `--restart-service` forces a restart.
+- Before starting the service, `up` stops if a waiting or running run needs a
+  workflow or step the new build no longer has, and names each run and what it
+  is missing; see [troubleshooting](/guide/troubleshooting). `--force` does not
+  skip this.
 - Parked and active runs are listed before a restart and require confirmation.
-  A parked run resumes on the new bundle, and fails if the upgrade changed the
-  steps it replays. `--force` skips the question but still prints the list;
-  without a terminal, the command otherwise refuses.
-- A service running another jigs version cannot list its runs, so `up` warns
-  that its runs are unknown and restarts it.
+  `--force` skips the question but still prints the list; without a terminal,
+  the command otherwise refuses.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
 
-`jigs upgrade` moves the factory's jigs pin to the latest release, or to
-`--to-version <version>`. Then, using the newly installed version, it
-regenerates `jigs/`, runs `jigs up` and runs the factory's typecheck. Review
-and commit the changes it makes. Your workflows and copied recipes are yours to
-update: a new release can change an API they use, and the typecheck tells you
-where.
+1. Set the new `@jigs-ai/jigs` version in `package.json`.
+2. Run `pnpm install`.
+3. Run `pnpm exec jigs up`.
+
+Your workflows and copied recipes are yours to update: a new release can change
+an API they use, and `pnpm typecheck` tells you where.
 
 The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
-naming both versions. `jigs up` and `jigs down` still work, but `jigs up`
-cannot list the old service's runs, so it warns and restarts. Check
-`jigs status` for parked or active runs before you upgrade.
+naming both versions. `jigs up` and `jigs down` still work.
 
 ## Cancelling
 

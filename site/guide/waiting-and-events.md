@@ -174,8 +174,8 @@ See the [watcher reference](/api/factory/routines#watchpullrequest) and
 ## Post commit updates
 
 After reading a snapshot, your workflow can use `postPullRequestNote` from
-`#jigs/routines` to explain the status of a commit; the generated routines
-supply the durable steps. Add this helper at file scope in the watcher module,
+`#jigs/routines` to explain the status of a commit; `#jigs/routines` supplies
+the durable steps. Add this helper at file scope in the watcher module,
 then call `await reportFailingCi(pr, snapshot)` inside the loop after the
 closed-state check. Both arguments come from that loop; the helper posts only when CI is red.
 

@@ -53,8 +53,8 @@ export async function hello() {
 export default defineWorkflow({ inputs, workflow: hello });
 ```
 
-`createRunDirectory` is a jigs-provided step. Its generated function already
-contains `"use step"`. `sleep` comes from the Workflow SDK's `workflow` package,
+`createRunDirectory` is a jigs-provided step. Its function in `#jigs/steps`
+already contains `"use step"`. `sleep` comes from the Workflow SDK's `workflow` package,
 which is installed in your factory.
 
 Here is what happens:
@@ -148,29 +148,33 @@ automate. A **binding** gives a GitHub repository a name that workflows can
 reference. jigs currently supports GitHub repositories. One workflow can operate across several repositories, or use no Git
 repository at all.
 
-## Why jigs generates code in your factory
+## Folders the build creates
+
+`jigs build`, which `jigs up` runs, writes three folders. All are gitignored;
+never edit them.
+
+- `.jigs/`: the service entry, its startup hook, and the step and routine files
+  your workflows import from `#jigs/steps` and `#jigs/routines`.
+- `.output/`: the compiled service `jigs up` runs, `.output/server/index.mjs`.
+- `.swc/`: the compiler's cache.
 
 The SDK needs stable identities for durable steps to match completed work with
 persisted results. A step's identity comes from its file path and function
-name. Moving or renaming it matters while existing runs still depend on it.
+name. Because the build copies jigs' steps into your factory's `.jigs/steps.ts`,
+their identities are paths in your factory, and upgrading jigs never renames
+them, so runs waiting through an upgrade keep working. `#jigs/routines` binds
+routines to these steps; routines have no durable identities of their own.
 
-jigs generates step wrappers in your factory's `jigs/steps.ts`. Those paths and
-names stay stable as the library implementation changes. `jigs/routines.ts`
-binds routines to these wrappers; routines have no durable identities of their
-own.
+Moving or renaming a workflow or step of your own changes its identity; finish
+or cancel affected runs first. `jigs up` stops before a restart that would
+leave a waiting run without its workflow or a step it recorded. Changing an agent's `output`
+schema while runs are in flight can change which agent calls a replay makes,
+because an answer the old schema accepted may now be asked for again; finish or
+cancel those runs first.
 
-**Commit the generated `jigs/` directory, but do not edit it by hand.** These
-files are part of the factory's durable contract. Committing them keeps their
-identities consistent across machines and code changes. `jigs generate`
-refreshes them; `jigs upgrade` does that for you. Finish or cancel affected runs
-before moving or renaming a workflow or step. Changing an agent's `output` schema
-while runs are in flight can change which agent calls a replay makes, because an
-answer the old schema accepted may now be asked for again; finish or cancel
-those runs first.
-
-Import jigs-provided steps and routines from the generated modules. Use
-`@jigs-ai/jigs` for types, configuration helpers, harnesses, models and other
-library APIs:
+Import jigs-provided steps and routines from `#jigs/steps` and
+`#jigs/routines`. Use `@jigs-ai/jigs` for types, configuration helpers,
+harnesses, models and other library APIs:
 
 ```ts
 import { defineWorkflow, harnesses } from "@jigs-ai/jigs";
@@ -186,13 +190,9 @@ my-factory/
 ├── workflows/
 │   └── hello/
 │       └── hello.ts
-├── jigs/
-│   ├── steps.ts
-│   └── routines.ts
 └── .env
 ```
 
 - `jigs.config.ts`: factory configuration and workflow registration.
 - `workflows/`: workflows you write.
-- `jigs/`: generated step wrappers and routines; commit it, do not edit it.
 - `.env`: local configuration and credentials.

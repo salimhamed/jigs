@@ -43,9 +43,9 @@ installation it uses by its installation name on the hub, such as
 runs' questions and notes mention the operator and the assignee rather than the ticket's
 creator.
 
-`jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
-`jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
-settings. It preserves existing files. Its printed ports come from the factory
+`jigs init` writes `jigs.config.ts`, a `hello` workflow in
+`workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example`
+and build settings. It preserves existing files. Its printed ports come from the factory
 path; adjust them in `jigs.config.ts` if they are taken.
 
 ## 2. Install and `.env`
@@ -152,14 +152,14 @@ a parked run at once. `jigs poke <run-id>` wakes one whose event was missed.
 
 ## Upgrading later
 
+Set the new `@jigs-ai/jigs` version in `package.json`, then:
+
 ```sh
-jigs upgrade
+pnpm install
+pnpm exec jigs up
+pnpm typecheck
 ```
 
-It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
-factory. Review and commit the regenerated `jigs/steps.ts` and
-`jigs/routines.ts`. From a release that generated `jigs.ts`, it also deletes
-that file and replaces the older `package.json` imports entries with
-`#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
-`#jigs/routines` by hand. Library imports come from the root `@jigs-ai/jigs`;
+`jigs up` stops if a waiting run needs a step the new build lacks; go back to
+the previous version, let it finish or cancel it, then upgrade again. Library imports come from the root `@jigs-ai/jigs`;
 routines such as `acquireTicket` or `agentSession` come from `#jigs/routines`.

@@ -7,9 +7,8 @@ import { interpolate } from "../../workflow/interpolate.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { columns, command, heading, note } from "../output.ts";
 
-// Scaffolds infrastructure, editable factory code, and the committed generated
-// integration. Existing files are preserved; `jigs generate` explicitly
-// refreshes jigs/. `jigs up` owns operations on the machine.
+// Scaffolds infrastructure and editable factory code. Existing files are
+// preserved. `jigs up` owns operations on the machine.
 
 export interface InitDeps {
   cwd: string;

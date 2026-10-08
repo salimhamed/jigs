@@ -105,4 +105,4 @@ the watcher the recipe uses.
    Check that `jigs.config.ts` imports the new copy.
 5. Run `pnpm exec jigs up`, then typecheck and test the factory.
 
-Moving workflow files can change their [durable identities](/guide/concepts#why-jigs-generates-code-in-your-factory).
+Moving workflow files can change their [durable identities](/guide/concepts#folders-the-build-creates).

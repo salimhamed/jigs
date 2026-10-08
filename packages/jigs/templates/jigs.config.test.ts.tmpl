@@ -48,19 +48,11 @@ test("every id this factory owns is addressed by a path inside it", () => {
   const owned = emittedIds();
   expect(owned.length).toBeGreaterThan(0);
   for (const id of owned) {
-    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:workflows|jigs)\//);
+    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:workflows|\.jigs)\//);
   }
 });
 
 test("every workflow this factory registers emitted a workflow id", () => {
   const emitted = emittedIds().filter((id) => id.startsWith("workflow//"));
   expect(emitted).toHaveLength(Object.keys(workflows).length);
-});
-
-test("every step id is declared under workflows/ or in jigs/steps.ts", () => {
-  const steps = emittedIds().filter((id) => id.startsWith("step//"));
-  expect(steps.length).toBeGreaterThan(0);
-  for (const id of steps) {
-    expect(id).toMatch(/^step\/\/\.\/(?:workflows\/[^/]+(?:\/[^/]+)*|jigs\/steps)\/\/\w+$/);
-  }
 });

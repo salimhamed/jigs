@@ -1,4 +1,5 @@
-import type { Factory, FactoryDefinition } from "../../workflow/factory.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
+import type { Factory } from "../../workflow/factory.ts";
 import {
   defaultReleasePolicy,
   type ReleasePolicy,
@@ -24,13 +25,11 @@ export function effectiveReleasePolicy(
 }
 
 /** Resolve the workflow policy, then the factory policy, then the built-in release/keep default. */
-export async function resolveReleasePolicy(
-  metadata: NamedRunMetadata,
-  definition: FactoryDefinition,
-): Promise<ReleasePolicy> {
+export async function resolveReleasePolicy(metadata: NamedRunMetadata): Promise<ReleasePolicy> {
+  const { config } = currentFactoryContext();
   const workflows = Object.fromEntries(
     await Promise.all(
-      Object.entries(definition.workflows).map(async ([name, load]) => [
+      Object.entries(config.workflows ?? {}).map(async ([name, load]) => [
         name,
         (await load()).default,
       ]),
@@ -38,6 +37,6 @@ export async function resolveReleasePolicy(
   );
   return effectiveReleasePolicy(
     workflowReleasePolicy({ workflows }, metadata.workflowName),
-    definition.release,
+    config.release,
   );
 }
