@@ -44,7 +44,7 @@ const WORKING =
   "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.";
 
 const WAITING =
-  "I can't take instructions here while I wait; my last message says where to act. Use Stop to end the run.";
+  "I can't take instructions here while I wait; my earlier message says where to act.";
 
 /** What routing a session's prompts reaches. Tests replace it; the service uses the defaults. */
 export interface SessionPromptDeps {
@@ -164,7 +164,7 @@ export async function routeSessionPrompt(
     // having posted since the message means the run already took it: a reply to its question
     // that landed as the run stopped listening. A run left awaiting input is waiting on people,
     // since a question always listens, so its reply asks again to keep the session awaiting
-    // input and its Stop button.
+    // input.
     try {
       const linear = deps.linear(installationName);
       const last = await linear.lastAppActivity(session.sessionId);

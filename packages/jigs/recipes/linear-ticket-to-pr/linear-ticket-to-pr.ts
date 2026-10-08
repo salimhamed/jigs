@@ -154,8 +154,8 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       sessionId: claim.sessionId,
       urls: [{ label: "Pull request", url: pr.url }],
     });
-    // Linear marks a session stale after about 30 quiet minutes and hides its
-    // Stop button; one awaiting input never goes stale.
+    // Linear marks a session stale after about 30 quiet minutes; one awaiting
+    // input never does.
     await noteOnTicket(claim, openedNote(pr.url));
 
     const followed = await followPullRequestToOutcome(delivery, pr, {
@@ -271,8 +271,8 @@ const openedNote = (url: string): TicketNote => ({
   notes: [],
   closing:
     mergedBy === "jigs"
-      ? "jigs merges it once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run."
-      : "It is yours to merge once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run.",
+      ? "jigs merges it once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run."
+      : "It's yours to merge once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
   run: "waiting",
 });
 
@@ -335,7 +335,7 @@ function needsHumanNote(
     headline: `jigs needs a person to move the pull request for ${key} forward.`,
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
-      "Comment on the pull request or push to it; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+      "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
     run: "waiting",
   };
 }

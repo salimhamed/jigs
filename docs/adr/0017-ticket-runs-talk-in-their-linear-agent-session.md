@@ -65,10 +65,12 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   session hides Stop (seen live). A ticket run waiting on its pull request's
   approval, CI and merge is quiet for hours, so its session went stale. A
   session in `awaitingInput` after an elicitation does not go stale (35 minutes
-  observed) and shows Stop. So a note with `run: "waiting"` is posted as an
+  observed), though Linear shows no Stop while it awaits input (checked live).
+  So a note with `run: "waiting"` is posted as an
   `elicitation`, which still notifies its mentions, with no `Still working.`
   after it. The recipe posts one when the pull request opens, saying to comment
-  on the pull request or use Stop, and for every needs-a-person note while it
+  on the pull request to change anything or close it to stop the run, and for
+  every needs-a-person note while it
   follows the pull request; it also adds the pull request to the session's
   `externalUrls`, which is how Linear's docs say to show one. The run does not
   read replies to such a note. The service tells a message to a run that holds
@@ -76,8 +78,9 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   newer than the message means the run already took it (a reply to a halt that
   landed as the halt stopped listening), so nothing is posted; an elicitation
   means the run waits on people, since a halt always listens, so the service
-  replies with an elicitation that says where to act and keeps the session
-  awaiting input; anything else gets the "I'm working" thought.
+  replies with an elicitation, "I can't take instructions here while I wait;
+  my earlier message says where to act.", which keeps the session awaiting
+  input (it only knows the run waits, not on what); anything else gets the "I'm working" thought.
   Rejected: a background loop posting thoughts to keep the session fresh (a
   timer per run for a display quirk). Accepted gap: a build that runs over 30
   minutes before the pull request opens can still go stale; a message in the

@@ -108,7 +108,7 @@ const opened = {
   headline: `Pull request ${pr.url} is open.`,
   notes: [],
   closing:
-    "jigs merges it once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run.",
+    "jigs merges it once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
   run: "waiting",
 };
 const merged = {
@@ -308,7 +308,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing:
-        "Comment on the pull request or push to it; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+        "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
       run: "waiting",
     },
     merged,

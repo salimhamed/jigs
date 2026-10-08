@@ -119,9 +119,9 @@ the workflow a note with `run: "succeeded"` or `"failed"`; without one,
 Linear shows the run working after it ended. Linear marks a session stale
 after about 30 quiet minutes and hides Stop, so before a long wait on people,
 such as a pull request in review, post a note with `run: "waiting"`: the
-session shows awaiting input, never goes stale, and keeps Stop. The run does not
-read replies to it, and the service answers them by saying so, so the note says
-where to act. Link a pull request with the
+session shows awaiting input and never goes stale, though Linear shows no Stop
+while it waits. The run does not read replies to it, and the service answers
+them by saying so, so the note says where to act, including how to stop the run. Link a pull request with the
 `setLinearAgentSessionUrls` step. A message sent while the run
 works waits, unread, for its next `haltForHuman`. Stop cancels the run.
 

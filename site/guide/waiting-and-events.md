@@ -88,8 +88,9 @@ Linear marks a session stale after about 30 minutes with no new activity, and
 a stale session hides its Stop button. Before a long quiet wait on people,
 such as a pull request waiting for review, post a note with
 `run: "waiting"`. It shows the session as awaiting input, which never goes
-stale, so Stop stays available. The run does not read replies to it, so say in
-the note where people act, for example on the pull request. To show the pull
+stale. Linear shows no Stop button while a session awaits input, and the run
+does not read replies to the note, so say in it where people act, for example
+"comment on the pull request, or close it to stop the run". To show the pull
 request in the session, call the `setLinearAgentSessionUrls` step with
 `[{ label: "Pull request", url }]`; the run's dashboard link stays first.
 
@@ -98,10 +99,9 @@ request in the session, call the `setLinearAgentSessionUrls` step with
   the run." The run reads it at its next question. If the run never asks
   again, it never reads the message.
 - **A message sent while the run waits on people**, after a waiting note,
-  gets the reply "I can't take instructions here while I wait; my last message
-  says where to act. Use Stop to end the run." The reply asks again, so the
-  session stays awaiting input and keeps Stop. The run does not read the
-  message.
+  gets the reply "I can't take instructions here while I wait; my earlier
+  message says where to act." The reply asks again, so the session stays
+  awaiting input. The run does not read the message.
 - **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
   and posts "Stopped." The ticket's status stays as it is.
 - **Ordinary comments** on the ticket answer nothing. jigs never posts or

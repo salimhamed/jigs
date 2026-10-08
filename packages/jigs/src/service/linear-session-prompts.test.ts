@@ -192,7 +192,7 @@ test("a reply to a run waiting on people asks again, once, so the session stays 
       derivedUuid(["linear-session-waiting", event.agentActivity.id]),
       {
         sessionId: "session-1",
-        body: "I can't take instructions here while I wait; my last message says where to act. Use Stop to end the run.",
+        body: "I can't take instructions here while I wait; my earlier message says where to act.",
       },
     ],
   ]);

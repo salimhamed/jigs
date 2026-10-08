@@ -50,8 +50,8 @@ export type TicketNote = {
    * @remarks
    * `"succeeded"` and `"failed"` end the session, so set one on the run's last
    * note. `"waiting"` shows the session as awaiting input, which never goes
-   * stale and keeps Stop. The run does not read replies to a waiting note, so
-   * say in it where people act.
+   * stale but shows no Stop button. The run does not read replies to a waiting
+   * note, so say in it where people act and how to stop the run.
    */
   run?: "waiting" | "succeeded" | "failed" | undefined;
 };

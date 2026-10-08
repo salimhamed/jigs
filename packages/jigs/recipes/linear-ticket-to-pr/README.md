@@ -13,8 +13,8 @@ session. A message sent while the run is working waits for its next question.
 Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
 as it is. Once the pull request opens, the session links to it and a note
 says it is open and waits on people. That keeps the session awaiting input,
-so Linear never marks it stale and Stop stays available however long review
-takes; to change the work, comment on the pull request. Every note mentions the operator (or the ticket's
+so Linear never marks it stale however long review takes. To change the work,
+comment on the pull request; to stop the run, close it. Every note mentions the operator (or the ticket's
 creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
@@ -215,7 +215,7 @@ export async function deliverTicket(
   await noteOnTicket(claim, {
     headline: `Pull request ${pr.url} is open.`,
     notes: [],
-    closing: "Comment on the pull request to change anything, or use Stop to end the run.",
+    closing: "Comment on the pull request to change anything, or close it to stop the run.",
     run: "waiting",
   });
   const followed = await followPullRequestToOutcome(delivery, pr, {
@@ -227,7 +227,8 @@ export async function deliverTicket(
       noteOnTicket(claim, {
         headline: `${pr.url} needs a person (${facts.reason}).`,
         notes: [facts.detail],
-        closing: "Comment on the pull request or push to it; replies here aren't read.",
+        closing:
+          "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read.",
         run: "waiting",
       }),
   });
