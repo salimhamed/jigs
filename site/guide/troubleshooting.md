@@ -81,8 +81,10 @@ export async function formatLocalTime(at: string, timeZone: string) {
 ## A run is waiting
 
 Run `pnpm exec jigs status <run>`. A waiting run is expected when it asked a
-question or is following a pull request; the status says what it needs and
-links to where you act. Starting another run does not answer the first one.
+question or is following a pull request; the status says what it needs. A
+question waits for a reply in the run's Linear agent session on the ticket,
+not in the ticket's comments. Starting another run does not answer the first
+one.
 
 Once you have answered, the run notices on its next
 [check](/guide/waiting-and-events). `pnpm exec jigs poke <run>` makes it

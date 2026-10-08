@@ -281,7 +281,8 @@ the app at work while the run starts. Each run gets:
 
 `teams` takes team keys such as `ENG` or team ids, `projects` takes project
 ids or the id at the end of a project's URL, and `labels` takes label names.
-Sessions not on an issue start no run.
+Sessions not on an issue start no run, and neither do sessions no person
+started, such as the ones ticket runs open.
 
 ```ts
 import { linear } from "@jigs-ai/jigs";
@@ -501,7 +502,7 @@ teams.
 ### The factory's Linear app {#linear-app}
 
 jigs acts on Linear as a [Linear app](/guide/hub-linear) the hub assigns the
-factory, so its comments and mentions reach you like anyone else's. Connect
+factory, so its messages and mentions reach you like anyone else's. Connect
 the app to your Linear workspace in the hub, name that installation, such as
 `linear-acme`, and assign the app to the factory; the hub hands the factory its
 tokens and refreshes them. Every Linear step, routine, trigger and agent takes
@@ -512,15 +513,16 @@ factory names, and says when a workspace must be connected again in the hub.
 Use one Linear app per purpose: two factories assigned the same app both answer
 a mention of it; see [Linear mentions and assignments](#linear-agent-sessions).
 
-### Who comments mention {#linear-operator}
+### Who a ticket run mentions {#linear-operator}
 
-Every comment jigs posts on a Linear ticket starts by mentioning people, so
-Linear notifies them. That covers the questions a paused run asks and the notes
-it leaves, such as the assumptions a ticket review made.
+A ticket run talks to people in its Linear agent session, and every question
+and note it posts there starts by mentioning people, so Linear notifies them.
+That covers the questions a paused run asks and the notes it leaves, such as
+the assumptions a ticket review made.
 
-- **Without `linear.operator`**, a comment mentions the ticket's creator and
+- **Without `linear.operator`**, a message mentions the ticket's creator and
   its assignee.
-- **With `linear.operator`**, set to the email of your Linear user, a comment
+- **With `linear.operator`**, set to the email of your Linear user, a message
   mentions you and the ticket's assignee instead. Set it when colleagues create
   tickets for the factory, so its questions reach you rather than them.
 
@@ -530,11 +532,12 @@ linear: { operator: "you@example.com" },
 ```
 
 Each person is mentioned once, even when the operator is also the assignee.
-Anyone's reply wakes a paused run; the mention only decides who is notified.
+Anyone's reply in the session answers a paused run; the mention only decides
+who is notified.
 The operator is one setting for the whole factory. Like the rest of
 `jigs.config.ts`, a change takes effect after a rebuild, which `jigs up` does.
 
-A step or routine that posts a comment, such as `haltForHuman` or
+A step or routine that posts in the session, such as `haltForHuman` or
 `noteOnTicket`, also takes a `mention` list of extra emails to mention
 alongside these people.
 
@@ -543,7 +546,7 @@ installation the factory uses and fail when no active Linear user there has it.
 
 When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
-out, logs a warning and posts the comment anyway. A mention never stops a run.
+out, logs a warning and posts the message anyway. A mention never stops a run.
 
 ## PagerDuty {#pagerduty}
 

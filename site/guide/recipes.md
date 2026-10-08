@@ -28,6 +28,9 @@ Reads a Linear ticket, asks a builder agent to implement the change, then asks
 a reviewer agent to review it. It publishes a pull request and lets the builder
 continue responding to feedback and CI. Merging follows the policy in the copied
 workflow: by default, jigs merges an approved pull request once CI is green.
+The run talks to people in one Linear agent session on the ticket: it asks
+there when the ticket is unclear, leaves its notes there, and ends it with
+"Merged" and the pull request's link, or why it stopped.
 
 #### Requires
 
@@ -80,7 +83,7 @@ stops the run. To allow any title, delete the check in the copied workflow. `app
 `"latest-commit"` by default, or `"any-commit"` to let an approval carry over
 later pushes. If GitHub blocks an approved, green pull request, the recipe
 leaves one note on it for each commit and keeps waiting. When the pull request
-needs a person, the recipe notes it on the ticket, leaves the ticket In Review
+needs a person, the recipe notes it in the ticket's session, leaves the ticket In Review
 and keeps watching; only closing the pull request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a
 restriction on its token; see

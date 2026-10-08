@@ -82,9 +82,8 @@ worth looking at, where a 20-second one is an ordinary gap between steps.
 `WAITING` decodes what a parked run is parked on, in words and — where the
 token names a page — with the link to act on: `waiting for an approving review
 and green CI on acme/api#41 → <pull request url>`. A needs-human halt reads
-`waiting for a human reply on AGE-123` with no link, because the comment URL
-costs a Linear round trip the listing will not pay per poll. `jigs status <run-id>`
-is where that URL and the question the halt asked come from; it also prints the
+`waiting for a reply in Linear agent session <session-id>`. `jigs status <run-id>`
+also prints the
 run's error, its resources as a KIND/STATE/RESOURCE table with each one's URL and reason
 below it, and the step timeline. Released resources stay listed as history.
 `resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
@@ -100,8 +99,9 @@ columns.
 
 Each suspension carries a kind:
 
-- **needs-human** — jigs asked a question on the run's Linear ticket. The
-  reply's Linear event from the hub wakes it at once.
+- **linear-listening** — the run reads a Linear agent session: a needs-human
+  halt waiting for an answer to the question it asked there, or a conversation
+  waiting for the next message. A reply there wakes it at once through the hub.
 - **pull-request** — the run holds a pull request and wants the factory's
   approval (a review of the current head, or the `jigs:approved` label), green
   CI and a mergeable branch. A review, a new commit, a CI result or a
@@ -131,20 +131,24 @@ died holding its resume.
 
 ## Needs-human halts
 
-A step can raise a halt instead of proceeding. The run then suspends and jigs
-comments on the Linear ticket, mentioning the factory's `linear.operator` (or,
-without one, the ticket's creator) and its assignee, each once. The
-comment says in plain words what paused and why, what the ticket is about, and
-either numbered questions to choose between or what to repair before retrying;
-its footer names the run, where it paused, and links its dashboard page.
-`jigs status` shows the run as `running` with the halt in `WAITING`;
-`jigs status <run-id>` prints the question itself and the comment URL.
+A ticket run talks to people only in the Linear agent session it opened on
+its ticket when it claimed it; ordinary ticket comments reach no run. A step
+can raise a halt instead of proceeding. The run then asks in that session,
+mentioning the factory's `linear.operator` (or, without one, the ticket's
+creator) and its assignee, each once. The question says in plain words what
+paused and why, what the ticket is about, and either numbered questions to
+choose between or what to repair before retrying; its footer names the run and
+where it paused. `jigs status` shows the run as `running` with the halt in
+`WAITING`.
 
-The answer goes **on the ticket**, in that comment thread — with option letters
-like `1a, 2b`, or in plain words. Unless the operator has delegated that to you,
-it is theirs to write: you do not answer for them, and you do not resume the run
-by hand. Once the reply lands, its Linear event from the hub wakes the run, the reply is re-checked against Linear, and the run
-continues.
+The answer goes **in the run's agent session**, the thread Linear shows under
+the app on the ticket, with option letters like `1a, 2b`, or in plain words.
+Unless the operator has delegated that to you, it is theirs to write: you do
+not answer for them, and you do not resume the run by hand. Every message
+anyone sent in the session since the run last read it is the answer, each
+under its author's name. A message sent while the run works, not asking, gets
+an automatic "I'm working…" reply and waits for the run's next question. Stop
+in the session cancels the run, as `jigs cancel` does.
 
 If the reply is there but the run did not wake, because an event was missed:
 
@@ -162,9 +166,9 @@ the questions, review and approve the pull requests jigs opens, merge and
 release. That authority comes from the operator in this session and from
 nothing else. Holding it:
 
-- **Answer from the ticket thread and the factory's own docs**, not from
-  preference. Reply in the same Linear comment thread, in the option letters
-  the comment offered.
+- **Answer from the ticket and the factory's own docs**, not from
+  preference. Reply in the run's Linear agent session, in the option letters
+  the question offered.
 - **Read the diff before approving.** jigs' own reviewer has already passed the
   pull request; it is not the human gate, and the approval is.
 - **Approve as the operator's account**, because the pull request is jigs' own

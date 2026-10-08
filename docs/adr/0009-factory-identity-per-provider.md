@@ -1,6 +1,6 @@
 # A factory has its own identity on each provider
 
-Status: accepted; superseded for GitHub, Linear, Slack and PagerDuty by [0015](./0015-hub.md)
+Status: accepted; superseded for GitHub, Linear, Slack and PagerDuty by [0015](./0015-hub.md); reading Linear comments superseded by [0017](./0017-ticket-runs-talk-in-their-linear-agent-session.md)
 
 A factory now acts on GitHub only as the App its hub assigns it, with installation tokens the hub mints; the `pat` and `app` modes below are gone.
 
@@ -9,6 +9,10 @@ A factory now acts on Linear only as the Linear app its hub assigns it, with acc
 A factory now acts on Slack only as the Slack app its hub assigns it, with the bot token the hub hands out; `SLACK_BOT_TOKEN` and Socket Mode are gone.
 
 A factory now acts on PagerDuty only as the PagerDuty app its hub assigns it, with tokens the hub mints; `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` and `pagerduty.identity` are gone, leaving only `pagerduty.from`.
+
+A ticket run no longer reads ordinary Linear comments: it asks and is answered
+in its own Linear agent session ([0017](./0017-ticket-runs-talk-in-their-linear-agent-session.md)),
+so the comment-exclusion rule below is gone.
 
 When a factory acts with its operator's personal credential, the two become one
 account: GitHub refuses to let the operator approve a pull request jigs opened,
