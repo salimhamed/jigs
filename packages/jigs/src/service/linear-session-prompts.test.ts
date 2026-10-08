@@ -27,6 +27,7 @@ let holder: string | null;
 let rows: Row[];
 let statuses: Map<string, string>;
 let answered: boolean;
+let asked: boolean;
 let timers: Array<{ fire: () => void; ms: number }>;
 let postFailures: number;
 let deps: SessionPromptDeps & {
@@ -45,6 +46,7 @@ beforeEach(() => {
   rows = [];
   statuses = new Map();
   answered = false;
+  asked = false;
   timers = [];
   postFailures = 0;
   posted.clear();
@@ -62,6 +64,7 @@ beforeEach(() => {
         return { id, createdAt: "" };
       },
       answeredSince: async () => answered,
+      askedBefore: async () => asked,
     }),
     appName: async () => "jigs",
     holder: async (token) => (token === SESSION ? holder : null),
@@ -153,6 +156,13 @@ test("a reply with no live turn wakes the parked run", async () => {
   wakeOutcome = { outcome: "woken" };
   expect(await route(prompted())).toBe("woken");
   expect(deps.wake).toHaveBeenCalledWith(LISTENING, expect.any(String));
+  expect(posted.size).toBe(0);
+});
+
+test("a reply to the run's open question gets no working note, even after the run stopped listening", async () => {
+  holder = RUN;
+  asked = true;
+  expect(await route(prompted())).toBe("woken");
   expect(posted.size).toBe(0);
 });
 

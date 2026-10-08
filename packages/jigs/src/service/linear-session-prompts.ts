@@ -47,7 +47,9 @@ const WORKING =
 export interface SessionPromptDeps {
   liveTurn: typeof liveTurn;
   wake: typeof wake;
-  linear: (installationName: string) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince">;
+  linear: (
+    installationName: string,
+  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "askedBefore">;
   appName: (installationName: string) => Promise<string>;
   /** The run holding this hook token, or null when none does. It may have ended since. */
   holder: (token: string) => Promise<string | null>;
@@ -155,15 +157,20 @@ export async function routeSessionPrompt(
     return "dropped";
   }
   if (holder !== null) {
-    // The message stays in the session, and the run reads it when it next listens.
+    // The message stays in the session, and the run reads it when it next listens. A reply to
+    // the run's open question can land after the run has already read it and stopped listening;
+    // that one is an answer, so it gets no working note.
     try {
-      await deps
-        .linear(installationName)
-        .postActivityOnce(
-          session.sessionId,
-          { type: "thought", body: WORKING },
-          derivedUuid(["linear-session-working", prompt.id]),
-        );
+      const linear = deps.linear(installationName);
+      if (await linear.askedBefore(session.sessionId, prompt.createdAt)) {
+        console.log(`[events] linear accepted ${at} run=${holder} answered`);
+        return "woken";
+      }
+      await linear.postActivityOnce(
+        session.sessionId,
+        { type: "thought", body: WORKING },
+        derivedUuid(["linear-session-working", prompt.id]),
+      );
     } catch (error) {
       console.error(
         `[linear] could not answer agent session ${session.sessionId}: ${String(error)}`,
