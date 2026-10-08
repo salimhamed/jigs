@@ -1,3 +1,21 @@
 @import "tailwindcss";
 
 @custom-variant dark (&:where(.dark, .dark *));
+
+/* Native controls draw their own popups, such as a select's option list, in the page's color scheme. */
+@layer base {
+  :root {
+    color-scheme: light;
+  }
+  :root.dark {
+    color-scheme: dark;
+  }
+  option {
+    background-color: var(--color-white);
+    color: var(--color-zinc-900);
+  }
+  .dark option {
+    background-color: var(--color-zinc-900);
+    color: var(--color-zinc-100);
+  }
+}

@@ -107,7 +107,7 @@ export function setUpTestHub() {
 
     async newFactory(organization = organizationId) {
       factories += 1;
-      return addFactory(db, organization, `factory ${factories}`);
+      return addFactory(db, organization, `factory ${factories}`, null);
     },
 
     /** The names of a factory's unconfirmed messages: an event's name, or the message's kind. */

@@ -11,8 +11,8 @@ mention of it, so two factories that share one both act on the same mention.
 
 ## 1. Create the app in Linear
 
-In Linear, under **Settings → API**, create a new application and fill in the
-form:
+In Linear, open **Settings** → **API** → **OAuth applications** → **New** and
+fill in the form:
 
 - **Application icon** and **Application name**: what people see, and the
   name they mention.
@@ -34,8 +34,15 @@ Create the app, then note its **Client ID** and **Client secret**.
 
 ## 2. Add the app to the hub
 
-In the hub, under **Apps → Add a Linear app**, enter the app's name as
-Linear shows it, its client ID, client secret and webhook signing secret.
+In the hub, under **Apps → Add app**, choose **Linear app**, and enter the
+app's name as Linear shows it, its client ID, client secret and webhook
+signing secret.
+
+Keep the name the same as the app's name in Linear: it is the name people
+mention, and agents are told it is their own. You can rename the app in
+Linear's settings any time; then rename it on its page on the hub too.
+Running factories learn the new name the next time they get a Linear token;
+restart a factory to apply it at once.
 
 ## 3. Finish the app's settings
 
@@ -55,14 +62,15 @@ an agent. The workspace then appears under **Workspaces**. Give it an
 `linear-acme`, under **Installation name**, and save.
 
 If the hub can no longer refresh a workspace's tokens, for example because
-the app was revoked in Linear, the workspace shows **Connect again**. Connect
-it again to fix it.
+the app was revoked in Linear, the workspace shows **Stopped working**. An
+admin connects it again to fix it.
 
 ## 5. Assign it to factories
 
-Under **Factories** on the app's page, check each factory that should act as
-this app, and save. A factory may be assigned several Linear apps and
-workspaces, and names the installation it uses in each trigger, step and agent.
+On the **Settings** tab of each factory that should act as this app, choose
+**Connect app** and connect the app. A factory may be assigned several Linear
+apps and workspaces, and names the installation it uses in each trigger, step
+and agent.
 
 In the factory, `pnpm exec jigs doctor` checks that the hub hands it a token
 for each Linear installation it uses. To start runs from mentions and assignments, see

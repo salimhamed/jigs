@@ -44,7 +44,7 @@ Keep them apart: each has its own settings page on GitHub and its own URLs.
 | What it does | Lets people sign in to the hub's web pages. | Lets factories act on GitHub, and sends the hub GitHub's webhooks. |
 | How many | Exactly one per hub. | One or more, added once the hub runs. |
 | Created under | **Developer settings → OAuth Apps** | **Developer settings → GitHub Apps** |
-| Its credentials go | In the hub's environment, as `HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`. | Into the hub's web pages, under **Apps → Add a GitHub App**. |
+| Its credentials go | In the hub's environment, as `HUB_SIGN_IN_GITHUB_CLIENT_ID` and `HUB_SIGN_IN_GITHUB_CLIENT_SECRET`. | Into the hub's web pages, under **Apps → Add app → GitHub App**. |
 | URLs it needs | **Homepage URL** and **Redirect URI**, which the hub prints. | **Webhook URL** and **Setup URL**, which the App's page on the hub shows. |
 | Set it up | [First sign-in](#first-sign-in) | [GitHub App](/guide/hub-github) |
 
@@ -199,18 +199,30 @@ this way; after that, the hub is invite-only.
 
 ## Members {#members}
 
-Under **Invites**, an admin invites a person by their GitHub account's
-[sign-in email](#first-sign-in), as an admin or a member. The hub sends no email: copy the invite
-link it shows and send it yourself. The person opens the link and signs in
-with the GitHub account whose sign-in email that is.
+Under **Members**, an admin chooses **Invite member** and enters a person's
+GitHub account [sign-in email](#first-sign-in), as an admin or a member. The
+hub sends no email: it shows an invite link to copy and send yourself, which
+works once. The person opens the link and signs in with the GitHub account
+whose sign-in email that is. Until then the invite waits under **Pending
+invites**, where an admin can copy its link again or revoke it.
 
-Admins add apps and factories, assign them, invite people and change roles
-under **Members**. Members see everything but change nothing.
+Admins manage apps, members, settings and every factory: they add, rename and
+remove apps, name installations, invite people, change roles and change any
+factory. Members can see everything, and add and manage their own factories:
+rename them, re-issue their tokens, connect and disconnect their apps, and
+remove them. A member who leaves the Organization loses those rights while
+they are out, though their factories still show them as the one who added
+them. Only admins can change a factory with no recorded creator, such as one
+added before the hub recorded who added factories.
+
+The hub's home page charts, hour by hour over the last 24 hours, the
+webhooks it received and the events it queued for your factories, with a
+total for each provider.
 
 ## Add a factory {#factories}
 
-Under **Factories**, an admin adds a factory by name. The hub shows a command
-with the factory's token, once:
+Under **Factories**, any member chooses **Add factory** and names it. The hub
+shows a command with the factory's token, once:
 
 ```sh
 jigs hub connect https://hub.example.com <token>
@@ -224,34 +236,44 @@ pnpm exec jigs hub connect https://hub.example.com <token>
 ```
 
 It writes the hub's URL to `jigs.config.ts` and the token to `.env` as
-`JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`.
+`JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`. The page checks every few
+seconds and says once the factory has connected.
 
-If the token is lost, **Re-issue token** makes a new one and stops the old
-one at once. **Remove** deletes the factory and every event waiting for it.
+If the token is lost, **Re-issue token** makes a new one, shows its command
+the same way and stops the old one at once. **Remove** deletes the factory
+and every event waiting for it.
 
-The factories list shows when each factory last reached the hub, its jigs
-version and how many events it has not confirmed. A factory's own page lists
-its assigned apps with their installations' names, and its event log: every
-provider event the hub kept for it, with when it arrived and whether the
-factory has confirmed it.
+**Factories** opens on **My factories**, the ones you added; **All factories**
+lists every factory in the Organization. Both show when each factory last
+reached the hub, with a green dot while it is connected, its jigs version, how
+many events it has not confirmed, how many apps it is assigned and who added
+it. A factory's own page has two tabs. **Settings** lists its connected apps,
+with their installations' names and when the factory last received an event
+from each, and lets whoever added the factory, or an admin, connect and
+disconnect apps, rename the factory, which keeps its token, re-issue its token
+or remove it. **Activity** is its event log, newest first: every provider
+event the hub kept for it, with when it arrived and whether the factory has
+confirmed it. Select an event to see its payload, and choose **Load older
+events** to see further back.
 
 ## Add apps and assign them {#apps}
 
 An app is your Organization's own identity on a provider: a GitHub App, a
 Linear OAuth app, a Slack app or a PagerDuty app. You create each one by hand
-on the provider, then add it under **Apps**. Its page on the hub shows the
-exact URLs and settings to put back on the provider, and installs or connects
-it.
+on the provider, then add it under **Apps → Add app**. Its page on the hub
+shows the exact URLs and settings to put back on the provider, and installs
+or connects it. An admin can rename an app on its page.
 
 - [GitHub App](/guide/hub-github)
 - [Linear app](/guide/hub-linear)
 - [Slack app](/guide/hub-slack)
 - [PagerDuty app](/guide/hub-pagerduty)
 
-Then, on the app's page under **Factories**, check each factory that should
-use it and save. That is an **assignment**: a factory receives events from,
-and gets tokens for, only the apps assigned to it. An app can be assigned to
-several factories, and every one of them receives its events.
+Then, on each factory's **Settings** tab, choose **Connect app** and connect
+the app. That is an **assignment**: a factory receives events from, and gets
+tokens for, only the apps assigned to it. An app can be assigned to
+several factories, and every one of them receives its events; its page lists
+them.
 
 A factory may be assigned several installations of one provider, including
 several apps in one workspace or GitHub organization. It names the

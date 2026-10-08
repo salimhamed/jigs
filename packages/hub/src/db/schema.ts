@@ -154,6 +154,12 @@ export const factories = pgTable(
     name: text("name").notNull(),
     tokenHash: text("token_hash").notNull().unique(),
     createdAt: timestamp("created_at", { withTimezone: true }).defaultNow().notNull(),
+    /**
+     * Who added the factory: while a member, they may change it, as admins may.
+     * `null` for a factory added before the hub recorded this, or once the user
+     * is deleted; only admins change those.
+     */
+    createdBy: text("created_by").references(() => user.id, { onDelete: "set null" }),
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
     lastSeenVersion: text("last_seen_version"),
     /** The position of the last message the factory confirmed. */
@@ -259,7 +265,10 @@ export const providerEvents = pgTable(
     /** The provider's own id for the event, where it may send one event twice, such as Slack's `event_id`. */
     dedupeKey: text("dedupe_key"),
   },
-  (table) => [unique("provider_events_app_dedupe_key").on(table.appId, table.dedupeKey)],
+  (table) => [
+    unique("provider_events_app_dedupe_key").on(table.appId, table.dedupeKey),
+    index("provider_events_organization_received_idx").on(table.organizationId, table.receivedAt),
+  ],
 );
 
 /** Every factory's messages, ordered by one sequence across all factories. */

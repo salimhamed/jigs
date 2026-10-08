@@ -131,7 +131,7 @@ dbTest(
     await db
       .insert(schema.organization)
       .values({ id: "acme", name: "Acme", slug: "acme", createdAt: new Date() });
-    const { token } = await addFactory(db, "acme", "factory");
+    const { token } = await addFactory(db, "acme", "factory", null);
     await db.$client.end();
 
     // Polls again the moment an answer comes back, as eagerly as a factory could.

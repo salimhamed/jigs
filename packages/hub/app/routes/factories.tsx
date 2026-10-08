@@ -1,168 +1,142 @@
-import { KeyRound, Trash2 } from "lucide-react";
-import { Form, Link } from "react-router";
-import { addFactory, reissueToken, removeFactory } from "../../src/factories.ts";
-import { requireAdmin, requireMember } from "../auth.server.ts";
-import { useActionToast } from "../components/action-toast.tsx";
-import { CopyButton } from "../components/copy-button.tsx";
-import { Time } from "../components/time.tsx";
-import { button, input, quietButton, table } from "../components/ui.ts";
-import { connectCommand, listFactories } from "../factories.server.ts";
+import { KeyRound, Plus, Trash2 } from "lucide-react";
+import { Link } from "react-router";
+import { manages } from "../../src/factories.ts";
+import { requireMember } from "../auth.server.ts";
+import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
+import { factoryHints } from "../components/factory-hints.ts";
+import { Hint } from "../components/hint.tsx";
+import { PageHeader, StatusDot, Tabs } from "../components/page.tsx";
+import { TimeAgo } from "../components/time.tsx";
+import {
+  button,
+  card,
+  dangerOutlineButton,
+  link,
+  quietButton,
+  table,
+  warningText,
+} from "../components/ui.ts";
+import { listFactories } from "../factories.server.ts";
 import type { Route } from "./+types/factories.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  const { organizationId, role } = await requireMember(context, request);
+  const member = await requireMember(context, request);
+  const mine = new URL(request.url).searchParams.get("tab") !== "all";
+  const factories = await listFactories(context, member.organizationId);
   return {
-    isAdmin: role === "admin",
-    factories: await listFactories(context, organizationId),
+    mine,
+    factories: factories
+      .filter(({ createdBy }) => !mine || createdBy === member.user.id)
+      .map(({ createdBy, ...factory }) => ({
+        ...factory,
+        canManage: manages(member, { createdBy }),
+      })),
   };
 }
 
-export async function action({ context, request }: Route.ActionArgs) {
-  const admin = await requireAdmin(context, request);
-  if ("error" in admin) return admin;
-  const { organizationId } = admin;
-  const form = await request.formData();
-  const factoryId = String(form.get("factoryId"));
-  const name = String(form.get("name") ?? "").trim();
-  switch (form.get("intent")) {
-    case "remove":
-      await removeFactory(context.db, context.waiters, organizationId, factoryId);
-      return { message: `Removed ${name}.` };
-    case "reissue": {
-      const token = await reissueToken(context.db, context.waiters, organizationId, factoryId);
-      if (!token) return { error: "That factory is gone." };
-      return { connect: { name, command: connectCommand(context, token) } };
-    }
-    default: {
-      if (!name) return { error: "Name the factory." };
-      try {
-        const { token } = await addFactory(context.db, organizationId, name);
-        return { connect: { name, command: connectCommand(context, token) } };
-      } catch (error) {
-        if (isUniqueViolation(error)) return { error: `A factory is already named ${name}.` };
-        throw error;
-      }
-    }
-  }
-}
-
-function isUniqueViolation(error: unknown): boolean {
-  for (let cause = error; cause instanceof Error; cause = cause.cause) {
-    if ((cause as { code?: string }).code === "23505") return true;
-  }
-  return false;
-}
-
-export default function Factories({ loaderData, actionData }: Route.ComponentProps) {
-  useActionToast(actionData);
-  const connect = actionData && "connect" in actionData ? actionData.connect : undefined;
+export default function Factories({ loaderData }: Route.ComponentProps) {
+  const { mine, factories } = loaderData;
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-semibold">Factories</h1>
-      {loaderData.isAdmin && (
-        <Form method="post" className="flex flex-wrap gap-2">
-          <input
-            name="name"
-            required
-            placeholder="Factory name"
-            aria-label="Name"
-            className={`${input} min-w-64`}
-          />
-          <button type="submit" className={button}>
+      <PageHeader
+        title="Factories"
+        subtitle="Services you run that act on events from the apps connected to them, such as new pull requests or Slack mentions."
+        action={
+          <Link to="/factories/new" className={button}>
+            <Plus className="size-4" />
             Add factory
-          </button>
-        </Form>
-      )}
-      {connect && (
-        <div className="space-y-2 rounded-md border border-zinc-200 p-4 dark:border-zinc-800">
-          <p className="text-sm">
-            Run this where <strong>{connect.name}</strong> runs. The token is shown only now.
-          </p>
-          <pre className="overflow-x-auto rounded bg-zinc-100 p-2 text-sm dark:bg-zinc-900">
-            {connect.command}
-          </pre>
-          <CopyButton text={connect.command} label="Command" />
+          </Link>
+        }
+      />
+      <Tabs
+        tabs={[
+          { to: "?", label: "My factories", current: mine },
+          { to: "?tab=all", label: "All factories", current: !mine },
+        ]}
+      />
+      {factories.length === 0 ? (
+        <p className="text-zinc-500">
+          {mine ? (
+            <>
+              You haven't added a factory yet.{" "}
+              <Link to="/factories/new" className={link}>
+                Add a factory
+              </Link>
+              .
+            </>
+          ) : (
+            "No factories yet."
+          )}
+        </p>
+      ) : (
+        <div className={`${card} overflow-x-auto`}>
+          <table className={table}>
+            <thead>
+              <tr>
+                <th>Name</th>
+                <th>
+                  <Hint label="Last seen" tip={factoryHints.lastSeen} />
+                </th>
+                <th>
+                  <Hint label="Factory version" tip={factoryHints.version} />
+                </th>
+                <th>
+                  <Hint label="Unconfirmed events" tip={factoryHints.unconfirmed} />
+                </th>
+                <th>
+                  <Hint label="Apps" tip={factoryHints.apps} />
+                </th>
+                <th>
+                  <Hint
+                    label="Added by"
+                    tip="Who added this factory. They and admins can change it."
+                  />
+                </th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {factories.map((factory) => (
+                <tr key={factory.id}>
+                  <td>
+                    <span className="flex items-center gap-2.5">
+                      <StatusDot online={factory.online} />
+                      <Link to={`/factories/${factory.id}`} className={link}>
+                        {factory.name}
+                      </Link>
+                    </span>
+                  </td>
+                  <td>{factory.lastSeenAt ? <TimeAgo iso={factory.lastSeenAt} /> : "never"}</td>
+                  <td className="font-mono">{factory.lastSeenVersion ?? "—"}</td>
+                  <td className={factory.unconfirmed > 0 ? warningText : undefined}>
+                    {factory.unconfirmed}
+                  </td>
+                  <td>{factory.appNames.length}</td>
+                  <td>{factory.addedBy ?? "—"}</td>
+                  <td>
+                    {factory.canManage && (
+                      <div className="flex justify-end gap-1">
+                        <ReissueTokenButton factory={factory} className={quietButton}>
+                          <KeyRound className="size-4" />
+                          Re-issue token
+                        </ReissueTokenButton>
+                        <RemoveFactoryButton
+                          factory={factory}
+                          returnTo={mine ? "/factories" : "/factories?tab=all"}
+                          className={dangerOutlineButton}
+                        >
+                          <Trash2 className="size-4" />
+                          Remove
+                        </RemoveFactoryButton>
+                      </div>
+                    )}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       )}
-      {loaderData.factories.length === 0 ? (
-        <p className="text-zinc-500">No factories yet.</p>
-      ) : (
-        <table className={table}>
-          <thead className="text-zinc-500">
-            <tr>
-              <th>Name</th>
-              <th>Last seen</th>
-              <th>jigs</th>
-              <th>Unconfirmed</th>
-              <th />
-            </tr>
-          </thead>
-          <tbody>
-            {loaderData.factories.map((factory) => (
-              <tr key={factory.id} className="border-t border-zinc-200 dark:border-zinc-800">
-                <td>
-                  <Link to={`/factories/${factory.id}`} className="underline">
-                    {factory.name}
-                  </Link>
-                </td>
-                <td>{factory.lastSeenAt ? <Time iso={factory.lastSeenAt} /> : "never"}</td>
-                <td>{factory.lastSeenVersion ?? "—"}</td>
-                <td>{factory.unconfirmed}</td>
-                <td className="flex justify-end gap-1">
-                  {loaderData.isAdmin && (
-                    <>
-                      <ConfirmForm
-                        intent="reissue"
-                        factory={factory}
-                        question={`Re-issue the token of ${factory.name}? Its current token stops working.`}
-                      >
-                        <KeyRound className="size-4" />
-                        Re-issue token
-                      </ConfirmForm>
-                      <ConfirmForm
-                        intent="remove"
-                        factory={factory}
-                        question={`Remove ${factory.name} and every message waiting for it?`}
-                      >
-                        <Trash2 className="size-4" />
-                        Remove
-                      </ConfirmForm>
-                    </>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
     </div>
-  );
-}
-
-function ConfirmForm({
-  intent,
-  factory,
-  question,
-  children,
-}: {
-  intent: string;
-  factory: { id: string; name: string };
-  question: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <Form
-      method="post"
-      onSubmit={(event) => {
-        if (!confirm(question)) event.preventDefault();
-      }}
-    >
-      <input type="hidden" name="intent" value={intent} />
-      <input type="hidden" name="factoryId" value={factory.id} />
-      <input type="hidden" name="name" value={factory.name} />
-      <button type="submit" className={quietButton}>
-        {children}
-      </button>
-    </Form>
   );
 }

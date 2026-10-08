@@ -26,3 +26,8 @@ export function connectDatabase(url: string): HubDatabase {
 export async function migrateDatabase(db: HubDatabase): Promise<void> {
   await migrate(db, { migrationsFolder });
 }
+
+/** Whether an error, or any error it was caused by, is PostgreSQL refusing a duplicate key. */
+export const isUniqueViolation = (error: unknown): boolean =>
+  error instanceof Error &&
+  ((error as { code?: string }).code === "23505" || isUniqueViolation(error.cause));
