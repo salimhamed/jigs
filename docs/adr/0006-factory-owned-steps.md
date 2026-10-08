@@ -9,16 +9,15 @@ is set in `@workflow/builders` (`resolveModuleSpecifier`), is not configurable,
 and has no alias or explicit-id feature. A waiting run whose step name changed
 fails on replay. jigs keeps two rules:
 
-1. jigs' shipped code never contains `"use workflow"` or `"use step"`; library
-   implementations are plain functions.
-2. Step names never depend on the SDK keeping anything stable beyond the
-   file-path rule above.
+1. No file under jigs' `src/` contains `"use workflow"` or `"use step"`;
+   library implementations are plain functions.
+2. Step names never depend on the SDK keeping anything stable.
 
 The package ships `factory/steps.ts` (explicit named `"use step"` wrappers
 around library steps) and `factory/routines.ts` (the library's routines bound
-to those wrappers) as source outside `src/`. `prepare()`, which every build and
-`jigs up` run, wipes the factory's gitignored `.jigs/` and writes them there
-beside `server.ts` and `service.ts`. A factory's step ids are therefore
+to those wrappers) as source outside `src/`. `prepare()` (run by every build,
+including `jigs up`) writes them into the factory's gitignored `.jigs/` beside
+`server.ts` and `service.ts`. A factory's step ids are therefore
 `step//./.jigs/steps//<function>`, with no version in them, and upgrading jigs
 renames nothing unless a wrapper itself is renamed.
 
@@ -71,8 +70,8 @@ factory's compile and its service run on the same runtime.
 - **Keeping old deployments running for old runs.** Only world-vercel pins runs
   to a deployment; world-postgres has no such thing.
 - **A committed `jigs/` folder in each factory**, rewritten by `jigs generate`
-  and `jigs upgrade` with a drift check. The previous design: the most
-  machinery and churn in every factory for the same ids.
+  and `jigs upgrade` with a drift check. The previous design; the most
+  machinery and churn for the same ids.
 - **Aliasing a package path such as `@jigs-ai/jigs/steps` to `.jigs/`.** Four
   aliases (tsconfig, Nitro, Vitest and others) must agree, the same import
   names two files, and a mismatch fails quietly.

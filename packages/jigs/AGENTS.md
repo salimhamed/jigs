@@ -49,8 +49,7 @@ process through `processEnv()`. `processEnv()` is never a factory setting: a
 token, key or anything the factory's `.env` can hold goes through `ctx.env`.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
-live in `factory/steps.ts`, which the build copies into a factory's `.jigs/`, and
-in factory code, including the copied recipes
+live in `factory/steps.ts` and in factory code, including the copied recipes
 ([ADR 0006](../../docs/adr/0006-factory-owned-steps.md)). `pnpm e2e` proves it, and
 also scans the built workflow bundle for `node:` specifiers and `process.env`.
 

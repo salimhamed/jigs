@@ -82,9 +82,9 @@ package's own `biome.json` and `tsconfig.json` extend. Each package has an
 
 In `packages/jigs`, `src/` is the library and CLI, `templates/` the bare
 factory `jigs init` writes, `factory/` the step wrappers and bound routines the
-build copies into a factory's `.jigs/`, `recipes/` the workflows `jigs recipe add` copies
-into a factory, `migrations/` the jigs tables and `e2e/` the packed-install
-check. The npm README and LICENSE are the root copies, which `prepack` copies
+build copies into a factory's `.jigs/`, `recipes/` the workflows `jigs recipe
+add` copies into a factory, `migrations/` the jigs tables and `e2e/` the
+packed-install check. The npm README and LICENSE are the root copies, which `prepack` copies
 in.
 
 ```
@@ -122,13 +122,12 @@ bundles it into a sandbox without Node built-ins. So anything a workflow
 imports (`workflow/`) must be side-effect free, and real work goes in steps. No
 file under `src/` carries `"use workflow"` or `"use step"`: a step's durable ID
 comes from its file path and function name, so the directives live in factory
-code and `packages/jigs/factory/steps.ts`, which the build copies into the factory's `.jigs/`,
-and a jigs upgrade never renames a step.
+code and `factory/steps.ts`, and a jigs upgrade never renames a step.
 
-Factory code imports the library from the root `@jigs-ai/jigs`. `factory/steps.ts` imports
-`@jigs-ai/jigs/steps/<topic>`, and `factory/routines.ts` is the only importer of
-`@jigs-ai/jigs/routines`, where the
-routines that take steps as arguments live. The other subpaths (`/nitro`,
+Factory code imports the library from the root `@jigs-ai/jigs`.
+`factory/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and
+`factory/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where
+the routines that take steps as arguments live. The other subpaths (`/nitro`,
 `/build`, `/service`) belong to the service a factory builds. The Workflow SDK, its Postgres World, the
 dashboard and zod are peer dependencies the factory installs. All but zod are
 optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none of them or the
