@@ -9,6 +9,7 @@ const GITHUB_API_URL = "https://api.github.com";
 
 // GitHub's advice for a secondary limit that names no wait.
 const UNNAMED_RATE_LIMIT_WAIT_SECONDS = 60;
+const SERVER_ERROR_WAIT_SECONDS = 5;
 
 /**
  * GitHub answered a REST call with an error status. Check `status` to handle
@@ -98,7 +99,7 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
     outlivesRun,
   }: GithubSend): Promise<T> {
     let reauthorized = false;
-    const rateLimit = rateLimitWaits("github", outlivesRun ? null : runSignal, deps.sleep);
+    const waits = rateLimitWaits("github", outlivesRun ? null : runSignal, deps.sleep);
     for (;;) {
       const credential = await auth.bearer();
       const res = await (deps.fetch ?? fetch)(`${GITHUB_API_URL}${apiPath}`, {
@@ -116,7 +117,14 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         reauthorized = true;
         continue;
       }
-      if (isRateLimited(res) && (await rateLimit.wait(rateLimitSeconds(res)))) continue;
+      if (isRateLimited(res) && (await waits.wait(rateLimitSeconds(res)))) continue;
+      // Only a read is sent again: a write GitHub failed on may still have landed.
+      if (
+        method === "GET" &&
+        res.status >= 500 &&
+        (await waits.wait(SERVER_ERROR_WAIT_SECONDS, "server error"))
+      )
+        continue;
       if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
       // 204 on a POST that adds nothing to say — assignees and labels do this.
       return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
