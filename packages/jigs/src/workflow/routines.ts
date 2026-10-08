@@ -1,8 +1,8 @@
 /**
- * The library routines your factory's generated `jigs/routines.ts` binds to its steps.
+ * The library routines your factory's `#jigs/routines` binds to its steps.
  *
- * Import routines from `#jigs/routines` in workflow code, never from here: the generated file is
- * the only caller this entry has.
+ * Import routines from `#jigs/routines` in workflow code, never from here: that file is the only
+ * caller this entry has.
  *
  * @module routines
  * @packageDocumentation

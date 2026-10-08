@@ -81,13 +81,7 @@ export async function checkExamples(examples) {
       [path.join(packageDir, entry.source)],
     ]),
   );
-  options.paths["#jigs/*"] = [path.join(virtualRoot, "factory/jigs/*.ts")];
-  for (const name of ["steps", "routines"]) {
-    virtual.set(
-      path.join(virtualRoot, `factory/jigs/${name}.ts`),
-      await readFile(path.join(packageDir, `templates/jigs/${name}.ts.tmpl`), "utf8"),
-    );
-  }
+  options.paths["#jigs/*"] = [path.join(packageDir, "factory/*.ts")];
 
   // These dependencies are real displayed files or scaffold files, never declarations
   // of missing variables. Each example still has to import everything it uses.

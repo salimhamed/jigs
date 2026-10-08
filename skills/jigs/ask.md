@@ -59,6 +59,6 @@ jigs --help
 ```
 
 Nothing that changes state: not `jigs run`, `cancel`, `poke`, `resources prune
---apply`, `bind`, `unbind`, `generate`, `build`, `up`, `upgrade`, or any `jigs
+--apply`, `bind`, `unbind`, `build`, `up`, or any `jigs
 service` verb other than `status`, and no file edits. If the answer would need
 one of those, say what you would do and let the human ask for it.

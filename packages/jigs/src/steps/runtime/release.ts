@@ -1,5 +1,4 @@
 import { currentFactoryContext } from "../../config/factory-context.ts";
-import type { FactoryDefinition } from "../../workflow/factory.ts";
 import type {
   ReleaseAction,
   ReleasePolicy,
@@ -105,10 +104,9 @@ export async function releaseRun(
  */
 export async function releaseRunResources(
   metadata: NamedRunMetadata,
-  definition: FactoryDefinition,
   explicit?: ReleasePolicy,
 ): Promise<ReleaseReport> {
-  const policy = explicit ?? (await resolveReleasePolicy(metadata, definition));
+  const policy = explicit ?? (await resolveReleasePolicy(metadata));
   const runId = metadata.workflowRunId;
   const resources = await withRunResourceLock(registrySql(), runId, (locked) =>
     releaseRun(locked, currentFactoryContext().slug, runId, policy.onSuccess, "success"),

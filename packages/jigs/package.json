@@ -88,11 +88,18 @@
     "./steps/runtime": {
       "types": "./dist/steps/runtime/index.d.ts",
       "default": "./dist/steps/runtime/index.js"
+    },
+    "./factory/steps": {
+      "types": "./factory/steps.d.ts"
+    },
+    "./factory/routines": {
+      "types": "./factory/routines.d.ts"
     }
   },
   "files": [
     "dist",
     "docs/api",
+    "factory",
     "templates",
     "recipes",
     "migrations"
@@ -103,7 +110,7 @@
   },
   "scripts": {
     "dev": "node src/cli/cli.ts",
-    "build": "tsdown",
+    "build": "tsdown && tsc -p tsconfig.factory.json",
     "test": "vitest run --project unit",
     "test:db": "vitest run --project db",
     "test:watch": "vitest --project unit",

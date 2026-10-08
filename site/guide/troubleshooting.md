@@ -31,18 +31,17 @@ Read `jigs service logs`. The usual causes:
 Fix the cause and run `jigs up` again. Harness installation and authentication
 are covered in [Models and harnesses](/guide/models-and-harnesses).
 
-## A build says `jigs/` is out of date
+## `jigs up` says runs are waiting on steps that no longer exist
 
-Run `pnpm exec jigs generate`, review the change to `jigs/steps.ts` and
-`jigs/routines.ts`, then run `pnpm exec jigs up`. This is generated code committed
-to the factory to keep [step identities stable](/guide/concepts#why-jigs-generates-code-in-your-factory).
-Keep your own code outside `jigs/`, since regeneration replaces it.
+A run that is waiting or running replays the steps it recorded, by
+[identity](/guide/concepts#folders-the-build-creates). When the new build no
+longer has one of them, because you renamed or moved a step or its file, `jigs up`
+stops before starting the service and lists each run with the steps it is
+missing. The running service is left as it was.
 
-A build also refuses a factory that still has a `jigs.ts` from an earlier
-release. Run `pnpm exec jigs upgrade`. It deletes `jigs.ts`, writes `jigs/`,
-and replaces the older entries in the `imports` map in `package.json` with
-`#jigs/*`. Then change your workflows to import from
-`#jigs/steps` and `#jigs/routines` instead of `#jigs`.
+Either let those runs finish on the build they started on, then rebuild, or
+cancel each with `pnpm exec jigs cancel <run-id>`. Then run `pnpm exec jigs up`
+again.
 
 ## A library import does not resolve
 
@@ -54,7 +53,10 @@ import { runAgent } from "#jigs/routines";
 import { createRunDirectory } from "#jigs/steps";
 ```
 
-Run `pnpm exec jigs generate` if the generated imports are missing. Custom
+`#jigs/steps` and `#jigs/routines` resolve through the `imports` map in
+`package.json` that `jigs init` writes: types from the installed
+`@jigs-ai/jigs`, code from `.jigs/`, which `jigs build` writes and the
+scaffolded `vitest.config.ts` writes before tests. Custom
 `"use step"` implementations may also import `@jigs-ai/jigs/steps` and its
 `steps/*` modules. Those low-level implementations are not durable wrappers
 and must not be called directly from workflow code. See the [API import map](/api/).

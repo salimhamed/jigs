@@ -1,9 +1,5 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
-import { tmpdir } from "node:os";
-import path from "node:path";
-import { beforeEach, expect, test, vi } from "vitest";
-import { inTestFactory } from "../../test-fixtures.ts";
-import type { FactoryDefinition } from "../../workflow/factory.ts";
+import { beforeEach, expect, onTestFinished, test, vi } from "vitest";
+import { inTestFactory, removeTmpDir, useTestFactory } from "../../test-fixtures.ts";
 import type { Halt } from "../../workflow/linear/halt-for-human.ts";
 
 const { findUserByEmail, getIssueParticipants, postActivityOnce } = vi.hoisted(() => ({
@@ -44,15 +40,10 @@ const context = {
   stepId: "step_01",
 };
 
-const definition: FactoryDefinition = {
-  hub: { url: "https://hub.example.test" },
-  service: { dashboardPort: 9090 },
-  workflows: {},
+const operator = (email: string) => {
+  const parent = useTestFactory({ linear: { operator: email } });
+  onTestFinished(() => removeTmpDir(parent));
 };
-const operator = (email: string): FactoryDefinition => ({
-  ...definition,
-  linear: { operator: email },
-});
 
 const body = (): string => postActivityOnce.mock.calls[0]?.[1].body ?? "";
 
@@ -113,7 +104,6 @@ test("a two-question halt renders as numbered questions with lettered options", 
       halt: questions,
     },
     context,
-    definition,
   );
 
   expect(body()).toBe(
@@ -164,7 +154,6 @@ test("a retry halt renders its notes and asks for any reply at all", async () =>
       },
     },
     { workflowRunId: "wrun_2", workflowName: "ship", stepId: "step_01" },
-    definition,
   );
 
   expect(body()).toBe(
@@ -197,7 +186,6 @@ test("the creator and the assignee are one mention when they are one person", as
       halt: questions,
     },
     context,
-    definition,
   );
   expect(body().split("\n")[0]).toBe(
     "https://linear.app/acme/profiles/salim — Work on **AI-659** is paused: your answers are needed before any code is written.",
@@ -217,7 +205,6 @@ test("an unassigned ticket greets its creator alone", async () => {
       halt: questions,
     },
     context,
-    definition,
   );
   expect(body().split("\n")[0]).toBe(
     "https://linear.app/acme/profiles/salim — Work on **AI-659** is paused: your answers are needed before any code is written.",
@@ -234,7 +221,6 @@ test("a ticket with nobody on it gets the headline without a dangling dash", asy
       halt: questions,
     },
     context,
-    definition,
   );
   expect(body().split("\n")[0]).toBe(
     "Work on **AI-659** is paused: your answers are needed before any code is written.",
@@ -259,7 +245,6 @@ test("a note greets the participants, bullets its lines, and closes with what to
       },
     },
     context,
-    definition,
   );
 
   expect(body()).toBe(
@@ -282,7 +267,6 @@ test("a factory's own renderer replaces the message without replacing the step",
       halt: questions,
     },
     context,
-    definition,
     (halt) => `just: ${halt.headline}`,
   );
   expect(body()).toBe(
@@ -299,7 +283,6 @@ test("a question is an elicitation in the session, under an id derived from the 
       halt: questions,
     },
     context,
-    definition,
   );
   expect(linearAgentFor).toHaveBeenCalledWith("linear-acme");
   expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
@@ -323,7 +306,6 @@ test.each([
         note: { headline: "Done.", notes: [], closing: "", run },
       },
       context,
-      definition,
     );
     expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
       "session-1",
@@ -342,7 +324,6 @@ test("any other note is a response, so its mentions notify, then a thought keeps
       note: { headline: "Done.", notes: [], closing: "" },
     },
     context,
-    definition,
   );
   expect(postActivityOnce.mock.calls).toEqual([
     ["session-1", { type: "response", body: body() }, stepPostingId(context, "session-1")],
@@ -363,7 +344,7 @@ const byEmail = async (email: string) => users[email] ?? null;
 const greeting = (): string => body().split(" — ")[0] ?? "";
 
 test("with an operator, a question mentions the operator and the assignee, not the creator", async () => {
-  const definition = operator("op@example.com");
+  operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest(
     {
@@ -373,58 +354,14 @@ test("with an operator, a question mentions the operator and the assignee, not t
       halt: questions,
     },
     context,
-    definition,
   );
   expect(greeting()).toBe(
     "https://linear.app/acme/profiles/olu https://linear.app/acme/profiles/dana",
   );
 });
 
-test("the operator comes from the passed definition, never from jigs.config.ts on disk", async () => {
-  const root = mkdtempSync(path.join(tmpdir(), "jigs-operator-"));
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
-  findUserByEmail.mockImplementation(byEmail);
-  try {
-    await postTicketNote(
-      {
-        installationName: "linear-acme",
-        issueId: "issue-1",
-        sessionId: "session-1",
-        note: { headline: "Done.", notes: [], closing: "" },
-      },
-      context,
-      definition,
-    );
-    expect(greeting()).toBe(
-      "https://linear.app/acme/profiles/salim https://linear.app/acme/profiles/dana",
-    );
-
-    writeFileSync(
-      path.join(root, "jigs.config.ts"),
-      'export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9000 }, linear: { operator: "kim@example.com" } };',
-    );
-    postActivityOnce.mockClear();
-    await postTicketNote(
-      {
-        installationName: "linear-acme",
-        issueId: "issue-1",
-        sessionId: "session-1",
-        note: { headline: "Done.", notes: [], closing: "" },
-      },
-      context,
-      operator("op@example.com"),
-    );
-    expect(greeting()).toBe(
-      "https://linear.app/acme/profiles/olu https://linear.app/acme/profiles/dana",
-    );
-    expect(findUserByEmail).not.toHaveBeenCalledWith("kim@example.com");
-  } finally {
-    rmSync(root, { recursive: true, force: true });
-  }
-});
-
 test("an operator who is also the assignee is mentioned once", async () => {
-  const definition = operator("dana@example.com");
+  operator("dana@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest(
     {
@@ -434,14 +371,13 @@ test("an operator who is also the assignee is mentioned once", async () => {
       halt: questions,
     },
     context,
-    definition,
   );
   expect(greeting()).toBe("https://linear.app/acme/profiles/dana");
 });
 
 test("an operator Linear cannot find leaves the assignee alone, with a warning", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const definition = operator("gone@example.com");
+  operator("gone@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketHumanInputRequest(
     {
@@ -451,7 +387,6 @@ test("an operator Linear cannot find leaves the assignee alone, with a warning",
       halt: questions,
     },
     context,
-    definition,
   );
   expect(greeting()).toBe("https://linear.app/acme/profiles/dana");
   expect(warn).toHaveBeenCalledWith(expect.stringContaining("gone@example.com"));
@@ -460,7 +395,7 @@ test("an operator Linear cannot find leaves the assignee alone, with a warning",
 
 test("a failed operator lookup still posts, mentioning the assignee", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const definition = operator("op@example.com");
+  operator("op@example.com");
   findUserByEmail.mockRejectedValue(new Error("Linear API 500"));
   await postTicketNote(
     {
@@ -470,7 +405,6 @@ test("a failed operator lookup still posts, mentioning the assignee", async () =
       note: { headline: "Done.", notes: [], closing: "" },
     },
     context,
-    definition,
   );
   expect(greeting()).toBe("https://linear.app/acme/profiles/dana");
   expect(warn).toHaveBeenCalledWith(expect.stringContaining("Linear API 500"));
@@ -479,7 +413,7 @@ test("a failed operator lookup still posts, mentioning the assignee", async () =
 
 test("extra mentions follow the operator and assignee, once each, skipping unknown emails", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const definition = operator("op@example.com");
+  operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   await postTicketNote(
     {
@@ -494,7 +428,6 @@ test("extra mentions follow the operator and assignee, once each, skipping unkno
       },
     },
     context,
-    definition,
   );
   expect(greeting()).toBe(
     "https://linear.app/acme/profiles/olu https://linear.app/acme/profiles/dana https://linear.app/acme/profiles/kim",
@@ -513,7 +446,6 @@ test("without an operator, extra mentions join the creator and assignee", async 
       halt: { ...questions, mention: ["kim@example.com"] },
     },
     context,
-    definition,
   );
   expect(findUserByEmail).toHaveBeenCalledTimes(1);
   expect(greeting()).toBe(
@@ -523,7 +455,7 @@ test("without an operator, extra mentions join the creator and assignee", async 
 
 test("a ticket whose people cannot be read still posts, mentioning the operator and extras", async () => {
   const warn = vi.spyOn(console, "warn").mockImplementation(() => {});
-  const definition = operator("op@example.com");
+  operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   getIssueParticipants.mockRejectedValueOnce(new Error("Linear API 502"));
   await postTicketHumanInputRequest(
@@ -534,7 +466,6 @@ test("a ticket whose people cannot be read still posts, mentioning the operator 
       halt: { ...questions, mention: ["kim@example.com"] },
     },
     context,
-    definition,
   );
   expect(postActivityOnce).toHaveBeenCalledTimes(1);
   expect(greeting()).toBe(
@@ -545,7 +476,7 @@ test("a ticket whose people cannot be read still posts, mentioning the operator 
 });
 
 test("a custom renderer receives the resolved mentions", async () => {
-  const definition = operator("op@example.com");
+  operator("op@example.com");
   findUserByEmail.mockImplementation(byEmail);
   const render = vi.fn(() => "custom");
   await postTicketNote(
@@ -556,7 +487,6 @@ test("a custom renderer receives the resolved mentions", async () => {
       note: { headline: "Done.", notes: [], closing: "", mention: ["kim@example.com"] },
     },
     context,
-    definition,
     render,
   );
   expect(render).toHaveBeenCalledWith(expect.anything(), {

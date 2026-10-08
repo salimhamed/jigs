@@ -10,6 +10,7 @@ import {
   assertDirectExportSummaries,
   convert,
   directExportSummaryFailures,
+  factoryEntries,
   hasPackageDocumentation,
   internalReferences,
   isPublicEntry,
@@ -17,7 +18,6 @@ import {
   publicSidebar,
   renderEntry,
   rootDir,
-  withFactoryEntries,
 } from "./docs.mjs";
 import { typedocOptions } from "./typedoc.config.mjs";
 
@@ -131,17 +131,11 @@ test("the real renderer writes stable subpath pages with the package version", a
 
 test("factory references expose caller signatures and concrete bound options", async () => {
   const destination = await tempDir();
-  let temporarySource;
-  await withFactoryEntries(async ({ entries, tsconfig }) => {
-    temporarySource = entries[0].source;
-    const { project } = await convert(
-      entries.map((entry) => entry.source),
-      { tsconfig },
-    );
-    assertDirectExportSummaries(project);
-    for (const entry of entries) await renderEntry(entry, destination, { tsconfig });
-  });
-  await expect(readFile(temporarySource)).rejects.toMatchObject({ code: "ENOENT" });
+  const { project } = await convert(
+    factoryEntries.map((entry) => path.resolve(packageDir, entry.source)),
+  );
+  assertDirectExportSummaries(project);
+  for (const entry of factoryEntries) await renderEntry(entry, destination);
   const routines = await readFile(path.join(destination, "factory/routines.md"), "utf8");
   const steps = await readFile(path.join(destination, "factory/steps.md"), "utf8");
   for (const name of ["runAgent", "haltForHuman", "watchPullRequest", "committedWork"]) {
@@ -160,7 +154,6 @@ test("factory references expose caller signatures and concrete bound options", a
   expect(steps).toContain("### createRunDirectory()");
   expect(steps).toContain("### release()");
   expect(steps).not.toContain("RunMetadata");
-  expect(steps).not.toContain("FactoryDefinition");
 }, 60_000);
 
 test("API navigation labels generated imports and low-level implementations separately", () => {

@@ -23,6 +23,9 @@ import type { ServiceLifecycleDeps, ServiceProcesses } from "./service-process.t
 import { serviceLogPath } from "./service-record.ts";
 import { nested, type Step, StepFailed, stepRunner } from "./step-runner.ts";
 
+// Where the Workflow SDK's Nitro builder records the step IDs it compiled.
+const BUILD_MANIFEST = "node_modules/.nitro/workflow/manifest.json";
+
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
 // second `up` on an unchanged factory installs, migrates and restarts
@@ -32,7 +35,6 @@ export type UpStepName =
   | "locate"
   | "env"
   | "install"
-  | "generate"
   | "compose"
   | "bootstrap"
   | "build"
@@ -57,8 +59,8 @@ export interface UpDeps {
   execFile?: ExecFile;
   processes?: ServiceProcesses;
   prepare?: Prepare;
-  generate?: () => Promise<void>;
   migrate?: (url: string) => Promise<void>;
+  strandedRuns?: (worldUrl: string, factoryRoot: string) => Promise<StrandedRun[]>;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
 }
@@ -100,19 +102,16 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       }),
     );
 
-    if (deps.generate !== undefined) {
-      await runner.run("generate", deps.generate);
-    }
-
     await runner.run("compose", () =>
       dockerCompose(execFile, factoryRoot, ["up", "-d", "--wait"], deps.out),
     );
 
-    await runner.run("bootstrap", async () => {
+    const worldUrl = await runner.run("bootstrap", async () => {
       const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
       const migrate =
         deps.migrate ?? (await import("../../steps/runtime/registry.ts")).migrateRegistry;
       await migrate(url);
+      return url;
     });
 
     await runner.run("build", () =>
@@ -128,6 +127,10 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     // and its own failure; the wait itself is the one `jigs service start`
     // does.
     result.service = await runner.run("service", async (note) => {
+      refuseStrandedRuns(
+        await (deps.strandedRuns ?? strandedRuns)(worldUrl, factoryRoot),
+        deps.out,
+      );
       const outcome = await ensureServiceCurrent(lifecycle, {
         restart: options.restart,
         beforeRestart: () => confirmRestart(factoryRoot, service, deps, options),
@@ -286,6 +289,53 @@ function publishedPostgresPorts(factoryRoot: string): string {
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
+export interface StrandedRun {
+  runId: string;
+  workflow: string;
+  missing: string[];
+}
+
+// The service the build replaces may be stopped or on another jigs, so the
+// World is read directly. Only factory-local IDs: the SDK's own are its contract.
+async function strandedRuns(worldUrl: string, factoryRoot: string): Promise<StrandedRun[]> {
+  const manifest = JSON.parse(readFileSync(path.join(factoryRoot, BUILD_MANIFEST), "utf8")) as {
+    steps: Record<string, Record<string, { stepId: string }>>;
+  };
+  const built = new Set(
+    Object.values(manifest.steps).flatMap((file) => Object.values(file).map((s) => s.stepId)),
+  );
+  const { connectRegistry } = await import("../../steps/runtime/registry.ts");
+  const sql = connectRegistry(worldUrl, { max: 1 });
+  try {
+    const { rows } = await sql.$client.query<{ id: string; workflow: string; step: string }>(
+      `select distinct r.id, r.name as workflow, s.step_name as step
+       from "workflow"."workflow_runs" r join "workflow"."workflow_steps" s on s.run_id = r.id
+       where r.status in ('pending', 'running') and s.step_name like 'step//./%'
+       order by r.id, s.step_name`,
+    );
+    const runs = new Map<string, StrandedRun>();
+    for (const row of rows.filter((row) => !built.has(row.step))) {
+      const run = runs.get(row.id) ?? { runId: row.id, workflow: row.workflow, missing: [] };
+      run.missing.push(row.step);
+      runs.set(row.id, run);
+    }
+    return [...runs.values()];
+  } finally {
+    await sql.$client.end();
+  }
+}
+
+// A waiting or running run replays its recorded steps by ID, and fails on one
+// the new build no longer has.
+function refuseStrandedRuns(runs: StrandedRun[], out: (line: string) => void): void {
+  if (runs.length === 0) return;
+  for (const run of runs) out(`  ${run.runId} ${run.workflow}: ${run.missing.join(", ")}`);
+  throw new JigsError(
+    `${runs.length} run(s) wait on steps this build no longer has`,
+    "let them finish on the build they started on, or cancel each: `pnpm exec jigs cancel <run-id>`",
+  );
+}
+
 async function confirmRestart(
   factoryRoot: string,
   service: ResolvedService,
@@ -293,12 +343,10 @@ async function confirmRestart(
   options: UpOptions,
 ): Promise<void> {
   const inFlight = await listRunsInFlight(factoryRoot);
-  // Warned even under --force: a parked run replays on the new bundle, and an
-  // upgrade that changed the steps it replays fails it.
-  const consequence =
-    "a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay";
+  // Warned even under --force: a restart cuts off active steps.
+  const consequence = "a restart cuts off active steps, and parked runs resume on the new bundle";
   // Every upgrade meets an older service, so asking here would ask every time;
-  // `jigs status` before the upgrade, on matching versions, is the real check.
+  // the stranded-run check has already read the World for what would fail.
   if (inFlight === undefined) {
     deps.out(
       `  warning: the running service is another jigs version, so its runs cannot be listed; ${consequence}`,

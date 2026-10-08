@@ -1,6 +1,9 @@
+import { prepareJigs } from "@jigs-ai/jigs/build";
 import { defineConfig } from "vitest/config";
 
 export default defineConfig({
+  // Writes .jigs/, which #jigs/steps and #jigs/routines resolve to when code runs.
+  plugins: [prepareJigs()],
   // Let workflow SDK mocks reach the library routines a factory tests.
   test: { server: { deps: { inline: ["@jigs-ai/jigs"] } } },
 });

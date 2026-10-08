@@ -9,7 +9,6 @@ import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { downFactory } from "./commands/down.ts";
-import { generateIntegration } from "./commands/generate.ts";
 import { connectHub } from "./commands/hub.ts";
 import { initFactory } from "./commands/init.ts";
 import { pokeRun } from "./commands/poke.ts";
@@ -28,7 +27,6 @@ import { resolveServiceUrl, usesFactoryService } from "./commands/service-client
 import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
-import { upgradeFactory } from "./commands/upgrade.ts";
 import { watchRuns } from "./commands/watch.ts";
 import { listWorkflows } from "./commands/workflows.ts";
 import { formatError } from "./output.ts";
@@ -68,7 +66,6 @@ const ROOT_HELP = `Usage: jigs <command> [options]
 
 Set up:
   init                      Scaffold a factory in the current directory
-  upgrade                   Move to a newer jigs, run up, then typecheck
   doctor                    Check config, connections and required tools
   hub connect <url> <token>
                             Point this factory at its hub; the token goes
@@ -109,9 +106,8 @@ Resources:
   resources prune           Preview what --apply would remove, policy-kept included
   resources prune --apply   Remove it after the Git safety checks
 
-Generated code:
+Build:
   build                     Compile workflows into the service bundle
-  generate                  Refresh the generated jigs/ directory
 
 A <run-id> is the run's full ID, which jigs status lists under RUN.
 In a factory, run every command as
@@ -152,13 +148,6 @@ recipe
   });
 
 program
-  .command("generate")
-  .description("refresh the generated jigs/ directory from the factory's installed jigs")
-  .action(async () => {
-    await generateIntegration({ cwd: process.cwd(), out });
-  });
-
-program
   .command("build")
   .description("compile this factory's workflows into its service bundle")
   .action(async () => {
@@ -190,22 +179,6 @@ program
   )
   .action(async () => {
     await downFactory({ cwd: process.cwd(), out });
-  });
-
-program
-  .command("upgrade")
-  .description(
-    "move this factory to a newer jigs: bump the package, then up, then the factory's typecheck",
-  )
-  .option("--to-version <version>", "pin jigs to this version instead of the latest release")
-  .option("--force", "restart over in-flight runs without asking")
-  .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(async (options: { toVersion?: string; force?: boolean; doctor: boolean }) => {
-    const result = await upgradeFactory(
-      { cwd: process.cwd(), out },
-      { ...options, to: options.toVersion },
-    );
-    if (!result.ok) process.exitCode = 1;
   });
 
 const hub = program

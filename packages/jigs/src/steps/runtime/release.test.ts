@@ -277,11 +277,7 @@ test("the release step applies an explicit policy's success action without resol
   seed(row("run-directory"));
   const keep = { onSuccess: "keep", onFailure: "keep" } as const;
 
-  const report = await releaseRunResources(
-    { workflowRunId: RUN, workflowName: "compiled" },
-    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9000 }, workflows: {} },
-    keep,
-  );
+  const report = await releaseRunResources({ workflowRunId: RUN, workflowName: "compiled" }, keep);
 
   expect(policy.resolveReleasePolicy).not.toHaveBeenCalled();
   expect(report.policy).toEqual(keep);
@@ -295,14 +291,9 @@ test("without a policy, the release step resolves the configured one", async () 
   const discard = { onSuccess: "release", onFailure: "release" } as const;
   policy.resolveReleasePolicy.mockResolvedValue(discard);
   const metadata = { workflowRunId: RUN, workflowName: "compiled" };
-  const definition = {
-    hub: { url: "https://hub.example.test" },
-    service: { dashboardPort: 9000 },
-    workflows: {},
-  };
 
-  const report = await releaseRunResources(metadata, definition);
+  const report = await releaseRunResources(metadata);
 
-  expect(policy.resolveReleasePolicy).toHaveBeenCalledWith(metadata, definition);
+  expect(policy.resolveReleasePolicy).toHaveBeenCalledWith(metadata);
   expect(report).toEqual({ policy: discard, resources: [] });
 });

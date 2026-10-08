@@ -194,8 +194,10 @@ nothing else. Holding it:
 
 ## Upgrade
 
-`jigs upgrade` moves the factory to the latest jigs release, rebuilds, restarts,
-runs `jigs doctor` and typechecks the factory; see **Confirm first** when runs are in flight.
+To upgrade, set the new `@jigs-ai/jigs` version in `package.json`, run
+`pnpm install`, then `jigs up`; see **Confirm first** when runs are in flight.
+`up` stops, naming the runs, if a waiting or running run recorded a step the
+new build lacks; they must finish or be cancelled first.
 Check `jigs status` before upgrading: once the new jigs is installed, commands
 that talk to the old service fail with a version error until `jigs up` restarts
 it, and `up` restarts it without being able to list its runs.
@@ -224,7 +226,7 @@ Show the human the pid and command; deleting the named service record is their
 call. A process an agent fully detached (`setsid`, double fork) can survive a
 stop, and Docker containers an agent started are never stopped.
 
-Parked runs are also why the names in `jigs/steps.ts` and `workflows/` matter —
+Parked runs are also why step names in `workflows/` matter —
 see the never list.
 
 ## Never
@@ -233,10 +235,10 @@ see the never list.
   that World starts a second queue worker, which steals the service's queue jobs
   and delivers them to a port with no workflow route. The service hosts the
   dashboard; use that.
-- Keep custom code outside the generated `jigs/`. Refresh it with `jigs generate`
-  and review the diff. When an authorized change renames or moves a workflow
-  or step, check active and suspended runs before deployment: finish or cancel
-  affected runs so they do not resume against different durable addresses.
+- Never edit `.jigs/`; the build rewrites it. When an authorized change renames
+  or moves a workflow or step, check active and suspended runs before
+  deployment: finish or cancel affected runs so they do not resume against
+  different durable addresses.
 
 ## Confirm first
 
@@ -249,8 +251,8 @@ Confirm these actions when the current request has not already authorized them:
 - `jigs resources prune --apply` — it removes the preview's eligible local
   resources after proving the factory service and everything it started are stopped.
 - `jigs service restart`, `jigs service stop`, `jigs down`, `jigs up --restart-service` or
-  `jigs upgrade` while `jigs status` shows a pending or running run. `up` and
-  `upgrade` ask before restarting over one; `--force` is the human's call.
+  an upgrade while `jigs status` shows a pending or running run. `up` asks
+  before restarting over one; `--force` is the human's call.
 - Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
   that binding's clone, and a new binding is not cloned until the next
   `jigs up`.

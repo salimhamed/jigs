@@ -52,6 +52,7 @@ function up(
       processes: io.procs.processes,
       prepare: vi.fn(),
       migrate: vi.fn(),
+      strandedRuns: async () => [],
       readyTimeoutMs: 500,
       ...extra,
     },
@@ -216,6 +217,23 @@ test("a restart over in-flight runs asks first, refuses without a TTY, and stays
   expect(forced.service).toBe("restarted");
   expect(io.procs.spawns).toHaveLength(3);
   expect(lines.join("\n")).toMatch(/warning: 1 run\(s\) parked or active.*\n.*wrun_01/);
+});
+
+test("runs waiting on steps the new build lacks stop the service step and are named", async () => {
+  const io = { exec: fakeExec(), procs: fakeProcesses() };
+  const root = factory({ port: await fakeService(io.procs) });
+  await up(root, io);
+  io.exec.bundle = "bundle v2";
+
+  const strandedRuns = vi.fn(async () => [
+    { runId: "wrun_01", workflow: "example", missing: ["step//./.jigs/steps//gone"] },
+  ]);
+  const result = await up(root, io, { strandedRuns }, { force: true });
+  expect(strandedRuns).toHaveBeenCalledWith("postgres://jigs:jigs@localhost:5555/jigs", root);
+  expect(statuses(result).at(-1)).toBe("service:failed");
+  expect(lines.join("\n")).toContain("wrun_01 example: step//./.jigs/steps//gone");
+  expect(result.steps.at(-1)?.repair).toContain("jigs cancel <run-id>");
+  expect(io.procs.spawns).toHaveLength(1);
 });
 
 // After an upgrade the new CLI meets the service the old jigs built; its run

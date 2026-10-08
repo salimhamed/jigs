@@ -1,7 +1,7 @@
 # Author a workflow
 
-Work in the factory repo. Read its `jigs.config.ts`, the generated
-`jigs/steps.ts` and `jigs/routines.ts`, and `workflows/` before editing. The
+Work in the factory repo. Read its `jigs.config.ts`, `workflows/`, and the
+steps and routines in `node_modules/@jigs-ai/jigs/factory/` before editing. The
 installed `node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that
 version; its only workflow is `hello`.
 
@@ -14,7 +14,7 @@ The guides, in the order you need them:
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
 preserves existing files and reports created/kept paths. Recipes
-become editable factory source; upgrades only regenerate `jigs/`.
+become editable factory source; upgrades never overwrite them.
 
 ## Code responsibilities
 
@@ -31,11 +31,10 @@ become editable factory source; upgrades only regenerate `jigs/`.
 - Step arguments and results cross the database as JSON. Pass data only: a
   function or a provider object fails with `SerializationError: Failed to
   serialize step arguments`.
-- `jigs/` is generated and committed. `jigs/steps.ts` holds every built-in step
-  and is the only generated file with `"use step"`; `jigs/routines.ts` holds the
-  routines bound to them. Import them as `#jigs/steps` and `#jigs/routines`.
-  Never edit either. `jigs generate` refreshes them; builds check for drift and
-  upgrades regenerate them automatically.
+- `#jigs/steps` holds every built-in step and `#jigs/routines` the routines
+  bound to them. The build copies both into the gitignored `.jigs/`, so their
+  step names are factory paths that upgrading jigs never renames. Never edit
+  `.jigs/`; the next build replaces it.
 - Each workflow lives in its own directory, `workflows/<name>/<name>.ts`, with
   its own files beside it, imported with `./` paths. The deferred workflow
   loaders in `jigs.config.ts` stay relative.
@@ -53,9 +52,9 @@ completion or cancellation with the operator.
 A workflow imports from two places. `@jigs-ai/jigs` is the library:
 `defineWorkflow`, `harnesses`, `models`, `JigsError`, every descriptor and
 result type, `yesNo`, `choice` and `score`, and pure renderers such as
-`renderTicketSnapshot`. `#jigs/steps` and `#jigs/routines` are generated for the
-factory. Implementations under `@jigs-ai/jigs/steps/<topic>` belong inside
-durable wrapper bodies. The generated wrappers preserve their names when
+`renderTicketSnapshot`. `#jigs/steps` and `#jigs/routines` are copied into the
+factory by the build. Implementations under `@jigs-ai/jigs/steps/<topic>` belong
+inside durable wrapper bodies. The copied wrappers preserve their names when
 library implementation paths move.
 
 Read the installed API reference at `node_modules/@jigs-ai/jigs/docs/api/`;

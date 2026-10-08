@@ -21,3 +21,4 @@ site/.vitepress/cache/
 /packages/jigs/LICENSE
 /packages/hub/build/
 /packages/hub/.react-router/
+/packages/jigs/factory/*.d.ts

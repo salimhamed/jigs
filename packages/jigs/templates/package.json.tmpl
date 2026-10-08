@@ -3,7 +3,14 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#jigs/*": "./jigs/*.ts"
+    "#jigs/steps": {
+      "types": "@jigs-ai/jigs/factory/steps",
+      "default": "./.jigs/steps.ts"
+    },
+    "#jigs/routines": {
+      "types": "@jigs-ai/jigs/factory/routines",
+      "default": "./.jigs/routines.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",

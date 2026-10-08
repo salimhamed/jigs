@@ -10,30 +10,32 @@ export const rootDir = path.resolve(toolDir, "../..");
 export const packageDir = path.join(rootDir, "packages/jigs");
 
 export function apiEntries(manifest, buildEntries) {
-  return Object.entries(manifest.exports).map(([subpath, conditions]) => {
-    if (!conditions || typeof conditions !== "object") {
-      throw new Error(`${subpath}: exports entry must provide types and default conditions`);
-    }
-    const typesTarget = conditions.types;
-    const match = /^\.\/dist\/(.+)\.d\.ts$/.exec(typesTarget ?? "");
-    if (!match) throw new Error(`${subpath}: invalid types target ${String(typesTarget)}`);
-    const buildKey = match[1];
-    if (conditions.default !== `./dist/${buildKey}.js`) {
-      throw new Error(`${subpath}: types and default targets do not share a build entry`);
-    }
-    const source = buildEntries[buildKey];
-    if (!source) throw new Error(`${subpath}: no tsdown entry emits ${buildKey}`);
-    return {
-      subpath,
-      source,
-      output: subpath === "." ? "index.md" : `${subpath.slice(2)}.md`,
-    };
-  });
+  return Object.entries(manifest.exports)
+    .filter(([subpath]) => !subpath.startsWith("./factory/"))
+    .map(([subpath, conditions]) => {
+      if (!conditions || typeof conditions !== "object") {
+        throw new Error(`${subpath}: exports entry must provide types and default conditions`);
+      }
+      const typesTarget = conditions.types;
+      const match = /^\.\/dist\/(.+)\.d\.ts$/.exec(typesTarget ?? "");
+      if (!match) throw new Error(`${subpath}: invalid types target ${String(typesTarget)}`);
+      const buildKey = match[1];
+      if (conditions.default !== `./dist/${buildKey}.js`) {
+        throw new Error(`${subpath}: types and default targets do not share a build entry`);
+      }
+      const source = buildEntries[buildKey];
+      if (!source) throw new Error(`${subpath}: no tsdown entry emits ${buildKey}`);
+      return {
+        subpath,
+        source,
+        output: subpath === "." ? "index.md" : `${subpath.slice(2)}.md`,
+      };
+    });
 }
 
 /**
- * Factories import the package root, `steps` and `steps/*`. `routines` is only for the generated
- * `jigs/routines.ts`, and the other entries host the service.
+ * Factories import the package root, `steps` and `steps/*`. `routines` is only for the factory's
+ * `#jigs/routines`, and the other entries host the service.
  */
 export function isPublicEntry(entry) {
   return (
@@ -42,65 +44,12 @@ export function isPublicEntry(entry) {
   );
 }
 
-/** Render the real generated factory APIs against current source, without package export changes. */
-export async function withFactoryEntries(action) {
-  const { entries } = await repositoryConfig();
-  const directory = await mkdtemp(path.join(packageDir, ".api-docs-"));
-  try {
-    const integration = path.join(directory, "jigs");
-    await mkdir(integration);
-    const factoryEntries = [];
-    for (const name of ["routines", "steps"]) {
-      const source = path.join(integration, `${name}.ts`);
-      const template = await readFile(
-        path.join(packageDir, `templates/jigs/${name}.ts.tmpl`),
-        "utf8",
-      );
-      // These types are inferred from bound routines, not package exports. Inline
-      // their real structure so the factory reference does not show opaque names.
-      const inlineTypes = [
-        "AgentSessionOptions",
-        "BoundReviewTicketOptions",
-        "HaltForHumanFn",
-        "CommittedWorkOptions",
-        "BranchState",
-      ];
-      const tags = inlineTypes.map((type) => ` * @inlineType ${type}\n`).join("");
-      await writeFile(source, template.replaceAll(" */", `${tags} */`));
-      factoryEntries.push({ subpath: `#jigs/${name}`, source, output: `factory/${name}.md` });
-    }
-    // The release wrapper imports a factory definition. It only needs the type here.
-    await writeFile(
-      path.join(directory, "jigs.config.ts"),
-      'import type { FactoryDefinition } from "@jigs-ai/jigs";\n' +
-        "declare const definition: FactoryDefinition;\nexport default definition;\n",
-    );
-    const tsconfig = path.join(directory, "tsconfig.json");
-    await writeFile(
-      tsconfig,
-      JSON.stringify(
-        {
-          extends: path.join(packageDir, "tsconfig.json"),
-          compilerOptions: {
-            paths: Object.fromEntries(
-              entries.map((entry) => [
-                entry.subpath === "." ? "@jigs-ai/jigs" : `@jigs-ai/jigs/${entry.subpath.slice(2)}`,
-                [path.resolve(packageDir, entry.source)],
-              ]),
-            ),
-          },
-          include: [path.join(packageDir, "src")],
-          files: factoryEntries.map((entry) => entry.source),
-        },
-        null,
-        2,
-      ),
-    );
-    return await action({ entries: factoryEntries, tsconfig });
-  } finally {
-    await rm(directory, { recursive: true, force: true });
-  }
-}
+/** The files a factory imports as `#jigs/steps` and `#jigs/routines`, rendered from source. */
+export const factoryEntries = ["routines", "steps"].map((name) => ({
+  subpath: `#jigs/${name}`,
+  source: `factory/${name}.ts`,
+  output: `factory/${name}.md`,
+}));
 
 /** Navigation is arranged by how factory authors use an import, not its package path. */
 export function publicSidebar(entries) {
@@ -204,7 +153,7 @@ async function checkRepositoryRules(entries) {
       failures.push(`${entry.source}: missing a leading @packageDocumentation comment`);
     }
   }
-  for (const directory of ["src", "recipes/linear-ticket-to-pr"]) {
+  for (const directory of ["src", "factory", "recipes/linear-ticket-to-pr"]) {
     for (const file of await walkTypeScriptFiles(path.join(packageDir, directory))) {
       const relative = path.relative(packageDir, file);
       failures.push(...internalReferences(await readFile(file, "utf8"), relative));
@@ -314,45 +263,43 @@ export async function run({ write = false, destination = path.join(packageDir, "
   await validate(entries);
   if (!write) return;
   await rm(destination, { recursive: true, force: true });
-  await Promise.all(entries.filter(isPublicEntry).map((entry) => renderEntry(entry, destination)));
-  await withFactoryEntries(async ({ entries: factoryEntries, tsconfig }) => {
-    for (const entry of factoryEntries) await renderEntry(entry, destination, { tsconfig });
-  });
+  await Promise.all(
+    [...entries.filter(isPublicEntry), ...factoryEntries].map((entry) =>
+      renderEntry(entry, destination),
+    ),
+  );
 }
 
 export async function renderSite(destination = path.join(rootDir, "docs-site")) {
   const { entries } = await repositoryConfig();
   await checkRepositoryRules(entries);
-  await withFactoryEntries(async ({ entries: factoryEntries, tsconfig }) => {
-    const { app, project } = await convert(
-      [...entries.filter(isPublicEntry), ...factoryEntries]
-        .sort((a, b) => a.subpath.localeCompare(b.subpath))
-        .map((entry) => path.resolve(packageDir, entry.source)),
-      {
-        ...siteOptions,
-        tsconfig,
-        format: "vitepress",
-        docsRoot: path.join(rootDir, "site"),
-        readme: path.join(toolDir, "site-index.md"),
-        mergeReadme: true,
-        out: path.join(rootDir, "site/api"),
-        sidebar: { collapsed: true },
-      },
-    );
-    app.validate(project);
-    assertDirectExportSummaries(project);
-    if (app.logger.hasErrors() || app.logger.hasWarnings()) {
-      throw new Error("TypeDoc validation failed");
-    }
-    await rm(path.join(rootDir, "site/api"), { recursive: true, force: true });
-    await app.outputs.writeOutput(
-      { name: "markdown", path: path.join(rootDir, "site/api") },
-      project,
-    );
-    if (app.logger.hasErrors() || app.logger.hasWarnings()) {
-      throw new Error("TypeDoc site rendering failed");
-    }
-  });
+  const { app, project } = await convert(
+    [...entries.filter(isPublicEntry), ...factoryEntries]
+      .sort((a, b) => a.subpath.localeCompare(b.subpath))
+      .map((entry) => path.resolve(packageDir, entry.source)),
+    {
+      ...siteOptions,
+      format: "vitepress",
+      docsRoot: path.join(rootDir, "site"),
+      readme: path.join(toolDir, "site-index.md"),
+      mergeReadme: true,
+      out: path.join(rootDir, "site/api"),
+      sidebar: { collapsed: true },
+    },
+  );
+  app.validate(project);
+  assertDirectExportSummaries(project);
+  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+    throw new Error("TypeDoc validation failed");
+  }
+  await rm(path.join(rootDir, "site/api"), { recursive: true, force: true });
+  await app.outputs.writeOutput(
+    { name: "markdown", path: path.join(rootDir, "site/api") },
+    project,
+  );
+  if (app.logger.hasErrors() || app.logger.hasWarnings()) {
+    throw new Error("TypeDoc site rendering failed");
+  }
   await writeFile(
     path.join(rootDir, "site/api/typedoc-sidebar.json"),
     JSON.stringify(publicSidebar(entries), null, 2),

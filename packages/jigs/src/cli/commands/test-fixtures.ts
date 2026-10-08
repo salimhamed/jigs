@@ -7,7 +7,7 @@ import type { ExecFile, ExecOptions } from "../exec.ts";
 import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-process.ts";
 import { writeServiceRecord } from "./service-record.ts";
 
-// The machine as `up` and `upgrade` see it: a scaffolded factory on disk, the
+// The machine as `up` sees it: a scaffolded factory on disk, the
 // child processes they exec, the service process they supervise, and the HTTP
 // service they poll. Every piece is a fake a test controls.
 

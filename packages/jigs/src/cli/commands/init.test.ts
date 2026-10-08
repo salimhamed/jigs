@@ -37,8 +37,6 @@ test("scaffolds a factory that can be installed and built", async () => {
       "docker-compose.yml",
       "jigs.config.test.ts",
       "jigs.config.ts",
-      "jigs/routines.ts",
-      "jigs/steps.ts",
       "nitro.config.ts",
       "package.json",
       "workflows/hello/hello.ts",
@@ -91,26 +89,19 @@ test("every placeholder a template carries is filled in", async () => {
   }
 });
 
-// Root-anchored specifiers are the factory's own import spelling; the map has
-// to mirror the directory layout exactly, because an alias pointing at another
-// real file would silently re-address the steps declared in it. Plain string
-// targets only: a conditional target keyed on "node" resolves in neither tsc
-// nor the workflows bundle, whose esbuild conditions are default, import and
-// workflow.
-test("the scaffold's imports map mirrors its layout with plain .ts targets", async () => {
+// Types come from the package, so a fresh clone typechecks before any build;
+// code runs from the copies the build writes into .jigs/, so each step's
+// durable ID is a path in the factory.
+test("the scaffold's imports map takes types from the package and code from .jigs/", async () => {
   const dir = scaffold("iota");
   await init(dir);
 
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
-  expect(pkg.imports).toEqual({ "#jigs/*": "./jigs/*.ts" });
-  for (const target of Object.values(pkg.imports as Record<string, unknown>)) {
-    expect(typeof target, String(target)).toBe("string");
-    expect(String(target).endsWith(".ts"), String(target)).toBe(true);
-  }
-  expect(existsSync(path.join(dir, "jigs", "steps.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "jigs", "routines.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "jigs", "index.ts"))).toBe(false);
-  expect(existsSync(path.join(dir, "jigs.ts"))).toBe(false);
+  expect(pkg.imports).toEqual({
+    "#jigs/steps": { types: "@jigs-ai/jigs/factory/steps", default: "./.jigs/steps.ts" },
+    "#jigs/routines": { types: "@jigs-ai/jigs/factory/routines", default: "./.jigs/routines.ts" },
+  });
+  expect(existsSync(path.join(dir, "jigs"))).toBe(false);
 });
 
 // Both spellings of a relative parent import: `from "../x"` and the dynamic
@@ -119,8 +110,8 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
 const RELATIVE_PARENT_IMPORT = /(?:from|import\s*\()\s*["']\.\.\//;
 
 test("the relative-import guard catches both import spellings", () => {
-  expect('import { a } from "../../jigs/steps.ts";').toMatch(RELATIVE_PARENT_IMPORT);
-  expect('const a = await import("../../jigs/steps.ts");').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('import { a } from "../../shared/steps.ts";').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("../../shared/steps.ts");').toMatch(RELATIVE_PARENT_IMPORT);
   expect('import { a } from "#jigs/steps";').not.toMatch(RELATIVE_PARENT_IMPORT);
   expect('const a = await import("./workflows/hello/hello.ts");').not.toMatch(
     RELATIVE_PARENT_IMPORT,
@@ -153,36 +144,10 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
   const { include, exclude } = JSON.parse(tsconfig) as { include: string[]; exclude: string[] };
   // A recipe's tests sit in nested workflow directories.
-  expect(include).toEqual(expect.arrayContaining(["workflows/**/*.ts", "jigs/**/*.ts"]));
+  expect(include).toEqual(expect.arrayContaining(["workflows/**/*.ts"]));
   expect(exclude).toEqual(["node_modules", ".jigs"]);
   expect(tsconfig).toContain('"jigs.config.test.ts"');
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');
-});
-
-// Each exported "use step" function's name is half a durable step id, so the
-// scaffold's wrappers are the ids every factory's World records. e2e reads
-// them back out of a real build and diffs them against e2e/expected-ids.linear-ticket-to-pr.txt;
-// here the template is held to that same recorded list without a build.
-test("the wrappers scaffolded are the step ids this repo has recorded", async () => {
-  const dir = scaffold("theta");
-  await init(dir);
-
-  const wrappers = readFileSync(path.join(dir, "jigs", "steps.ts"), "utf8");
-  const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
-    .map((match) => `step//./jigs/steps//${match[1]}`)
-    .sort();
-  expect(steps).toHaveLength(35);
-  const recorded = readFileSync(
-    path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
-    "utf8",
-  )
-    .split("\n")
-    .filter((line) => line.startsWith("step//./jigs/steps//"))
-    .sort();
-  expect(recorded).toEqual(steps);
-  // Every wrapper has its directive: one without it compiles clean and runs
-  // unmemoized.
-  expect(wrappers.match(/"use step";/g)).toHaveLength(steps.length);
 });
 
 test("the docker project and ports all carry the factory", async () => {
