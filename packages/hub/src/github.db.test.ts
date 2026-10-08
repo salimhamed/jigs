@@ -492,7 +492,7 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
         apiUrl: github,
       },
     );
-  expect(await add(organizationId, { name: "" })).toEqual({ error: "Name the App." });
+  expect(await add(organizationId, { name: "" })).toEqual({ error: "Name the app." });
   expect(await add(organizationId, { appId: "x" })).toEqual({
     error: "The App ID is a number.",
   });

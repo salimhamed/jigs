@@ -8,7 +8,8 @@ import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { PageHeader } from "../components/page.tsx";
-import { button, card, dangerOutlineButton, select, table } from "../components/ui.ts";
+import { Select } from "../components/select.tsx";
+import { button, card, dangerOutlineButton, table } from "../components/ui.ts";
 import type { Route } from "./+types/members.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -171,10 +172,9 @@ function MemberRow({
       <td>{member.email}</td>
       <td>
         {isAdmin ? (
-          <select
+          <Select
             aria-label={`Role of ${member.email}`}
             value={member.role}
-            className={select}
             onChange={(event) =>
               fetcher.submit(
                 {
@@ -191,7 +191,7 @@ function MemberRow({
                 {roleLabels[role]}
               </option>
             ))}
-          </select>
+          </Select>
         ) : (
           roleLabels[member.role as Role]
         )}
