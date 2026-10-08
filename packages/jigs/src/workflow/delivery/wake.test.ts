@@ -208,8 +208,4 @@ describe("the builder's own replies, posted as the App's bot", () => {
     const own = { ...review("COMMENTED", "Done"), user: APP_BOT };
     expect(wakes(asBot, { ...asBot, reviews: [own] })).toBe(true);
   });
-
-  test("with a personal token there is no bot to recognize", () => {
-    expect(wakes(opened, { ...opened, conversationComments: [reply] })).toBe(true);
-  });
 });

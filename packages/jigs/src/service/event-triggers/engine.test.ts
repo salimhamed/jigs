@@ -449,11 +449,11 @@ const preflightFailure: CheckReport = {
   ok: false,
   checks: [
     {
-      id: "github.identity",
-      label: "GitHub identity",
+      id: "github.installations",
+      label: "GitHub installations",
       ok: false,
-      reason: "GITHUB_TOKEN is not set",
-      repair: "set GITHUB_TOKEN in the factory repo's .env",
+      reason: "the hub gave no GitHub token: 401 Unauthorized",
+      repair: "check hub.url in jigs.config.ts and that the hub is running",
     },
   ],
 };
@@ -477,7 +477,9 @@ test("a start that fails preflight is recorded failed with its report, and never
     state: "failed",
     report: preflightFailure,
   });
-  expect(h.lines).toContain("[trigger] pages P5 failed: GitHub identity: GITHUB_TOKEN is not set");
+  expect(h.lines).toContain(
+    "[trigger] pages P5 failed: GitHub installations: the hub gave no GitHub token: 401 Unauthorized",
+  );
 });
 
 test("inputs the workflow rejects at start are recorded failed with a repair", async () => {
@@ -761,8 +763,8 @@ const unansweredReport = (reason: string): CheckReport => ({
   ok: false,
   checks: [
     {
-      id: "github.identity",
-      label: "GitHub identity",
+      id: "github.installations",
+      label: "GitHub installations",
       ok: false,
       reason,
       repair: "retry",
@@ -793,7 +795,7 @@ for (const [variant, reason] of [
     await engine.drain();
     expect(h.memory.state("pages", "P1")).toMatchObject({ state: "pending", attemptedAt: null });
     expect(h.lines).toContain(
-      `[trigger] pages P1 waits: preflight did not answer: GitHub identity: ${reason}`,
+      `[trigger] pages P1 waits: preflight did not answer: GitHub installations: ${reason}`,
     );
     await engine.drain();
     expect(h.memory.state("pages", "P1")?.state).toBe("started");

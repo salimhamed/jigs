@@ -55,8 +55,6 @@ export interface PullRequestComment {
   id: number;
   body: string;
   user: string;
-  // GitHub's account kind does not establish who initiated a message: an agent
-  // using a personal token posts as that user.
   userType: string;
   createdAt: string;
   updatedAt: string;

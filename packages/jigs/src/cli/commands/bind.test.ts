@@ -339,11 +339,7 @@ test("a label permission failure preserves the binding, and the retry clones it"
   const failure = await bindRepo(
     API,
     failLabel(
-      new GitHubApiError(
-        403,
-        "/repos/acme/Api/labels",
-        "Resource not accessible by personal access token",
-      ),
+      new GitHubApiError(403, "/repos/acme/Api/labels", "Resource not accessible by integration"),
     ),
     { installation: "gh" },
   ).catch((err: unknown) => err);

@@ -26,7 +26,7 @@ test("connect points the config at the hub and replaces the token in .env", () =
     "jigs.config.ts",
     `export default defineFactory({\n  hub: { url: "https://hub.example.com" },\n  workflows: {},\n});\n`,
   );
-  write(".env", "WORKFLOW_POSTGRES_URL=postgres://x\nJIGS_HUB_TOKEN=\nGITHUB_TOKEN=gh\n");
+  write(".env", "WORKFLOW_POSTGRES_URL=postgres://x\nJIGS_HUB_TOKEN=\nJIGS_DASHBOARD_PORT=4000\n");
 
   connectHub("https://hub.acme.test", "secret-token", deps());
 
@@ -34,7 +34,7 @@ test("connect points the config at the hub and replaces the token in .env", () =
     `export default defineFactory({\n  hub: { url: "https://hub.acme.test" },\n  workflows: {},\n});\n`,
   );
   expect(read(".env")).toBe(
-    "WORKFLOW_POSTGRES_URL=postgres://x\nJIGS_HUB_TOKEN=secret-token\nGITHUB_TOKEN=gh\n",
+    "WORKFLOW_POSTGRES_URL=postgres://x\nJIGS_HUB_TOKEN=secret-token\nJIGS_DASHBOARD_PORT=4000\n",
   );
   expect(lines).toContain("hub set to https://hub.acme.test in jigs.config.ts");
 });

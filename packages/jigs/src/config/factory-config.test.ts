@@ -491,7 +491,7 @@ test("the GitHub section holds the operator, co-author and approval, and no iden
   };
   expect(withSettings({ github }).github).toEqual(github);
   expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
-  expect(() => withSettings({ github: { identities: [{ mode: "pat" }] } })).toThrow("identities");
+  expect(() => withSettings({ github: { identities: [] } })).toThrow("identities");
 });
 
 test("a Linear operator is optional and must be an email", () => {

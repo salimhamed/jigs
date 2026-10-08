@@ -8,7 +8,6 @@ const label = (name: string) => ({ name, color: "1d76db", description: "Managed 
 let github: FakeGithub;
 
 beforeEach(() => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   github = fakeGithub();
 });
 
