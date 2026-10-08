@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.102.2](https://github.com/salimhamed/jigs/compare/jigs-v0.102.1...jigs-v0.102.2) (2026-10-08)
+
+
+### Bug Fixes
+
+* keep pull request watches alive through GitHub server errors ([#645](https://github.com/salimhamed/jigs/issues/645)) ([7e1aee1](https://github.com/salimhamed/jigs/commit/7e1aee1a033cfcb33af7916f80e6f6638869899e))
+
 ## [0.102.1](https://github.com/salimhamed/jigs/compare/jigs-v0.102.0...jigs-v0.102.1) (2026-10-04)
 
 
