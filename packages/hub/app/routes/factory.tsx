@@ -1,18 +1,17 @@
-import type { Provider } from "@jigs-ai/hub-protocol";
-import { ChevronRight, KeyRound, Plus, Trash2 } from "lucide-react";
+import { ChevronRight, KeyRound, Trash2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { data, Form, Link, redirect, useFetcher } from "react-router";
-import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
+import { assignApp, isUuid, unassignApp } from "../../src/apps.ts";
 import { manages, removeFactory, renameFactory } from "../../src/factories.ts";
 import { providerNames } from "../../src/provider-names.ts";
-import { listInstalledApps } from "../apps.server.ts";
 import { requireFactoryManager, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
+import { ConnectApp } from "../components/connect-app.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
-import { type InstallationLabel, InstallationNames } from "../components/installation-names.tsx";
+import { InstallationNames } from "../components/installation-names.tsx";
 import {
   DangerRow,
   Details,
@@ -32,7 +31,7 @@ import {
   table,
   warningText,
 } from "../components/ui.ts";
-import { countEvents, readEventLog, readFactory, readLastEvents } from "../factories.server.ts";
+import { countEvents, readEventLog, readFactory, readFactoryApps } from "../factories.server.ts";
 import type { Route } from "./+types/factory.ts";
 import type { loader as eventLoader } from "./factory-event.ts";
 import type { loader as eventsLoader } from "./factory-events.ts";
@@ -56,19 +55,12 @@ export async function loader({ context, request, params }: Route.LoaderArgs) {
     ]);
     return { tab: "activity" as const, factory, ...log, total };
   }
-  const [connected, lastEvents, organizationApps] = await Promise.all([
-    assignedApps(context.db, factory.id),
-    readLastEvents(context, factory.id),
-    listInstalledApps(context, organizationId),
-  ]);
   return {
     tab: "settings" as const,
     isAdmin,
     canManage,
     factory,
-    connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
-    hasApps: organizationApps.length > 0,
-    available: organizationApps.filter((app) => !connected.some(({ id }) => id === app.id)),
+    ...(await readFactoryApps(context, organizationId, factory.id)),
   };
 }
 
@@ -151,11 +143,7 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
         ]}
       />
       {loaderData.tab === "settings" ? (
-        <SettingsTab
-          key={factory.id}
-          loaded={loaderData}
-          connectedNow={(actionData && "connected" in actionData && actionData.connected) || null}
-        />
+        <SettingsTab key={factory.id} loaded={loaderData} />
       ) : (
         // A new first page means new events arrived; the older pages shown are then stale.
         <ActivityTab key={loaderData.messages[0]?.position ?? "none"} loaded={loaderData} />
@@ -164,19 +152,10 @@ export default function Factory({ loaderData, actionData }: Route.ComponentProps
   );
 }
 
-function SettingsTab({
-  loaded,
-  connectedNow,
-}: {
-  loaded: Extract<Loaded, { tab: "settings" }>;
-  connectedNow: string | null;
-}) {
+function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> }) {
   const { isAdmin, canManage, factory, connected, available, hasApps } = loaded;
   // Every app connected since the page opened stays marked, not only the latest.
   const [justConnected, setJustConnected] = useState<string[]>([]);
-  useEffect(() => {
-    if (connectedNow) setJustConnected((ids) => [...ids, connectedNow]);
-  }, [connectedNow]);
   return (
     <div className="space-y-8">
       <section className="space-y-3">
@@ -192,10 +171,11 @@ function SettingsTab({
           </div>
           {canManage && (
             <ConnectApp
-              factoryName={factory.name}
+              factory={factory}
               apps={available}
               hasApps={hasApps}
               isAdmin={isAdmin}
+              onConnect={(appId) => setJustConnected((ids) => [...ids, appId])}
             />
           )}
         </div>
@@ -315,87 +295,6 @@ function SettingsTab({
         </DangerRow>
       )}
     </div>
-  );
-}
-
-/** The apps not yet connected, in a panel that filters them by name. */
-function ConnectApp({
-  factoryName,
-  apps,
-  hasApps,
-  isAdmin,
-}: {
-  factoryName: string;
-  apps: { id: string; provider: Provider; name: string; installations: InstallationLabel[] }[];
-  hasApps: boolean;
-  isAdmin: boolean;
-}) {
-  const [search, setSearch] = useState("");
-  const shown = apps.filter((app) => app.name.toLowerCase().includes(search.toLowerCase()));
-  return (
-    <>
-      <button type="button" popoverTarget="connect-app" className={secondaryButton}>
-        <Plus className="size-4" />
-        Connect app
-      </button>
-      <div
-        id="connect-app"
-        popover="auto"
-        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
-      >
-        <div className="p-3">
-          <input
-            type="search"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Search apps"
-            aria-label="Search apps"
-            className={`${input} w-full`}
-          />
-        </div>
-        <p className="px-4 pb-2 text-sm text-zinc-500">Not connected to {factoryName}</p>
-        <ul className="max-h-80 divide-y divide-zinc-200 overflow-y-auto border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
-          {shown.length === 0 && (
-            <li className="px-4 py-3 text-sm text-zinc-500">
-              {!hasApps
-                ? "No apps yet."
-                : apps.length === 0
-                  ? "Every app is connected."
-                  : "No app matches."}
-            </li>
-          )}
-          {shown.map((app) => (
-            <li key={app.id} className="flex items-center gap-3 px-4 py-2.5">
-              <div className="min-w-0 grow">
-                <div className="text-sm">
-                  {app.name} <span className="text-zinc-500">{providerNames[app.provider]}</span>
-                </div>
-                <InstallationNames installations={app.installations} />
-              </div>
-              <Form
-                method="post"
-                onSubmit={(event) =>
-                  (event.currentTarget.closest("[popover]") as HTMLElement | null)?.hidePopover()
-                }
-              >
-                <input type="hidden" name="appId" value={app.id} />
-                <button type="submit" name="intent" value="connect" className={secondaryButton}>
-                  Connect
-                </button>
-              </Form>
-            </li>
-          ))}
-        </ul>
-        {isAdmin && (
-          <p className="px-4 py-3 text-sm text-zinc-500">
-            Not listed?{" "}
-            <Link to="/apps/new" className={link}>
-              Add an app
-            </Link>
-          </p>
-        )}
-      </div>
-    </>
   );
 }
 

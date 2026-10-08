@@ -1,5 +1,6 @@
 import { and, asc, desc, eq, lt, sql } from "drizzle-orm";
 import type { AppLoadContext } from "react-router";
+import { assignedApps } from "../src/apps.ts";
 import {
   apps,
   assignments,
@@ -8,6 +9,7 @@ import {
   providerEvents,
   user,
 } from "../src/db/schema.ts";
+import { listInstalledApps } from "./apps.server.ts";
 
 // A connected factory long-polls at most 30 seconds at a time, and each poll marks it seen.
 const ONLINE_WITHIN_MS = 2 * 60_000;
@@ -164,4 +166,22 @@ export async function readLastEvents(context: AppLoadContext, factoryId: string)
       appId === null ? [] : [[appId, new Date(receivedAt).toISOString()]],
     ),
   ) as Record<string, string>;
+}
+
+/** The apps connected to a factory, with their last events, and the rest of the Organization's. */
+export async function readFactoryApps(
+  context: AppLoadContext,
+  organizationId: string,
+  factoryId: string,
+) {
+  const [connected, lastEvents, organizationApps] = await Promise.all([
+    assignedApps(context.db, factoryId),
+    readLastEvents(context, factoryId),
+    listInstalledApps(context, organizationId),
+  ]);
+  return {
+    connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
+    hasApps: organizationApps.length > 0,
+    available: organizationApps.filter((app) => !connected.some(({ id }) => id === app.id)),
+  };
 }
