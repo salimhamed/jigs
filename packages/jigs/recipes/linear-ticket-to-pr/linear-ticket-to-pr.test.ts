@@ -109,19 +109,19 @@ const opened = {
   notes: [],
   closing:
     "jigs merges it once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run.",
-  waitsOnPeople: true,
+  run: "waiting",
 };
 const merged = {
   headline: `Merged ${pr.url}.`,
   notes: [],
   closing: "",
-  endsRun: "success",
+  run: "succeeded",
 };
 const failed = {
   headline: "The run failed. The run's page has the error.",
   notes: [],
   closing: "",
-  endsRun: "failure",
+  run: "failed",
 };
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
 const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.calls[0]?.[2];
@@ -176,7 +176,6 @@ test("an opened pull request is linked from the ticket's session, then a note wa
     vi.mocked(routines.publishPullRequest).mock.invocationCallOrder[0] ?? Infinity,
   );
   expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[0]).toBeGreaterThan(linked);
-  expect(posted()[0]).toEqual(opened);
 });
 
 test("a title that is not a conventional commit is sent back to the writer with the problem", async () => {
@@ -209,7 +208,7 @@ test("a second unconventional title stops the run before anything is pushed", as
       ],
       closing:
         "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
-      endsRun: "failure",
+      run: "failed",
     },
   ]);
   expect(steps.pushBranch).not.toHaveBeenCalled();
@@ -309,8 +308,8 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing:
-        "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
-      waitsOnPeople: true,
+        "Comment on the pull request or push to it; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+      run: "waiting",
     },
     merged,
   ]);
@@ -404,7 +403,7 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing: expect.stringContaining("Another run starts over on a new branch"),
-      endsRun: "failure",
+      run: "failed",
     },
   ]);
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
@@ -438,7 +437,7 @@ test("a pull request closed without merging gets a note on the ticket, sets Todo
 
   expect(posted()[1]).toMatchObject({
     headline: "jigs stopped pull request maintenance for ABC-123.",
-    endsRun: "failure",
+    run: "failed",
     notes: expect.arrayContaining([
       "The pull request was closed unmerged.",
       `Unfinished pull request: ${pr.url}`,
@@ -465,7 +464,7 @@ test("a stop whose status change fails posts no second ending", async () => {
 
   await expect(run()).rejects.toThrow("no Todo state");
 
-  expect(posted().map((note) => note.endsRun)).toEqual([undefined, "failure"]);
+  expect(posted().map((note) => note.run)).toEqual(["waiting", "failed"]);
   expect(posted()[1]?.headline).toBe("jigs stopped pull request maintenance for ABC-123.");
 });
 

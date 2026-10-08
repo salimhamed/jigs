@@ -193,3 +193,25 @@ test("a session is answered after a time only by a later response or error", asy
   expect(bodies()[0].query).toContain('type: { in: ["response", "error"] }');
   expect(bodies()[0].variables).toEqual({ id: "session-1", since: "2026-10-07T00:00:00.000Z" });
 });
+
+test("the app's last activity is its newest non-prompt one, by type, or null before any", async () => {
+  respond({
+    agentSession: {
+      activities: {
+        nodes: [
+          {
+            createdAt: "2026-10-07T00:00:00.000Z",
+            content: { __typename: "AgentActivityElicitationContent" },
+          },
+        ],
+      },
+    },
+  });
+  respond({ agentSession: { activities: { nodes: [] } } });
+  expect(await agent.lastAppActivity("session-1")).toEqual({
+    type: "elicitation",
+    createdAt: "2026-10-07T00:00:00.000Z",
+  });
+  expect(await agent.lastAppActivity("session-1")).toBeNull();
+  expect(bodies()[0].query).not.toContain("prompt");
+});

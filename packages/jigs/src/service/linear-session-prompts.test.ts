@@ -27,7 +27,7 @@ let holder: string | null;
 let rows: Row[];
 let statuses: Map<string, string>;
 let answered: boolean;
-let asked: boolean;
+let last: { type: string; createdAt: string } | null;
 let timers: Array<{ fire: () => void; ms: number }>;
 let postFailures: number;
 let deps: SessionPromptDeps & {
@@ -46,7 +46,7 @@ beforeEach(() => {
   rows = [];
   statuses = new Map();
   answered = false;
-  asked = false;
+  last = null;
   timers = [];
   postFailures = 0;
   posted.clear();
@@ -64,7 +64,7 @@ beforeEach(() => {
         return { id, createdAt: "" };
       },
       answeredSince: async () => answered,
-      askedBefore: async () => asked,
+      lastAppActivity: async () => last,
     }),
     appName: async () => "jigs",
     holder: async (token) => (token === SESSION ? holder : null),
@@ -159,15 +159,48 @@ test("a reply with no live turn wakes the parked run", async () => {
   expect(posted.size).toBe(0);
 });
 
-test("a reply to the run's open question gets no working note, even after the run stopped listening", async () => {
+test("a reply the run already took as it stopped listening gets no answer", async () => {
   holder = RUN;
-  asked = true;
+  last = { type: "thought", createdAt: "2026-10-07T00:00:01.000Z" };
   expect(await route(prompted())).toBe("woken");
   expect(posted.size).toBe(0);
 });
 
+test("a reply to a run waiting on people asks again, once, so the session stays awaiting input", async () => {
+  holder = RUN;
+  last = { type: "elicitation", createdAt: "2026-10-06T00:00:00.000Z" };
+  const event = prompted();
+  const types: string[] = [];
+  const linear = deps.linear;
+  deps.linear = (name) => {
+    const api = linear(name);
+    return {
+      ...api,
+      postActivityOnce: (sessionId, content, id) => {
+        types.push(content.type);
+        return api.postActivityOnce(sessionId, content, id);
+      },
+    };
+  };
+
+  expect(await route(event)).toBe("woken");
+  expect(await route(event)).toBe("woken");
+
+  expect(types[0]).toBe("elicitation");
+  expect([...posted.entries()]).toEqual([
+    [
+      derivedUuid(["linear-session-waiting", event.agentActivity.id]),
+      {
+        sessionId: "session-1",
+        body: "I can't take instructions here while I wait; my last message says where to act. Use Stop to end the run.",
+      },
+    ],
+  ]);
+});
+
 test("a reply to a run that holds the session but is not listening is told it is working, once", async () => {
   holder = RUN;
+  last = { type: "thought", createdAt: "2026-10-06T00:00:00.000Z" };
   statuses = new Map([[RUN, "running"]]);
   const event = prompted();
 

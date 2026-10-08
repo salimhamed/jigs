@@ -81,17 +81,13 @@ export const postTicketNote = async (
     mention: note.mention,
   });
   const linear = linearAgentFor(installationName);
-  const type = note.waitsOnPeople
-    ? "elicitation"
-    : note.endsRun === "failure"
-      ? "error"
-      : "response";
+  const type = note.run === undefined ? "response" : NOTE_ACTIVITY[note.run];
   await linear.postActivityOnce(
     sessionId,
     { type, body: render(note, participants) },
     stepPostingId(metadata, sessionId),
   );
-  if (note.endsRun === undefined && !note.waitsOnPeople) {
+  if (note.run === undefined) {
     await linear.postActivityOnce(
       sessionId,
       { type: "thought", body: STILL_WORKING },
@@ -100,5 +96,7 @@ export const postTicketNote = async (
   }
   console.log(`[postTicketNote] posted ${type} session=${sessionId} issue=${issueId}`);
 };
+
+const NOTE_ACTIVITY = { waiting: "elicitation", succeeded: "response", failed: "error" } as const;
 
 const STILL_WORKING = "Still working.";

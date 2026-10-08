@@ -26,7 +26,7 @@ test("a malformed verdict object fails the schema", () => {
 test("a note is posted in the claim's session", async () => {
   const claim = { installationName: "linear-acme", issueId: "i1", sessionId: "s1" } as TicketClaim;
   const postTicketNote = vi.fn(async () => {});
-  const note = { headline: "h", notes: [], closing: "c", endsRun: "failure" as const };
+  const note = { headline: "h", notes: [], closing: "c", run: "failed" as const };
   await noteOnTicket(claim, note, { postTicketNote });
   expect(postTicketNote).toHaveBeenCalledExactlyOnceWith({
     installationName: "linear-acme",

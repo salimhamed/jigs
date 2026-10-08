@@ -112,7 +112,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     // A stop leaves the work where it is, ends the ticket's session with a
     // failure, and fails the run.
     const stop = async (note: TicketNote): Promise<never> => {
-      await noteOnTicket(claim, { ...note, waitsOnPeople: undefined, endsRun: "failure" });
+      await noteOnTicket(claim, { ...note, run: "failed" });
       ended = true;
       await setStatus("Todo");
       throw new JigsError(note.headline);
@@ -184,7 +184,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       headline: `Merged ${pr.url}.`,
       notes: [],
       closing: "",
-      endsRun: "success",
+      run: "succeeded",
     });
     return { pr: pr.url };
   } catch (error) {
@@ -194,7 +194,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
         headline: "The run failed. The run's page has the error.",
         notes: [],
         closing: "",
-        endsRun: "failure",
+        run: "failed",
       }).catch(() => {});
     }
     throw error;
@@ -273,7 +273,7 @@ const openedNote = (url: string): TicketNote => ({
     mergedBy === "jigs"
       ? "jigs merges it once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run."
       : "It is yours to merge once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run.",
-  waitsOnPeople: true,
+  run: "waiting",
 });
 
 const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): TicketNote => ({
@@ -335,8 +335,8 @@ function needsHumanNote(
     headline: `jigs needs a person to move the pull request for ${key} forward.`,
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
-      "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
-    waitsOnPeople: true,
+      "Comment on the pull request or push to it; replies here aren't read. jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+    run: "waiting",
   };
 }
 

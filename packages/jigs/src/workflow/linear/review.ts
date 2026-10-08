@@ -25,11 +25,9 @@ export const ticketReviewVerdictSchema = z.strictObject({
  * renderer owns the layout and every caller owns what it says.
  *
  * @remarks
- * Without `endsRun` or `waitsOnPeople`, the session keeps showing the run as
- * working. Linear marks a session stale after about 30 minutes with no
- * activity, and a stale session hides its Stop button, so a run that will be
- * quiet for long while people act, such as while its pull request waits for
- * review, sets `waitsOnPeople`.
+ * Linear marks a session stale after about 30 minutes with no activity, and a
+ * stale session hides its Stop button. Before a long quiet wait on people, such
+ * as a pull request waiting for review, post a note with `run: "waiting"`.
  *
  * @group Linear tickets
  */
@@ -46,25 +44,17 @@ export type TicketNote = {
    * user has is skipped with a warning.
    */
   mention?: string[] | undefined;
-} & (
-  | {
-      /**
-       * Set on the run's last note: it ends the session, as a success or a
-       * failure.
-       */
-      endsRun?: "success" | "failure" | undefined;
-      waitsOnPeople?: undefined;
-    }
-  | {
-      /**
-       * Shows the session as awaiting input while the run waits on people, so it
-       * never goes stale and Stop stays available. The run does not read replies
-       * to it; the note says where people act instead.
-       */
-      waitsOnPeople: true;
-      endsRun?: undefined;
-    }
-);
+  /**
+   * What the run does after this note; omitted, it keeps working.
+   *
+   * @remarks
+   * `"succeeded"` and `"failed"` end the session, so set one on the run's last
+   * note. `"waiting"` shows the session as awaiting input, which never goes
+   * stale and keeps Stop. The run does not read replies to a waiting note, so
+   * say in it where people act.
+   */
+  run?: "waiting" | "succeeded" | "failed" | undefined;
+};
 
 /**
  * Posting a note in the run's Linear agent session. Declared here rather than

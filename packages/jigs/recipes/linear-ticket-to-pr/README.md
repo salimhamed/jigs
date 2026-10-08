@@ -204,7 +204,7 @@ export async function deliverTicket(
       headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
-      endsRun: "failure",
+      run: "failed",
     });
     await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     throw new JigsError(`delivery stopped: ${built.reason}`);
@@ -212,6 +212,12 @@ export async function deliverTicket(
   const { title, body } = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
   await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "In Review" });
+  await noteOnTicket(claim, {
+    headline: `Pull request ${pr.url} is open.`,
+    notes: [],
+    closing: "Comment on the pull request to change anything, or use Stop to end the run.",
+    run: "waiting",
+  });
   const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
@@ -221,8 +227,8 @@ export async function deliverTicket(
       noteOnTicket(claim, {
         headline: `${pr.url} needs a person (${facts.reason}).`,
         notes: [facts.detail],
-        closing: "jigs keeps watching the pull request.",
-        waitsOnPeople: true,
+        closing: "Comment on the pull request or push to it; replies here aren't read.",
+        run: "waiting",
       }),
   });
   if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
@@ -231,7 +237,7 @@ export async function deliverTicket(
     headline: `Merged ${pr.url}.`,
     notes: [],
     closing: "",
-    endsRun: "success",
+    run: "succeeded",
   });
   return { pr: pr.url };
 }

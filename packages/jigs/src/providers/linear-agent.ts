@@ -194,27 +194,30 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     return data.agentSession.activities.nodes.length > 0;
   }
 
-  /** Whether the app's last activity before `at` was a question, still open when a reply came. */
-  async function askedBefore(sessionId: string, at: string): Promise<boolean> {
+  /** The app's newest activity in a session, or null before its first. A person's message is not one. */
+  async function lastAppActivity(
+    sessionId: string,
+  ): Promise<{ type: string; createdAt: string } | null> {
     const data = await graphql<{
-      agentSession: { activities: { nodes: Array<{ content: { __typename: string } }> } };
+      agentSession: {
+        activities: { nodes: Array<{ createdAt: string; content: { __typename: string } }> };
+      };
     }>(
-      `query AgentSessionAskedBefore($id: String!, $at: DateTimeOrDuration!) {
+      `query AgentSessionLastAppActivity($id: String!) {
         agentSession(id: $id) {
           activities(
-            filter: {
-              type: { in: ["thought", "action", "elicitation", "response", "error"] }
-              createdAt: { lt: $at }
-            }
+            filter: { type: { in: ["thought", "action", "elicitation", "response", "error"] } }
             first: 1
-          ) { nodes { content { __typename } } }
+          ) { nodes { createdAt content { __typename } } }
         }
       }`,
-      { id: sessionId, at },
+      { id: sessionId },
     );
     // Linear returns a session's activities newest first.
     const last = data.agentSession.activities.nodes[0];
-    return last?.content.__typename === "AgentActivityElicitationContent";
+    if (last === undefined) return null;
+    const type = last.content.__typename.replace(/^AgentActivity|Content$/g, "").toLowerCase();
+    return { type, createdAt: last.createdAt };
   }
 
   return {
@@ -225,7 +228,7 @@ export function createLinearAgentApi(linear: Pick<LinearClient, "graphql">) {
     setExternalUrls,
     listPrompts,
     answeredSince,
-    askedBefore,
+    lastAppActivity,
   };
 }
 

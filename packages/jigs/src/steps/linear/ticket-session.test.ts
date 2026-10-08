@@ -310,43 +310,29 @@ test("a question is an elicitation in the session, under an id derived from the 
 });
 
 test.each([
-  ["success", "response"],
-  ["failure", "error"],
-] as const)("a note that ends the run as a %s is the session's final %s", async (endsRun, type) => {
-  await postTicketNote(
-    {
-      installationName: "linear-acme",
-      issueId: "issue-1",
-      sessionId: "session-1",
-      note: { headline: "Done.", notes: [], closing: "", endsRun },
-    },
-    context,
-    definition,
-  );
-  expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
-    "session-1",
-    { type, body: body() },
-    stepPostingId(context, "session-1"),
-  );
-});
-
-test("a note that waits on people is an elicitation, with no thought after it", async () => {
-  await postTicketNote(
-    {
-      installationName: "linear-acme",
-      issueId: "issue-1",
-      sessionId: "session-1",
-      note: { headline: "Open.", notes: [], closing: "", waitsOnPeople: true },
-    },
-    context,
-    definition,
-  );
-  expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
-    "session-1",
-    { type: "elicitation", body: body() },
-    stepPostingId(context, "session-1"),
-  );
-});
+  ["succeeded", "response"],
+  ["failed", "error"],
+  ["waiting", "elicitation"],
+] as const)(
+  "a note after which the run is %s is a %s, with no thought after it",
+  async (run, type) => {
+    await postTicketNote(
+      {
+        installationName: "linear-acme",
+        issueId: "issue-1",
+        sessionId: "session-1",
+        note: { headline: "Done.", notes: [], closing: "", run },
+      },
+      context,
+      definition,
+    );
+    expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
+      "session-1",
+      { type, body: body() },
+      stepPostingId(context, "session-1"),
+    );
+  },
+);
 
 test("any other note is a response, so its mentions notify, then a thought keeps the session working", async () => {
   await postTicketNote(

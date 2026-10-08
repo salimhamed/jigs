@@ -43,13 +43,16 @@ const STOPPED = "Stopped.";
 const WORKING =
   "I'm working and can't take instructions mid-run; I'll ask here if I need you. Use Stop to end the run.";
 
+const WAITING =
+  "I can't take instructions here while I wait; my last message says where to act. Use Stop to end the run.";
+
 /** What routing a session's prompts reaches. Tests replace it; the service uses the defaults. */
 export interface SessionPromptDeps {
   liveTurn: typeof liveTurn;
   wake: typeof wake;
   linear: (
     installationName: string,
-  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "askedBefore">;
+  ) => Pick<LinearAgentApi, "postActivityOnce" | "answeredSince" | "lastAppActivity">;
   appName: (installationName: string) => Promise<string>;
   /** The run holding this hook token, or null when none does. It may have ended since. */
   holder: (token: string) => Promise<string | null>;
@@ -97,8 +100,8 @@ const pendingStops = new Set<string>();
 /**
  * Hand a `prompted` agent session event to the run that holds the session: into its live turn
  * when one runs in this process, and through its listening hook, so a run reading the session
- * reads it again. A run that holds the session but is not listening is working, and the person
- * is told so. A session whose runs have ended is told so too, and a stop no run takes in time is
+ * reads it again. A run that holds the session but is not listening is working or waiting on
+ * people, and the person is told so. A session whose runs have ended is told so too, and a stop no run takes in time is
  * ended here.
  */
 export async function routeSessionPrompt(
@@ -157,19 +160,26 @@ export async function routeSessionPrompt(
     return "dropped";
   }
   if (holder !== null) {
-    // The message stays in the session, and the run reads it when it next listens. A reply to
-    // the run's open question can land after the run has already read it and stopped listening;
-    // that one is an answer, so it gets no working note.
+    // The message stays in the session, and the run reads it when it next listens. The app
+    // having posted since the message means the run already took it: a reply to its question
+    // that landed as the run stopped listening. A run left awaiting input is waiting on people,
+    // since a question always listens, so its reply asks again to keep the session awaiting
+    // input and its Stop button.
     try {
       const linear = deps.linear(installationName);
-      if (await linear.askedBefore(session.sessionId, prompt.createdAt)) {
+      const last = await linear.lastAppActivity(session.sessionId);
+      if (last !== null && Date.parse(last.createdAt) > Date.parse(prompt.createdAt)) {
         console.log(`[events] linear accepted ${at} run=${holder} answered`);
         return "woken";
       }
+      const waiting = last?.type === "elicitation";
       await linear.postActivityOnce(
         session.sessionId,
-        { type: "thought", body: WORKING },
-        derivedUuid(["linear-session-working", prompt.id]),
+        waiting ? { type: "elicitation", body: WAITING } : { type: "thought", body: WORKING },
+        derivedUuid([waiting ? "linear-session-waiting" : "linear-session-working", prompt.id]),
+      );
+      console.log(
+        `[events] linear accepted ${at} run=${holder} ${waiting ? "waiting" : "not listening"}`,
       );
     } catch (error) {
       console.error(
@@ -177,7 +187,6 @@ export async function routeSessionPrompt(
       );
       return "failed";
     }
-    console.log(`[events] linear accepted ${at} run=${holder} not listening`);
     return "woken";
   }
   if (state?.state === "open") {
