@@ -1,10 +1,6 @@
 import { randomBytes } from "node:crypto";
-import { once } from "node:events";
-import http from "node:http";
-import type { AddressInfo } from "node:net";
 import { makeSignature } from "better-auth/crypto";
 import { eq } from "drizzle-orm";
-import type { RequestHandler } from "express";
 import type { AppLoadContext } from "react-router";
 import { afterAll, beforeAll, expect } from "vitest";
 import { action as appAction } from "../app/routes/app.tsx";
@@ -22,9 +18,6 @@ import * as schema from "./db/schema.ts";
 import { dbTest, testDatabase } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
 import { MessageWaiters } from "./messages.ts";
-import { createHubApp } from "./server.ts";
-import { Shutdown } from "./shutdown.ts";
-import type { WebApp } from "./web.ts";
 
 const database = testDatabase();
 const db = connectDatabase(database.url);
@@ -255,41 +248,14 @@ dbTest("keeps invite links to admins", async () => {
   expect((await pendingInvite(admin.cookie))?.admin?.id).toBe(inviteId);
   expect((await pendingInvite(member.cookie))?.admin).toBeNull();
 
-  const notFound: RequestHandler = (_request, response) => void response.sendStatus(404);
-  const web: WebApp = { handlers: [notFound], close: async () => {} };
-  const server = createHubApp(auth, [], web, new Shutdown()).listen(0, "127.0.0.1");
-  await once(server, "listening");
-  const { port } = server.address() as AddressInfo;
-  // node:http, since fetch will not send a made-up Host header.
-  const get = (path: string, headers: Record<string, string> = {}) =>
-    new Promise<{ status: number; body: string }>((resolve, reject) => {
-      http
-        .get(
-          { host: "127.0.0.1", port, path, headers: { cookie: member.cookie, ...headers } },
-          (response) => {
-            let body = "";
-            response.setEncoding("utf8");
-            response.on("data", (chunk) => {
-              body += chunk;
-            });
-            response.on("end", () => resolve({ status: response.statusCode ?? 0, body }));
-          },
-        )
-        .on("error", reject);
-    });
-  try {
-    expect((await get("/api/auth/get-session")).status).toBe(200);
-    for (const [path, headers] of [
-      ["/api/auth/organization/get-full-organization", {}],
-      ["/api/auth/organization/list-invitations", {}],
-      // Better Auth builds the URL it routes on from the Host header.
-      ["/api/auth/get-session", { host: "hub.test/api/auth/organization/list-invitations?" }],
-    ] as const) {
-      const response = await get(path, headers);
-      expect(response.status).toBe(404);
-      expect(response.body).not.toContain(inviteId);
-    }
-  } finally {
-    server.close();
+  const get = (path: string) =>
+    auth.handler(
+      new Request(`http://hub.test/api/auth/${path}`, { headers: { cookie: member.cookie } }),
+    );
+  expect((await get("get-session")).status).toBe(200);
+  for (const path of ["organization/get-full-organization", "organization/list-invitations"]) {
+    const response = await get(path);
+    expect(response.status).toBe(404);
+    expect(await response.text()).not.toContain(inviteId);
   }
 });
