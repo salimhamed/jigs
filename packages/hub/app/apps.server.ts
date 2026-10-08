@@ -64,15 +64,18 @@ export async function listInstalledApps(context: AppLoadContext, organizationId:
 
 /** An Organization's apps, each with its installations and how many factories it is assigned to. */
 export async function listApps(context: AppLoadContext, organizationId: string) {
-  const rows = await listInstalledApps(context, organizationId);
-  const assigned = await context.db
-    .select({ appId: assignments.appId })
-    .from(assignments)
-    .innerJoin(apps, eq(apps.id, assignments.appId))
-    .where(eq(apps.organizationId, organizationId));
+  const [rows, counts] = await Promise.all([
+    listInstalledApps(context, organizationId),
+    context.db
+      .select({ appId: assignments.appId, factories: sql<number>`count(*)::int` })
+      .from(assignments)
+      .innerJoin(apps, eq(apps.id, assignments.appId))
+      .where(eq(apps.organizationId, organizationId))
+      .groupBy(assignments.appId),
+  ]);
   return rows.map((app) => ({
     ...app,
-    factories: assigned.filter((row) => row.appId === app.id).length,
+    factories: counts.find((row) => row.appId === app.id)?.factories ?? 0,
   }));
 }
 

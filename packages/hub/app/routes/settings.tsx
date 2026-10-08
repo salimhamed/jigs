@@ -1,7 +1,7 @@
 import { Form } from "react-router";
 import { attempt, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
-import { PageHeader } from "../components/page.tsx";
+import { PageHeader, SettingRow } from "../components/page.tsx";
 import { card, input, secondaryButton } from "../components/ui.ts";
 import type { Route } from "./+types/settings.ts";
 
@@ -23,27 +23,25 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
   return (
     <div className="space-y-6">
       <PageHeader title="Settings" />
-      <Form
-        method="post"
-        className={`${card} flex max-w-3xl flex-wrap items-center gap-x-6 gap-y-2 p-5`}
-      >
-        <label htmlFor="organization-name" className="w-48 text-sm text-zinc-500">
-          Organization name
-        </label>
-        <input
-          id="organization-name"
-          name="name"
-          required
-          defaultValue={loaderData.name}
-          disabled={!loaderData.isAdmin}
-          className={`${input} min-w-48 grow`}
-        />
-        {loaderData.isAdmin && (
-          <button type="submit" className={secondaryButton}>
-            Save
-          </button>
-        )}
-      </Form>
+      <div className={`${card} max-w-4xl`}>
+        <SettingRow label="Organization name" hint="Shown at the top of every page.">
+          <Form method="post" className="flex flex-wrap gap-2">
+            <input
+              name="name"
+              required
+              defaultValue={loaderData.name}
+              disabled={!loaderData.isAdmin}
+              aria-label="Organization name"
+              className={`${input} min-w-0 grow`}
+            />
+            {loaderData.isAdmin && (
+              <button type="submit" className={secondaryButton}>
+                Save
+              </button>
+            )}
+          </Form>
+        </SettingRow>
+      </div>
     </div>
   );
 }

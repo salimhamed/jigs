@@ -128,8 +128,15 @@ async function manage(cookie: string, factoryId: string, name: string) {
   expect((await assignedApps(db, factoryId)).map((app) => app.id)).toEqual([appId]);
   await onFactory(cookie, factoryId, { intent: "disconnect", appId });
   expect(await assignedApps(db, factoryId)).toEqual([]);
-  expect(await onFactory(cookie, factoryId, { intent: "remove" })).toBeInstanceOf(Response);
+  const removed = await onFactory(cookie, factoryId, {
+    intent: "remove",
+    returnTo: "/factories?tab=all",
+  });
+  expect((removed as Response).headers.get("location")).toBe("/factories?tab=all");
   expect(await exists(factoryId)).toBe(false);
+  expect(await onFactory(cookie, factoryId, { intent: "rename", name })).toEqual({
+    error: "That factory is gone.",
+  });
 }
 
 const notYours = { error: "Only an admin or whoever added this factory can change it." };

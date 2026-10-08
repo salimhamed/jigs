@@ -1,17 +1,19 @@
-import { AlertTriangle, Download, KeyRound, Link2, Save, Trash2 } from "lucide-react";
+import { AlertTriangle, Download, Link2, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { data, Form, Link, redirect } from "react-router";
 import { isUuid, removeApp, renameApp, setInstallationName } from "../../src/apps.ts";
 import { setPagerDutyFrom, setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
-import { providerNames } from "../../src/provider-names.ts";
+import { providerAppTitles, providerNames } from "../../src/provider-names.ts";
 import { setSlackScopes } from "../../src/slack.ts";
 import { readApp } from "../apps.server.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { Codes } from "../components/codes.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
+import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
-import { Card, DangerRow, Details, PageHeader, UrlRow } from "../components/page.tsx";
+import { InstallationName } from "../components/installation-names.tsx";
+import { Card, DangerRow, Details, PageHeader, SettingRow, UrlRow } from "../components/page.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   button,
@@ -21,7 +23,7 @@ import {
   external,
   input,
   link,
-  quietButton,
+  secondaryButton,
   table,
   warningText,
 } from "../components/ui.ts";
@@ -104,13 +106,6 @@ export async function action({ context, request, params }: Route.ActionArgs) {
 type Loaded = Route.ComponentProps["loaderData"]["app"];
 type AppOf<P extends Loaded["provider"]> = Extract<Loaded, { provider: P }>;
 
-const providerTitles: Record<Loaded["provider"], string> = {
-  github: "GitHub App",
-  linear: "Linear app",
-  slack: "Slack app",
-  pagerduty: "PagerDuty app",
-};
-
 export default function AppPage({ loaderData, actionData }: Route.ComponentProps) {
   useActionToast(actionData);
   const { app, isAdmin } = loaderData;
@@ -123,7 +118,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
             <>
               {app.name}
               <span className="rounded-full border border-zinc-300 px-2.5 py-0.5 text-sm font-normal text-zinc-500 dark:border-zinc-700">
-                {providerTitles[app.provider]}
+                {providerAppTitles[app.provider]}
               </span>
             </>
           }
@@ -151,8 +146,12 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
               <thead>
                 <tr>
                   <th>Factory</th>
-                  <th>Last seen</th>
-                  <th>Last event from this app</th>
+                  <th>
+                    <Hint label="Last seen" tip={factoryHints.lastSeen} />
+                  </th>
+                  <th>
+                    <Hint label="Last event" tip={factoryHints.lastEvent} />
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -180,24 +179,25 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
       </Card>
 
       {isAdmin && (
-        <Card title="Name">
-          <Form method="post" className="space-y-2">
-            <div className="flex flex-wrap gap-2">
-              <input
-                name="name"
-                required
-                defaultValue={app.name}
-                aria-label="Name"
-                className={`${input} min-w-64`}
-              />
-              <button type="submit" name="intent" value="rename" className={button}>
-                <Save className="size-4" />
-                Save
-              </button>
-            </div>
-            <p className="text-sm text-zinc-500">{nameHints[app.provider]}</p>
-          </Form>
-        </Card>
+        <section className="space-y-3">
+          <h2 className="font-semibold">General</h2>
+          <div className={card}>
+            <SettingRow label="Name" hint={nameHints[app.provider]}>
+              <Form method="post" className="flex flex-wrap gap-2">
+                <input
+                  name="name"
+                  required
+                  defaultValue={app.name}
+                  aria-label="Name"
+                  className={`${input} min-w-0 grow`}
+                />
+                <button type="submit" name="intent" value="rename" className={secondaryButton}>
+                  Save
+                </button>
+              </Form>
+            </SettingRow>
+          </div>
+        </section>
       )}
 
       {isAdmin && (
@@ -530,8 +530,7 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
             className={`${input} w-full font-mono`}
           />
           {isAdmin && (
-            <button type="submit" name="intent" value="scopes" className={button}>
-              <Save className="size-4" />
+            <button type="submit" name="intent" value="scopes" className={secondaryButton}>
               Save
             </button>
           )}
@@ -676,8 +675,7 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
                       aria-label="From email"
                       className={input}
                     />
-                    <button type="submit" name="intent" value="from" className={quietButton}>
-                      <Save className="size-4" />
+                    <button type="submit" name="intent" value="from" className={secondaryButton}>
                       Save
                     </button>
                   </Form>
@@ -708,8 +706,7 @@ function WebhookSecretForm({ replacing }: { replacing: boolean }) {
           className={input}
         />
       </label>
-      <button type="submit" name="intent" value="webhookSecret" className={button}>
-        <KeyRound className="size-4" />
+      <button type="submit" name="intent" value="webhookSecret" className={secondaryButton}>
         Save
       </button>
     </Form>
@@ -796,7 +793,7 @@ function InstallationsCard({
               {rows.map(({ installation, cells }) => (
                 <tr key={installation.id}>
                   <td>
-                    <InstallationName installation={installation} isAdmin={isAdmin} />
+                    <InstallationNameField installation={installation} isAdmin={isAdmin} />
                   </td>
                   {cells}
                 </tr>
@@ -810,7 +807,7 @@ function InstallationsCard({
 }
 
 /** An installation's name, which factories use for it, with a form to set it for admins. */
-function InstallationName({
+function InstallationNameField({
   installation,
   isAdmin,
 }: {
@@ -818,7 +815,7 @@ function InstallationName({
   isAdmin: boolean;
 }) {
   if (!isAdmin) {
-    return installation.installationName ?? <span className={warningText}>Needs a name</span>;
+    return <InstallationName name={installation.installationName} />;
   }
   return (
     <Form method="post" className="flex items-center gap-2">
@@ -837,8 +834,7 @@ function InstallationName({
             : ""
         }`}
       />
-      <button type="submit" name="intent" value="installationName" className={quietButton}>
-        <Save className="size-4" />
+      <button type="submit" name="intent" value="installationName" className={secondaryButton}>
         Save
       </button>
     </Form>

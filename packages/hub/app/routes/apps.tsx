@@ -4,8 +4,9 @@ import { providerNames } from "../../src/provider-names.ts";
 import { listApps } from "../apps.server.ts";
 import { requireMember } from "../auth.server.ts";
 import { Hint } from "../components/hint.tsx";
+import { InstallationNames } from "../components/installation-names.tsx";
 import { PageHeader } from "../components/page.tsx";
-import { button, card, link, table, warningText } from "../components/ui.ts";
+import { button, card, link, table } from "../components/ui.ts";
 import type { Route } from "./+types/apps.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -59,17 +60,7 @@ export default function Apps({ loaderData }: Route.ComponentProps) {
                   </td>
                   <td className="text-zinc-500">{providerNames[app.provider]}</td>
                   <td>
-                    {app.installations.length === 0
-                      ? "—"
-                      : app.installations.map((installation, index) => (
-                          <span key={installation.account}>
-                            {index > 0 && ", "}
-                            {installation.installationName ?? (
-                              <span className={warningText}>needs a name</span>
-                            )}{" "}
-                            <span className="text-zinc-500">({installation.account})</span>
-                          </span>
-                        ))}
+                    <InstallationNames installations={app.installations} withAccounts />
                   </td>
                   <td>{app.factories}</td>
                 </tr>

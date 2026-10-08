@@ -1,9 +1,6 @@
 import { type ReactNode, useRef } from "react";
 import { Form } from "react-router";
-import { button, quietButton } from "./ui.ts";
-
-const dangerConfirm =
-  "inline-flex items-center justify-center gap-2 rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700";
+import { button, dangerButton, quietButton } from "./ui.ts";
 
 /**
  * A button that opens a confirmation dialog; confirming posts `fields` to
@@ -53,7 +50,7 @@ export function ConfirmForm({
             <button type="button" className={quietButton} onClick={() => dialog.current?.close()}>
               Cancel
             </button>
-            <button type="submit" className={destructive ? dangerConfirm : button}>
+            <button type="submit" className={destructive ? dangerButton : button}>
               {confirmLabel}
             </button>
           </div>

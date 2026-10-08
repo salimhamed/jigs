@@ -72,7 +72,8 @@ export async function requireFactoryManager(
     columns: { createdBy: true },
     where: and(eq(factories.id, factoryId), eq(factories.organizationId, member.organizationId)),
   });
-  return factory && manages(member, factory)
+  if (!factory) return { error: "That factory is gone." };
+  return manages(member, factory)
     ? member
     : { error: "Only an admin or whoever added this factory can change it." };
 }

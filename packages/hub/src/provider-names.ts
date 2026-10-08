@@ -7,3 +7,11 @@ export const providerNames: Record<Provider, string> = {
   slack: "Slack",
   pagerduty: "PagerDuty",
 };
+
+/** What each provider calls the app a hub uses, such as GitHub's GitHub App. */
+export const providerAppTitles: Record<Provider, string> = {
+  github: "GitHub App",
+  linear: "Linear app",
+  slack: "Slack app",
+  pagerduty: "PagerDuty app",
+};

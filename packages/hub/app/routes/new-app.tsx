@@ -4,6 +4,7 @@ import { Form, Link, redirect } from "react-router";
 import { addGitHubApp, githubWebhookPath } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
 import { addPagerDutyApp } from "../../src/pagerduty.ts";
+import { providerAppTitles } from "../../src/provider-names.ts";
 import { addSlackApp } from "../../src/slack.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
@@ -103,7 +104,7 @@ const slackCredentials = (
 const forms: Record<
   Provider,
   {
-    card: { title: string; summary: string };
+    summary: string;
     primary: string;
     steps: (urls: HubUrls) => ReactNode[];
     note?: ReactNode;
@@ -112,7 +113,7 @@ const forms: Record<
   }
 > = {
   github: {
-    card: { title: "GitHub App", summary: "Repos, PRs, checks" },
+    summary: "Repos, PRs, checks",
     primary: "Create a GitHub App for your organization first, then copy its details here.",
     steps: (urls) => [
       <>
@@ -185,7 +186,7 @@ const forms: Record<
     submit: "Add GitHub App",
   },
   linear: {
-    card: { title: "Linear app", summary: "Issues, agent sessions" },
+    summary: "Issues, agent sessions",
     primary: "Create an OAuth application in Linear first, then copy its details here.",
     steps: (urls) => [
       <>
@@ -229,7 +230,7 @@ const forms: Record<
     submit: "Add Linear app",
   },
   slack: {
-    card: { title: "Slack app", summary: "Mentions, messages" },
+    summary: "Mentions, messages",
     primary: "Create a Slack app first, then copy its details here.",
     steps: () => [
       <>
@@ -282,7 +283,7 @@ const forms: Record<
     submit: "Add Slack app",
   },
   pagerduty: {
-    card: { title: "PagerDuty app", summary: "Incidents" },
+    summary: "Incidents",
     primary: "Register an app in PagerDuty first, then copy its details here.",
     steps: (urls) => [
       <>
@@ -378,8 +379,8 @@ export default function NewApp({ loaderData, actionData }: Route.ComponentProps)
                     : "border-zinc-200 dark:border-zinc-800"
                 }`}
               >
-                <div className="font-medium">{forms[option].card.title}</div>
-                <div className="text-sm text-zinc-500">{forms[option].card.summary}</div>
+                <div className="font-medium">{providerAppTitles[option]}</div>
+                <div className="text-sm text-zinc-500">{forms[option].summary}</div>
               </Link>
             ))}
           </nav>

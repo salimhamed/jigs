@@ -12,6 +12,7 @@ import { ConfirmForm } from "../components/confirm-form.tsx";
 import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
 import { Hint } from "../components/hint.tsx";
+import { type InstallationLabel, InstallationNames } from "../components/installation-names.tsx";
 import {
   DangerRow,
   Details,
@@ -35,6 +36,8 @@ import { countEvents, readEventLog, readFactory, readLastEvents } from "../facto
 import type { Route } from "./+types/factory.ts";
 import type { loader as eventLoader } from "./factory-event.ts";
 import type { loader as eventsLoader } from "./factory-events.ts";
+
+const allFactories = "/factories?tab=all";
 
 const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
@@ -93,7 +96,8 @@ export async function action({ context, request, params }: Route.ActionArgs) {
     }
     case "remove":
       await removeFactory(context.db, context.waiters, organizationId, params.id);
-      return redirect("/factories");
+      // Back to the list tab it was removed from; any other place could lead off the hub.
+      return redirect(form.get("returnTo") === allFactories ? allFactories : "/factories");
     default:
       throw notFound();
   }
@@ -204,10 +208,7 @@ function SettingsTab({
                     <Hint label="Installations" tip={installationsHint} />
                   </th>
                   <th>
-                    <Hint
-                      label="Last event"
-                      tip="When this factory last received an event from this app."
-                    />
+                    <Hint label="Last event" tip={factoryHints.lastEvent} />
                   </th>
                   <th />
                 </tr>
@@ -249,7 +250,7 @@ function SettingsTab({
                           body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
                           confirmLabel="Disconnect"
                           destructive
-                          className={quietButton}
+                          className={dangerOutlineButton}
                         >
                           Disconnect
                         </ConfirmForm>
@@ -309,8 +310,6 @@ function SettingsTab({
   );
 }
 
-type Installations = { account: string; installationName: string | null }[];
-
 /** The apps not yet connected, in a panel that filters them by name. */
 function ConnectApp({
   factoryName,
@@ -319,7 +318,7 @@ function ConnectApp({
   isAdmin,
 }: {
   factoryName: string;
-  apps: { id: string; provider: Provider; name: string; installations: Installations }[];
+  apps: { id: string; provider: Provider; name: string; installations: InstallationLabel[] }[];
   hasApps: boolean;
   isAdmin: boolean;
 }) {
@@ -505,25 +504,5 @@ function EventRow({ factoryId, message }: { factoryId: string; message: Message 
         </tr>
       )}
     </>
-  );
-}
-
-function InstallationNames({ installations }: { installations: Installations }) {
-  if (installations.length === 0) return <span className="text-zinc-500">not installed</span>;
-  return (
-    <span className="font-mono text-xs">
-      {installations.map((installation, index) => (
-        <span key={installation.account}>
-          {index > 0 && ", "}
-          {installation.installationName === null ? (
-            <span className={warningText} title={installation.account}>
-              needs a name
-            </span>
-          ) : (
-            <span title={installation.account}>{installation.installationName}</span>
-          )}
-        </span>
-      ))}
-    </span>
   );
 }

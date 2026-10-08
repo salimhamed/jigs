@@ -25,7 +25,7 @@ An account admin or owner registers the app once per PagerDuty account.
 
 ## 2. Add the app to the hub
 
-In the hub, under **Apps → Add app**, choose **PagerDuty**, and enter the
+In the hub, under **Apps → Add app**, choose **PagerDuty app**, and enter the
 app's name, which only labels it on the hub, its client ID and client secret,
 the account's subdomain (the `<subdomain>` in `<subdomain>.pagerduty.com`),
 its region, US or EU, and the **from email**.

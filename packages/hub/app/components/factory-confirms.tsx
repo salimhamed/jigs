@@ -27,13 +27,15 @@ export function ReissueTokenButton({
 
 const and = new Intl.ListFormat("en", { type: "conjunction" });
 
-/** Removes a factory once confirmed, saying what it loses. */
+/** Removes a factory once confirmed, saying what it loses, then shows the factory list at `returnTo`. */
 export function RemoveFactoryButton({
   factory,
+  returnTo = "/factories",
   className,
   children,
 }: {
   factory: { id: string; name: string; appNames: string[]; unconfirmed: number };
+  returnTo?: string;
   className: string;
   children: ReactNode;
 }) {
@@ -47,7 +49,7 @@ export function RemoveFactoryButton({
   return (
     <ConfirmForm
       action={`/factories/${factory.id}`}
-      fields={{ intent: "remove" }}
+      fields={{ intent: "remove", returnTo }}
       title={`Remove ${factory.name}?`}
       body={`Its token stops working${disconnected}.${dropped}`}
       confirmLabel="Remove factory"

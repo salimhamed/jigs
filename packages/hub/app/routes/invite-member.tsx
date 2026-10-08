@@ -1,5 +1,5 @@
 import { Form, Link } from "react-router";
-import { type Role, roles } from "../../src/roles.ts";
+import { type Role, roleLabels, roles } from "../../src/roles.ts";
 import { attempt, requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
@@ -78,7 +78,7 @@ export default function InviteMember({ loaderData, actionData }: Route.Component
                     defaultChecked={role === "member"}
                     className="sr-only"
                   />
-                  <span className="block font-medium capitalize">{role}</span>
+                  <span className="block font-medium">{roleLabels[role]}</span>
                   <span className="block text-sm text-zinc-500">{roleChoices[role]}</span>
                 </label>
               ))}

@@ -6,4 +6,5 @@ export const factoryHints = {
   unconfirmed:
     "Events sent to this factory that it hasn't confirmed receiving yet. They wait on the hub until it does. A growing number means the factory is offline or falling behind.",
   apps: "How many apps are connected to this factory.",
+  lastEvent: "When this factory last received an event from this app.",
 };

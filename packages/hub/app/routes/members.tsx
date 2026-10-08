@@ -2,13 +2,13 @@ import { and, eq } from "drizzle-orm";
 import { Trash2, UserPlus, X } from "lucide-react";
 import { data, Link, useFetcher } from "react-router";
 import * as schema from "../../src/db/schema.ts";
-import { roles } from "../../src/roles.ts";
+import { type Role, roleLabels, roles } from "../../src/roles.ts";
 import { attempt, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
 import { PageHeader } from "../components/page.tsx";
-import { button, card, dangerButton, select, table } from "../components/ui.ts";
+import { button, card, dangerOutlineButton, select, table } from "../components/ui.ts";
 import type { Route } from "./+types/members.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
@@ -188,12 +188,12 @@ function MemberRow({
           >
             {roles.map((role) => (
               <option key={role} value={role}>
-                {role}
+                {roleLabels[role]}
               </option>
             ))}
           </select>
         ) : (
-          member.role
+          roleLabels[member.role as Role]
         )}
       </td>
       <td className="text-right">
@@ -204,7 +204,7 @@ function MemberRow({
             body={`${member.name} loses access to this hub. Invite them again to let them back in.`}
             confirmLabel="Remove member"
             destructive
-            className={dangerButton}
+            className={dangerOutlineButton}
           >
             <Trash2 className="size-4" />
             Remove
@@ -220,7 +220,7 @@ function InviteRow({ invite }: { invite: Route.ComponentProps["loaderData"]["inv
   return (
     <tr>
       <td>{invite.email}</td>
-      <td>{invite.role}</td>
+      <td>{roleLabels[invite.role as Role]}</td>
       <td className="text-zinc-500" suppressHydrationWarning>
         {new Date(invite.expiresAt).toLocaleDateString()}
       </td>
@@ -234,7 +234,7 @@ function InviteRow({ invite }: { invite: Route.ComponentProps["loaderData"]["inv
               body="Its link stops working. You can invite them again later."
               confirmLabel="Revoke invite"
               destructive
-              className={dangerButton}
+              className={dangerOutlineButton}
             >
               <X className="size-4" />
               Revoke

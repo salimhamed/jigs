@@ -109,21 +109,23 @@ function ConnectFactory({
   const url = `/factories/${factory.id}/last-seen`;
   const lastSeenAt = lastSeen.data?.lastSeenAt;
   const connected = lastSeenAt != null && lastSeenAt > factory.issuedAt;
+  const gone = lastSeen.data?.gone === true;
+  const done = connected || gone;
   const [now, setNow] = useState(Date.now);
   const [nextCheck, setNextCheck] = useState(() => Date.now() + CHECK_EVERY_MS);
   const { load } = lastSeen;
 
   useEffect(() => {
-    if (connected) return;
+    if (done) return;
     const timer = setInterval(() => setNow(Date.now()), 1000);
     return () => clearInterval(timer);
-  }, [connected]);
+  }, [done]);
 
   useEffect(() => {
-    if (connected || now < nextCheck) return;
+    if (done || now < nextCheck) return;
     load(url);
     setNextCheck(now + CHECK_EVERY_MS);
-  }, [connected, now, nextCheck, load, url]);
+  }, [done, now, nextCheck, load, url]);
 
   const checkNow = () => {
     load(url);
@@ -154,7 +156,9 @@ function ConnectFactory({
           The token is shown once. Copy it before leaving this page.
         </p>
       </div>
-      {connected ? (
+      {gone ? (
+        <p className={`text-sm ${warningText}`}>This factory was removed.</p>
+      ) : connected ? (
         <p className="flex items-center gap-2 text-sm">
           <CheckCircle2 className="size-4 text-emerald-500" />
           {factory.name} is connected.

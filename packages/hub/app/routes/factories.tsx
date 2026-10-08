@@ -10,7 +10,7 @@ import { TimeAgo } from "../components/time.tsx";
 import {
   button,
   card,
-  dangerButton,
+  dangerOutlineButton,
   link,
   quietButton,
   table,
@@ -120,7 +120,11 @@ export default function Factories({ loaderData }: Route.ComponentProps) {
                           <KeyRound className="size-4" />
                           Re-issue token
                         </ReissueTokenButton>
-                        <RemoveFactoryButton factory={factory} className={dangerButton}>
+                        <RemoveFactoryButton
+                          factory={factory}
+                          returnTo={mine ? "/factories" : "/factories?tab=all"}
+                          className={dangerOutlineButton}
+                        >
                           <Trash2 className="size-4" />
                           Remove
                         </RemoveFactoryButton>

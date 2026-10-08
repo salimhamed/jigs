@@ -5,3 +5,6 @@
  */
 export const roles = ["admin", "member"] as const;
 export type Role = (typeof roles)[number];
+
+/** How the hub's pages show each role. */
+export const roleLabels: Record<Role, string> = { admin: "Admin", member: "Member" };
