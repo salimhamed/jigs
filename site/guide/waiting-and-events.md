@@ -14,8 +14,10 @@ person replies. It requires the factory's [Linear app](/guide/configuration#line
 and a claimed ticket. Claiming prevents two runs from owning the same ticket,
 and it opens a Linear agent session on the ticket, or takes the one the run
 was started from with `acquireTicket`'s `session` argument. A ticket run talks
-to people only in that session: Linear shows it working, with an Open button
-that links to the run's page and a Stop button that works for the whole run.
+to people only in that session: Linear shows it working, with a Stop button
+that works for the whole run. When the service has a dashboard, an Open button
+links to the run's page; the dashboard listens on `localhost`, so the link
+opens only on the factory's machine.
 
 This complete workflow resolves its `ticket` input in the Linear installation
 its `linearInstallation` input names, such as `linear-acme`, claims the ticket, then
@@ -75,7 +77,7 @@ The question mentions your [`linear.operator`](/guide/configuration#linear-opera
 or the ticket's creator without one, and the assignee. Pass
 `mention: ["dana@example.com"]` in the halt to mention more people. Anyone who
 replies in the session answers it. Messages sent there before the question
-count too, and the reply holds each message after its author's name.
+count too: `reply.body` joins them, each prefixed with its author's name.
 
 `noteOnTicket` posts a note in the session and notifies the people it
 mentions. A note with `endsRun` is the run's last message, as a success or a
@@ -86,7 +88,7 @@ the run as working.
   can't take instructions mid-run; I'll ask here if I need you. Use Stop to end
   the run." The run reads it at its next question. If the run never asks
   again, it never reads the message.
-- **Stop** cancels the run within about 30 seconds, as `jigs cancel` does,
+- **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
   and posts "Stopped." The ticket's status stays as it is.
 - **Ordinary comments** on the ticket answer nothing. jigs never posts or
   reads them, though an agent with Linear's MCP tools may still comment.

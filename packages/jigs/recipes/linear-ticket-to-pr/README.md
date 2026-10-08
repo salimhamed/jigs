@@ -10,8 +10,8 @@ The run opens one Linear agent session on the ticket when it starts, and says
 everything there: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
 session. A message sent while the run is working waits for its next question.
-Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status as
-it is. Every note mentions the operator (or the ticket's
+Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
+as it is. Every note mentions the operator (or the ticket's
 creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
@@ -26,8 +26,8 @@ following the pull request, runs in four jigs routines the workflow calls.
 
 ## What it needs
 
-- **A Linear app assigned to the factory, and the factory's GitHub App installed on the repository's owner**,
-  each installation named on the hub. See
+- **A Linear app assigned to the factory, and the factory's GitHub App
+  installed on the repository's owner**, each installation named on the hub. See
   [The factory's App](https://salimhamed.github.io/jigs/guide/configuration#github-app)
   and [The factory's Linear app](https://salimhamed.github.io/jigs/guide/configuration#linear-app).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
@@ -48,8 +48,8 @@ following the pull request, runs in four jigs routines the workflow calls.
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
   `"jigs"`, so jigs merges once the pull request is approved and CI is green.
   Set it to `"human"` to have the run wait for you to merge. jigs never merges
-  in a repository with no CI: add CI, or set `"human"` and merge yourself. The workflow passes it to jigs as
-  `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
+  in a repository with no CI: add CI, or set `"human"` and merge yourself.
+  The workflow passes it to jigs as `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
   merging only with a label, check the snapshot `mergeWhen` receives instead.
   `approvalCovers`, next to it, is `"latest-commit"`,
   so a push needs a new approving review; `"any-commit"` lets a person's
@@ -69,7 +69,8 @@ Every pull request title is a
 as one squashed commit named after the title, and release tooling and
 title-lint checks read that commit. The writer is told the rule in `prompts.ts`;
 a title that breaks it is sent back once with the problem, and a second bad
-title stops the run before anything is pushed, with a note in the ticket's session.
+title stops the run before anything is pushed, with a note in the ticket's
+session.
 
 To allow any title, delete the `check` passed to `describePullRequest` in
 `linear-ticket-to-pr.ts`, along with `titleProblems` and the title rule in the
@@ -110,19 +111,21 @@ Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-A delivery that stops before the pull request opens, or the pull request closing unmerged,
-ends the ticket's session with a note saying what remains, sets `Todo`, and
-fails the run. A merge sets `Done` and ends the session with "Merged" and the
-pull request's link. Any other error ends the session with "The run failed",
-which points to the run's page for the error, leaves the ticket's status alone, and fails the run. To keep
+When the delivery stops before the pull request opens, or the pull request
+closes unmerged, the run ends the ticket's session with a note saying what
+remains, sets `Todo`, and fails. A merge sets `Done` and ends the session with
+"Merged" and the pull request's link. Any other error ends the session with
+"The run failed", which points to the run's page for the error, leaves the
+ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
 hand; another run starts over on a new branch. Notes name the branch but never
 the local worktree path; `jigs status` shows the path.
 
 A pull request that needs a person, because the builder asked, its attempts ran
 out, or the merge was refused, does not stop the run. The workflow posts a
-note in the ticket's session saying what a person needs to do, leaves the ticket In Review, and
-keeps watching: the next change to the pull request picks the work back up.
+note in the ticket's session saying what a person needs to do, leaves the
+ticket In Review, and keeps watching: the next change to the pull request picks
+the work back up.
 
 ## The agents
 
@@ -278,8 +281,8 @@ export async function deliverTicket(
   closed without merging; local work is never pushed on the way out.
 
 The routines word nothing a person reads. Stops are return values, and
-needs-human, a blocked merge included, is a callback with facts; the workflow writes
-every note and decides where it goes. Facts never contain the local worktree
+needs-human, a blocked merge included, is a callback with facts; the workflow
+writes every note and decides where it goes. Facts never contain the local worktree
 path.
 
 ## Edit the prompts

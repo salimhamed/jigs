@@ -98,7 +98,8 @@ export const githubSchema = z.strictObject({
 /**
  * A factory's Linear settings: optionally the operator, the Linear user's
  * email that every question and note a ticket run posts mentions together
- * with the ticket's assignee. jigs acts on Linear as the Linear app the hub assigns the factory.
+ * with the ticket's assignee. jigs acts on Linear as the Linear app the hub
+ * assigns the factory.
  */
 export const linearSchema = z.strictObject({
   operator: z.email().optional(),

@@ -10,6 +10,10 @@ never answer a halt ([0016](./0016-linear-agent-conversations.md)). Meanwhile
 Linear's agent panel already gives each exchange a thread, a reply box, a
 working state and a stop button. So a ticket run now talks to people only in
 one Linear agent session, and jigs never writes or reads an ordinary comment.
+This replaces the ticket claim as a wake channel and the needs-human marker in
+[0003](./0003-webhook-ingress-resource-scoped-tokens.md), the comment reading
+in [0009](./0009-factory-identity-per-provider.md), and the single hook and
+the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
 
 - **One session per run, opened at the claim.** `acquireTicket` takes the
   ticket's claim, then opens a session on the issue with
@@ -62,10 +66,11 @@ one Linear agent session, and jigs never writes or reads an ordinary comment.
   "Received" acknowledgement. This also skips sessions that automation opened
   without a person; there is no other way to tell the factory's own sessions
   apart, and no such use is known.
-- **The comment wake is gone.** Linear `Comment` events wake nothing, a ticket
-  claim is never woken (`jigs poke` stays for pull-request and Slack waits),
-  and the needs-human marker hook, the comment cursor and the posted-comment
-  ids are removed. Agents using the Linear MCP may still post ordinary
+- **The comment wake is gone.** Linear `Comment` events wake nothing, and
+  nothing wakes a ticket claim. `jigs poke` reaches a listening hook (a halted
+  ticket run, or a conversation waiting for its next message) and pull-request
+  and Slack waits, never the claim. The needs-human marker hook, the comment
+  cursor and the posted-comment ids are removed. Agents using the Linear MCP may still post ordinary
   comments as the app; nothing reads them.
 
 ## Consequences

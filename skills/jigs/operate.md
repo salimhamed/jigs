@@ -99,9 +99,9 @@ columns.
 
 Each suspension carries a kind:
 
-- **linear-listening** — a needs-human halt: jigs asked a question in the
-  run's Linear agent session on its ticket. A reply there wakes it at once
-  through the hub.
+- **linear-listening** — the run reads a Linear agent session: a needs-human
+  halt waiting for an answer to the question it asked there, or a conversation
+  waiting for the next message. A reply there wakes it at once through the hub.
 - **pull-request** — the run holds a pull request and wants the factory's
   approval (a review of the current head, or the `jigs:approved` label), green
   CI and a mergeable branch. A review, a new commit, a CI result or a

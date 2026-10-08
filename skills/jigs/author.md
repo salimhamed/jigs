@@ -113,8 +113,8 @@ take only the claim.
 
 A ticket run talks to people only in that session; jigs posts and reads no
 ordinary ticket comments. Post notes through the claim with
-`noteOnTicket(claim, note)` rather than the `postTicketNote` step, so
-`haltForHuman` knows which messages the run has read. Give every way out of
+`noteOnTicket(claim, note)` rather than the `postTicketNote` step: the claim
+already carries the installation, issue and session the step needs. Give every way out of
 the workflow a note with `endsRun: "success"` or `"failure"`; without one,
 Linear shows the run working after it ended. A message sent while the run
 works waits, unread, for its next `haltForHuman`. Stop cancels the run.

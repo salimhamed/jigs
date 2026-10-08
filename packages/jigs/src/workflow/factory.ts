@@ -197,9 +197,9 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  *
  * @remarks
  * `operator` is the email of the Linear user who runs the factory. With it,
- * every question and note a ticket run posts in its Linear agent session
- * mentions the operator and the ticket's assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
- * when no Linear user has the email. Steps read it from the built factory, so
+ * every question and note a ticket run posts mentions the operator and the
+ * ticket's assignee; without it, the ticket's creator and assignee.
+ * `jigs doctor` fails when no Linear user has the email. Steps read it from the built factory, so
  * a change takes effect after a rebuild, which `jigs up` does.
  *
  * @example
