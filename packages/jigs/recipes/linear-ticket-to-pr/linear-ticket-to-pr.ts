@@ -25,7 +25,12 @@ import {
   postPullRequestNote,
   publishPullRequest,
 } from "#jigs/routines";
-import { provisionWorktree, pushBranch, setTicketStatus } from "#jigs/steps";
+import {
+  provisionWorktree,
+  pushBranch,
+  setLinearAgentSessionUrls,
+  setTicketStatus,
+} from "#jigs/steps";
 import { prompts, type Ticket } from "./prompts.ts";
 import { reviewTicket, type TicketHandoff } from "./review-ticket.ts";
 
@@ -107,7 +112,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     // A stop leaves the work where it is, ends the ticket's session with a
     // failure, and fails the run.
     const stop = async (note: TicketNote): Promise<never> => {
-      await noteOnTicket(claim, { ...note, endsRun: "failure" });
+      await noteOnTicket(claim, { ...note, waitsOnPeople: undefined, endsRun: "failure" });
       ended = true;
       await setStatus("Todo");
       throw new JigsError(note.headline);
@@ -144,6 +149,14 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
       body: withReviewerNotes(described.body, built.notes),
     });
     await setStatus("In Review");
+    await setLinearAgentSessionUrls({
+      installationName,
+      sessionId: claim.sessionId,
+      urls: [{ label: "Pull request", url: pr.url }],
+    });
+    // Linear marks a session stale after about 30 quiet minutes and hides its
+    // Stop button; one awaiting input never goes stale.
+    await noteOnTicket(claim, openedNote(pr.url));
 
     const followed = await followPullRequestToOutcome(delivery, pr, {
       attemptsPerUpdate,
@@ -253,6 +266,16 @@ function stoppedNote(
   };
 }
 
+const openedNote = (url: string): TicketNote => ({
+  headline: `Pull request ${url} is open.`,
+  notes: [],
+  closing:
+    mergedBy === "jigs"
+      ? "jigs merges it once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run."
+      : "It is yours to merge once it is approved and CI passes. Comment on the pull request to change anything, or use Stop to end the run.",
+  waitsOnPeople: true,
+});
+
 const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): TicketNote => ({
   headline: `jigs stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
   notes: [`Proposed titles: ${titles.join(", then ")}`, workLocation(worktree)],
@@ -313,6 +336,7 @@ function needsHumanNote(
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
       "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+    waitsOnPeople: true,
   };
 }
 

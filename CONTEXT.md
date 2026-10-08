@@ -169,7 +169,9 @@ at its claim. One a person opened is the `linear.agentSessions` source's
 occurrence. Not an agent session.
 
 **Ticket note**: A message a ticket run posts in its Linear agent session that
-asks for nothing. Only a note with `endsRun` ends the session.
+asks for nothing. Only a note with `endsRun` ends the session; one with
+`waitsOnPeople` leaves it awaiting input, so it never goes stale while the run
+waits on people.
 
 **Conversation**: One Claude session answering in one Linear agent session, run
 by one run: turns until it goes idle, someone stops it, or a turn fails.

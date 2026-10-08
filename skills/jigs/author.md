@@ -116,7 +116,12 @@ ordinary ticket comments. Post notes through the claim with
 `noteOnTicket(claim, note)` rather than the `postTicketNote` step: the claim
 already carries the installation, issue and session the step needs. Give every way out of
 the workflow a note with `endsRun: "success"` or `"failure"`; without one,
-Linear shows the run working after it ended. A message sent while the run
+Linear shows the run working after it ended. Linear marks a session stale
+after about 30 quiet minutes and hides Stop, so before a long wait on people,
+such as a pull request in review, post a note with `waitsOnPeople: true`: the
+session shows awaiting input, never goes stale, and keeps Stop. The run does not
+read replies to it, so the note says where to act. Link a pull request with the
+`setLinearAgentSessionUrls` step. A message sent while the run
 works waits, unread, for its next `haltForHuman`. Stop cancels the run.
 
 Every question and note mentions the operator (or, without one, the

@@ -330,6 +330,24 @@ test.each([
   );
 });
 
+test("a note that waits on people is an elicitation, with no thought after it", async () => {
+  await postTicketNote(
+    {
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      sessionId: "session-1",
+      note: { headline: "Open.", notes: [], closing: "", waitsOnPeople: true },
+    },
+    context,
+    definition,
+  );
+  expect(postActivityOnce).toHaveBeenCalledExactlyOnceWith(
+    "session-1",
+    { type: "elicitation", body: body() },
+    stepPostingId(context, "session-1"),
+  );
+});
+
 test("any other note is a response, so its mentions notify, then a thought keeps the session working", async () => {
   await postTicketNote(
     {

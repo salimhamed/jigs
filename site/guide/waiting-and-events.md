@@ -84,6 +84,15 @@ mentions. A note with `endsRun` is the run's last message, as a success or a
 failure; end every way out of a ticket run with one, or Linear keeps showing
 the run as working.
 
+Linear marks a session stale after about 30 minutes with no new activity, and
+a stale session hides its Stop button. Before a long quiet wait on people,
+such as a pull request waiting for review, post a note with
+`waitsOnPeople: true`. It shows the session as awaiting input, which never goes
+stale, so Stop stays available. The run does not read replies to it, so say in
+the note where people act, for example on the pull request. To show the pull
+request in the session, call the `setLinearAgentSessionUrls` step with
+`[{ label: "Pull request", url }]`; the run's dashboard link stays first.
+
 - **A message sent while the run works** gets the reply "I'm working and
   can't take instructions mid-run; I'll ask here if I need you. Use Stop to end
   the run." The run reads it at its next question. If the run never asks

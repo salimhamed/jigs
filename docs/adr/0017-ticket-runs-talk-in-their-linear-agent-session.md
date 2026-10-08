@@ -60,6 +60,24 @@ the halt-comment rule in [0016](./0016-linear-agent-conversations.md).
   success, an `error` for failure. A person's message puts the session back to
   `pending`, so a halt that takes an answer posts a short thought to make it
   active again before the run's later notes.
+- **A run waiting on people keeps its session awaiting input.** Linear marks
+  a session `stale` after about 30 minutes with no agent activity, and a stale
+  session hides Stop (seen live). A ticket run waiting on its pull request's
+  approval, CI and merge is quiet for hours, so its session went stale. A
+  session in `awaitingInput` after an elicitation does not go stale (35 minutes
+  observed) and shows Stop. So a note with `waitsOnPeople` is posted as an
+  `elicitation`, which still notifies its mentions, with no `Still working.`
+  after it. The recipe posts one when the pull request opens, saying to comment
+  on the pull request or use Stop, and for every needs-a-person note while it
+  follows the pull request; it also adds the pull request to the session's
+  `externalUrls`, which is how Linear's docs say to show one. The run does not
+  read replies to such a note, and the service posts no "I'm working" thought
+  for them, because the app's last activity before them is an elicitation.
+  Rejected: a background loop posting thoughts to keep the session fresh (a
+  timer per run for a display quirk). Accepted gap: a build that runs over 30
+  minutes before the pull request opens can still go stale; a message in the
+  session gets the service's "I'm working" thought, which brings Stop back,
+  and `jigs cancel` always ends the run.
 - **Sessions with no human creator start nothing.** Linear sends the app a
   `created` event for a session it opened itself, with no creator. The
   `linear.agentSessions` source starts no run for it, and the hub posts no

@@ -11,7 +11,10 @@ everything there: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
 session. A message sent while the run is working waits for its next question.
 Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
-as it is. Every note mentions the operator (or the ticket's
+as it is. Once the pull request opens, the session links to it and a note
+says it is open and waits on people. That keeps the session awaiting input,
+so Linear never marks it stale and Stop stays available however long review
+takes; to change the work, comment on the pull request. Every note mentions the operator (or the ticket's
 creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
@@ -123,7 +126,8 @@ the local worktree path; `jigs status` shows the path.
 
 A pull request that needs a person, because the builder asked, its attempts ran
 out, or the merge was refused, does not stop the run. The workflow posts a
-note in the ticket's session saying what a person needs to do, leaves the
+note in the ticket's session saying what a person needs to do, which also
+waits on people, leaves the
 ticket In Review, and keeps watching: the next change to the pull request picks
 the work back up.
 
@@ -218,6 +222,7 @@ export async function deliverTicket(
         headline: `${pr.url} needs a person (${facts.reason}).`,
         notes: [facts.detail],
         closing: "jigs keeps watching the pull request.",
+        waitsOnPeople: true,
       }),
   });
   if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
