@@ -8,6 +8,7 @@ import { providerAppTitles } from "../../src/provider-names.ts";
 import { addSlackApp } from "../../src/slack.ts";
 import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
+import { Callout } from "../components/callout.tsx";
 import { Codes } from "../components/codes.tsx";
 import { PageHeader, UrlRow } from "../components/page.tsx";
 import { Select } from "../components/select.tsx";
@@ -127,16 +128,17 @@ const forms: Record<
         <UrlRow label="Webhook URL" value={urls.githubWebhook} />
       </>,
       <>
-        Create the app, then copy the details below. The app's page lists the remaining settings
-        once you add it here.
+        Create the app, leaving everything else as GitHub's defaults for now, then copy its details
+        below. Once you add it, the hub lists the permissions, events and other settings to change
+        on GitHub.
       </>,
     ],
-    note: "This app is how factories work on GitHub, such as opening pull requests. It's separate from the GitHub login people use to sign in to this hub.",
+    note: "Factories act on GitHub through this app, for example to open pull requests. It isn't the GitHub login people use to sign in to this hub.",
     fields: [
       {
         name: "name",
         label: "Name",
-        help: "What the hub calls this app. Only people see it, and you can change it later.",
+        help: "A label for this app in the hub. Factories and GitHub never see it, and you can change it later.",
       },
       {
         name: "slug",
@@ -305,7 +307,11 @@ const forms: Record<
       </>,
     ],
     fields: [
-      { name: "name", label: "Name", help: "What the hub calls this app. Only people see it." },
+      {
+        name: "name",
+        label: "Name",
+        help: "A label for this app in the hub. Factories and PagerDuty never see it.",
+      },
       {
         name: "clientId",
         label: "Client ID",
@@ -397,6 +403,7 @@ function AppForm({ provider, urls }: { provider: Provider; urls: HubUrls }) {
   return (
     <Form method="post" className="max-w-2xl space-y-6">
       <input type="hidden" name="provider" value={provider} />
+      {note && <Callout>{note}</Callout>}
       <div className="space-y-3 text-sm">
         <p className="font-semibold">{primary}</p>
         <ol className="list-decimal space-y-3 pl-5 marker:text-zinc-500 [&_li>div]:mt-2">
@@ -405,7 +412,6 @@ function AppForm({ provider, urls }: { provider: Provider; urls: HubUrls }) {
             <li key={index}>{step}</li>
           ))}
         </ol>
-        {note && <p className="text-zinc-500">{note}</p>}
       </div>
       <div className="space-y-5">
         {fields.map((field) => (

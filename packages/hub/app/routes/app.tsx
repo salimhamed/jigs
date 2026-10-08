@@ -239,12 +239,12 @@ function providerIds(app: Loaded) {
 }
 
 const nameHints: Record<Loaded["provider"], string> = {
-  github: "Only people see this name. Renaming it doesn't change the app on GitHub.",
+  github: "A label for this app in the hub. Factories and GitHub never see it.",
   linear:
     "Match the app's name in Linear: people @mention it by that name, and agents are told it is their own. You can rename the app in Linear's settings any time. Running factories pick up a new name when they next get a Linear token; restart a factory to apply it at once.",
   slack:
     "Factories see this as the bot's name from their next Slack token; restart a factory to apply it at once. Renaming it doesn't change the app in Slack.",
-  pagerduty: "Only people see this name. Renaming it doesn't change anything in PagerDuty.",
+  pagerduty: "A label for this app in the hub. Factories and PagerDuty never see it.",
 };
 
 function ProviderSections({ app, isAdmin }: { app: Loaded; isAdmin: boolean }) {
