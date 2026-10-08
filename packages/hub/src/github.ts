@@ -29,8 +29,10 @@ export const githubWebhookPath = "/webhooks/github";
 /** Where GitHub returns after someone installs or changes an installation of an App, its "Setup URL". */
 export const githubSetupPath = (appId: string) => `/setup/github/${appId}`;
 
-/** What the hub knows of a GitHub App besides its secrets, kept in `apps.settings`. Its slug is the app's name. */
+/** What the hub knows of a GitHub App besides its secrets, kept in `apps.settings`. */
 export interface GitHubAppSettings {
+  /** The App's URL name, as in `https://github.com/apps/<slug>`, which its bot user is named after. */
+  slug: string;
   clientId: string;
   /** The user id of `<slug>[bot]`, learned the first time the hub issues the App a token. */
   botUserId?: number;
@@ -44,6 +46,7 @@ interface GitHubAppSecrets {
 
 /** What an admin copies from a GitHub App they made by hand. */
 export interface GitHubAppInput extends GitHubAppSecrets {
+  name: string;
   appId: string;
   slug: string;
   clientId: string;
@@ -63,8 +66,9 @@ export async function addGitHubApp(
   input: GitHubAppInput,
   { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ app: App } | { error: string }> {
+  if (!input.name) return { error: "Name the app." };
   if (!/^\d+$/.test(input.appId)) return { error: "The App ID is a number." };
-  if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the App's URL name." };
+  if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the app's URL name." };
   if (!input.clientId || !input.clientSecret || !input.webhookSecret) {
     return { error: "Enter the client ID, client secret and webhook secret." };
   }
@@ -76,7 +80,7 @@ export async function addGitHubApp(
   const installed = await listInstallations(apiUrl, input.appId, input.privateKey);
   if ("status" in installed) {
     return {
-      error: `GitHub refused App ${input.appId} with this private key (${installed.status}).`,
+      error: `GitHub refused app ${input.appId} with this private key (${installed.status}).`,
     };
   }
   return db.transaction(async (tx) => {
@@ -85,9 +89,9 @@ export async function addGitHubApp(
       .values({
         organizationId,
         provider: "github",
-        name: input.slug,
+        name: input.name,
         externalId: input.appId,
-        settings: { clientId: input.clientId } satisfies GitHubAppSettings,
+        settings: { slug: input.slug, clientId: input.clientId } satisfies GitHubAppSettings,
         secrets: encryptJson<GitHubAppSecrets>(encryptionKey, {
           privateKey: input.privateKey,
           webhookSecret: input.webhookSecret,
@@ -104,7 +108,7 @@ export async function addGitHubApp(
 
 /** The page on GitHub that installs an App. */
 export const githubInstallUrl = (app: App) =>
-  `https://github.com/apps/${app.name}/installations/new`;
+  `https://github.com/apps/${(app.settings as GitHubAppSettings).slug}/installations/new`;
 
 /** A JSON Web Token that authenticates as the GitHub App itself, for ten minutes at most. */
 export function githubAppJwt(appId: string, privateKey: string | KeyObject, now = Date.now()) {
@@ -283,7 +287,7 @@ export function createGitHubRoutes(options: {
     const installationId = String(request.query.installation_id ?? "");
     const app = await findApp(db, "github", String(request.params.appId));
     if (!app || !/^\d+$/.test(installationId)) {
-      response.status(400).type("text").send("GitHub sent no installation of an App on this hub.");
+      response.status(400).type("text").send("GitHub sent no installation of an app on this hub.");
       return;
     }
     const account = await fetchInstallationAccount(
@@ -339,7 +343,7 @@ export async function issueGitHubToken(
       token,
       expiresAt: expires_at,
       account: installation.account,
-      app: { slug: app.name, botUserId },
+      app: { slug: (app.settings as GitHubAppSettings).slug, botUserId },
     },
   };
 }
@@ -352,12 +356,11 @@ async function readBotUserId(
 ): Promise<number> {
   const settings = app.settings as GitHubAppSettings;
   if (settings.botUserId !== undefined) return settings.botUserId;
-  const response = await fetch(`${apiUrl}/users/${encodeURIComponent(`${app.name}[bot]`)}`, {
+  const bot = `${settings.slug}[bot]`;
+  const response = await fetch(`${apiUrl}/users/${encodeURIComponent(bot)}`, {
     headers: bearerHeaders(token),
   });
-  if (!response.ok) {
-    throw new Error(`GitHub answered ${response.status} reading the user ${app.name}[bot]`);
-  }
+  if (!response.ok) throw new Error(`GitHub answered ${response.status} reading the user ${bot}`);
   const { id } = (await response.json()) as { id: number };
   await db
     .update(apps)

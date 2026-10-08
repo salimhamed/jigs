@@ -8,7 +8,7 @@ import {
 import { eq } from "drizzle-orm";
 import express from "express";
 import { beforeAll, expect, vi } from "vitest";
-import { type App, setAssignments } from "./apps.ts";
+import { type App, assignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { readMessages } from "./messages.ts";
@@ -326,8 +326,8 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   await install(slack, workspace);
   await install(other, workspace);
   const [assigned, unassigned] = [(await newFactory()).factory, (await newFactory()).factory];
-  await setAssignments(db, organizationId, slack.app.id, [assigned.id]);
-  await setAssignments(db, organizationId, other.app.id, [unassigned.id]);
+  await assignApp(db, organizationId, assigned.id, slack.app.id);
+  await assignApp(db, organizationId, unassigned.id, other.app.id);
 
   const payload = messageEvent(slack, workspace);
   expect((await deliver(slack.signingSecret, payload)).status).toBe(200);
@@ -384,8 +384,8 @@ dbTest("issues the bot token of each named installation of the assigned apps", a
   await nameInstallation(slack.app.id, workspace.id, "slack-first");
   await nameInstallation(second.app.id, own.id, "slack-second");
   const { factory, token } = await newFactory();
-  await setAssignments(db, organizationId, slack.app.id, [factory.id]);
-  await setAssignments(db, organizationId, second.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, slack.app.id);
+  await assignApp(db, organizationId, factory.id, second.app.id);
 
   expect(await requestSlackToken(token, "slack-first")).toEqual({
     status: 200,

@@ -7,7 +7,7 @@ import {
 import { eq } from "drizzle-orm";
 import express from "express";
 import { beforeAll, expect, vi } from "vitest";
-import { type App, setAssignments } from "./apps.ts";
+import { type App, assignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import {
@@ -344,8 +344,8 @@ dbTest("stores a signed, current event once and sends it only to the app's facto
   const workspace = newWorkspace();
   await connect(linear.app, workspace);
   const [assigned, unassigned] = [(await newFactory()).factory, (await newFactory()).factory];
-  await setAssignments(db, organizationId, linear.app.id, [assigned.id]);
-  await setAssignments(db, organizationId, other.app.id, [unassigned.id]);
+  await assignApp(db, organizationId, assigned.id, linear.app.id);
+  await assignApp(db, organizationId, unassigned.id, other.app.id);
 
   const payload = commentCreated(workspace);
   expect(await deliver(linear, payload)).toBe(200);
@@ -377,7 +377,7 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
   const workspace = newWorkspace();
   await connect(linear.app, workspace);
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, linear.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, linear.app.id);
   const sessionId = crypto.randomUUID();
 
   expect(await deliver(linear, sessionCreated(workspace, sessionId))).toBe(200);
@@ -470,8 +470,8 @@ dbTest("issues the token of each named workspace of the assigned apps", async ()
   await nameInstallation(linear.app.id, workspace.id, "lin-first");
   await nameInstallation(second.app.id, own.id, "lin-second");
   const { factory, token } = await newFactory();
-  await setAssignments(db, organizationId, linear.app.id, [factory.id]);
-  await setAssignments(db, organizationId, second.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, linear.app.id);
+  await assignApp(db, organizationId, factory.id, second.app.id);
 
   const first = await requestLinearToken(token, "lin-first");
   expect(first.status).toBe(200);
@@ -509,7 +509,7 @@ dbTest("refreshes a token near expiry once, and stops on a refused refresh", asy
   await connect(linear.app, workspace);
   await nameInstallation(linear.app.id, workspace.id, "lin-refreshed");
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, linear.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, linear.app.id);
   const current = await linearTokens.issue(factory.id, "lin-refreshed");
   if (!("token" in current)) throw new Error(current.error);
 

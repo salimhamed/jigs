@@ -1,7 +1,8 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import type { HubDatabase, Transaction } from "./db/database.ts";
+import { type HubDatabase, isUniqueViolation, type Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
+import { providerNames } from "./provider-names.ts";
 
 export type App = typeof apps.$inferSelect;
 
@@ -36,33 +37,63 @@ export async function removeApp(
 }
 
 /**
- * Assign an app to exactly these factories of its Organization, unassigning
- * it from every other. Returns `false` if there is no such app.
+ * Rename an app. The name labels it on the hub; a Linear or Slack app's
+ * factories also learn it as the app's own name with their next token.
  */
-export async function setAssignments(
+export async function renameApp(
   db: HubDatabase,
   organizationId: string,
   appId: string,
-  factoryIds: readonly string[],
-): Promise<boolean> {
-  return db.transaction(async (tx) => {
-    const [app] = await tx
-      .select({ id: apps.id })
-      .from(apps)
-      .where(and(eq(apps.id, appId), eq(apps.organizationId, organizationId)))
-      .for("update");
-    if (!app) return false;
-    await tx.delete(assignments).where(eq(assignments.appId, appId));
-    if (factoryIds.length > 0) {
-      await tx.execute(sql`
-        insert into ${assignments} (app_id, factory_id)
-        select ${appId}, ${factories.id} from ${factories}
-        where ${inArray(factories.id, [...factoryIds])}
-          and ${factories.organizationId} = ${organizationId}
-      `);
-    }
-    return true;
-  });
+  name: string,
+): Promise<{ name: string } | { error: string }> {
+  if (!name) return { error: "Name the app." };
+  const renamed = await db
+    .update(apps)
+    .set({ name })
+    .where(and(eq(apps.id, appId), eq(apps.organizationId, organizationId)))
+    .returning({ id: apps.id });
+  if (renamed.length === 0) return { error: "There is no such app." };
+  return { name };
+}
+
+/** Assign an app to a factory, so the factory receives its events. Both must be the Organization's. */
+export async function assignApp(
+  db: HubDatabase,
+  organizationId: string,
+  factoryId: string,
+  appId: string,
+): Promise<void> {
+  await db.execute(sql`
+    insert into ${assignments} (app_id, factory_id)
+    select ${apps.id}, ${factories.id} from ${apps}, ${factories}
+    where ${apps.id} = ${appId} and ${apps.organizationId} = ${organizationId}
+      and ${factories.id} = ${factoryId} and ${factories.organizationId} = ${organizationId}
+    on conflict do nothing
+  `);
+}
+
+/** Stop a factory of the Organization receiving an app's events. */
+export async function unassignApp(
+  db: HubDatabase,
+  organizationId: string,
+  factoryId: string,
+  appId: string,
+): Promise<void> {
+  await db
+    .delete(assignments)
+    .where(
+      and(
+        eq(assignments.appId, appId),
+        eq(assignments.factoryId, factoryId),
+        inArray(
+          assignments.factoryId,
+          db
+            .select({ id: factories.id })
+            .from(factories)
+            .where(eq(factories.organizationId, organizationId)),
+        ),
+      ),
+    );
 }
 
 /** The apps assigned to a factory, each with where it is installed. */
@@ -202,17 +233,6 @@ export async function setInstallationName(
   if (named.length === 0) return { error: "There is no such installation." };
   return { installationName };
 }
-
-const isUniqueViolation = (error: unknown): boolean =>
-  error instanceof Error &&
-  ((error as { code?: string }).code === "23505" || isUniqueViolation(error.cause));
-
-const providerNames: Record<Provider, string> = {
-  github: "GitHub",
-  linear: "Linear",
-  slack: "Slack",
-  pagerduty: "PagerDuty",
-};
 
 /**
  * The installation of the provider named `installationName`, of an app

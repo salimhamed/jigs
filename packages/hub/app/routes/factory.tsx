@@ -1,128 +1,509 @@
-import { Check } from "lucide-react";
-import { data, Link } from "react-router";
-import { assignedApps, isUuid } from "../../src/apps.ts";
-import { requireMember } from "../auth.server.ts";
-import { Time } from "../components/time.tsx";
-import { table } from "../components/ui.ts";
-import { readEventLog } from "../factories.server.ts";
+import type { Provider } from "@jigs-ai/hub-protocol";
+import { ChevronRight, KeyRound, Plus, Trash2 } from "lucide-react";
+import { useEffect, useState } from "react";
+import { data, Form, Link, redirect, useFetcher } from "react-router";
+import { assignApp, assignedApps, isUuid, unassignApp } from "../../src/apps.ts";
+import { manages, removeFactory, renameFactory } from "../../src/factories.ts";
+import { providerNames } from "../../src/provider-names.ts";
+import { listInstalledApps } from "../apps.server.ts";
+import { requireFactoryManager, requireMember } from "../auth.server.ts";
+import { useActionToast } from "../components/action-toast.tsx";
+import { ConfirmForm } from "../components/confirm-form.tsx";
+import { ReissueTokenButton, RemoveFactoryButton } from "../components/factory-confirms.tsx";
+import { factoryHints } from "../components/factory-hints.ts";
+import { Hint } from "../components/hint.tsx";
+import { type InstallationLabel, InstallationNames } from "../components/installation-names.tsx";
+import {
+  DangerRow,
+  Details,
+  PageHeader,
+  SettingRow,
+  StatusDot,
+  Tabs,
+} from "../components/page.tsx";
+import { TimeAgo } from "../components/time.tsx";
+import {
+  card,
+  dangerOutlineButton,
+  input,
+  link,
+  quietButton,
+  secondaryButton,
+  table,
+  warningText,
+} from "../components/ui.ts";
+import { countEvents, readEventLog, readFactory, readLastEvents } from "../factories.server.ts";
 import type { Route } from "./+types/factory.ts";
+import type { loader as eventLoader } from "./factory-event.ts";
+import type { loader as eventsLoader } from "./factory-events.ts";
+
+const allFactories = "/factories?tab=all";
+
+const notFound = () => data(null, { status: 404, statusText: "Not Found" });
 
 export async function loader({ context, request, params }: Route.LoaderArgs) {
-  const { organizationId } = await requireMember(context, request);
-  const before = new URL(request.url).searchParams.get("before");
-  const log = isUuid(params.id)
-    ? await readEventLog(
-        context,
-        organizationId,
-        params.id,
-        before && /^\d{1,19}$/.test(before) ? BigInt(before) : null,
-      )
-    : null;
-  if (!log) throw data(null, { status: 404, statusText: "Not Found" });
-  return { ...log, apps: await assignedApps(context.db, params.id), paged: before !== null };
+  const member = await requireMember(context, request);
+  const { organizationId } = member;
+  const found = isUuid(params.id) ? await readFactory(context, organizationId, params.id) : null;
+  if (!found) throw notFound();
+  const { cursor, createdBy, ...factory } = found;
+  const isAdmin = member.role === "admin";
+  const canManage = manages(member, { createdBy });
+  if (new URL(request.url).searchParams.get("tab") === "activity") {
+    const [log, total] = await Promise.all([
+      readEventLog(context, { id: factory.id, cursor }, null),
+      countEvents(context, factory.id),
+    ]);
+    return { tab: "activity" as const, factory, ...log, total };
+  }
+  const [connected, lastEvents, organizationApps] = await Promise.all([
+    assignedApps(context.db, factory.id),
+    readLastEvents(context, factory.id),
+    listInstalledApps(context, organizationId),
+  ]);
+  return {
+    tab: "settings" as const,
+    isAdmin,
+    canManage,
+    factory,
+    connected: connected.map((app) => ({ ...app, lastEventAt: lastEvents[app.id] ?? null })),
+    hasApps: organizationApps.length > 0,
+    available: organizationApps.filter((app) => !connected.some(({ id }) => id === app.id)),
+  };
 }
 
-export default function Factory({ loaderData }: Route.ComponentProps) {
-  const { name, apps, messages, older, paged } = loaderData;
+export async function action({ context, request, params }: Route.ActionArgs) {
+  if (!isUuid(params.id)) throw notFound();
+  const form = await request.formData();
+  const intent = form.get("intent");
+  const caller = await requireFactoryManager(context, request, params.id);
+  if ("error" in caller) return caller;
+  const { organizationId } = caller;
+  const appId = String(form.get("appId") ?? "");
+  switch (intent) {
+    case "connect":
+      if (!isUuid(appId)) return { error: "Choose an app to connect." };
+      await assignApp(context.db, organizationId, params.id, appId);
+      return { connected: appId };
+    case "disconnect":
+      if (isUuid(appId)) await unassignApp(context.db, organizationId, params.id, appId);
+      return { message: "Disconnected the app." };
+    case "rename": {
+      const name = String(form.get("name") ?? "").trim();
+      const renamed = await renameFactory(context.db, organizationId, params.id, name);
+      if ("error" in renamed) return renamed;
+      return { message: `Renamed the factory ${renamed.name}.` };
+    }
+    case "remove":
+      await removeFactory(context.db, context.waiters, organizationId, params.id);
+      // Back to the list tab it was removed from; any other place could lead off the hub.
+      return redirect(form.get("returnTo") === allFactories ? allFactories : "/factories");
+    default:
+      throw notFound();
+  }
+}
+
+const installationsHint = "The names your factory code uses to choose where to work.";
+
+type Loaded = Route.ComponentProps["loaderData"];
+
+export default function Factory({ loaderData, actionData }: Route.ComponentProps) {
+  useActionToast(actionData);
+  const { factory } = loaderData;
   return (
-    <div className="space-y-4">
-      <h1 className="text-2xl font-semibold">{name}</h1>
-      {apps.length === 0 ? (
-        <p className="text-sm text-zinc-500">
-          No apps assigned, so it receives no provider events.
-        </p>
+    <div className="space-y-6">
+      <div className="space-y-3">
+        <PageHeader
+          title={
+            <>
+              <StatusDot online={factory.online} />
+              {factory.name}
+            </>
+          }
+          parent={{ to: "/factories", label: "Factories" }}
+        />
+        <Details
+          items={[
+            {
+              label: "Last seen",
+              hint: factoryHints.lastSeen,
+              value: factory.lastSeenAt ? <TimeAgo iso={factory.lastSeenAt} /> : "never",
+            },
+            {
+              label: "Factory version",
+              hint: factoryHints.version,
+              value: factory.lastSeenVersion ?? "—",
+              className: "font-mono",
+            },
+            {
+              label: "Unconfirmed events",
+              hint: factoryHints.unconfirmed,
+              value: factory.unconfirmed,
+              className: factory.unconfirmed > 0 ? warningText : undefined,
+            },
+          ]}
+        />
+      </div>
+      <Tabs
+        tabs={[
+          { to: "?", label: "Settings", current: loaderData.tab === "settings" },
+          { to: "?tab=activity", label: "Activity", current: loaderData.tab === "activity" },
+        ]}
+      />
+      {loaderData.tab === "settings" ? (
+        <SettingsTab
+          loaded={loaderData}
+          justConnected={(actionData && "connected" in actionData && actionData.connected) || null}
+        />
       ) : (
-        <table className={table}>
-          <thead className="text-zinc-500">
-            <tr>
-              <th>App</th>
-              <th>Provider</th>
-              <th>Installations</th>
-            </tr>
-          </thead>
-          <tbody>
-            {apps.map((app) => (
-              <tr key={app.id} className="border-t border-zinc-200 dark:border-zinc-800">
-                <td>
-                  <Link to={`/apps/${app.id}`} className="underline">
-                    {app.name}
-                  </Link>
-                </td>
-                <td>{app.provider}</td>
-                <td>
-                  {app.installations.length === 0
-                    ? "—"
-                    : app.installations.map((installation, index) => (
-                        <span key={installation.account}>
-                          {index > 0 && ", "}
-                          {installation.installationName === null ? (
-                            <span className="text-red-600 dark:text-red-400">needs a name</span>
-                          ) : (
-                            <code>{installation.installationName}</code>
-                          )}{" "}
-                          <span className="text-zinc-500">({installation.account})</span>
-                        </span>
-                      ))}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+        // A new first page means new events arrived; the older pages shown are then stale.
+        <ActivityTab key={loaderData.messages[0]?.position ?? "none"} loaded={loaderData} />
       )}
-      <p className="text-sm text-zinc-500">
-        The provider events sent to this factory, newest first.
-      </p>
-      {messages.length === 0 ? (
-        <p className="text-zinc-500">No messages.</p>
-      ) : (
-        <table className={`${table} [&_td]:align-top`}>
-          <thead className="text-zinc-500">
-            <tr>
-              <th>Position</th>
-              <th>Provider</th>
-              <th>Event</th>
-              <th>Received</th>
-              <th>Confirmed</th>
-            </tr>
-          </thead>
-          <tbody>
-            {messages.map((message) => (
-              <tr key={message.position} className="border-t border-zinc-200 dark:border-zinc-800">
-                <td className="tabular-nums">{message.position}</td>
-                <td>{message.provider ?? "—"}</td>
-                <td>
-                  {message.kind === "fellBehind" ? (
-                    <span className="text-zinc-500">fell behind</span>
-                  ) : (
-                    <details>
-                      <summary className="cursor-pointer">{message.name}</summary>
-                      <pre className="mt-2 max-h-96 max-w-xl overflow-auto rounded bg-zinc-100 p-2 text-xs dark:bg-zinc-900">
-                        {message.payload}
-                      </pre>
-                    </details>
-                  )}
-                </td>
-                <td>
-                  <Time iso={message.receivedAt} />
-                </td>
-                <td>{message.confirmed && <Check aria-label="Confirmed" className="size-4" />}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      )}
-      <div className="flex gap-4 text-sm">
-        {paged && (
-          <Link to="?" className="underline">
-            Newest
-          </Link>
+    </div>
+  );
+}
+
+function SettingsTab({
+  loaded,
+  justConnected,
+}: {
+  loaded: Extract<Loaded, { tab: "settings" }>;
+  justConnected: string | null;
+}) {
+  const { isAdmin, canManage, factory, connected, available, hasApps } = loaded;
+  return (
+    <div className="space-y-8">
+      <section className="space-y-3">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div className="max-w-2xl space-y-1">
+            <h2 className="font-semibold">
+              Connected apps <span className="font-normal text-zinc-500">· {connected.length}</span>
+            </h2>
+            <p className="text-sm text-zinc-500">
+              Connecting an app sends its events to this factory and lets the factory act through
+              it, for example opening pull requests through a GitHub App or replying in Slack.
+            </p>
+          </div>
+          {canManage && (
+            <ConnectApp
+              factoryName={factory.name}
+              apps={available}
+              hasApps={hasApps}
+              isAdmin={isAdmin}
+            />
+          )}
+        </div>
+        {connected.length === 0 ? (
+          <p className="text-sm text-zinc-500">
+            No apps connected, so it receives no provider events.
+          </p>
+        ) : (
+          <div className={`${card} overflow-x-auto`}>
+            <table className={table}>
+              <thead>
+                <tr>
+                  <th>App</th>
+                  <th>Provider</th>
+                  <th>
+                    <Hint label="Installations" tip={installationsHint} />
+                  </th>
+                  <th>
+                    <Hint label="Last event" tip={factoryHints.lastEvent} />
+                  </th>
+                  <th />
+                </tr>
+              </thead>
+              <tbody>
+                {connected.map((app) => (
+                  <tr
+                    key={app.id}
+                    className={
+                      app.id === justConnected ? "bg-emerald-50 dark:bg-emerald-950/40" : undefined
+                    }
+                  >
+                    <td>
+                      <span className="flex items-center gap-2.5">
+                        <Link to={`/apps/${app.id}`} className={link}>
+                          {app.name}
+                        </Link>
+                        {app.id === justConnected && (
+                          <span className="text-emerald-600 dark:text-emerald-400">Connected</span>
+                        )}
+                      </span>
+                    </td>
+                    <td className="text-zinc-500">{providerNames[app.provider]}</td>
+                    <td>
+                      <InstallationNames installations={app.installations} />
+                    </td>
+                    <td className="whitespace-nowrap">
+                      {app.lastEventAt ? (
+                        <TimeAgo iso={app.lastEventAt} />
+                      ) : (
+                        <span className="text-zinc-500">No events yet</span>
+                      )}
+                    </td>
+                    <td className="text-right">
+                      {canManage && (
+                        <ConfirmForm
+                          fields={{ intent: "disconnect", appId: app.id }}
+                          title={`Disconnect ${app.name} from ${factory.name}?`}
+                          body={`${factory.name} stops receiving ${app.name} events and can no longer ask for its tokens. Events already received stay in the log.`}
+                          confirmLabel="Disconnect"
+                          destructive
+                          className={dangerOutlineButton}
+                        >
+                          Disconnect
+                        </ConfirmForm>
+                      )}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         )}
-        {older && (
-          <Link to={`?before=${older}`} className="underline">
-            Older
-          </Link>
+      </section>
+
+      {canManage && (
+        <section className="space-y-3">
+          <h2 className="font-semibold">General</h2>
+          <div className={`${card} divide-y divide-zinc-200 dark:divide-zinc-800`}>
+            <SettingRow label="Name" hint="Shown in the factory list.">
+              <Form method="post" className="flex flex-wrap gap-2">
+                <input
+                  name="name"
+                  required
+                  defaultValue={factory.name}
+                  aria-label="Name"
+                  className={`${input} min-w-0 grow`}
+                />
+                <button type="submit" name="intent" value="rename" className={secondaryButton}>
+                  Save
+                </button>
+              </Form>
+            </SettingRow>
+            <SettingRow
+              label="Connection token"
+              hint="Issuing a new one stops the old token. Run the new connect command on the factory."
+            >
+              <ReissueTokenButton factory={factory} className={secondaryButton}>
+                <KeyRound className="size-4" />
+                Re-issue token
+              </ReissueTokenButton>
+            </SettingRow>
+          </div>
+        </section>
+      )}
+
+      {canManage && (
+        <DangerRow
+          label="Remove factory"
+          hint="Disconnects it from all apps and drops its unconfirmed events."
+        >
+          <RemoveFactoryButton factory={factory} className={dangerOutlineButton}>
+            <Trash2 className="size-4" />
+            Remove factory
+          </RemoveFactoryButton>
+        </DangerRow>
+      )}
+    </div>
+  );
+}
+
+/** The apps not yet connected, in a panel that filters them by name. */
+function ConnectApp({
+  factoryName,
+  apps,
+  hasApps,
+  isAdmin,
+}: {
+  factoryName: string;
+  apps: { id: string; provider: Provider; name: string; installations: InstallationLabel[] }[];
+  hasApps: boolean;
+  isAdmin: boolean;
+}) {
+  const [search, setSearch] = useState("");
+  const shown = apps.filter((app) => app.name.toLowerCase().includes(search.toLowerCase()));
+  return (
+    <>
+      <button type="button" popoverTarget="connect-app" className={secondaryButton}>
+        <Plus className="size-4" />
+        Connect app
+      </button>
+      <div
+        id="connect-app"
+        popover="auto"
+        className="m-auto w-[calc(100%-2rem)] max-w-md rounded-lg border border-zinc-200 bg-white p-0 text-zinc-900 shadow-xl backdrop:bg-black/30 dark:border-zinc-800 dark:bg-zinc-900 dark:text-zinc-100"
+      >
+        <div className="p-3">
+          <input
+            type="search"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search apps"
+            aria-label="Search apps"
+            className={`${input} w-full`}
+          />
+        </div>
+        <p className="px-4 pb-2 text-sm text-zinc-500">Not connected to {factoryName}</p>
+        <ul className="max-h-80 divide-y divide-zinc-200 overflow-y-auto border-y border-zinc-200 dark:divide-zinc-800 dark:border-zinc-800">
+          {shown.length === 0 && (
+            <li className="px-4 py-3 text-sm text-zinc-500">
+              {!hasApps
+                ? "No apps yet."
+                : apps.length === 0
+                  ? "Every app is connected."
+                  : "No app matches."}
+            </li>
+          )}
+          {shown.map((app) => (
+            <li key={app.id} className="flex items-center gap-3 px-4 py-2.5">
+              <div className="min-w-0 grow">
+                <div className="text-sm">
+                  {app.name} <span className="text-zinc-500">{providerNames[app.provider]}</span>
+                </div>
+                <InstallationNames installations={app.installations} />
+              </div>
+              <Form
+                method="post"
+                onSubmit={(event) =>
+                  (event.currentTarget.closest("[popover]") as HTMLElement | null)?.hidePopover()
+                }
+              >
+                <input type="hidden" name="appId" value={app.id} />
+                <button type="submit" name="intent" value="connect" className={secondaryButton}>
+                  Connect
+                </button>
+              </Form>
+            </li>
+          ))}
+        </ul>
+        {isAdmin && (
+          <p className="px-4 py-3 text-sm text-zinc-500">
+            Not listed?{" "}
+            <Link to="/apps/new" className={link}>
+              Add an app
+            </Link>
+          </p>
         )}
       </div>
-    </div>
+    </>
+  );
+}
+
+type Message = Extract<Loaded, { tab: "activity" }>["messages"][number];
+
+function ActivityTab({ loaded }: { loaded: Extract<Loaded, { tab: "activity" }> }) {
+  const { factory, total } = loaded;
+  // Each older page continues from the last position shown, so events arriving meanwhile
+  // never shift or repeat a row; a reload shows the newest again.
+  const [olderPages, setOlderPages] = useState<Message[][]>([]);
+  const more = useFetcher<typeof eventsLoader>();
+  useEffect(() => {
+    const page = more.data?.messages;
+    if (page) setOlderPages((pages) => [...pages, page]);
+  }, [more.data]);
+  const messages = [loaded.messages, ...olderPages].flat();
+  const older = more.data ? more.data.older : loaded.older;
+  return (
+    <section className="space-y-3">
+      <h2 className="font-semibold">
+        Event log{" "}
+        <span className="font-normal text-zinc-500">
+          · {total.toLocaleString("en-US")} events · showing{" "}
+          {messages.length.toLocaleString("en-US")}
+        </span>
+      </h2>
+      {messages.length === 0 ? (
+        <p className="text-sm text-zinc-500">No events.</p>
+      ) : (
+        <div className={`${card} overflow-x-auto`}>
+          <table className={table}>
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Provider</th>
+                <th>Event</th>
+                <th>Received</th>
+                <th>
+                  <Hint
+                    label="Confirmed"
+                    tip="Yes once the factory confirms it received the event. Pending until then."
+                  />
+                </th>
+                <th />
+              </tr>
+            </thead>
+            <tbody>
+              {messages.map((message) => (
+                <EventRow key={message.position} factoryId={factory.id} message={message} />
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      {older && (
+        <button
+          type="button"
+          disabled={more.state === "loading"}
+          onClick={() => more.load(`/factories/${factory.id}/events?before=${older}`)}
+          className={secondaryButton}
+        >
+          {more.state === "loading" ? "Loading…" : "Load older events"}
+        </button>
+      )}
+    </section>
+  );
+}
+
+function EventRow({ factoryId, message }: { factoryId: string; message: Message }) {
+  const [open, setOpen] = useState(false);
+  const payload = useFetcher<typeof eventLoader>();
+  const expandable = message.kind !== "fellBehind";
+  const toggle = () => {
+    if (!open && !payload.data) payload.load(`/factories/${factoryId}/events/${message.position}`);
+    setOpen(!open);
+  };
+  return (
+    <>
+      <tr
+        onClick={expandable ? toggle : undefined}
+        className={
+          expandable ? "cursor-pointer hover:bg-zinc-50 dark:hover:bg-zinc-900" : undefined
+        }
+      >
+        <td className="font-mono text-zinc-500 tabular-nums">{message.position}</td>
+        <td>{message.provider ? providerNames[message.provider] : "—"}</td>
+        <td className={expandable ? "font-mono" : "text-zinc-500"}>
+          {expandable ? message.name : "fell behind"}
+        </td>
+        <td className="whitespace-nowrap">
+          <TimeAgo iso={message.receivedAt} />
+        </td>
+        <td>{message.confirmed ? "Yes" : <span className={warningText}>Pending</span>}</td>
+        <td className="w-10 text-right">
+          {expandable && (
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-label={open ? "Hide payload" : "Show payload"}
+              className={quietButton}
+            >
+              <ChevronRight className={`size-4 ${open ? "rotate-90" : ""}`} />
+            </button>
+          )}
+        </td>
+      </tr>
+      {open && (
+        <tr>
+          <td colSpan={6} className="bg-zinc-50 dark:bg-zinc-900/50">
+            {/* w-0 min-w-full: long payload lines scroll instead of widening the columns. */}
+            <pre className="max-h-96 w-0 min-w-full overflow-auto text-xs">
+              {payload.data ? (payload.data.payload ?? "No longer kept.") : "Loading…"}
+            </pre>
+          </td>
+        </tr>
+      )}
+    </>
   );
 }

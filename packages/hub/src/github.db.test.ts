@@ -3,7 +3,7 @@ import { type GitHubTokenResponse, githubTokenPath } from "@jigs-ai/hub-protocol
 import { eq } from "drizzle-orm";
 import express from "express";
 import { beforeAll, expect } from "vitest";
-import { type App, setAssignments, setInstallationName } from "./apps.ts";
+import { type App, assignApp, renameApp, setInstallationName } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import {
@@ -28,6 +28,7 @@ let github: string;
 const githubInstallations = new Map<string, { appId: string; login: string }>();
 // The fake GitHub's bot users' ids, by login, and the installation tokens it minted.
 const githubBots = new Map<string, number>();
+const slugOf = (app: App) => (app.settings as GitHubAppSettings).slug;
 const minted: { installationId: string; token: string }[] = [];
 let botLookups = 0;
 const tokenLifetimeMs = 60 * 60 * 1000;
@@ -121,6 +122,7 @@ async function newApp(organization = organizationId) {
     encryptionKey,
     organization,
     {
+      name: `Jigs ${appCount}`,
       appId: String(1000 + appCount),
       slug: `jigs-${appCount}`,
       clientId: `Iv1.${appCount}`,
@@ -131,7 +133,7 @@ async function newApp(organization = organizationId) {
     { apiUrl: github },
   );
   if ("error" in added) throw new Error(added.error);
-  githubBots.set(`${added.app.name}[bot]`, 40000 + appCount);
+  githubBots.set(`${slugOf(added.app)}[bot]`, 40000 + appCount);
   return { app: added.app, webhookSecret };
 }
 
@@ -181,7 +183,7 @@ const installationEvent = (action: string, app: App, installationId: number, log
     id: installationId,
     account: { login, id: 2, type: "Organization" },
     app_id: Number(app.externalId),
-    app_slug: app.name,
+    app_slug: slugOf(app),
     target_type: "Organization",
     repository_selection: "all",
     permissions: { issues: "write", metadata: "read" },
@@ -228,8 +230,9 @@ dbTest("stores a signed event once and sends it only to the app's factories", as
     (await newFactory()).factory,
     (await newFactory()).factory,
   ];
-  await setAssignments(db, organizationId, github.app.id, [assigned.id, alsoAssigned.id]);
-  await setAssignments(db, organizationId, otherApp.app.id, [unassigned.id]);
+  await assignApp(db, organizationId, assigned.id, github.app.id);
+  await assignApp(db, organizationId, alsoAssigned.id, github.app.id);
+  await assignApp(db, organizationId, unassigned.id, otherApp.app.id);
   const installationId = await installed(github.app);
 
   expect(await deliver(github, "issues", issueOpened(installationId))).toBe(200);
@@ -262,7 +265,7 @@ dbTest("stores a signed event once and sends it only to the app's factories", as
 dbTest("answers ping without storing it", async () => {
   const github = await newApp();
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, github.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, github.app.id);
   expect(await deliver(github, "ping", { zen: "Keep it logically awesome.", hook_id: 1 })).toBe(
     200,
   );
@@ -294,7 +297,7 @@ dbTest("drops events from installations that are not the app's", async () => {
   const github = await newApp();
   const other = await newApp();
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, github.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, github.app.id);
   const othersInstallation = await installed(other.app);
 
   expect(await deliver(github, "issues", issueOpened(othersInstallation))).toBe(202);
@@ -308,7 +311,7 @@ dbTest("drops events from installations that are not the app's", async () => {
 dbTest("keeps installations current from installation events", async () => {
   const github = await newApp();
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, github.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, github.app.id);
   const installationsOf = () =>
     db
       .select({
@@ -350,7 +353,7 @@ dbTest("records an installation GitHub confirms is the App's", async () => {
   const github = await newApp();
   const other = await newApp();
   expect(githubInstallUrl(github.app)).toBe(
-    `https://github.com/apps/${github.app.name}/installations/new`,
+    `https://github.com/apps/${slugOf(github.app)}/installations/new`,
   );
   githubInstallations.set("31", { appId: github.app.externalId, login: "acme-corp" });
   githubInstallations.set("32", { appId: other.app.externalId, login: "elsewhere" });
@@ -389,6 +392,7 @@ dbTest("learns installations the hub missed, when added and when an event names 
     encryptionKey,
     organizationId,
     {
+      name: "Early",
       appId,
       slug: "jigs-early",
       clientId: "Iv1.early",
@@ -401,7 +405,7 @@ dbTest("learns installations the hub missed, when added and when an event names 
   if (!("app" in added)) throw new Error(added.error);
   const app = { app: added.app, webhookSecret: "early secret" };
   const { factory } = await newFactory();
-  await setAssignments(db, organizationId, app.app.id, [factory.id]);
+  await assignApp(db, organizationId, factory.id, app.app.id);
   expect(await deliver(app, "issues", issueOpened(61))).toBe(200);
 
   githubInstallations.set("62", { appId, login: "missed" });
@@ -470,6 +474,7 @@ dbTest("names installations uniquely within an Organization", async () => {
 
 dbTest("validates a GitHub App before adding it, once per hub", async () => {
   const input = {
+    name: "Acme",
     appId: "424242",
     slug: "jigs-acme",
     clientId: "Iv1.abc",
@@ -487,6 +492,7 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
         apiUrl: github,
       },
     );
+  expect(await add(organizationId, { name: "" })).toEqual({ error: "Name the app." });
   expect(await add(organizationId, { appId: "x" })).toEqual({
     error: "The App ID is a number.",
   });
@@ -497,7 +503,7 @@ dbTest("validates a GitHub App before adding it, once per hub", async () => {
     .privateKey.export({ type: "pkcs8", format: "pem" })
     .toString();
   expect(await add(organizationId, { privateKey: otherKey })).toEqual({
-    error: "GitHub refused App 424242 with this private key (401).",
+    error: "GitHub refused app 424242 with this private key (401).",
   });
   const added = await add(organizationId);
   if (!("app" in added)) throw new Error(added.error);
@@ -515,8 +521,8 @@ dbTest(
   async () => {
     const [github, second] = [await newApp(), await newApp()];
     const { factory, token } = await newFactory();
-    await setAssignments(db, organizationId, github.app.id, [factory.id]);
-    await setAssignments(db, organizationId, second.app.id, [factory.id]);
+    await assignApp(db, organizationId, factory.id, github.app.id);
+    await assignApp(db, organizationId, factory.id, second.app.id);
     const installationId = String(await installed(github.app, "Acme-Corp", "gh-acme-corp"));
     const widgetsId = String(await installed(github.app, "widgets", "gh-widgets"));
     const secondId = String(await installed(second.app, "acme-labs", "gh-acme-labs"));
@@ -529,19 +535,23 @@ dbTest(
       token: minted.at(-1)?.token,
       expiresAt: expect.any(String),
       account: "Acme-Corp",
-      app: { slug: github.app.name, botUserId: githubBots.get(`${github.app.name}[bot]`) },
+      app: { slug: slugOf(github.app), botUserId: githubBots.get(`${slugOf(github.app)}[bot]`) },
     });
     expect(minted.at(-1)?.installationId).toBe(installationId);
     expect(minted.length - before.minted).toBe(1);
 
     const stored = await db.query.apps.findFirst({ where: eq(schema.apps.id, github.app.id) });
     expect(stored?.settings).toEqual({
+      slug: slugOf(github.app),
       clientId: expect.any(String),
       botUserId: issued.app.botUserId,
     } satisfies GitHubAppSettings);
 
     // The factory asks again for a longer-lived token, or after GitHub rejected one, so every
-    // request mints anew; the bot's id is not looked up again.
+    // request mints anew; the bot's id is not looked up again. A new name leaves the slug alone.
+    expect(await renameApp(db, organizationId, github.app.id, "Acme bot")).toEqual({
+      name: "Acme bot",
+    });
     const again = await requestGitHubToken(token, "gh-acme-corp");
     expect(again).toEqual({
       status: 200,
@@ -553,12 +563,12 @@ dbTest(
 
     expect((await requestGitHubToken(token, "gh-widgets")).body).toMatchObject({
       account: "widgets",
-      app: { slug: github.app.name },
+      app: { slug: slugOf(github.app) },
     });
     expect(minted.at(-1)?.installationId).toBe(widgetsId);
     expect((await requestGitHubToken(token, "gh-acme-labs")).body).toMatchObject({
       account: "acme-labs",
-      app: { slug: second.app.name },
+      app: { slug: slugOf(second.app) },
     });
     expect(minted.at(-1)?.installationId).toBe(secondId);
   },
@@ -569,7 +579,7 @@ dbTest(
   async () => {
     const [assigned, unassigned, theirs] = [await newApp(), await newApp(), await newApp("other")];
     const { factory, token } = await newFactory();
-    await setAssignments(db, organizationId, assigned.app.id, [factory.id]);
+    await assignApp(db, organizationId, factory.id, assigned.app.id);
     await installed(assigned.app, "unnamed");
     await installed(unassigned.app, "elsewhere", "gh-elsewhere");
     await installed(theirs.app, "theirs", "gh-theirs");

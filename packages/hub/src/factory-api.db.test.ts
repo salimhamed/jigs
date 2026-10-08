@@ -13,7 +13,7 @@ import {
 } from "@jigs-ai/hub-protocol";
 import { eq, sql } from "drizzle-orm";
 import { beforeAll, expect } from "vitest";
-import { setAssignments } from "./apps.ts";
+import { assignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { addFactory, reissueToken, removeFactory } from "./factories.ts";
@@ -68,7 +68,7 @@ async function appFor(factoryIds: string[], organization = organizationId) {
     })
     .returning();
   if (!app) throw new Error("expected an app");
-  await setAssignments(db, organization, app.id, factoryIds);
+  for (const factoryId of factoryIds) await assignApp(db, organization, factoryId, app.id);
   appsByFactories.set(key, app.id);
   return app.id;
 }
@@ -104,7 +104,7 @@ dbTest("refuses unknown tokens and records who called", async () => {
   const seen = await db.query.factories.findFirst({ where: eq(schema.factories.id, factory.id) });
   expect(seen).toMatchObject({ lastSeenVersion: "1.2.3", lastSeenAt: expect.any(Date) });
 
-  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
+  const reissued = (await reissueToken(db, waiters, organizationId, factory.id))?.token;
   if (!reissued) throw new Error("expected a token");
   expect(reissued).toMatch(/^[0-9a-f]{64}$/);
   expect((await poll(token)).status).toBe(401);
@@ -284,7 +284,7 @@ dbTest("refuses a held poll once its token is re-issued or its factory removed",
   const { factory, token } = await newFactory();
   const held = poll(token, 30);
   await until(() => waiters.held(factory.id) === 1);
-  const reissued = await reissueToken(db, waiters, organizationId, factory.id);
+  const reissued = (await reissueToken(db, waiters, organizationId, factory.id))?.token;
   expect((await held).status).toBe(401);
 
   const again = poll(reissued ?? "", 30);
@@ -297,7 +297,7 @@ dbTest("fans an event out only to the factories its app is assigned to", async (
   const { factory, token } = await newFactory();
   const unassigned = await newFactory();
   const removed = await newFactory();
-  const foreign = await addFactory(db, "other", "theirs");
+  const foreign = await addFactory(db, "other", "theirs", null);
   const appId = await appFor([factory.id, removed.factory.id, foreign.factory.id]);
   await removeFactory(db, waiters, organizationId, removed.factory.id);
   const assigned = await db

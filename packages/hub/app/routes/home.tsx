@@ -1,18 +1,24 @@
+import { queuedByHour, webhooksByHour } from "../../src/activity.ts";
 import { requireMember } from "../auth.server.ts";
+import { HourlyChart } from "../components/hourly-chart.tsx";
+import { PageHeader } from "../components/page.tsx";
 import type { Route } from "./+types/home.ts";
 
 export async function loader({ context, request }: Route.LoaderArgs) {
-  await requireMember(context, request);
-  return { publicUrl: context.config.publicUrl.href };
+  const { organizationId } = await requireMember(context, request);
+  const [webhooks, queued] = await Promise.all([
+    webhooksByHour(context.db, organizationId),
+    queuedByHour(context.db, organizationId),
+  ]);
+  return { webhooks, queued };
 }
 
 export default function Home({ loaderData }: Route.ComponentProps) {
   return (
-    <div className="space-y-2">
-      <h1 className="text-2xl font-semibold">jigs hub</h1>
-      <p className="text-zinc-500">
-        Factories connect to this hub at <code>{loaderData.publicUrl}</code>.
-      </p>
+    <div className="space-y-6">
+      <PageHeader title="Overview" />
+      <HourlyChart title="Webhooks received, last 24 h" activity={loaderData.webhooks} />
+      <HourlyChart title="Events queued for factories, last 24 h" activity={loaderData.queued} />
     </div>
   );
 }
