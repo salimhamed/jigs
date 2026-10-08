@@ -3,20 +3,10 @@
 // handed, so the body only sequences memoized step results.
 
 import { createHook } from "workflow";
-import { NEEDS_HUMAN_TOKEN_PREFIX } from "../hook-tokens.ts";
 import type { HaltQuestion } from "../human/questions.ts";
 import type { LinearAgentConversationSteps } from "./agent-conversation.ts";
 import { type LinearAgentPrompt, linearListeningToken } from "./agent-session.ts";
 import type { TicketClaim } from "./claim.ts";
-
-/** Build the marker token for a run's unanswered ticket comment. */
-export function needsHumanToken(
-  installationName: string,
-  issueId: string,
-  commentId: string,
-): string {
-  return `${NEEDS_HUMAN_TOKEN_PREFIX}${installationName}:${issueId}:${commentId}`;
-}
 
 /**
  * What the question says, in the words a stranger to the repo reads.

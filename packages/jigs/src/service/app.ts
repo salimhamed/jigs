@@ -175,10 +175,11 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
       return;
     }
     const run = getRun(runId);
-    // Nothing wakes a session's ownership hook; its run listens on another.
-    const tokens = (await runResourceTokens(world, run.runId)).filter(
-      (token) => parseHookToken(token)?.kind !== "linear-session",
-    );
+    // Ownership hooks are locks held for the run's life, never waits.
+    const tokens = (await runResourceTokens(world, run.runId)).filter((token) => {
+      const kind = parseHookToken(token)?.kind;
+      return kind !== "ticket-claim" && kind !== "linear-session";
+    });
     if (tokens.length === 0) {
       response.status(409).json({ error: "run has no suspensions to poke" });
       return;
@@ -355,12 +356,8 @@ function dashboardPointer(ctx: FactoryContext, runId: string): string {
     : `http://localhost:${port}/run/${runId}`;
 }
 
-// The hooks that name an external resource: what another run can be blocked
-// on, and what a poke can wake. The needs-human marker is neither — the reply
-// that ends that halt lands on the ticket claim beside it.
+// The hooks that name an external resource: what another run can be blocked on.
 async function runResourceTokens(world: AppDeps["world"], runId: string): Promise<string[]> {
   const hooks = await (await world()).hooks.list({ runId });
-  return hooks.data
-    .map((hook) => hook.token)
-    .filter((token) => parseHookToken(token)?.kind !== "needs-human");
+  return hooks.data.map((hook) => hook.token);
 }

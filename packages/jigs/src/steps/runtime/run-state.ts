@@ -70,7 +70,7 @@ export interface RunState {
   steps: number | null;
   lastStep: RunStep | null;
   /**
-   * What the run is parked on: a pull request watch, a needs-human halt, or another event. A
+   * What the run is parked on: a pull request watch, a person's reply, or another event. A
    * parked run's status stays `running`; a non-empty list is what says it is waiting.
    */
   suspensions: RunSuspension[];
@@ -131,7 +131,7 @@ export function describeRunState(
       ...(steps ?? []).flatMap((step) => [step.completedAt, step.startedAt]),
     ]),
     claim: tokens.find((token) => parseHookToken(token)?.kind === "ticket-claim") ?? null,
-    suspensions: tokens.flatMap((token) => describeSuspension(token, run.ticket) ?? []),
+    suspensions: tokens.flatMap((token) => describeSuspension(token) ?? []),
   };
 }
 

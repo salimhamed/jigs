@@ -4,7 +4,7 @@
 // re-reads its provider from scratch: the wake carries nothing, so it stands in
 // for whatever event was lost.
 
-import { parseHookToken, wakeToken } from "../workflow/hook-tokens.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
 import { wake } from "./wake.ts";
 
@@ -12,35 +12,11 @@ type HeldHook = { runId: string; token: string };
 
 /** The held hooks that a wake would actually reach a waiting run through. */
 function waitingOn(hooks: HeldHook[]): HeldHook[] {
-  const parsed = hooks.map((hook) => ({ hook, token: parseHookToken(hook.token) }));
-  // A halt marker wakes through the claim on its ticket.
-  const halted = new Set(
-    parsed.flatMap(({ hook, token }) =>
-      token?.kind === "needs-human" && token.halt !== null
-        ? [`${hook.runId} ${wakeToken(hook.token)}`]
-        : [],
-    ),
-  );
-  return parsed
-    .filter(({ hook, token }) => {
-      if (token === null) return false;
-      switch (token.kind) {
-        // Nothing resumes the marker; the reply lands on the claim beside it.
-        case "needs-human":
-          return false;
-        // The session's owner reads it only through its listening hook.
-        case "linear-session":
-          return false;
-        // A ticket claim is held for the run's whole life, but only a run halted
-        // on a human is waiting on it. Waking the claim of a run parked anywhere
-        // else would queue a replay and a stale hint.
-        case "ticket-claim":
-          return halted.has(`${hook.runId} ${hook.token}`);
-        default:
-          return true;
-      }
-    })
-    .map(({ hook }) => hook);
+  return hooks.filter((hook) => {
+    const kind = parseHookToken(hook.token)?.kind;
+    // Ownership hooks are locks held for the run's life, never waits.
+    return kind !== undefined && kind !== "ticket-claim" && kind !== "linear-session";
+  });
 }
 
 export interface WakeWaitingDeps {

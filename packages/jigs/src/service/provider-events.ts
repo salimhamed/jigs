@@ -7,7 +7,6 @@ import type { FactoryContext } from "../config/factory-context.ts";
 import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { GitHubApiError } from "../providers/github-http.ts";
 import { HubResponseError } from "../providers/hub.ts";
-import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
 import {
   pullRequestToken,
   tokenFromGitHubPayload,
@@ -110,20 +109,15 @@ async function routeGithub({ installationName, name, payload }: NamedEvent, deps
   return wakeAndLog("github", [token], event);
 }
 
-async function routeLinear({ installationName, name, payload }: NamedEvent) {
+// Outside an agent session, a Linear event concerns no run.
+function routeLinear({ name, payload }: NamedEvent) {
   if (payload === null) {
     console.log("[events] linear ignored reason=unrecognized-shape");
     return { outcome: "ignored" } as const;
   }
-  const event = name === "" ? null : sanitizeForLog(name);
-  const token = tokenFromLinearPayload(installationName, payload);
-  if (token === null) {
-    console.log(
-      `[events] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
-    );
-    return { outcome: "ignored" } as const;
-  }
-  return wakeAndLog("linear", [token], event);
+  const event = name === "" ? "" : ` event=${sanitizeForLog(name)}`;
+  console.log(`[events] linear ignored reason=unrecognized-event${event}`);
+  return { outcome: "ignored" } as const;
 }
 
 // PagerDuty events and Linear agent sessions start runs rather than wake them.

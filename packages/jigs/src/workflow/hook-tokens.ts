@@ -5,10 +5,6 @@ import type { PullRequestRef } from "./pull-requests/pull-request.ts";
 
 /** Prefix for the durable hook that gives one run exclusive ownership of a ticket. */
 export const TICKET_TOKEN_PREFIX = "linear:ticket:";
-// The halt's marker hook. It names no external resource and nothing resumes
-// it: the reply that ends the halt lands on the ticket claim.
-/** Prefix for marker hooks that tell operators which ticket comment needs an answer. */
-export const NEEDS_HUMAN_TOKEN_PREFIX = "jigs:needs-human:";
 /** The durable hook-token prefix for pull request activity. */
 export const PULL_REQUEST_TOKEN_PREFIX = "github:pr:";
 /** Prefix for the hook a run parks on while it waits for a reply in a Slack thread. */
@@ -29,11 +25,6 @@ export type HookToken =
       kind: "ticket-claim";
       provider: "linear";
       ticket: { installationName: string; issueId: string } | null;
-    }
-  | {
-      kind: "needs-human";
-      provider: "linear";
-      halt: { installationName: string; issueId: string; commentId: string } | null;
     }
   | { kind: "pull-request"; provider: "github"; slug: string; pr: PullRequestRef | null }
   | {
@@ -79,20 +70,6 @@ const HOOK_KINDS: { [K in HookKind]: { prefix: string; parse: (rest: string) => 
           installationName === undefined || issueId === undefined
             ? null
             : { installationName, issueId },
-      };
-    },
-  },
-  "needs-human": {
-    prefix: NEEDS_HUMAN_TOKEN_PREFIX,
-    parse: (rest) => {
-      const [installationName, issueId, commentId] = parts(rest, 3) ?? [];
-      return {
-        kind: "needs-human",
-        provider: "linear",
-        halt:
-          installationName === undefined || issueId === undefined || commentId === undefined
-            ? null
-            : { installationName, issueId, commentId },
       };
     },
   },
@@ -154,17 +131,9 @@ export function parseHookToken(token: string): HookToken | null {
   return null;
 }
 
-/** The token whose wake ends a wait on `token`: a halt is woken through its ticket claim, never its marker. */
-export function wakeToken(token: string): string {
-  const parsed = parseHookToken(token);
-  return parsed?.kind === "needs-human" && parsed.halt !== null
-    ? `${TICKET_TOKEN_PREFIX}${parsed.halt.installationName}:${parsed.halt.issueId}`
-    : token;
-}
-
 /**
  * What a hook token names and what a run holding it waits for. `ticket` is the
- * identifier the run was launched with, so a claim or a halt names the ticket
+ * identifier the run was launched with, so a claim names the ticket
  * an operator knows rather than the issue UUID inside the token.
  */
 export function describeHookToken(token: string, ticket?: string | null): HookDescription {
@@ -178,17 +147,6 @@ export function describeHookToken(token: string, ticket?: string | null): HookDe
             : `Linear issue ${parsed.ticket.issueId}`
           : `Linear ticket ${ticket}`;
       return { kind: parsed.kind, label, reason: `holding the claim on ${label}` };
-    }
-    case "needs-human": {
-      const where = ticket ?? parsed.halt?.issueId;
-      return {
-        kind: parsed.kind,
-        label: where === undefined ? token : `the question on ${where}`,
-        reason:
-          where === undefined
-            ? `waiting for a human reply, on a ticket this halt marker does not name (${token})`
-            : `waiting for a human reply on ${where}`,
-      };
     }
     case "pull-request": {
       const { owner, repo, number } = parsed.pr ?? {};

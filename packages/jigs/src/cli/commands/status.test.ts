@@ -47,7 +47,7 @@ const result = (over: Partial<StatusResult> = {}): StatusResult => ({
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
-test("status says what the run waits for, where to act, and what was asked", async () => {
+test("status says what the run waits for", async () => {
   respond(
     result({
       status: "running",
@@ -55,11 +55,9 @@ test("status says what the run waits for, where to act, and what was asked", asy
       dashboard: DASHBOARD,
       suspensions: [
         {
-          token: "jigs:needs-human:acme:issue-1:comment-1",
-          kind: "needs-human",
-          reason: "waiting for a human reply on AGE-317",
-          url: "https://linear.app/acme/issue/AGE-317#comment-comment-1",
-          question: "Which binding?\nA. api",
+          token: "linear:listening:acme:session-1",
+          kind: "linear-listening",
+          reason: "waiting for a reply in Linear agent session session-1",
         },
       ],
     }),
@@ -80,10 +78,7 @@ test("status says what the run waits for, where to act, and what was asked", asy
     `  dashboard      ${DASHBOARD}`,
     "",
     "Waiting",
-    "  waiting for a human reply on AGE-317 → https://linear.app/acme/issue/AGE-317#comment-comment-1",
-    "  asked:",
-    "    Which binding?",
-    "    A. api",
+    "  waiting for a reply in Linear agent session session-1",
   ]);
 });
 
@@ -203,10 +198,10 @@ test("status prints the last wake of a human and a Slack-thread wait", async () 
       status: "running",
       suspensions: [
         {
-          token: "jigs:needs-human:acme:issue-1:comment-1",
-          kind: "needs-human",
-          reason: "waiting for a human to answer on AGE-1",
-          lastWake: { kind: "linear Comment", at: "2026-09-04T10:08:00.000Z" },
+          token: "linear:listening:acme:session-1",
+          kind: "linear-listening",
+          reason: "waiting for a reply in Linear agent session session-1",
+          lastWake: { kind: "linear AgentSessionEvent", at: "2026-09-04T10:08:00.000Z" },
         },
         {
           token: "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
@@ -222,8 +217,8 @@ test("status prints the last wake of a human and a Slack-thread wait", async () 
   expect(lines.slice(4)).toEqual([
     "",
     "Waiting",
-    "  waiting for a human to answer on AGE-1",
-    "    last wake  linear Comment, 2m ago (2026-09-04T10:08:00.000Z)",
+    "  waiting for a reply in Linear agent session session-1",
+    "    last wake  linear AgentSessionEvent, 2m ago (2026-09-04T10:08:00.000Z)",
     "  waiting for a reply in a Slack thread",
     "    last wake  slack reply, 2m ago (2026-09-04T10:08:00.000Z)",
   ]);
