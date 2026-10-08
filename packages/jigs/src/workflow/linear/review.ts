@@ -13,7 +13,7 @@ import type { TicketClaim } from "./claim.ts";
 export const ticketReviewVerdictSchema = z.strictObject({
   verdict: z.enum(["proceed", "needs-human"]),
   brief: z.string().min(1),
-  // What the ticket is about, in plain words, for whoever reads the comment.
+  // What the ticket is about, in plain words, for whoever reads the session.
   about: z.string(),
   questions: z.array(haltQuestionSchema),
   assumptions: z.array(z.string()),
