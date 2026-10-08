@@ -525,13 +525,38 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
           },
         ]}
         settings={[
-          ["Socket Mode", "Off, or Slack never sends events to the Request URL"],
-          ["Subscribe to bot events", <Codes key="events" values={app.events} />],
-          ["Token rotation", "Off"],
+          [
+            "Socket Mode",
+            "Off, or Slack never sends events to the Request URL",
+            <>
+              <strong>Socket Mode</strong>, under <strong>Settings</strong> in the sidebar.
+            </>,
+          ],
+          [
+            "Subscribe to bot events",
+            <Codes key="events" values={app.events} />,
+            <>
+              <strong>Event Subscriptions</strong>, under <strong>Subscribe to bot events</strong>.
+              Click <strong>Add Bot User Event</strong> for each, then <strong>Save Changes</strong>
+              .
+            </>,
+          ],
+          [
+            "Token rotation",
+            "Off",
+            <>
+              <strong>OAuth &amp; Permissions</strong>, under{" "}
+              <strong>Advanced token security via token rotation</strong>. Don't click{" "}
+              <strong>Opt In</strong>: Slack can't turn rotation off again.
+            </>,
+          ],
           [
             "Channels",
+            "Invite the bot to each channel factories should hear",
             <>
-              Invite the bot to each channel factories should hear: <code>/invite @bot-name</code>
+              In Slack itself, not the app's settings: send <code>/invite @bot-name</code> in the
+              channel, or open the channel's details → <strong>Integrations</strong> →{" "}
+              <strong>Add apps</strong>.
             </>,
           ],
         ]}
@@ -753,7 +778,8 @@ function ProviderSettings({
   provider: string;
   description: ReactNode;
   urls: { label: string; value: string; where: ReactNode }[];
-  settings: [string, ReactNode][];
+  /** Each setting's label, value and, optionally, where to find it. */
+  settings: [string, ReactNode, ReactNode?][];
   children?: ReactNode;
 }) {
   return (
@@ -766,10 +792,13 @@ function ProviderSettings({
         ))}
       </div>
       <dl className="divide-y divide-zinc-200 border-t border-zinc-200 text-sm dark:divide-zinc-800 dark:border-zinc-800">
-        {settings.map(([label, value]) => (
+        {settings.map(([label, value, where]) => (
           <div key={label} className="grid gap-x-4 gap-y-1 py-2.5 sm:grid-cols-[16rem_1fr]">
             <dt className="font-semibold">{label}</dt>
-            <dd className="text-zinc-600 dark:text-zinc-400">{value}</dd>
+            <dd className="space-y-1 text-zinc-600 dark:text-zinc-400">
+              <div>{value}</div>
+              {where && <p className="text-zinc-500">{where}</p>}
+            </dd>
           </div>
         ))}
       </dl>
