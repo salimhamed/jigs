@@ -34,13 +34,15 @@ export function linearListeningToken(installationName: string, sessionId: string
 
 /**
  * What the factory's app posts into a Linear agent session. A `thought` or an `action` shows
- * progress; a `response` or an `error` ends the app's turn, and Linear waits for the person.
+ * progress; an `elicitation` asks the person for input; a `response` or an `error` ends the
+ * app's turn, and Linear waits for the person.
  *
  * @group Linear agent sessions
  */
 export type LinearAgentActivityContent =
   | { type: "thought"; body: string }
   | { type: "action"; action: string; parameter: string; result?: string }
+  | { type: "elicitation"; body: string }
   | { type: "response"; body: string }
   | { type: "error"; body: string };
 

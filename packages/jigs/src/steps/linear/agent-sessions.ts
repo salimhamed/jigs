@@ -1,15 +1,52 @@
 // The Linear agent session calls a factory wraps as its own steps, each through
 // the Linear installation it names.
 
+import { derivedUuid } from "../../providers/linear.ts";
 import { linearAgentFor, onceActivityId } from "../../providers/linear-agent.ts";
 import type {
   LinearAgentActivityContent,
   LinearAgentPrompt,
 } from "../../workflow/linear/agent-session.ts";
 import { dashboardRunUrl, type RunMetadata, type StepRunMetadata } from "../runtime/run-context.ts";
-import { stepPostingId } from "./needs-human-comments.ts";
 
 export type { LinearAgentActivityContent, LinearAgentPrompt };
+
+/**
+ * The id a step's post is created under: derived from the run, the step and where it posts, so
+ * every retry of one step names the same post while two posts of the same text stay two.
+ */
+export function stepPostingId(
+  metadata: Pick<StepRunMetadata, "workflowRunId" | "stepId">,
+  target: string,
+): string {
+  return derivedUuid([metadata.workflowRunId, metadata.stepId, target]);
+}
+
+const runLinks = (metadata: RunMetadata, urls: Array<{ label: string; url: string }>) => {
+  const dashboard = dashboardRunUrl(metadata.workflowRunId);
+  return dashboard === undefined ? urls : [{ label: "jigs run", url: dashboard }, ...urls];
+};
+
+/**
+ * Open a Linear agent session on an issue as the factory's app, showing the run's dashboard when
+ * the service hosts one, and return its id.
+ *
+ * @remarks
+ * Linear starts the session at once. Its create call takes no id of its own, so a retry after a
+ * lost response may open a second session.
+ *
+ * @group Linear agent sessions
+ */
+export async function openLinearAgentSession(
+  { installationName, issueId }: { installationName: string; issueId: string },
+  metadata: RunMetadata,
+): Promise<{ sessionId: string }> {
+  const sessionId = await linearAgentFor(installationName).createSession(
+    issueId,
+    runLinks(metadata, []),
+  );
+  return { sessionId };
+}
 
 /**
  * Post an activity into a Linear agent session as the factory's app.
@@ -64,9 +101,7 @@ export async function setLinearAgentSessionUrls(
   },
   metadata: RunMetadata,
 ): Promise<void> {
-  const dashboard = dashboardRunUrl(metadata.workflowRunId);
-  const all = dashboard === undefined ? urls : [{ label: "jigs run", url: dashboard }, ...urls];
-  await linearAgentFor(installationName).setExternalUrls(sessionId, all);
+  await linearAgentFor(installationName).setExternalUrls(sessionId, runLinks(metadata, urls));
 }
 
 /**

@@ -20,8 +20,8 @@ export const ticketReviewVerdictSchema = z.strictObject({
 });
 
 /**
- * A comment jigs posts on the ticket that asks for nothing and suspends
- * nothing. It carries its own words, the way a halt does, so the
+ * A note a ticket run posts in its Linear agent session that asks for nothing
+ * and suspends nothing. It carries its own words, the way a halt does, so the
  * renderer owns the layout and every caller owns what it says.
  *
  * @group Linear tickets
@@ -39,23 +39,26 @@ export type TicketNote = {
    * user has is skipped with a warning.
    */
   mention?: string[] | undefined;
+  /**
+   * Set on the run's last note: it ends the session, as a success or a
+   * failure. Without it the note shows as progress.
+   */
+  endsRun?: "success" | "failure" | undefined;
 };
 
 /**
- * Posting a note on the ticket that asks for nothing and suspends nothing.
- * Declared here rather than written as `typeof postTicketNote` for the same
- * reason the halt's step contracts are: the routine that calls the step owns the contract.
+ * Posting a note in the run's Linear agent session. Declared here rather than
+ * written as `typeof postTicketNote` for the same reason the halt's step
+ * contract is: the routine that calls the step owns the contract.
  */
 export type PostTicketNote = (request: {
   installationName: string;
   issueId: string;
+  sessionId: string;
   note: TicketNote;
-}) => Promise<{ commentId: string }>;
+}) => Promise<void>;
 
-/**
- * Post a note on a claimed ticket and record its comment on the claim, so a
- * later halt in this run never mistakes it for a human's reply.
- */
+/** Post a note in a claimed ticket's Linear agent session. */
 export async function noteOnTicket(
   claim: TicketClaim,
   note: TicketNote,
@@ -63,7 +66,6 @@ export async function noteOnTicket(
 ): Promise<void> {
   // Destructured for the same reason haltForHuman destructures its steps.
   const { postTicketNote } = deps;
-  const { installationName, issueId } = claim;
-  const { commentId } = await postTicketNote({ installationName, issueId, note });
-  claim.postedCommentIds.push(commentId);
+  const { installationName, issueId, sessionId } = claim;
+  await postTicketNote({ installationName, issueId, sessionId, note });
 }

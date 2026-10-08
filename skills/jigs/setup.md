@@ -162,4 +162,4 @@ factory. Review and commit the regenerated `jigs/steps.ts` and
 that file and replaces the older `package.json` imports entries with
 `#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
 `#jigs/routines` by hand. Library imports come from the root `@jigs-ai/jigs`;
-routines such as `claimTicket` or `agentSession` come from `#jigs/routines`.
+routines such as `acquireTicket` or `agentSession` come from `#jigs/routines`.

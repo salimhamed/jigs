@@ -95,9 +95,9 @@ import type {
 } from "./index.ts";
 import type { AgentRunner, AgentRunnerOptions } from "./steps/index.ts";
 import type {
+  HumanInputContext,
   LinearIssueMatch,
-  NeedsHumanContext,
-  RenderNeedsHumanComment,
+  RenderHumanInputRequest,
   RenderTicketNote,
   TicketParticipants,
   TicketStatusResult,
@@ -200,8 +200,8 @@ type StepsTypeSurface = {
   mergeOutcome: MergeOutcome;
   openedPullRequest: OpenedPullRequest;
   linearIssueMatch: LinearIssueMatch;
-  needsHumanContext: NeedsHumanContext;
-  renderNeedsHumanComment: RenderNeedsHumanComment;
+  humanInputContext: HumanInputContext;
+  renderHumanInputRequest: RenderHumanInputRequest;
   renderTicketNote: RenderTicketNote;
   ticketParticipants: TicketParticipants;
   ticketStatusResult: TicketStatusResult;

@@ -1,7 +1,7 @@
 import { beforeEach, expect, test } from "vitest";
 import { createHubTokens } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
-import { createLinearClient, mention } from "./linear.ts";
+import { createLinearClient } from "./linear.ts";
 import { createLinearAuth, LINEAR_API_URL } from "./linear-auth.ts";
 import { type FetchCall, fakeFetch, jsonResponse } from "./test-support.ts";
 
@@ -113,13 +113,12 @@ test("createComment posts a commentCreate mutation with the body verbatim", asyn
       comment: { id: "c1", createdAt: "2026-08-26T12:00:00Z" },
     },
   });
-  const body = `${mention({ id: "u1", name: "salim" })} this run needs a human.`;
+  const body = "https://linear.app/acme/profiles/salim this run needs a human.";
   const comment = await linear.createComment("issue-uuid", body);
   expect(comment).toEqual({ id: "c1", createdAt: "2026-08-26T12:00:00Z" });
   const request = lastRequest().body;
   expect(request.query).toContain("commentCreate");
   expect(request.variables.input).toEqual({ issueId: "issue-uuid", body });
-  expect(request.variables.input.body).toContain("@[salim](u1)");
 });
 
 test("createComment names the comment when given an id", async () => {
@@ -130,14 +129,6 @@ test("createComment names the comment when given an id", async () => {
     body: "hi",
     id: "c-id",
   });
-});
-
-test("findComment returns the comment by id, or null when there is none", async () => {
-  respond({ comments: { nodes: [{ id: "c-id", createdAt: "t" }] } });
-  await expect(linear.findComment("c-id")).resolves.toEqual({ id: "c-id", createdAt: "t" });
-  expect(lastRequest().body.variables).toEqual({ id: "c-id" });
-  respond({ comments: { nodes: [] } });
-  await expect(linear.findComment("c-id")).resolves.toBeNull();
 });
 
 const projectQuery = {
@@ -320,32 +311,6 @@ test("findIssueInProject returns the first non-trashed node, which Linear orders
   });
   expect(issue?.identifier).toBe("CAI-451");
   expect(issue?.description).toBe("");
-});
-
-test("listCommentsSince filters strictly after the cursor", async () => {
-  respond({
-    issue: {
-      comments: {
-        nodes: [
-          {
-            id: "c1",
-            body: "old",
-            createdAt: "2026-08-26T10:00:00Z",
-            user: { id: "u1", name: "salim" },
-          },
-          {
-            id: "c2",
-            body: "new",
-            createdAt: "2026-08-26T12:00:01Z",
-            user: { id: "u1", name: "salim" },
-          },
-        ],
-      },
-    },
-  });
-  const comments = await linear.listCommentsSince("issue-uuid", "2026-08-26T12:00:00Z");
-  expect(comments.map((c) => c.id)).toEqual(["c2"]);
-  expect(lastRequest().body.query).toContain("agentSession { id } parent { agentSession { id } }");
 });
 
 test("GraphQL errors throw", async () => {

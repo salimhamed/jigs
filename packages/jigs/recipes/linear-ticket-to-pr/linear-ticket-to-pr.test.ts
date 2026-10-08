@@ -102,6 +102,12 @@ const statuses = () =>
   });
 const handed = () =>
   vi.mocked(routines.buildAndReview).mock.calls[0]?.[0] as Delivery<Ticket> | undefined;
+const merged = {
+  headline: `Merged ${pr.url}.`,
+  notes: [],
+  closing: "",
+  endsRun: "success",
+};
 const posted = () => vi.mocked(routines.noteOnTicket).mock.calls.map(([, note]) => note);
 const following = () => vi.mocked(routines.followPullRequestToOutcome).mock.calls[0]?.[2];
 
@@ -136,6 +142,10 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
     approvalCovers: "latest-commit",
   });
   expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(true);
+  expect(posted()).toEqual([merged]);
+  expect(vi.mocked(routines.noteOnTicket).mock.invocationCallOrder[0]).toBeGreaterThan(
+    vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[2] ?? Infinity,
+  );
 });
 
 test("a title that is not a conventional commit is sent back to the writer with the problem", async () => {
@@ -168,6 +178,7 @@ test("a second unconventional title stops the run before anything is pushed", as
       ],
       closing:
         "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
+      endsRun: "failure",
     },
   ]);
   expect(steps.pushBranch).not.toHaveBeenCalled();
@@ -268,6 +279,7 @@ test("a pull request that needs a person gets a note on the ticket and stays In 
       closing:
         "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
     },
+    merged,
   ]);
   expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
 });
@@ -308,6 +320,7 @@ test("needs-human notes say what holds back the merge and how many attempts ran 
       `Pull request: ${pr.url}`,
       expect.any(String),
     ],
+    [],
   ]);
 });
 
@@ -325,7 +338,7 @@ test("a blocked merge is noted on the pull request with the delivery's scope, no
 
   await run();
 
-  expect(routines.noteOnTicket).not.toHaveBeenCalled();
+  expect(posted()).toEqual([merged]);
   expect(routines.postPullRequestNote).toHaveBeenCalledWith({
     pr,
     scope: "linearTicketToPr/ABC-123",
@@ -357,6 +370,7 @@ test("a stopped build pushes the branch, posts its note on the ticket, sets Todo
         "The work is on branch `acme/abc-123`, in the run's local worktree, which `jigs status` lists.",
       ],
       closing: expect.stringContaining("Another run starts over on a new branch"),
+      endsRun: "failure",
     },
   ]);
   expect(steps.pushBranch).toHaveBeenCalledWith(worktree);
@@ -390,6 +404,7 @@ test("a pull request closed without merging gets a note on the ticket, sets Todo
 
   expect(posted()[0]).toMatchObject({
     headline: "jigs stopped pull request maintenance for ABC-123.",
+    endsRun: "failure",
     notes: expect.arrayContaining([
       "The pull request was closed unmerged.",
       `Unfinished pull request: ${pr.url}`,

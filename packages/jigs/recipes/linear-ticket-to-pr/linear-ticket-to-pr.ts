@@ -97,9 +97,10 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
   };
 
-  // A stop leaves the work where it is, tells the ticket, and fails the run.
+  // A stop leaves the work where it is, ends the ticket's session with a
+  // failure, and fails the run.
   const stop = async (note: TicketNote): Promise<never> => {
-    await noteOnTicket(claim, note);
+    await noteOnTicket(claim, { ...note, endsRun: "failure" });
     await setStatus("Todo");
     throw new JigsError(note.headline);
   };
@@ -143,7 +144,7 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     approvalCovers,
     // A blocked merge is noted on the pull request, marked so it wakes no
     // builder and a later run does not post it again. Anything else is only a
-    // ticket note: the ticket stays In Review while the run keeps watching.
+    // note in the ticket's session: the ticket stays In Review while the run keeps watching.
     onNeedsHuman: (facts) =>
       facts.reason === "merge-blocked"
         ? postPullRequestNote({
@@ -158,6 +159,12 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   if (followed.outcome === "closed") return stop(closedNote(key, worktree, pr.url));
 
   await setStatus("Done");
+  await noteOnTicket(claim, {
+    headline: `Merged ${pr.url}.`,
+    notes: [],
+    closing: "",
+    endsRun: "success",
+  });
   return { pr: pr.url };
 }
 
