@@ -17,9 +17,11 @@ _Avoid_: task, node, stage
 step. Its file path and function name are the **step id**, so moving or
 renaming one changes the address, and a jigs version bump never does.
 
-**Generated integration**: The factory's committed `jigs/` directory, written by
-`jigs generate`: the step wrappers, and the routines bound to them. Custom code
-lives outside it.
+**Factory step files**: The step wrappers, and the routines bound to them, that
+the build writes into the factory's gitignored `.jigs/` from the package's
+`factory/` sources. Workflows import them as `#jigs/steps` and `#jigs/routines`.
+Custom code lives outside them.
+_Avoid_: generated integration
 
 **Routine**: A function a workflow calls that runs steps and may wait on
 something outside the run, such as `runAgent` or `watchPullRequest`. It has no
@@ -50,8 +52,8 @@ One key per pull request.
 a factory. Once copied it is factory code.
 _Avoid_: template, built-in workflow
 
-**Scaffold**: What `jigs init` writes: config, the generated integration and a
-trivial workflow. It presumes no process.
+**Scaffold**: What `jigs init` writes: config, the `#jigs/*` import mapping and
+a trivial workflow. It presumes no process.
 
 ## Runs
 

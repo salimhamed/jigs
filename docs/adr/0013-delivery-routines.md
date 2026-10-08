@@ -7,7 +7,7 @@ lines that every factory copied and then edited. A second workflow reached into
 one factory's copy, and every fix needed a hand merge into each copy. Under
 [0007](./0007-routines-recipes-and-run-resources.md) two callers are the cue to
 extract, so the engine moves into jigs as four routines, bound to the
-factory's steps in the generated `jigs/routines.ts`:
+factory's steps in `#jigs/routines`:
 
 - `buildAndReview(delivery, { rounds })` returns outcome `approved` with the
   reviewed commit, or a stop as a value: outcome `stopped` with

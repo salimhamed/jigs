@@ -33,8 +33,7 @@ or step transport, run the long-step regression once with the real value:
 the **Long step regression** workflow in Actions with the revision to test. It
 takes over five minutes and never runs on pull requests.
 
-Biome formats at 100 columns. Keep `packages/jigs/templates/jigs/*.ts.tmpl` formatted the same
-way, or a formatted factory reports its `jigs/` files as stale.
+Biome formats at 100 columns.
 
 ## Tests
 
@@ -82,7 +81,8 @@ package's own `biome.json` and `tsconfig.json` extend. Each package has an
 `AGENTS.md` with the rules for working in it.
 
 In `packages/jigs`, `src/` is the library and CLI, `templates/` the bare
-factory `jigs init` writes, `recipes/` the workflows `jigs recipe add` copies
+factory `jigs init` writes, `factory/` the step wrappers and bound routines the
+build copies into a factory's `.jigs/`, `recipes/` the workflows `jigs recipe add` copies
 into a factory, `migrations/` the jigs tables and `e2e/` the packed-install
 check. The npm README and LICENSE are the root copies, which `prepack` copies
 in.
@@ -96,8 +96,8 @@ src/
                pagerduty, pull-requests, runtime, workspaces)
   service/    the long-running process: routes, hub client, schedules, release
   cli/        commands
-  build/      the templates and the generated factory files, shared by the
-              CLI and the service build
+  build/      the scaffold templates and the files the build writes into a
+              factory's .jigs/, shared by the CLI and the service build
   checks/     preflight, doctor and just-in-time checks
   providers/  Git and provider clients (GitHub, Linear, Slack, PagerDuty)
               with their checks
@@ -122,11 +122,12 @@ bundles it into a sandbox without Node built-ins. So anything a workflow
 imports (`workflow/`) must be side-effect free, and real work goes in steps. No
 file under `src/` carries `"use workflow"` or `"use step"`: a step's durable ID
 comes from its file path and function name, so the directives live in factory
-code and the generated `jigs/steps.ts`, and a jigs upgrade never renames a step.
+code and `packages/jigs/factory/steps.ts`, which the build copies into the factory's `.jigs/`,
+and a jigs upgrade never renames a step.
 
-Factory code imports the library from the root `@jigs-ai/jigs`. The generated
-`jigs/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and the generated
-`jigs/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where the
+Factory code imports the library from the root `@jigs-ai/jigs`. `factory/steps.ts` imports
+`@jigs-ai/jigs/steps/<topic>`, and `factory/routines.ts` is the only importer of
+`@jigs-ai/jigs/routines`, where the
 routines that take steps as arguments live. The other subpaths (`/nitro`,
 `/build`, `/service`) belong to the service a factory builds. The Workflow SDK, its Postgres World, the
 dashboard and zod are peer dependencies the factory installs. All but zod are
@@ -219,7 +220,7 @@ TypeScript fences in the website, READMEs, skills, templates and source
 every variable's source; the checker supplies no missing declarations. Give
 cooperating files a first-line comment such as `// workflows/my-flow/steps.ts`.
 Relative imports can then resolve another displayed file on the same page.
-Examples can also import the actual generated `#jigs` modules and recipe files.
+Examples can also import the actual `#jigs` modules and recipe files.
 
 For configuration excerpts, label the fence `ts factory-options` and explain
 that its properties belong inside `defineFactory({ ... })` in `jigs.config.ts`.
