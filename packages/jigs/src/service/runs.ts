@@ -7,7 +7,6 @@ import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import { currentFactoryContext } from "../config/factory-context.ts";
 import type { PullRequestRef } from "../providers/github.ts";
-import { linearFor } from "../providers/linear.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
 import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
@@ -24,7 +23,7 @@ import {
   type RunState,
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { parseHookToken, wakeToken } from "../workflow/hook-tokens.ts";
+import { parseHookToken } from "../workflow/hook-tokens.ts";
 import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
 import { occurrencesByAttribute } from "./event-triggers/store.ts";
@@ -188,10 +187,9 @@ export async function cancelRun(runId: string): Promise<void> {
 
 /**
  * What the providers say about one run's suspensions: the pull request the
- * run is watching, the comment a halt is waiting on, and what last woke each
- * wait. Failures leave a suspension exactly as its token described it —
- * observability must never break the route — so this is for the single-run
- * read only, never the listing.
+ * run is watching, and what last woke each wait. Failures leave a suspension
+ * exactly as its token described it — observability must never break the
+ * route — so this is for the single-run read only, never the listing.
  */
 export async function enrichSuspensions(
   suspensions: readonly RunSuspension[],
@@ -200,17 +198,12 @@ export async function enrichSuspensions(
   return await Promise.all(
     suspensions.map(async (bare) => {
       const parsed = parseHookToken(bare.token);
-      const wake = lastWake(wakeToken(bare.token), runId);
+      const wake = lastWake(bare.token, runId);
       const suspension = wake === undefined ? bare : { ...bare, lastWake: wake };
       if (parsed?.kind === "pull-request" && parsed.pr !== null) {
         return await withPrState(suspension, parsed.pr);
       }
-      if (parsed?.kind !== "needs-human" || parsed.halt === null) return suspension;
-      const comment = await linearFor(parsed.halt.installationName)
-        .getComment(parsed.halt.commentId)
-        .catch(() => null);
-      if (comment === null) return suspension;
-      return { ...suspension, url: comment.url, question: comment.body };
+      return suspension;
     }),
   );
 }

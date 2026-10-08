@@ -338,16 +338,6 @@ export function createLinearClient(deps: LinearClientDeps) {
     return data.commentCreate.comment;
   }
 
-  /** One comment by id: where a human replies to it, and what it says. Linear
-   *  mints the permalink, so nothing here guesses at an anchor. */
-  async function getComment(id: string): Promise<{ url: string; body: string }> {
-    const data = await linearGraphql<{
-      comment: { url: string; body: string } | null;
-    }>(`query Comment($id: String!) { comment(id: $id) { url body } }`, { id });
-    if (data.comment === null) throw new JigsError(`Linear comment not found: ${id}`);
-    return data.comment;
-  }
-
   // A Linear project URL ends in its slugId, so accept that as well as the UUID.
   async function resolveProject(ref: string): Promise<RawProject> {
     if (PROJECT_UUID.test(ref)) {
@@ -470,7 +460,6 @@ export function createLinearClient(deps: LinearClientDeps) {
     getIssueParticipants,
     fetchIssueSnapshot,
     createComment,
-    getComment,
     createIssueInProject,
     findIssueInProject,
   };

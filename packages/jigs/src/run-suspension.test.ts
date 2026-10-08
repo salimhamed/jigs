@@ -1,7 +1,6 @@
 import { expect, test } from "vitest";
 import { describeSuspension } from "./run-suspension.ts";
 import { linearListeningToken, linearSessionToken } from "./workflow/linear/agent-session.ts";
-import { needsHumanToken } from "./workflow/linear/halt-for-human.ts";
 import { ticketToken } from "./workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "./workflow/pull-requests/pull-request.ts";
 import { slackThreadToken } from "./workflow/slack/thread-token.ts";
@@ -21,15 +20,6 @@ test("a ticket claim or a session's ownership hook is not a park, and every othe
     kind: "pull-request",
     reason: "waiting for pull request activity on acme/api#41",
     url: "https://github.com/acme/api/pull/41",
-  });
-  // The ticket the run was launched with, never the issue UUID in the token:
-  // the identifier is what an operator can act on.
-  expect(
-    describeSuspension(needsHumanToken("linear-acme", "issue-1", "comment-1"), "AGE-317"),
-  ).toEqual({
-    token: "jigs:needs-human:linear-acme:issue-1:comment-1",
-    kind: "needs-human",
-    reason: "waiting for a human reply on AGE-317",
   });
   expect(
     describeSuspension(slackThreadToken("slack-acme", "C0123ABCD", "1790723244.335019")),
@@ -59,16 +49,5 @@ test("a park jigs minted keeps its kind when the rest of the token is unreadable
     token: "github:pr:garbage",
     kind: "pull-request",
     reason: "waiting for pull request activity on garbage",
-  });
-  expect(describeSuspension("jigs:needs-human:onlyone")).toEqual({
-    token: "jigs:needs-human:onlyone",
-    kind: "needs-human",
-    reason:
-      "waiting for a human reply, on a ticket this halt marker does not name (jigs:needs-human:onlyone)",
-  });
-  // The run was launched with a ticket, so the marker does not have to name one.
-  expect(describeSuspension("jigs:needs-human:onlyone", "AGE-317")).toMatchObject({
-    kind: "needs-human",
-    reason: "waiting for a human reply on AGE-317",
   });
 });
