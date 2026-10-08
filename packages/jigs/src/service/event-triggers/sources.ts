@@ -34,8 +34,10 @@ export interface Source<P = unknown> {
   sampleInputs: Record<string, unknown>;
   /**
    * The occurrence a pushed provider event is, or null when the event is not
-   * one, such as an event from another installation. Throws only when it could
-   * not tell, so the event is routed again.
+   * one, such as an event from another installation or of another type. It
+   * sees every event its provider sends, so it rejects those before any
+   * network call. Throws when it could not tell; the event is routed again
+   * unless the error is one a retry would only get again.
    */
   fromPush(params: P, event: PushedEvent): Promise<SourceOccurrence | null>;
   /** What a run this source started was started for, in an operator's words, read off its inputs. */

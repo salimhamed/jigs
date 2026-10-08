@@ -3,7 +3,6 @@
 // it, is one occurrence, keyed by the session's id, read off the event the hub passes on.
 
 import { z } from "zod";
-import { HubResponseError } from "../providers/hub.ts";
 import { type LinearIssueFiling, linearFor } from "../providers/linear.ts";
 import {
   type LinearAgentSessionInputs,
@@ -49,27 +48,18 @@ const SAMPLE_INPUTS = {
 } satisfies LinearAgentSessionInputs;
 
 // The issue's project and labels, read as the factory's app in the trigger's
-// installation. An issue that is gone, or an installation the hub does not give
-// this factory, will read the same way every time, so the session is passed
-// over rather than retried.
+// installation. An issue that is gone will read the same way every time, so the
+// session is passed over rather than retried.
 async function readFiling(
   issueId: string,
   installationName: string,
 ): Promise<LinearIssueFiling | null> {
-  try {
-    const filing = await linearFor(installationName).fetchIssueFiling(issueId);
-    if (filing === null)
-      console.error(
-        `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
-      );
-    return filing;
-  } catch (error) {
-    if (!(error instanceof HubResponseError && error.status === 404)) throw error;
+  const filing = await linearFor(installationName).fetchIssueFiling(issueId);
+  if (filing === null)
     console.error(
-      `[linear] ignored an agent session in installation ${installationName}, which the hub does not give this factory: ${String(error)}`,
+      `[linear] ignored an agent session on issue ${issueId}, which the app cannot read`,
     );
-    return null;
-  }
+  return filing;
 }
 
 export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {

@@ -267,3 +267,10 @@ test("the bot's own post under a custom username, with no user, is skipped by it
   expect(await messages.fromPush(params, pushed(ownBotMessage))).toBeNull();
   expect(await mentions.fromPush(params, pushed(ownBotMessage))).toBeNull();
 });
+
+test("a reply, an edit or a channel join is passed over without asking Slack who the bot is", async () => {
+  const bot = vi.mocked(slackApi.slackBot);
+  for (const message of [THREAD_REPLY, BROADCAST, EDIT, DELETE, JOIN])
+    expect(await mentions.fromPush(params, pushed(message))).toBeNull();
+  expect(bot).not.toHaveBeenCalled();
+});

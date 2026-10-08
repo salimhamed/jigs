@@ -170,19 +170,12 @@ test("an issue in no project never matches a project filter", async () => {
   ).toBeNull();
 });
 
-test("an issue the app cannot read, or an installation the hub does not give the factory, is ignored loudly", async () => {
+test("an issue the app cannot read is ignored loudly", async () => {
   const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
   stubFiling(vi.fn(async () => null));
   expect(await source.fromPush({ ...ACME, labels: ["agent"] }, from(created()))).toBeNull();
-  stubFiling(
-    vi.fn(async () => {
-      throw new HubResponseError(404, "no such installation");
-    }),
-  );
-  expect(await source.fromPush({ ...ACME, labels: ["agent"] }, from(created()))).toBeNull();
   expect(errors.mock.calls.map(([line]) => String(line))).toEqual([
     expect.stringContaining("which the app cannot read"),
-    expect.stringContaining("which the hub does not give this factory"),
   ]);
   errors.mockRestore();
 });
@@ -264,4 +257,27 @@ test("a filter that cannot read the issue fails the push rather than passing the
   await engine.arm();
   await expect(engine.push("linear", from(created()))).rejects.toThrow("could not read the event");
   expect(starts).toEqual([]);
+});
+
+test("an installation the hub does not give the factory passes the session over, not retried", async () => {
+  stubFiling(
+    vi.fn(async () => {
+      throw new HubResponseError(404, "no such installation");
+    }),
+  );
+  const { engine, starts } = sessionEngine({ labels: ["agent"] });
+  await engine.arm();
+  expect(await engine.push("linear", from(created()))).toEqual([]);
+  expect(starts).toEqual([]);
+});
+
+test("an event of another type is passed over without reading the issue", async () => {
+  const filing = unread();
+  const { engine } = sessionEngine({ labels: ["agent"] });
+  await engine.arm();
+  const prompted = { ...created(), action: "prompted" };
+  const comment = { type: "Comment", action: "create", data: { id: "c1" } };
+  expect(await engine.push("linear", from(prompted))).toEqual([]);
+  expect(await engine.push("linear", from(comment))).toEqual([]);
+  expect(filing).not.toHaveBeenCalled();
 });
