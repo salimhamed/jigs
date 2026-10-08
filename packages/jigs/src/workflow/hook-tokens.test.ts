@@ -73,7 +73,6 @@ test("a minted prefix keeps its kind when the rest is unreadable", () => {
 
 test("every kind describes what it names and what a run holding it waits for", () => {
   expect(describeHookToken(claim)).toMatchObject({ label: "Linear issue issue-1" });
-  expect(describeHookToken(claim, "AGE-317")).toMatchObject({ label: "Linear ticket AGE-317" });
   expect(describeHookToken(pr)).toEqual({
     kind: "pull-request",
     label: "pull request acme/api#41",

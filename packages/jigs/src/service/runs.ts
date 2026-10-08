@@ -187,9 +187,9 @@ export async function cancelRun(runId: string): Promise<void> {
 
 /**
  * What the providers say about one run's suspensions: the pull request the
- * run is watching, and what last woke each wait. Failures leave a suspension exactly as its token described it —
- * observability must never break the route — so this is for the single-run
- * read only, never the listing.
+ * run is watching, and what last woke each wait. Failures leave a suspension
+ * exactly as its token described it — observability must never break the
+ * route — so this is for the single-run read only, never the listing.
  */
 export async function enrichSuspensions(
   suspensions: readonly RunSuspension[],

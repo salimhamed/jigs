@@ -1,5 +1,5 @@
 import type { WakeNote } from "./service/wake.ts";
-import { describeHookToken, type HookKind } from "./workflow/hook-tokens.ts";
+import { describeHookToken, type HookKind, isOwnershipKind } from "./workflow/hook-tokens.ts";
 import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-requests/snapshot.ts";
 
 /**
@@ -40,6 +40,6 @@ export interface RunSuspension {
  */
 export function describeSuspension(token: string): RunSuspension | null {
   const { kind, reason, url } = describeHookToken(token);
-  if (kind === "ticket-claim" || kind === "linear-session") return null;
+  if (isOwnershipKind(kind)) return null;
   return { token, kind, reason, ...(url === undefined ? {} : { url }) };
 }

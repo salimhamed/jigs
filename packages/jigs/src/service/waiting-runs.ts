@@ -4,7 +4,7 @@
 // re-reads its provider from scratch: the wake carries nothing, so it stands in
 // for whatever event was lost.
 
-import { parseHookToken } from "../workflow/hook-tokens.ts";
+import { isOwnershipKind, parseHookToken } from "../workflow/hook-tokens.ts";
 import { listWorldHooks, runsWithActiveStep } from "./runs.ts";
 import { wake } from "./wake.ts";
 
@@ -12,10 +12,11 @@ type HeldHook = { runId: string; token: string };
 
 /** The held hooks that a wake would actually reach a waiting run through. */
 function waitingOn(hooks: HeldHook[]): HeldHook[] {
+  // The hub stands in only for providers jigs mints tokens for, so a token it
+  // did not mint is left to `jigs poke`.
   return hooks.filter((hook) => {
     const kind = parseHookToken(hook.token)?.kind;
-    // Ownership hooks are locks held for the run's life, never waits.
-    return kind !== undefined && kind !== "ticket-claim" && kind !== "linear-session";
+    return kind !== undefined && !isOwnershipKind(kind);
   });
 }
 

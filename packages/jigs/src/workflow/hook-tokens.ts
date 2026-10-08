@@ -132,20 +132,24 @@ export function parseHookToken(token: string): HookToken | null {
 }
 
 /**
- * What a hook token names and what a run holding it waits for. `ticket` is the
- * identifier the run was launched with, so a claim names the ticket
- * an operator knows rather than the issue UUID inside the token.
+ * Whether a hook of this kind is a lock a run holds for its whole life (a ticket claim or a
+ * Linear agent session's ownership), never something it waits on. Nothing wakes one.
  */
-export function describeHookToken(token: string, ticket?: string | null): HookDescription {
+export function isOwnershipKind(
+  kind: HookKind | "external" | undefined,
+): kind is "ticket-claim" | "linear-session" {
+  return kind === "ticket-claim" || kind === "linear-session";
+}
+
+/** What a hook token names and what a run holding it waits for. */
+export function describeHookToken(token: string): HookDescription {
   const parsed = parseHookToken(token);
   switch (parsed?.kind) {
     case "ticket-claim": {
       const label =
-        ticket == null
-          ? parsed.ticket === null
-            ? `a Linear issue this token does not name (${token})`
-            : `Linear issue ${parsed.ticket.issueId}`
-          : `Linear ticket ${ticket}`;
+        parsed.ticket === null
+          ? `a Linear issue this token does not name (${token})`
+          : `Linear issue ${parsed.ticket.issueId}`;
       return { kind: parsed.kind, label, reason: `holding the claim on ${label}` };
     }
     case "pull-request": {
