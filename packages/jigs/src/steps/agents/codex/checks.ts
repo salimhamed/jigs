@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import type { Check, CheckResult } from "../../../checks/check.ts";
-import { SERVICE_ENV_FILE } from "../../../providers/credentials.ts";
+import { FACTORY_ENVIRONMENT } from "../../../providers/credentials.ts";
 import { realCodexAuthPath } from "./home.ts";
 
 // A login file only, never a version.
@@ -35,7 +35,7 @@ export function codexAuthCheck(authPath = realCodexAuthPath()): Check {
         return {
           ok: false,
           reason: `${authPath} reports auth_mode ${JSON.stringify(auth.auth_mode)}, not "chatgpt"`,
-          repair: `unset OPENAI_API_KEY in ${SERVICE_ENV_FILE}, then log in with the ChatGPT subscription: \`codex logout && codex login\``,
+          repair: `unset OPENAI_API_KEY in ${FACTORY_ENVIRONMENT}, then log in with the ChatGPT subscription: \`codex logout && codex login\``,
         };
       }
       return { ok: true };

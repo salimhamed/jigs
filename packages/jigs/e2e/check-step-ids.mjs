@@ -948,8 +948,9 @@ async function checkScaffold(name) {
   // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
   if (hub !== undefined) {
-    writeFileSync(path.join(factory, ".env"), "");
-    run(path.join(factory, "node_modules", ".bin", "jigs"), ["hub", "connect", hub.url, hub.token]);
+    writeFileSync(path.join(factory, ".env"), `JIGS_HUB_TOKEN=${hub.token}\n`);
+    const config = path.join(factory, "jigs.config.ts");
+    writeFileSync(config, readFileSync(config, "utf8").replace("https://hub.example.com", hub.url));
   }
   if (name === "linear-ticket-to-pr") {
     run(path.join(factory, "node_modules", ".bin", "jigs"), [

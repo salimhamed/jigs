@@ -2,7 +2,7 @@ import { execFileSync } from "node:child_process";
 import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { afterEach, beforeEach, type Mock, vi } from "vitest";
+import { afterEach, beforeEach, type Mock, onTestFinished, vi } from "vitest";
 import type { FactoryContext } from "./config/factory-context.ts";
 import { factorySlug } from "./config/paths.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "./version.ts";
@@ -93,7 +93,7 @@ export interface TestContextInit {
   env?: Record<string, string | undefined>;
 }
 
-// A context built in memory: no jigs.config.ts or .env on disk.
+// A context built in memory, with no jigs.config.ts on disk.
 export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
   const root = init.root ?? "/factory";
   const env = init.env ?? {};
@@ -114,17 +114,21 @@ export function testFactoryContext(init: TestContextInit = {}): FactoryContext {
   };
 }
 
-// Point the process's own factory context at a new factory repo, for code that reads it
-// ambiently. Undone by `vi.unstubAllEnvs()`; the caller removes the returned directory.
+// Run the rest of the current test from `dir`, as the CLI runs every command from its factory's
+// root. Undone when the test finishes.
+export function runFrom(dir: string): void {
+  const cwd = vi.spyOn(process, "cwd").mockReturnValue(dir);
+  onTestFinished(() => cwd.mockRestore());
+}
+
+// `runFrom` a new factory repo; the caller removes the returned directory.
 export function useTestFactory(config: Record<string, unknown> | string = {}): string {
   const parent = makeTmpDir();
-  const root = makeFactoryRepo(parent, config);
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  runFrom(makeFactoryRepo(parent, config));
   return parent;
 }
 
-// `useTestFactory` around every test of a file. Call it after the file's own hooks, so an
-// `unstubAllEnvs` there does not undo it.
+// `useTestFactory` around every test of a file.
 export function inTestFactory(config: Record<string, unknown> | string = {}): void {
   let parent: string;
   beforeEach(() => {

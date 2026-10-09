@@ -38,7 +38,6 @@ let remoteDir: string;
 let target: string;
 let oldBaseUrl: string | undefined;
 let oldPostgresUrl: string | undefined;
-let oldFactoryRoot: string | undefined;
 let oldDataHome: string | undefined;
 
 beforeAll(async () => {
@@ -54,11 +53,10 @@ beforeAll(async () => {
 
   oldBaseUrl = process.env.WORKFLOW_LOCAL_BASE_URL;
   oldPostgresUrl = process.env.WORKFLOW_POSTGRES_URL;
-  oldFactoryRoot = process.env.JIGS_FACTORY_ROOT;
   oldDataHome = process.env.XDG_DATA_HOME;
   process.env.WORKFLOW_LOCAL_BASE_URL = `http://127.0.0.1:${address.port}`;
   process.env.WORKFLOW_POSTGRES_URL = testUrl.toString();
-  process.env.JIGS_FACTORY_ROOT = factoryRoot;
+  vi.spyOn(process, "cwd").mockReturnValue(factoryRoot);
   process.env.XDG_DATA_HOME = dataRoot;
 
   remoteDir = makeClonedBinding(tmp, cloneDir(dirs)).remoteDir;
@@ -88,7 +86,7 @@ afterAll(async () => {
   await admin.end();
   restoreEnv("WORKFLOW_LOCAL_BASE_URL", oldBaseUrl);
   restoreEnv("WORKFLOW_POSTGRES_URL", oldPostgresUrl);
-  restoreEnv("JIGS_FACTORY_ROOT", oldFactoryRoot);
+  vi.restoreAllMocks();
   restoreEnv("XDG_DATA_HOME", oldDataHome);
   vi.unstubAllEnvs();
   removeTmpDir(tmp);

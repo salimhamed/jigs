@@ -1,3 +1,4 @@
+import { currentFactoryContext } from "../../config/factory-context.ts";
 // Shared plumbing for the verbs that are HTTP clients of the service. One
 // place for the unreachable-service and unknown-run errors, so every verb
 // renders them identically.
@@ -5,7 +6,6 @@
 import { resolveService } from "../../config/factory-config.ts";
 import { JigsError } from "../../errors.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
-import { factoryContextAt } from "../factory-context.ts";
 
 export interface ServiceDeps {
   serviceUrl: string;
@@ -22,9 +22,9 @@ export function usesFactoryService(explicit?: string): explicit is undefined | "
 // user is standing in names its own service. Call this from inside a command
 // action, never from a commander `.default()` — the filesystem walk here
 // would then run on `jigs --help`, outside any factory repo.
-export function resolveServiceUrl(cwd: string, explicit?: string): string {
+export function resolveServiceUrl(explicit?: string): string {
   if (!usesFactoryService(explicit)) return explicit;
-  return resolveService(factoryContextAt(cwd)).serviceUrl;
+  return resolveService(currentFactoryContext()).serviceUrl;
 }
 
 export async function serviceFetch(

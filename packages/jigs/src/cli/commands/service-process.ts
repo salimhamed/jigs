@@ -11,7 +11,7 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
-import { readFactoryEnv } from "../../config/factory-env.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import {
   type ProcessControl,
@@ -21,7 +21,6 @@ import {
   systemProcesses,
 } from "../../service/process-tree.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { displayPath, note } from "../output.ts";
 import {
   livePid,
@@ -68,7 +67,6 @@ export interface ServiceHealth {
 }
 
 export interface ServiceLifecycleDeps {
-  cwd: string;
   out: (line: string) => void;
   processes?: ServiceProcesses;
   probe?: (url: string) => Promise<ServiceHealth | null>;
@@ -124,14 +122,14 @@ function newerThan(target: string, builtAt: number): boolean {
   );
 }
 
-type BundleDeps = Pick<ServiceLifecycleDeps, "cwd" | "processes">;
+type BundleDeps = Pick<ServiceLifecycleDeps, "processes">;
 
 // Which bundle the running process was started from, so a later `jigs up`
 // can tell a rebuild that changed nothing from one the service has yet to
 // pick up.
 export function runningBundleHash(deps: BundleDeps): string | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { slug } = resolveService(currentFactoryContext());
   if (livePid(slug, processes) === undefined) return undefined;
   return readServiceRecord(slug).process?.bundle;
 }
@@ -140,7 +138,7 @@ export function runningBundleHash(deps: BundleDeps): string | undefined {
 // behind them, or the running process is behind the bundle — a build nobody
 // restarted onto. Undefined for an unbuilt factory.
 export function serviceBehindSources(deps: BundleDeps): string | undefined {
-  const factoryRoot = factoryContextAt(deps.cwd).root;
+  const factoryRoot = currentFactoryContext().root;
   if (!existsSync(path.join(factoryRoot, SERVICE_ENTRY))) return undefined;
   const stale = staleWorkflowSources(factoryRoot);
   if (stale.length > 0) {
@@ -153,22 +151,17 @@ export function serviceBehindSources(deps: BundleDeps): string | undefined {
   return undefined;
 }
 
-// The factory's own `.env` is the service's environment file, World URL and
-// credentials included. What jigs.config.ts declares wins over it: the two addresses
-// the child listens on, and the base URL derived from the first of them.
+// The child inherits this process's environment. What jigs.config.ts declares
+// wins over it: the two addresses the child listens on, and the base URL
+// derived from the first of them.
 //
 // `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
 // dashboard's included — to the service's own workflow routes. Left unset the
 // World guesses a port the process happens to listen on, and a queue job
 // delivered to a port with no workflow route dies after three 404s.
-//
-// An empty `.env` slot is unset, as doctor reads it, so it never hides a value
-// the shell exported.
-function childEnv(factoryRoot: string, service: ResolvedService): Record<string, string> {
-  const declared = Object.entries(readFactoryEnv(factoryRoot)).filter(([, value]) => value !== "");
+function childEnv(service: ResolvedService): Record<string, string> {
   return {
     ...stringEnv(),
-    ...Object.fromEntries(declared),
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
@@ -204,7 +197,7 @@ export function spawnService(
     command: process.execPath,
     args: [SERVICE_ENTRY],
     cwd: factoryRoot,
-    env: childEnv(factoryRoot, service),
+    env: childEnv(service),
     logPath: logFile,
   });
   if (pid === undefined) {

@@ -1,6 +1,5 @@
-import { tmpdir } from "node:os";
 import { beforeAll, expect, test, vi } from "vitest";
-import { testFactoryContext } from "../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, testFactoryContext } from "../test-fixtures.ts";
 import { type SlackMessage, slackBot, slackFor } from "./slack.ts";
 import { slackInstallationProbe } from "./slack-checks.ts";
 import { useLiveSlackToken } from "./test-fixtures.ts";
@@ -10,7 +9,7 @@ import { useLiveSlackToken } from "./test-fixtures.ts";
 const token = process.env.JIGS_TEST_SLACK_BOT_TOKEN;
 const configured = Boolean(token);
 const channel = "C0C5EUZ7P9Q";
-vi.stubEnv("JIGS_FACTORY_ROOT", tmpdir());
+vi.spyOn(process, "cwd").mockReturnValue(makeFactoryRepo(makeTmpDir()));
 
 beforeAll(async () => {
   if (token) await useLiveSlackToken(token);

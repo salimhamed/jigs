@@ -2,9 +2,9 @@ import { existsSync } from "node:fs";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, type ExecOutput, execOutput, nodeExecFile } from "../exec.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { displayPath } from "../output.ts";
 import { SERVICE_ENTRY } from "./service-process.ts";
 
@@ -16,14 +16,13 @@ import { SERVICE_ENTRY } from "./service-process.ts";
 export type Prepare = (factoryRoot: string) => unknown;
 
 export interface BuildDeps {
-  cwd: string;
   out: (line: string) => void;
   execFile?: ExecFile;
   prepare?: Prepare;
 }
 
 export async function buildFactoryService(deps: BuildDeps): Promise<void> {
-  const factoryRoot = factoryContextAt(deps.cwd).root;
+  const factoryRoot = currentFactoryContext().root;
 
   const prepare = deps.prepare ?? (await loadPrepare(factoryRoot));
   await prepare(factoryRoot);

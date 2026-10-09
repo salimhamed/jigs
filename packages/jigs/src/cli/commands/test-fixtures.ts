@@ -21,8 +21,6 @@ export function closeFakeServices(): void {
 // A factory the way `jigs init` leaves it, plus the code the operator wrote.
 export interface FactoryShape {
   port: number;
-  example?: boolean;
-  env?: string;
   compose?: boolean;
   config?: boolean;
   bins?: string[];
@@ -31,13 +29,6 @@ export interface FactoryShape {
 export function factory(tmp: string, shape: FactoryShape): string {
   const root = path.join(tmp, "acme-factory");
   mkdirSync(root, { recursive: true });
-  if (shape.example !== false) {
-    writeFileSync(
-      path.join(root, ".env.example"),
-      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nJIGS_HUB_TOKEN=test-hub-token\n",
-    );
-  }
-  if (shape.env !== undefined) writeFileSync(path.join(root, ".env"), shape.env);
   if (shape.compose !== false) {
     writeFileSync(
       path.join(root, "docker-compose.yml"),

@@ -465,7 +465,7 @@ test("without its hub token the service refuses the boot and says how to connect
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(
     expect.stringMatching(
-      /^\[service\] JIGS_HUB_TOKEN is not set\n.*pnpm exec jigs hub connect <url> <token>.*, then restart the service$/,
+      /^\[service\] JIGS_HUB_TOKEN is not set\n.*set JIGS_HUB_TOKEN in the factory's environment.*, then restart the service$/,
     ),
   );
 });

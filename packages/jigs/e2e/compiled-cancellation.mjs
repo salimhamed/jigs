@@ -317,16 +317,6 @@ export async function runCompiledCancellationMatrix({
   const env = runtimeEnv(testUrl.toString(), dataHome, ports);
   let serviceEnv = env;
 
-  // Keeps the hub token `jigs hub connect` wrote: the service does not start without it.
-  const hubToken =
-    readFileSync(path.join(factory, ".env"), "utf8").match(/^JIGS_HUB_TOKEN=.*$/m)?.[0] ?? "";
-  const writeEnv = (workers) =>
-    writeFileSync(
-      path.join(factory, ".env"),
-      `WORKFLOW_POSTGRES_URL=${testUrl.toString()}\nWORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_WORKER_CONCURRENCY=${workers}\nWORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN=1\n${hubToken}\n`,
-    );
-  writeEnv(1);
-
   try {
     await admin.query(`CREATE DATABASE "${database}"`);
     db = new Pool({ connectionString: testUrl.toString(), max: 2 });
@@ -692,7 +682,6 @@ await (await getWorld()).close?.();`,
     mkdirSync(cancelledDir, { recursive: true });
     mkdirSync(survivorDir, { recursive: true });
     // Two workers, so the survivor's step runs beside the cancelled one.
-    writeEnv(2);
     serviceEnv = {
       ...env,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
@@ -881,7 +870,6 @@ await (await getWorld()).close?.();`,
     const survivorDir = path.join(codexRoot, "survivor");
     mkdirSync(cancelledDir, { recursive: true });
     mkdirSync(survivorDir, { recursive: true });
-    writeEnv(2);
     serviceEnv = {
       ...env,
       HOME: home,

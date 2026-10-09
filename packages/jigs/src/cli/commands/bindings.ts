@@ -1,19 +1,18 @@
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { displayPath, formatTable } from "../output.ts";
 
 export interface BindingsDeps {
-  cwd: string;
   out: (line: string) => void;
 }
 
 // Offline by decree: what a binding is, where its clone would be, and what the
 // clone on disk says — never the network.
 export async function listBindings(deps: BindingsDeps): Promise<void> {
-  const { root: factoryRoot, config } = factoryContextAt(deps.cwd);
+  const { root: factoryRoot, config } = currentFactoryContext();
   const rows: string[][] = [];
   for (const [name, binding] of Object.entries(config.bindings)) {
     const clone = cloneRepoDir({ factoryRoot, bindingName: name });

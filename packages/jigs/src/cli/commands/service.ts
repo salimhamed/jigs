@@ -1,8 +1,8 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { parsePs, type ServiceTarget } from "../../service/process-tree.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, indent, layout } from "../output.ts";
 import {
   awaitReady,
@@ -36,7 +36,7 @@ interface Launched {
 // new one. Undefined when the recorded service is still running.
 async function launch(deps: ServiceLifecycleDeps): Promise<Launched | undefined> {
   const { out, processes = nodeProcesses } = deps;
-  const ctx = factoryContextAt(deps.cwd);
+  const ctx = currentFactoryContext();
   const service = resolveService(ctx);
   const { slug, serviceUrl } = service;
   const releaseExclusion = acquireServiceExclusion(slug, "start");
@@ -84,8 +84,8 @@ export async function ensureServiceCurrent(
   options: { restart?: boolean; beforeRestart: () => Promise<void> },
 ): Promise<ServiceOutcome> {
   const { processes = nodeProcesses } = deps;
-  const { root } = factoryContextAt(deps.cwd);
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { root } = currentFactoryContext();
+  const { slug } = resolveService(currentFactoryContext());
   let outcome: ServiceOutcome = "started";
   // Compared against the bundle the running process started from, not the
   // one on disk before this build: a restart refused last time must still
@@ -106,7 +106,7 @@ export async function ensureServiceCurrent(
 /** Waits for the recorded service to report itself ready. */
 export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const { slug, serviceUrl } = resolveService(factoryContextAt(deps.cwd));
+  const { slug, serviceUrl } = resolveService(currentFactoryContext());
   const recorded = readServiceRecord(slug).process;
   if (recorded === undefined || recorded.exited) {
     throw new JigsError(`not running: ${slug}`, "start it: `pnpm exec jigs up`");
@@ -127,7 +127,7 @@ export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<voi
  */
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { slug } = resolveService(currentFactoryContext());
   const state = inspectService(slug, processes, { cleanUp: true });
   const target: ServiceTarget =
     state.kind === "running"
@@ -154,7 +154,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
  */
 export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { slug } = resolveService(currentFactoryContext());
   const stop =
     "prune never stops or kills processes, so stop the service first: `pnpm exec jigs service stop`";
   const state = inspectService(slug, processes, { cleanUp: true });
@@ -184,13 +184,13 @@ export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
 // For a caller deciding on liveness rather than reporting it.
 export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { slug } = resolveService(currentFactoryContext());
   return livePid(slug, processes);
 }
 
 export function serviceStatus(deps: ServiceLifecycleDeps): void {
   const { out, processes = nodeProcesses, now = () => new Date() } = deps;
-  const ctx = factoryContextAt(deps.cwd);
+  const ctx = currentFactoryContext();
   const factoryRoot = ctx.root;
   const { slug, serviceUrl, dashboardUrl } = resolveService(ctx);
   const pid = livePid(slug, processes);
@@ -248,7 +248,7 @@ function signalSince(log: string, offset: number): string | undefined {
 // one shadowing the other.
 export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: number } = {}): void {
   const { out } = deps;
-  const { slug } = resolveService(factoryContextAt(deps.cwd));
+  const { slug } = resolveService(currentFactoryContext());
   const file = serviceLogPath(slug);
   if (!existsSync(file)) {
     throw new JigsError(

@@ -1,8 +1,15 @@
+import { existsSync } from "node:fs";
 import { defineFactory } from "@jigs-ai/jigs";
+
+// jigs reads only the process environment. A value already set is kept, so the shell wins,
+// then .env.local, then .env.
+for (const file of [".env.local", ".env"]) {
+  if (existsSync(file)) process.loadEnvFile(file);
+}
 
 export default defineFactory({
   // GitHub, Linear, Slack and PagerDuty events and tokens reach this factory through its hub.
-  // Set this and the token with: pnpm exec jigs hub connect <url> <token>
+  // Set its URL here and the factory token as JIGS_HUB_TOKEN in the environment.
   // Workflows, bindings and triggers name each installation they use by the
   // name an admin gave it on the hub.
   hub: { url: "https://hub.example.com" },

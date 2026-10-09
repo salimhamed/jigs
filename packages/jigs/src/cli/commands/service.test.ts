@@ -10,7 +10,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { factorySlug } from "../../config/paths.ts";
 import type { JigsError } from "../../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import {
   awaitServiceReady,
@@ -136,16 +136,18 @@ const deps = (
   cwd: string,
   io: Fake,
   timeouts: { startTimeoutMs?: number; stopTimeoutMs?: number } = {},
-) => ({
-  cwd,
-  out: (line: string) => lines.push(line),
-  processes: io.processes,
-  probe: io.probe,
-  // The fake answers at once; the wait between probes is for a real boot.
-  startPollMs: 0,
-  killWaitMs: 0,
-  ...timeouts,
-});
+) => {
+  runFrom(cwd);
+  return {
+    out: (line: string) => lines.push(line),
+    processes: io.processes,
+    probe: io.probe,
+    // The fake answers at once; the wait between probes is for a real boot.
+    startPollMs: 0,
+    killWaitMs: 0,
+    ...timeouts,
+  };
+};
 
 test("resource maintenance exclusion closes the service restart race", async () => {
   const root = builtFactory();
@@ -182,9 +184,10 @@ function exitsOnTerm(io: Fake) {
   };
 }
 
-test("start runs the built entry in the factory root on the factory's port", async () => {
+test("start runs the built entry in the factory root on the factory's port, with this process's environment", async () => {
   const root = builtFactory();
-  writeFileSync(path.join(root, ".env"), "LINEAR_API_KEY=lin\nPORT=1234\n");
+  vi.stubEnv("LINEAR_API_KEY", "lin");
+  vi.stubEnv("PORT", "1234");
   const io = fake();
 
   await startService(deps(root, io));
@@ -193,25 +196,9 @@ test("start runs the built entry in the factory root on the factory's port", asy
   expect(spec?.args).toEqual([SERVICE_ENTRY]);
   expect(spec?.cwd).toBe(root);
   expect(spec?.env.LINEAR_API_KEY).toBe("lin");
-  // jigs.config.ts, not .env, is where a factory's address is declared.
+  // jigs.config.ts, not the environment, is where a factory's address is declared.
   expect(spec?.env.PORT).toBe("9100");
   expect(lines[0]).toContain("at http://localhost:9100");
-});
-
-test("an empty .env slot leaves the value the shell exported", async () => {
-  const root = builtFactory();
-  writeFileSync(path.join(root, ".env"), "OPENROUTER_API_KEY=\nAWS_PROFILE=\nLINEAR_API_KEY=lin\n");
-  vi.stubEnv("OPENROUTER_API_KEY", "sk-shell");
-  vi.stubEnv("AWS_PROFILE", "shell-profile");
-  vi.stubEnv("LINEAR_API_KEY", "lin-shell");
-  const io = fake();
-
-  await startService(deps(root, io));
-
-  const env = io.spawns[0]?.env;
-  expect(env?.OPENROUTER_API_KEY).toBe("sk-shell");
-  expect(env?.AWS_PROFILE).toBe("shell-profile");
-  expect(env?.LINEAR_API_KEY).toBe("lin");
 });
 
 test("the child is told where to host its dashboard and where its queue delivers", async () => {
@@ -226,21 +213,6 @@ test("the child is told where to host its dashboard and where its queue delivers
   expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
   expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
   expect(lines).toContain("  dashboard  http://localhost:9200");
-});
-
-test("the factory's own .env owns the world the service writes", async () => {
-  const root = builtFactory();
-  writeFileSync(
-    path.join(root, ".env"),
-    "WORKFLOW_POSTGRES_URL=postgres://me:secret@db.internal:5432/mine\n",
-  );
-  const io = fake();
-
-  await startService(deps(root, io));
-
-  expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_URL).toBe(
-    "postgres://me:secret@db.internal:5432/mine",
-  );
 });
 
 test("start runs node directly and records the pid, its process group and its bundle", async () => {

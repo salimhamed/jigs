@@ -31,7 +31,7 @@ const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 }
 const tmp = makeTmpDir();
 const factoryRoot = path.join(tmp, "factory");
 mkdirSync(factoryRoot, { recursive: true });
-vi.stubEnv("JIGS_FACTORY_ROOT", factoryRoot);
+vi.spyOn(process, "cwd").mockReturnValue(factoryRoot);
 vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 vi.stubEnv("WORKFLOW_POSTGRES_URL", testUrl.toString());
 

@@ -1,10 +1,10 @@
-import { copyFileSync, writeFileSync } from "node:fs";
+import { copyFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import * as hub from "../providers/hub.ts";
 import * as linearApi from "../providers/linear.ts";
-import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, removeTmpDir, useTestFactory } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
@@ -183,7 +183,7 @@ test("preflight lists a credential shared by a model and a Pi agent once", () =>
 });
 
 test("doctor checks the model source each Pi agent carries and names the workflows", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("TEAM_KEY", "");
   const checks = doctorChecks({
     one: {
@@ -214,7 +214,7 @@ test("doctor checks the model source each Pi agent carries and names the workflo
 });
 
 test("doctor checks the model sources a workflow declares", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({
     triage: { requires: { models: [models.openrouter("m", { apiKeyEnv: "TEAM_KEY" })] } },
   }).map((check) => check.id);
@@ -263,20 +263,20 @@ test("model requirements reject kind-only declarations", () => {
 });
 
 test("doctor does not infer a model credential without a descriptor", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("OPENROUTER_API_KEY", "configured");
   expect(doctorChecks({}).map((check) => check.id)).not.toContain("model.openrouter-api-key");
 });
 
 test("doctor omits checks that require a call-site model descriptor", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   expect(doctorChecks({}).map((check) => check.id)).not.toContain(
     "model.openai-compatible-runtime",
   );
 });
 
 test("doctor checks aws only when a workflow requires it", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("AWS_PROFILE", "some-profile");
   expect(doctorChecks({ hello: {} }).map((c) => c.id)).not.toContain("aws.credentials");
   vi.stubEnv("AWS_PROFILE", "");
@@ -288,7 +288,7 @@ test("doctor checks aws only when a workflow requires it", async () => {
 });
 
 test("a workflow's declared secrets are checked by preflight and doctor", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("SNOWFLAKE_TOKEN", "");
   expect(preflightIds({ secrets: ["SNOWFLAKE_TOKEN"] })).toEqual(["secret.SNOWFLAKE_TOKEN"]);
   const report = await runChecks(
@@ -323,11 +323,9 @@ test("preflight probes only the installations a workflow's agents name", async (
 });
 
 function factoryWith(config: string): string {
-  const factory = makeTmpDir();
-  onTestFinished(() => removeTmpDir(factory));
-  writeFileSync(path.join(factory, "jigs.config.ts"), `export default ${config}`);
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
-  return factory;
+  const parent = useTestFactory(`export default ${config}`);
+  onTestFinished(() => removeTmpDir(parent));
+  return path.join(parent, "factory");
 }
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
@@ -345,13 +343,13 @@ test("doctor checks no provider credential for a factory whose workflows require
   });
 });
 
-test("doctor fails a factory without its hub token, naming hub connect", async () => {
+test("doctor fails a factory without its hub token, naming the variable", async () => {
   factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(doctorChecks({ hello: {} }));
   expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
     ok: false,
-    repair: expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
+    repair: expect.stringContaining("set JIGS_HUB_TOKEN in the factory's environment"),
   });
 });
 
@@ -505,13 +503,13 @@ test("doctor sweeps the hub's Slack installations for a workflow requiring slack
 });
 
 test("doctor checks no harness for a factory whose workflows require none", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({ hello: {} }).map((check) => check.id);
   expect(ids.filter((id) => id.startsWith("harness."))).toEqual([]);
 });
 
 test("doctor checks each required harness and names the workflows that need it", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("PATH", "/nowhere");
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "");
   const harness = doctorChecks({
@@ -552,7 +550,7 @@ test("preflight probes the PagerDuty installations a workflow's agents name", as
   expect(report.checks.find((c) => c.id === "pagerduty.installations")).toMatchObject({
     ok: false,
     reason: "acme: the hub gave no PagerDuty token: JIGS_HUB_TOKEN is not set",
-    repair: expect.stringContaining("jigs hub connect"),
+    repair: expect.stringContaining("set JIGS_HUB_TOKEN"),
   });
 });
 
@@ -663,9 +661,7 @@ test("doctor reports an agent whose environment cannot be planned, rather than f
 });
 
 test("preflight and doctor check each declared skill folder, doctor naming the workflows", async () => {
-  const root = makeTmpDir();
-  onTestFinished(() => removeTmpDir(root));
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  const root = factoryWith(`{ ${HUB} }`);
   const analyst = harnesses.claude({ model: "opus", skills: ["skills/snowflake"] });
   expect(preflightIds({ agents: { analyst } })).toContain("skills.skills/snowflake");
 
@@ -688,7 +684,7 @@ test("the just-in-time checks cover the skills of the harness the body built", (
 });
 
 test("doctor shows a skill path once when no earlier entry could clash with it", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({
     report: { requires: { agents: { a: harnesses.claude({ model: "opus", skills: ["s/a"] }) } } },
     audit: {

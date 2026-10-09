@@ -1,11 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
-import { readFactoryEnv } from "../../config/factory-env.ts";
+import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
-import { stringEnv } from "../../steps/agents/shared/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { columns, detail, displayPath, hint, section } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
@@ -30,7 +28,6 @@ export const BUILD_MANIFEST = "node_modules/.nitro/workflow/manifest.json";
 
 export type UpStepName =
   | "locate"
-  | "env"
   | "install"
   | "compose"
   | "bootstrap"
@@ -51,7 +48,6 @@ export interface UpResult {
 }
 
 export interface UpDeps {
-  cwd: string;
   out: (line: string) => void;
   execFile?: ExecFile;
   processes?: ServiceProcesses;
@@ -74,22 +70,20 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service } = await runner.run("locate", (note) => {
-      const located = locate(deps.cwd);
-      note(located.factoryRoot);
-      return located;
+    const { ctx, service } = await runner.run("locate", (note) => {
+      const located = currentFactoryContext();
+      note(located.root);
+      return { ctx: located, service: resolveService(located) };
     });
+    const factoryRoot = ctx.root;
     result.factoryRoot = factoryRoot;
     result.serviceUrl = service.serviceUrl;
     result.dashboardUrl = service.dashboardUrl;
     const lifecycle: ServiceLifecycleDeps = {
-      cwd: factoryRoot,
       out: nested(deps.out),
       processes: deps.processes,
       startTimeoutMs: deps.readyTimeoutMs,
     };
-
-    const env = await runner.run("env", () => ensureEnv(factoryRoot));
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -104,7 +98,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     );
 
     const worldUrl = await runner.run("bootstrap", async () => {
-      const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
+      const url = await bootstrapWorld(execFile, ctx, deps.out);
       const migrate =
         deps.migrate ?? (await import("../../steps/runtime/registry.ts")).migrateRegistry;
       await migrate(url);
@@ -113,7 +107,6 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
 
     await runner.run("build", () =>
       buildFactoryService({
-        cwd: factoryRoot,
         out: nested(deps.out),
         execFile,
         prepare: deps.prepare,
@@ -162,80 +155,37 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   }
 }
 
-function locate(cwd: string): { factoryRoot: string; service: ResolvedService } {
-  const ctx = factoryContextAt(cwd);
-  return { factoryRoot: ctx.root, service: resolveService(ctx) };
-}
-
-// Never copied for the operator: a .env is where they decide which
-// credentials this factory holds.
-function ensureEnv(factoryRoot: string): Record<string, string> {
-  if (!existsSync(path.join(factoryRoot, ".env"))) {
-    if (!existsSync(path.join(factoryRoot, ".env.example"))) {
-      throw new JigsError(
-        `no .env or .env.example in ${factoryRoot}`,
-        "scaffold one: `pnpm exec jigs init`",
-      );
-    }
-    throw new JigsError(
-      `no .env in ${factoryRoot}`,
-      "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
-    );
-  }
-  const env = readFactoryEnv(factoryRoot);
-  // The service refuses to start without it, so nothing after this step could work.
-  if ((env.JIGS_HUB_TOKEN ?? "") === "") {
-    throw new JigsError(
-      "JIGS_HUB_TOKEN is not set in .env",
-      "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`",
-    );
-  }
-  return env;
-}
-
-// The World URL travels in the child's environment explicitly, never left to
-// bootstrap's own .env lookup: unset, it silently migrates
+// Checked here, never left to bootstrap's default: unset, it silently migrates
 // postgres://localhost:5432/world, which is nobody's factory.
 async function bootstrapWorld(
   execFile: ExecFile,
-  factoryRoot: string,
-  env: Record<string, string>,
+  ctx: FactoryContext,
   out: (line: string) => void,
 ): Promise<string> {
-  const url = env.WORKFLOW_POSTGRES_URL;
-  if (url === undefined || url === "") {
+  const url = ctx.env("WORKFLOW_POSTGRES_URL");
+  if (url === undefined) {
     throw new JigsError(
-      "WORKFLOW_POSTGRES_URL is not set in .env",
-      "set it to this factory's World, in the shape .env.example shows",
+      "WORKFLOW_POSTGRES_URL is not set",
+      "set it to this factory's World in the factory's environment",
     );
   }
-  const bin = path.join(factoryRoot, "node_modules", ".bin", "bootstrap");
+  const bin = path.join(ctx.root, "node_modules", ".bin", "bootstrap");
   if (!existsSync(bin)) {
     throw new JigsError(
       `no bootstrap in ${path.dirname(bin)}`,
       "pnpm install did not install @workflow/world-postgres\nadd it to this factory's package.json",
     );
   }
-  await execOrExplain(
-    execFile,
-    bin,
-    [],
-    {
-      cwd: factoryRoot,
-      env: { ...stringEnv(), ...env, WORKFLOW_POSTGRES_URL: url },
-    },
-    out,
-    {
-      missing: new JigsError(`${bin} is not executable`, "install again: `pnpm install`"),
-      failed: (err) =>
-        /ECONNREFUSED/.test(execOutput(err))
-          ? new JigsError(
-              `bootstrap could not reach the World at ${redactPassword(url)}`,
-              `docker-compose.yml publishes ${publishedPostgresPorts(factoryRoot)}, and the two have to agree`,
-            )
-          : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
-    },
-  );
+  await execOrExplain(execFile, bin, [], { cwd: ctx.root }, out, {
+    missing: new JigsError(`${bin} is not executable`, "install again: `pnpm install`"),
+    failed: (err) =>
+      /ECONNREFUSED/.test(execOutput(err))
+        ? new JigsError(
+            `bootstrap could not reach the World at ${redactPassword(url)}`,
+            `docker-compose.yml publishes ${publishedPostgresPorts(ctx.root)}, and the two have to agree`,
+          )
+        : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
+  });
   return url;
 }
 

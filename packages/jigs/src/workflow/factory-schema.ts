@@ -128,13 +128,13 @@ const eventTriggerSchema: z.ZodType<EventTrigger, EventTrigger> = z.strictObject
 export const factoryConfigSchema = z
   .strictObject({
     bindings: z.record(z.string(), bindingSchema).default({}),
-    // The hub this factory hears its providers through. Its token stays in
-    // .env as JIGS_HUB_TOKEN.
+    // The hub this factory hears its providers through. Its token is
+    // JIGS_HUB_TOKEN in the factory's environment.
     hub: z.strictObject({ url: z.url() }),
     // One service per factory repo, so the addresses belong to the factory
     // rather than the machine. Only non-secret operating parameters live here —
     // the World the service writes is a credential-bearing URL, so it stays in
-    // the factory's own .env. An absent section is read as an empty one, so what
+    // the factory's environment. An absent section is read as an empty one, so what
     // it is missing reports itself by name.
     service: z.preprocess<unknown, typeof serviceSchema, z.input<typeof serviceSchema>>(
       (section) => section ?? {},

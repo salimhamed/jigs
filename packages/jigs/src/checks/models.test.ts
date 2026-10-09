@@ -1,5 +1,5 @@
 import { expect, test } from "vitest";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
 import { inTestFactory } from "../test-fixtures.ts";
 import { models } from "../workflow/agents/harness-config.ts";
 import { preflightChecks } from "./index.ts";
@@ -12,7 +12,7 @@ test("an API model credential check requires the named environment variable with
   expect(missing).toEqual({
     ok: false,
     reason: "OPENROUTER_API_KEY is not set in the service's environment",
-    repair: `set OPENROUTER_API_KEY in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+    repair: `set OPENROUTER_API_KEY in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
   });
 
   await expect(modelApiKeyCheck("TEAM_OPENROUTER_KEY", () => "configured").run()).resolves.toEqual({

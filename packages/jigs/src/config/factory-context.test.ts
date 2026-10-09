@@ -44,7 +44,7 @@ test("a seeded context outlives a change of working factory", () => {
     }),
   );
   const seeded = currentFactoryContext();
-  vi.stubEnv("JIGS_FACTORY_ROOT", path.join(parent, "elsewhere"));
+  vi.spyOn(process, "cwd").mockReturnValue(path.join(parent, "elsewhere"));
 
   expect(currentFactoryContext()).toBe(seeded);
 });

@@ -23,7 +23,7 @@ import { JIGS_VERSION } from "../version.ts";
 const HUB_TIMEOUT_MS = 30_000;
 
 export const HUB_CONNECT =
-  "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`";
+  "set JIGS_HUB_TOKEN in the factory's environment to the token the hub showed when you added this factory";
 
 /** The hub answered with an error status. */
 export class HubResponseError extends JigsError {
