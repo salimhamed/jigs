@@ -138,7 +138,7 @@ test("a scheduled run names the schedule that fired it", async () => {
   // The schedule table is its own section, after the runs.
   expect(lines[2]).toBe("");
   expect(lines[3]).toBe(
-    "SCHEDULE       STATE   WORKFLOW         CRON       NEXT                      ACTIVE",
+    "SCHEDULE       STATE   WORKFLOW         CRON       NEXT                      RUNNING",
   );
   expect(lines[4]).toBe(
     `nightly-sweep  active  deliver-feature  0 3 * * *  2026-08-27T03:00:00.000Z  ${RUN}`,
@@ -197,8 +197,8 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
   });
   await showRuns(deps(), { now: NOW });
   expect(lines.slice(2)).toEqual([
-    "TRIGGER  STATE   WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  ACTIVE  FAILED",
-    "pages    active  respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
+    "TRIGGER  STATE   WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  RUNNING  FAILED",
+    "pages    active  respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3        1",
     "FAIL pages PABC: GitHub installations: the hub gave no GitHub token: 401 Unauthorized",
     "  check hub.url in jigs.config.ts and that the hub is running",
   ]);

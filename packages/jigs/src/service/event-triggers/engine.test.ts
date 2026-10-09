@@ -13,7 +13,7 @@ import { createTriggerEngine, type TriggerDeps } from "./engine.ts";
 import { startTriggers } from "./runner.ts";
 import type { Source, SourceOccurrence, SourceRegistry } from "./sources.ts";
 import type { TriggerStore } from "./store.ts";
-import { listTriggers, triggerChecks, triggerInstallations } from "./view.ts";
+import { listTriggers, triggerChecks } from "./view.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
   const targetWorld = process.env.WORKFLOW_TARGET_WORLD;
@@ -1116,22 +1116,6 @@ test("an unknown source kind is refused at boot with its repair, and the rest st
     '[trigger] broken not started: source "nope.things" is not a source this jigs version provides',
     "  → set triggers.broken.source in jigs.config.ts to one of: fake.pages",
   ]);
-});
-
-test("an inactive trigger is logged once and neither armed nor checked, however broken", () => {
-  const lines: string[] = [];
-  const quiet = factory({
-    off: { ...pagesTrigger, active: false, source: { kind: "nope.things", params: {} } },
-  });
-  const engine = createTriggerEngine(quiet, {
-    sources: { "fake.pages": fakeSource().source },
-    log: (line) => lines.push(line),
-    store: memoryStore().store,
-  });
-  expect(engine.triggers).toEqual([]);
-  expect(lines).toEqual(["[trigger] off inactive"]);
-  expect(triggerChecks(quiet)).toEqual([]);
-  expect(triggerInstallations(quiet)).toEqual({});
 });
 
 async function check(name: string, trigger: EventTrigger, sources?: SourceRegistry) {

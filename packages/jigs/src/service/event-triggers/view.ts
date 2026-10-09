@@ -87,8 +87,8 @@ export async function listTriggers(
 }
 
 /**
- * Doctor's half: for each active trigger, the same validations the engine refuses a trigger on,
- * and for a valid trigger its recent failed occurrences with their repairs.
+ * Doctor's half: the same validations the engine refuses a trigger on, and for a valid trigger its
+ * recent failed occurrences with their repairs.
  */
 export function triggerChecks(
   factory: Factory,
@@ -96,7 +96,6 @@ export function triggerChecks(
   deps: { store?: () => TriggerStore } = {},
 ): Check[] {
   return Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]): Check[] => {
-    if (!trigger.active) return [];
     const id = `trigger.${name}`;
     const label = `trigger ${name}`;
     const resolved = resolveTrigger(factory, name, trigger, sources);
@@ -132,7 +131,7 @@ export function triggerChecks(
 }
 
 /**
- * Each active trigger whose source this jigs version provides, with the
+ * Each declared trigger whose source this jigs version provides, with the
  * provider it reads and the installation it names.
  */
 export function triggerInstallations(
@@ -142,7 +141,7 @@ export function triggerInstallations(
   return Object.fromEntries(
     Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
       const source = sources[trigger.source.kind];
-      if (!trigger.active || source === undefined) return [];
+      if (source === undefined) return [];
       const { installationName } = trigger.source.params;
       return [
         [

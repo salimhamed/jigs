@@ -41,10 +41,6 @@ export function startSchedules(factory: Factory, deps: ScheduleDeps = {}): Cron[
   const log = deps.log ?? console.log;
   const jobs: Cron[] = [];
   for (const [name, schedule] of Object.entries(factory.schedules ?? {})) {
-    if (!schedule.active) {
-      log(`[schedule] ${name} inactive`);
-      continue;
-    }
     const problem = scheduleProblem(factory, name, schedule);
     if (problem !== null) {
       log(`[schedule] ${name} not scheduled: ${problem.reason}`);
@@ -118,22 +114,21 @@ export async function listSchedules(
     state: schedule.active ? "active" : "inactive",
     workflow: schedule.workflow,
     cron: schedule.cron,
-    next: nextOccurrence(schedule.cron),
+    next: schedule.active ? nextOccurrence(schedule.cron) : null,
     active: activeRunId(rows, name),
   }));
 }
 
 /** Doctor's half: the same cron and inputs validations the ticker refuses on,
- *  one check per active schedule. */
+ *  one check per schedule. */
 export function scheduleChecks(factory: Factory): Check[] {
-  return Object.entries(factory.schedules ?? {}).flatMap(([name, schedule]): Check[] => {
-    if (!schedule.active) return [];
+  return Object.entries(factory.schedules ?? {}).map(([name, schedule]) => {
     const id = `schedule.${name}`;
     const label = `schedule ${name}`;
     const problem = scheduleProblem(factory, name, schedule);
     return problem === null
-      ? [{ id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) }]
-      : [failedCheck(id, label, problem.reason, problem.repair)];
+      ? { id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) }
+      : failedCheck(id, label, problem.reason, problem.repair);
   });
 }
 

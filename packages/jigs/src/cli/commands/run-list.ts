@@ -124,7 +124,7 @@ export async function showRuns(
   if (result.schedules.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["SCHEDULE", "STATE", "WORKFLOW", "CRON", "NEXT", "ACTIVE"],
+      ["SCHEDULE", "STATE", "WORKFLOW", "CRON", "NEXT", "RUNNING"],
       result.schedules.map((schedule) => [
         schedule.name,
         schedule.state,
@@ -144,7 +144,7 @@ export async function showRuns(
   if (result.triggers.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["TRIGGER", "STATE", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
+      ["TRIGGER", "STATE", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "RUNNING", "FAILED"],
       result.triggers.map((trigger) => [
         trigger.name,
         trigger.state,

@@ -1,7 +1,12 @@
 import { expect, test, vi } from "vitest";
 import { z } from "zod";
 import { memoryTriggerStore } from "../test-fixtures.ts";
-import { recordedOccurrences, startTriggers, withdrawOccurrence } from "./runner.ts";
+import {
+  recordedOccurrences,
+  startTriggers,
+  withdrawInactive,
+  withdrawOccurrence,
+} from "./runner.ts";
 
 const quiescers = vi.hoisted((): Array<() => Promise<void>> => []);
 vi.mock("../shutdown.ts", () => ({
@@ -46,4 +51,20 @@ test("once the triggers shut down, a lookup rejects rather than read as no occur
   await expect(withdrawOccurrence({ trigger: "pages", occurrence: "P1" })).rejects.toThrow(
     "shut down",
   );
+});
+
+test("an inactive trigger's waiting occurrences are skipped, and a claimed one is left alone", async () => {
+  const memory = memoryTriggerStore(() => T0, T0);
+  const row = {
+    trigger: "pages",
+    state: "pending",
+    inputs: {},
+    attribute: "a",
+    occurredAt: T0,
+  } as const;
+  await memory.store.record({ ...row, occurrence: "P1" });
+  await memory.store.record({ ...row, occurrence: "P2" });
+  await memory.store.attempt("pages", "P2", T0);
+  await withdrawInactive(["pages"], { ready: async () => {}, store: memory.store });
+  expect((await memory.store.pending("pages")).map((r) => r.occurrence)).toEqual(["P2"]);
 });

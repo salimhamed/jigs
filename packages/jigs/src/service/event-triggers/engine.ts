@@ -108,10 +108,6 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
 
   const armed: Armed[] = [];
   for (const [name, trigger] of Object.entries(factory.triggers ?? {})) {
-    if (!trigger.active) {
-      log(`[trigger] ${name} inactive`);
-      continue;
-    }
     const resolved = resolveTrigger(factory, name, trigger, deps.sources ?? SOURCES);
     if ("reason" in resolved) {
       log(`[trigger] ${name} not started: ${resolved.reason}`);

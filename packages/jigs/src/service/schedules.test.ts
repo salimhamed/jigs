@@ -146,15 +146,17 @@ test("a malformed schedule is logged with its repair and left unscheduled", () =
   }
 });
 
-test("an inactive schedule is logged once, never scheduled or checked, and listed as inactive", async () => {
-  const lines: string[] = [];
-  const quiet = factory({ off: { ...nightlySchedule, active: false, cron: "always" } });
-  const jobs = startSchedules(quiet, { log: (line) => lines.push(line) });
-  expect(jobs).toEqual([]);
-  expect(lines).toEqual(["[schedule] off inactive"]);
-  expect(scheduleChecks(quiet)).toEqual([]);
-  expect(await listSchedules(quiet, { listRuns: async () => [] })).toMatchObject([
-    { name: "off", state: "inactive" },
+test("an inactive schedule is listed as inactive, with no next fire", async () => {
+  const quiet = factory({ off: { ...nightlySchedule, active: false } });
+  expect(await listSchedules(quiet, { listRuns: async () => [] })).toEqual([
+    {
+      name: "off",
+      state: "inactive",
+      workflow: "sweep",
+      cron: "0 3 * * *",
+      next: null,
+      active: null,
+    },
   ]);
 });
 
