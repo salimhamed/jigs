@@ -3,7 +3,7 @@ import { writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { afterEach, expect, test } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, testFactoryContext } from "../test-fixtures.ts";
 import { defineFactory } from "../workflow/factory.ts";
 import { parseFactoryConfig } from "../workflow/factory-schema.ts";
 import { addWorkflow, removeBinding, upsertBinding } from "./config-edit.ts";
@@ -22,7 +22,7 @@ function factory(source: string) {
 }
 const source = `// Factory config.
 export default {
-  hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 },
+  hub: { url: "https://hub.example.test" },
   bindings: {
     // Main API.
     "acme-api": {
@@ -56,7 +56,6 @@ test("defineFactory rejects an unknown top-level section at compile time and whe
   expect(() =>
     defineFactory({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       workflows: {},
       // @ts-expect-error lienar is not a factory section
       lienar: {},
@@ -65,16 +64,9 @@ test("defineFactory rejects an unknown top-level section at compile time and whe
 });
 
 test.each([
-  [{ service: {} }, "dashboardPort"],
-  [{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 0 } }, "dashboardPort"],
-  [
-    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090, port: 70000 } },
-    "port",
-  ],
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       bindings: { api: {} },
     },
     "remote",
@@ -82,7 +74,6 @@ test.each([
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url", installationName: "gh", hookTimeoutMinutes: 0 } },
     },
     "hookTimeoutMinutes",
@@ -90,7 +81,6 @@ test.each([
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url", installationName: "gh", typo: true } },
     },
     "typo",
@@ -98,7 +88,6 @@ test.each([
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url" } },
     },
     "bindings.api.installationName",
@@ -106,17 +95,15 @@ test.each([
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       bindings: { api: { remote: "url", installationName: "Acme_GitHub" } },
     },
     "must be an installation name from the hub",
   ],
-  [{ service: { dashboardPort: 9090 } }, "hub"],
-  [{ hub: { url: "hub.example.test" }, service: { dashboardPort: 9090 } }, "url"],
+  [{}, "hub"],
+  [{ hub: { url: "hub.example.test" } }, "url"],
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       slack: { scopes: [] },
     },
     'Unrecognized key: "slack"',
@@ -124,49 +111,57 @@ test.each([
   [
     {
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       pagerduty: { from: "oncall@example.com" },
     },
     'Unrecognized key: "pagerduty"',
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { port: 8990 },
+    },
+    'Unrecognized key: "service"',
   ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
 });
 
-test("service port defaults while dashboard port is explicit", () => {
-  expect(
-    parseFactoryConfig({
-      hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
-    }).service,
-  ).toEqual({ port: 8990, dashboardPort: 3456 });
+test("the service's ports come from the environment", () => {
+  const ctx = testFactoryContext({
+    env: { JIGS_SERVICE_PORT: "7001", JIGS_DASHBOARD_PORT: "7002" },
+  });
+  expect(resolveService(ctx)).toMatchObject({
+    serviceUrl: "http://localhost:7001",
+    dashboardUrl: "http://localhost:7002",
+  });
+});
+
+test.each(["JIGS_SERVICE_PORT", "JIGS_DASHBOARD_PORT"])("an unset %s fails by name", (name) => {
+  const env = { JIGS_SERVICE_PORT: "7001", JIGS_DASHBOARD_PORT: "7002", [name]: "" };
+  expect(() => resolveService(testFactoryContext({ env }))).toThrow(`${name} is not set`);
 });
 
 test("agent environment names default to none and must be names, not values", () => {
   expect(
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
     }).agents,
   ).toEqual({ env: [] });
   expect(
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
       agents: { env: ["MISE_DATA_DIR"] },
     }).agents.env,
   ).toEqual(["MISE_DATA_DIR"]);
   expect(() =>
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
       agents: { env: ["A=b"] },
     }),
   ).toThrow("agents.env.0");
   expect(() =>
     defineFactory({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 3456 },
       agents: { env: ["A=b"] },
       workflows: {},
     }),
@@ -184,7 +179,6 @@ test.each([
 ])("agents.env rejects %s, which jigs sets or which selects a model credential", (name) => {
   const definition = {
     hub: { url: "https://hub.example.test" },
-    service: { dashboardPort: 3456 },
     agents: { env: [name] },
     workflows: {},
   };
@@ -213,7 +207,6 @@ test("updating an installation name preserves all surrounding text and comments"
 test("a binding without an installation name gains one beside its remote", () => {
   const input = `export default {
   hub: { url: "https://hub.example.test" },
-  service: { dashboardPort: 9090 },
   bindings: {
     // Main API.
     api: {
@@ -390,7 +383,7 @@ test("adding a binding to a one-line object ignores commas in comments", () => {
 
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
-    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } };",
+    "export default { hub: { url: 'https://hub.example.test' } };",
     "api",
     { remote: "url", installationName: "gh" },
   );
@@ -436,25 +429,25 @@ test("an already registered workflow leaves the config alone", () => {
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
   const root = factory(
-    `const service = { dashboardPort: 9090 }; export default { hub: { url: "https://hub.example.test" }, service, bindings: { api: { remote: "url", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
+    `const github = { operator: "octo" }; export default { hub: { url: "https://hub.example.test" }, github, bindings: { api: { remote: "url", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
   const ctx = resolveFactoryContext(root);
-  expect(resolveService(ctx).dashboardPort).toBe(9090);
+  expect(ctx.config.github.operator).toBe("octo");
   expect(resolveBinding(ctx.config, "api").remote).toBe("url");
 });
 
 test("native TypeScript config is one snapshot per process and a new process sees edits", () => {
   const root = factory(
-    `import service from "./settings.ts"; export default { hub: { url: "https://hub.example.test" }, service };`,
+    `import github from "./settings.ts"; export default { hub: { url: "https://hub.example.test" }, github };`,
   );
   const settings = path.join(root, "settings.ts");
   writeFileSync(
     settings,
-    "const service: { dashboardPort: number } = { dashboardPort: 9090 }; export default service;",
+    'const github: { operator: string } = { operator: "first" }; export default github;',
   );
-  expect(resolveService(resolveFactoryContext(root)).dashboardPort).toBe(9090);
-  writeFileSync(settings, "export default { dashboardPort: 9091 };");
-  expect(resolveService(resolveFactoryContext(root)).dashboardPort).toBe(9090);
+  expect(resolveFactoryContext(root).config.github.operator).toBe("first");
+  writeFileSync(settings, 'export default { operator: "second" };');
+  expect(resolveFactoryContext(root).config.github.operator).toBe("first");
 
   const moduleUrl = pathToFileURL(
     fileURLToPath(new URL("./factory-config.ts", import.meta.url)),
@@ -469,13 +462,12 @@ test("native TypeScript config is one snapshot per process and a new process see
     ],
     { encoding: "utf8" },
   );
-  expect(JSON.parse(output).service.dashboardPort).toBe(9091);
+  expect(JSON.parse(output).github.operator).toBe("second");
 });
 
 const withSettings = (extra: Record<string, unknown>) =>
   parseFactoryConfig({
     hub: { url: "https://hub.example.test" },
-    service: { dashboardPort: 9090 },
     ...extra,
   });
 
@@ -582,7 +574,6 @@ test("defineFactory refuses a schedule naming a workflow it does not declare", (
   expect(() =>
     defineFactory({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9090 },
       workflows: sweep,
       schedules: { nightly: { active: true, workflow: "swep", cron: "0 3 * * *", inputs: {} } },
     }),

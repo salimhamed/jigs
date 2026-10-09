@@ -51,7 +51,6 @@ import { defineFactory, slack } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { dashboardPort: 3456 },
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
   triggers: {
     "answer-questions": {

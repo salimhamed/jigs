@@ -134,7 +134,7 @@ Then start the run again.
 An agent step that runs in a worktree writes what the agent does to a stream
 while it works: its text and reasoning, and each tool call and result. To watch
 it, open the run in the dashboard the service hosts (`jigs service status`
-prints its URL, on `dashboardPort`), go to the **Streams** tab and pick the
+prints its URL, on `JIGS_DASHBOARD_PORT`), go to the **Streams** tab and pick the
 stream of the step. The stream updates every few seconds while the run is
 active. Each attempt of a step starts with an `attempt-start` record naming the
 attempt, the harness and the worktree. Questions to an agent without a
@@ -191,7 +191,7 @@ is left, then delete the record.
 
 ## Starting the service says the URL is already served by another process
 
-Another program already listens on the factory's `service.port`, so the new
+Another program already listens on the factory's `JIGS_SERVICE_PORT`, so the new
 service could not take the port. jigs stops the service it just started and
 leaves the other process alone. The message names that process ID, or says the
 answer carried none when the program is not a jigs service.
@@ -199,7 +199,7 @@ answer carried none when the program is not a jigs service.
 Find the program with `ps -p <pid> -o pid,command`, or with `lsof -i :<port>`
 when no ID is named. Stop it if it should not be running, often a service
 another factory or checkout started, then run `jigs up` again. To keep both,
-give this factory another `service.port` in `jigs.config.ts`.
+give this factory another `JIGS_SERVICE_PORT`.
 
 ## A service command says the service record is unreadable
 

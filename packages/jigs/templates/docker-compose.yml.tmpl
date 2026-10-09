@@ -1,5 +1,4 @@
-# Isolate this factory's container and volume from other factories.
-name: {{FACTORY_NAME}}
+name: ${COMPOSE_PROJECT_NAME}
 services:
   postgres:
     image: postgres:17-alpine
@@ -8,7 +7,7 @@ services:
       POSTGRES_PASSWORD: jigs
       POSTGRES_DB: jigs
     ports:
-      - "127.0.0.1:{{POSTGRES_PORT}}:5432"
+      - "127.0.0.1:${JIGS_POSTGRES_PORT:?is not set}:5432"
     volumes:
       - postgres-data:/var/lib/postgresql/data
     healthcheck:

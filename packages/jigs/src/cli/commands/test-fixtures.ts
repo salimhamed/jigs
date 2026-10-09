@@ -2,6 +2,7 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import { createServer, type Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import path from "node:path";
+import { vi } from "vitest";
 import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 import type { ExecFile, ExecOptions } from "../exec.ts";
 import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-process.ts";
@@ -18,7 +19,7 @@ export function closeFakeServices(): void {
   for (const server of servers.splice(0)) server.close();
 }
 
-// A factory the way `jigs init` leaves it, plus the code the operator wrote.
+// A factory the way `jigs init` leaves it, plus the code and environment the operator wrote.
 export interface FactoryShape {
   port: number;
   compose?: boolean;
@@ -29,16 +30,18 @@ export interface FactoryShape {
 export function factory(tmp: string, shape: FactoryShape): string {
   const root = path.join(tmp, "acme-factory");
   mkdirSync(root, { recursive: true });
+  vi.stubEnv("JIGS_SERVICE_PORT", String(shape.port));
+  vi.stubEnv("JIGS_DASHBOARD_PORT", "9200");
   if (shape.compose !== false) {
     writeFileSync(
       path.join(root, "docker-compose.yml"),
-      'name: acme-factory\nservices:\n  postgres:\n    ports:\n      - "127.0.0.1:5555:5432"\n',
+      "services:\n  postgres:\n    image: postgres:17-alpine\n",
     );
   }
   if (shape.config !== false) {
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {hub: {url: "https://hub.example.test"}, service: {port: ${shape.port}, dashboardPort: 9200}, workflows: {}};\n`,
+      `export default {hub: {url: "https://hub.example.test"}, workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");

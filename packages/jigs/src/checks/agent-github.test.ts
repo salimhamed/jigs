@@ -41,9 +41,7 @@ test("preflight checks a workflow's opted-in agents", () => {
 });
 
 test("doctor checks github-mcp-server is installed instead of probing it without a token", () => {
-  const parent = useTestFactory(
-    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
-  );
+  const parent = useTestFactory("export default { hub: { url: 'https://hub.example.test' } }");
   onTestFinished(() => removeTmpDir(parent));
   const withMcp = harnesses.claude({
     model: "m",

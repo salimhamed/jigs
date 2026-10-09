@@ -10,7 +10,6 @@ let parent: string;
 beforeEach(() => {
   parent = useTestFactory({
     hub: { url: "https://hub.example.test" },
-    service: { port: 8990, dashboardPort: 9090 },
   });
 });
 afterEach(() => {
@@ -24,7 +23,7 @@ test("a seeded context answers with the built configuration and never reads jigs
   seedFactoryContext(
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { port: 7001, dashboardPort: 7002 },
+      github: { operator: "built" },
       workflows: {},
     }),
   );
@@ -32,14 +31,13 @@ test("a seeded context answers with the built configuration and never reads jigs
 
   const ctx = currentFactoryContext();
   expect(ctx.root).toBe(root);
-  expect(ctx.config.service.port).toBe(7001);
+  expect(ctx.config.github.operator).toBe("built");
 });
 
 test("a seeded context outlives a change of working factory", () => {
   seedFactoryContext(
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { port: 7001, dashboardPort: 7002 },
       workflows: {},
     }),
   );

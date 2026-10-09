@@ -26,9 +26,7 @@ test("preflight checks the installations of each provider a workflow's agents op
 });
 
 test("doctor leaves a hosted server reading an agent token to the step's own probe", () => {
-  const parent = useTestFactory(
-    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
-  );
+  const parent = useTestFactory("export default { hub: { url: 'https://hub.example.test' } }");
   onTestFinished(() => removeTmpDir(parent));
   const triager = harnesses.claude({
     model: "m",

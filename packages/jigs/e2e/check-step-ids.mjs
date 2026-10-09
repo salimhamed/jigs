@@ -463,7 +463,7 @@ function bootOutcome(
   // The World is the stub whatever the shell says; the URL is the registry's.
   const env = {
     ...baseEnv,
-    PORT: String(BOOT_PORT),
+    JIGS_SERVICE_PORT: String(BOOT_PORT),
     JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
     WORKFLOW_TARGET_WORLD: BOOT_WORLD,
     WORKFLOW_POSTGRES_URL: postgresUrl,
@@ -670,9 +670,8 @@ export default defineWorkflow({ inputs: runtimeE2eInputs, workflow: runtimeE2eWo
 function runtimeEnv(postgresUrl) {
   return {
     ...process.env,
-    PORT: String(RUNTIME_PORT),
+    JIGS_SERVICE_PORT: String(RUNTIME_PORT),
     JIGS_DASHBOARD_PORT: String(RUNTIME_DASHBOARD_PORT),
-    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${RUNTIME_PORT}`,
     WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
     WORKFLOW_POSTGRES_URL: postgresUrl,
     WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
@@ -1216,10 +1215,7 @@ if (hub === undefined) {
   );
   factory = factories.get("bare");
   if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
-  installCompiledCancellationFixture(factory, {
-    service: CANCEL_PORT,
-    dashboard: CANCEL_DASHBOARD_PORT,
-  });
+  installCompiledCancellationFixture(factory);
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,

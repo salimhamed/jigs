@@ -53,9 +53,7 @@ const remote = (url: string) =>
 const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]);
 
 beforeEach(() => {
-  factory = useTestFactory(
-    `export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }`,
-  );
+  factory = useTestFactory(`export default { hub: { url: "https://hub.example.test" } }`);
   memoryRows.length = 0;
   vi.mocked(git).mockResolvedValue("");
   // The first push creates the branch; every later one updates it.

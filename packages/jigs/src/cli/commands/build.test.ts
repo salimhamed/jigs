@@ -9,7 +9,7 @@ function factory(): string {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 59321 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };",
   );
   mkdirSync(path.join(root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(path.join(root, "node_modules", ".bin", "nitro"), "");
@@ -50,7 +50,7 @@ test("a factory with no nitro installed is told to install, not to guess", async
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 59321 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };",
   );
 
   runFrom(root);

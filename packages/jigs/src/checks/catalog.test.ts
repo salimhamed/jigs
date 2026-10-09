@@ -329,7 +329,7 @@ function factoryWith(config: string): string {
 }
 
 test("doctor checks no provider credential for a factory whose workflows require none", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+  factoryWith('{ hub: { url: "https://hub.example.test" } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
     factory: { name: "personal" },
@@ -344,7 +344,7 @@ test("doctor checks no provider credential for a factory whose workflows require
 });
 
 test("doctor fails a factory without its hub token, naming the variable", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+  factoryWith('{ hub: { url: "https://hub.example.test" } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(doctorChecks({ hello: {} }));
   expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
@@ -354,7 +354,7 @@ test("doctor fails a factory without its hub token, naming the variable", async 
 });
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+  factoryWith('{ hub: { url: "https://hub.example.test" } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(
     doctorChecks({
@@ -373,7 +373,7 @@ test("doctor checks each provider a workflow requires and names the workflows", 
   });
 });
 
-const HUB = 'hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }';
+const HUB = 'hub: { url: "https://hub.example.test" }';
 
 const hubStatus = (
   apps: Array<{ provider: "github" | "linear" | "slack" | "pagerduty"; installationName: string }>,
@@ -593,9 +593,7 @@ const probeServer = (credential: string) => ({
 });
 
 test("doctor probes each MCP server a required agent declares, from the factory root", async () => {
-  const factory = factoryWith(
-    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
-  );
+  const factory = factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   copyFileSync(PROBE_SERVER, path.join(factory, "mcp-probe-server.mjs"));
   vi.stubEnv("PROBE_SOURCE", "from-factory");
   const builder = harnesses.claude({
@@ -611,7 +609,7 @@ test("doctor probes each MCP server a required agent declares, from the factory 
 });
 
 test("doctor names the workflows whose agents declare a failing MCP server", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   const builder = harnesses.claude({
     model: "opus",
     mcpServers: { github: probeServer("MISSING_PROBE_TOKEN") },
@@ -635,7 +633,7 @@ test("doctor names the workflows whose agents declare a failing MCP server", asy
 });
 
 test("doctor reports an agent whose environment cannot be planned, rather than failing", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   // Built by hand: the harness builder would have filled in `compat`.
   const builder = {
     kind: "pi",

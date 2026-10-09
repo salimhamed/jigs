@@ -32,7 +32,7 @@ import { formatError } from "./output.ts";
 const serviceOption = () =>
   new Option(
     "--service-url <url>",
-    "jigs service URL (default: this factory's service.port in jigs.config.ts)",
+    "jigs service URL (default: localhost on JIGS_SERVICE_PORT)",
   ).env("JIGS_SERVICE_URL");
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {

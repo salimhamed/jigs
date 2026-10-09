@@ -36,7 +36,7 @@ const API = "git@github.com:acme/Api.git";
 const writeConfig = (bindings: string, extra = "") =>
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    `export default { ${extra}hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, bindings: { ${bindings} }, workflows: {} };`,
+    `export default { ${extra}hub: { url: "https://hub.example.test" }, bindings: { ${bindings} }, workflows: {} };`,
   );
 
 test("bind writes the remote under a name derived from the repo", async () => {
@@ -307,7 +307,7 @@ test("the label leg without a hub token fails with the hub's repair, after recor
 test("bind ensures every jigs label on every run, whatever the approval", async () => {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, workflows: {} };',
   );
   const ensureLabel = vi.fn().mockResolvedValueOnce("created").mockResolvedValueOnce("verified");
 
@@ -330,7 +330,7 @@ test("a factory approving by review still gets the jigs labels", async () => {
   const ensureLabel = vi.fn().mockResolvedValue("verified");
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { operator: "me" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { operator: "me" }, hub: { url: "https://hub.example.test" }, workflows: {} };',
   );
 
   await bindRepo(API, deps({ ensureLabel }), { installation: "gh" });
@@ -437,7 +437,7 @@ test("bind with a non-github remote skips the label leg", async () => {
 });
 
 test("unsupported bindings fail before modifying files or ensuring labels", async () => {
-  const text = `const bindings = {}; export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings };`;
+  const text = `const bindings = {}; export default { hub: { url: "https://hub.example.test" }, bindings };`;
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
   const ensureLabel = vi.fn();
   await expect(bindRepo(API, deps({ ensureLabel }), { installation: "gh" })).rejects.toThrow(

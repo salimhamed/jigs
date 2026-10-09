@@ -346,15 +346,11 @@ function factoryRootOrNull(context: () => FactoryContext): string | null {
   }
 }
 
-// The run's page on the dashboard this service hosts. A service started
-// without a dashboard port has none to point at, and the answer is not to name
-// a standalone `workflow web`: run against a live World it opens a second queue
-// worker and steals the jobs this run is waiting on.
+// The run's page on the dashboard this service hosts, never a standalone
+// `workflow web`: run against a live World it opens a second queue worker and
+// steals the jobs this run is waiting on.
 function dashboardPointer(ctx: FactoryContext, runId: string): string {
-  const port = ctx.env("JIGS_DASHBOARD_PORT");
-  return port === undefined || port === ""
-    ? "dashboard: not configured"
-    : `http://localhost:${port}/run/${runId}`;
+  return `http://localhost:${ctx.env("JIGS_DASHBOARD_PORT")}/run/${runId}`;
 }
 
 // Every hook the run holds, the locks among them.

@@ -130,7 +130,6 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   workflows: {
     "incident-triage": () => import("./workflows/incident-triage/incident-triage.ts"),
   },

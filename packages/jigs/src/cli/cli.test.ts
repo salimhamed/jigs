@@ -70,7 +70,7 @@ test("a command loads the factory's config from its root before reading the envi
   try {
     const root = makeFactoryRepo(
       parent,
-      `process.env.JIGS_SERVICE_URL = "set-by-config";\nexport default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};\n`,
+      `process.env.JIGS_SERVICE_URL = "set-by-config";\nexport default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, workflows: {} })};\n`,
     );
     const nested = path.join(root, "workflows");
     mkdirSync(nested);
