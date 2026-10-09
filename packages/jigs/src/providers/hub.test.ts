@@ -57,18 +57,22 @@ test("a hub failure other than an unknown installation carries no hint", async (
   });
   expect((error as { hint?: string }).hint).toBeUndefined();
 });
-test("a rejected factory token says how to connect again", async () => {
+test("a rejected factory token names the hub", async () => {
   hubAnswering(new Response("", { status: 401 }));
   await expect(fetchFactoryStatus(ctx())).rejects.toMatchObject({
     status: 401,
     message: "the hub at https://hub.example.test rejected JIGS_HUB_TOKEN",
-    hint: expect.stringContaining("set JIGS_HUB_TOKEN"),
   });
 });
 
-test("no request is made without a factory token", async () => {
+test("no request is made without a hub connection", async () => {
   const { calls } = hubAnswering(jsonResponse({}));
-  await expect(fetchFactoryStatus(ctx(null))).rejects.toThrow("JIGS_HUB_TOKEN is not set");
+  await expect(fetchFactoryStatus(ctx(null))).rejects.toThrow("this copy has no hub connection");
+  await expect(
+    fetchFactoryStatus(
+      testFactoryContext({ config: { hub: undefined }, env: { JIGS_HUB_TOKEN: "token" } }),
+    ),
+  ).rejects.toThrow("this copy has no hub connection");
   expect(calls).toEqual([]);
 });
 

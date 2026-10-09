@@ -10,7 +10,7 @@ import { stopProcessGroups } from "../steps/agents/shared/process-group.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
 import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
-import type { WorkflowDefinition } from "../workflow/factory.ts";
+import type { Factory, WorkflowDefinition } from "../workflow/factory.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
 import { installShutdown, onShutdown } from "./shutdown.ts";
 
@@ -90,27 +90,36 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
 }
 
 /** Injectable configuration and output used by the hub startup gate. */
-export interface HubTokenGateDeps {
+export interface HubGateDeps {
   context?: () => Promise<FactoryContext>;
   exit?: (code: number) => void;
   error?: (line: string) => void;
 }
 
-// Without its token the factory hears nothing from its providers, and every run
-// that waits on one waits forever.
-/** Refuse service startup when the factory is not connected to its hub. */
-export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boolean> {
-  try {
-    const { hubConnection } = await import("../providers/hub.ts");
-    hubConnection(await (deps.context ?? serviceContext)());
-    return true;
-  } catch (err) {
-    (deps.error ?? ((line: string) => console.error(line)))(
-      `[service] ${describe(err)}, then restart the service`,
-    );
-    (deps.exit ?? process.exit)(1);
-    return false;
-  }
+// Every trigger source reads a provider, so an active trigger in a copy with no
+// hub hears nothing, and an active schedule would fail every run it starts.
+/**
+ * Refuse service startup when a copy with no hub connection has an active trigger, or an active
+ * schedule whose workflow needs a provider.
+ */
+export async function gateOnHubUse(live: Factory, deps: HubGateDeps = {}): Promise<boolean> {
+  const [{ hubConnection }, { needsHub }] = await Promise.all([
+    import("../providers/hub.ts"),
+    import("../checks/index.ts"),
+  ]);
+  if (hubConnection(await (deps.context ?? serviceContext)()) !== undefined) return true;
+  const offenders = [
+    ...Object.keys(live.triggers ?? {}).map((name) => `trigger ${name}`),
+    ...Object.entries(live.schedules ?? {})
+      .filter(([, schedule]) => needsHub(live.workflows[schedule.workflow]?.requires ?? {}))
+      .map(([name]) => `schedule ${name}`),
+  ];
+  if (offenders.length === 0) return true;
+  (deps.error ?? ((line: string) => console.error(line)))(
+    `[service] this copy has no hub connection, which ${offenders.join(", ")} need`,
+  );
+  (deps.exit ?? process.exit)(1);
+  return false;
 }
 
 /** Injectable database operations and output used by the registry startup gate. */
@@ -295,8 +304,11 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
   return true;
 }
 
-/** Run the ordered service startup gates, then enable readiness and start the hub client. */
-export async function startWorld() {
+/**
+ * Run the ordered service startup gates, then enable readiness and start the hub client when this
+ * copy has a hub connection. `live` is the factory with only its active triggers and schedules.
+ */
+export async function startWorld(live: Factory) {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
   // stop` during a first clone or against a hanging Postgres has to end in an
   // exit, not the CLI's SIGKILL. A clone child mid-gate is orphaned to
@@ -315,7 +327,7 @@ export async function startWorld() {
   if (!(await gateOnHarnessRuntimes())) return;
 
   setBootPhase("hub");
-  if (!(await gateOnHubToken())) return;
+  if (!(await gateOnHubUse(live))) return;
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.
@@ -360,8 +372,10 @@ async function startHub(ctx: FactoryContext): Promise<void> {
     import("./event-triggers/runner.ts"),
     import("../providers/hub.ts"),
   ]);
+  const hub = hubConnection(ctx);
+  if (hub === undefined) return;
   const client = startHubClient({
-    ...hubConnection(ctx),
+    ...hub,
     route: { context: ctx, push: pushEvent },
   });
   onShutdown(() => client.stop(), { phase: "quiesce" });

@@ -3,7 +3,7 @@ import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { githubInstallationProbe } from "../providers/github-checks.ts";
-import { fetchFactoryStatus } from "../providers/hub.ts";
+import { fetchFactoryStatus, hubConnection } from "../providers/hub.ts";
 import { linearInstallationProbe } from "../providers/linear-checks.ts";
 import { pagerDutyInstallationProbe } from "../providers/pagerduty-checks.ts";
 import { slackInstallationProbe } from "../providers/slack-checks.ts";
@@ -61,6 +61,11 @@ function integrationsOf(requires: WorkflowRequires): Provider[] {
   return [...new Set([...(requires.integrations ?? []), ...opted])];
 }
 
+/** Whether a workflow's runs reach a provider, and so need this copy's hub connection. */
+export function needsHub(requires: WorkflowRequires): boolean {
+  return integrationsOf(requires).length > 0 || (requires.bindings ?? []).length > 0;
+}
+
 /** An event trigger as doctor sees it: the provider its source reads, and the installation it names. */
 export interface TriggerInstallation {
   provider: Provider;
@@ -74,6 +79,15 @@ function agentInstallations(requires: WorkflowRequires, provider: Provider): str
   return Object.values(requires.agents ?? {}).flatMap(
     (agent) => agent[provider]?.installationName ?? [],
   );
+}
+
+// An unreadable config connects nothing: the binding checks report it.
+function connected(ctx: FactoryContext): boolean {
+  try {
+    return hubConnection(ctx) !== undefined;
+  } catch {
+    return false;
+  }
 }
 
 // An unreadable config binds nothing: the binding checks report it.
@@ -139,6 +153,7 @@ export function preflightChecks(
         ];
   };
   return [
+    ...(needsHub({ ...requires, bindings }) ? hubChecks(ctx) : []),
     ...PROVIDERS.filter((provider) => integrations.includes(provider)).flatMap(installations),
     ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
@@ -323,9 +338,12 @@ export function doctorChecks(
       watching.map(([name]) => name),
     );
   };
+  // Unconnected, nothing live needs the hub: the boot refuses an active trigger
+  // or schedule that does, and preflight refuses a run that does.
+  const providers = connected(ctx) ? PROVIDERS.flatMap(installations) : [];
   return [
-    ...hubChecks(ctx, status),
-    ...PROVIDERS.flatMap(installations),
+    ...(providers.length > 0 ? hubChecks(ctx, status) : []),
+    ...providers,
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),

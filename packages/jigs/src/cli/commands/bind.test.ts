@@ -287,7 +287,7 @@ afterEach(() => {
 
 const failLabel = (err: unknown) => deps({ ensureLabel: vi.fn().mockRejectedValue(err) });
 
-test("the label leg without a hub token fails with the hub's repair, after recording the binding", async () => {
+test("the label leg without a hub connection fails with its repair, after recording the binding", async () => {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
 
   const failure = await bindRepo(
@@ -299,7 +299,7 @@ test("the label leg without a hub token fails with the hub's repair, after recor
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("jigs:approved label could not be ensured");
   expect((failure as { hint?: string }).hint).toContain(
-    "set JIGS_HUB_TOKEN in the factory's environment",
+    "JIGS_HUB_TOKEN in this copy's environment",
   );
   expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
 });

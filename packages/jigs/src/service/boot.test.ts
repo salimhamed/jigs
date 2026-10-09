@@ -5,11 +5,12 @@ import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
 import { inTestFactory, testFactoryContext } from "../test-fixtures.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
+import type { Factory } from "../workflow/factory.ts";
 import {
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
-  gateOnHubToken,
+  gateOnHubUse,
   gateOnRegistry,
   gateOnWorldStart,
 } from "./boot.ts";
@@ -456,24 +457,49 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
   expect(checked).toEqual([["claude"]]);
 });
 
-test("without its hub token the service refuses the boot and says how to connect", async () => {
+const hubUser = {
+  workflows: {
+    hello: { requires: {} },
+    answer: { requires: { integrations: ["slack"] } },
+  },
+  triggers: {
+    pages: {
+      active: true,
+      workflow: "hello",
+      source: { kind: "pagerduty.incidents", params: { installationName: "acme" } },
+    },
+  },
+  schedules: {
+    nightly: { active: true, workflow: "answer", cron: "0 3 * * *", inputs: {} },
+    hourly: { active: true, workflow: "hello", cron: "0 * * * *", inputs: {} },
+  },
+} as unknown as Factory;
+
+test("with no hub connection, an active trigger or schedule that needs the hub refuses the boot", async () => {
   const exit = vi.fn();
   const error = vi.fn();
-  expect(await gateOnHubToken({ context: async () => testFactoryContext(), exit, error })).toBe(
-    false,
-  );
+  expect(
+    await gateOnHubUse(hubUser, { context: async () => testFactoryContext(), exit, error }),
+  ).toBe(false);
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(
-    expect.stringMatching(
-      /^\[service\] JIGS_HUB_TOKEN is not set\n.*set JIGS_HUB_TOKEN in the factory's environment.*, then restart the service$/,
-    ),
+    "[service] this copy has no hub connection, which trigger pages, schedule nightly need",
   );
 });
 
-test("a hub token lets the boot continue", async () => {
+test("a copy needs no hub connection when nothing active needs the hub", async () => {
+  const exit = vi.fn();
+  const quiet = { ...hubUser, triggers: {}, schedules: { hourly: hubUser.schedules?.hourly } };
+  expect(
+    await gateOnHubUse(quiet as Factory, { context: async () => testFactoryContext(), exit }),
+  ).toBe(true);
+  expect(exit).not.toHaveBeenCalled();
+});
+
+test("a connected copy boots whatever needs the hub", async () => {
   const exit = vi.fn();
   expect(
-    await gateOnHubToken({
+    await gateOnHubUse(hubUser, {
       context: async () => testFactoryContext({ env: { JIGS_HUB_TOKEN: "token" } }),
       exit,
     }),

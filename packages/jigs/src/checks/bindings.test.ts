@@ -100,6 +100,7 @@ test("a declared, cloned binding whose remote answers passes", async () => {
 function githubBinding(reach: () => Promise<unknown>) {
   const factory = makeFactoryRepo(tmp, yml("api", "git@github.com:acme/api.git"));
   markClone(factory, "api");
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(git, "probeRemoteAuth").mockResolvedValue(null);
   const asked: string[] = [];
   vi.spyOn(githubApi, "githubGet").mockImplementation(async (installationName, apiPath) => {
