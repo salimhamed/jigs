@@ -179,7 +179,7 @@ function ConnectFactory({
           description={
             <>
               Add the first line to <strong>{factory.name}</strong>'s <code>jigs.config.ts</code>,
-              and set the second in its environment on the machine where it runs.
+              and the second to its <code>.env.local</code> on the machine where it runs.
             </>
           }
         >
