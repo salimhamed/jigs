@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.104.0](https://github.com/salimhamed/jigs/compare/jigs-v0.103.0...jigs-v0.104.0) (2026-10-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* factory copies are configured by the environment ([#661](https://github.com/salimhamed/jigs/issues/661))
+
+### Features
+
+* factory copies are configured by the environment ([#661](https://github.com/salimhamed/jigs/issues/661)) ([526ad01](https://github.com/salimhamed/jigs/commit/526ad01d64ae051ebb5caa9ea2eac7c326e4bb66))
+
 ## [0.103.0](https://github.com/salimhamed/jigs/compare/jigs-v0.102.2...jigs-v0.103.0) (2026-10-09)
 
 
