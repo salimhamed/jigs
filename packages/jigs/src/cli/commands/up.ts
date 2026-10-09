@@ -6,7 +6,7 @@ import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { columns, detail, displayPath, hint, section } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
-import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
+import { dockerCompose, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
 import {
   awaitServiceReady,
@@ -182,7 +182,7 @@ async function bootstrapWorld(
       /ECONNREFUSED/.test(execOutput(err))
         ? new JigsError(
             `bootstrap could not reach the World at ${redactPassword(url)}`,
-            `docker-compose.yml publishes ${publishedPostgresPorts(ctx.root)}, and the two have to agree`,
+            "WORKFLOW_POSTGRES_URL has to name the port JIGS_POSTGRES_PORT publishes",
           )
         : new JigsError("bootstrap failed", "the output above is @workflow/world-postgres's"),
   });
@@ -199,18 +199,14 @@ async function printSummary(
   pid: number | undefined,
   out: (line: string) => void,
 ): Promise<void> {
-  const ports = postgresPorts(factoryRoot);
   const { container } = await postgresNames(execFile, factoryRoot);
   const rows: Array<[string, string]> = [
-    [
-      "postgres",
-      `${ports.length === 0 ? "no published port" : ports.map((port) => `localhost:${port}`).join(", ")}${container === undefined ? "" : ` ${detail(`Docker container ${container}`)}`}`,
-    ],
+    ["postgres", container === undefined ? "running" : `Docker container ${container}`],
     ["service", `${service.serviceUrl} ${detail(`pid ${pid ?? "unknown"}`)}`],
     ["dashboard", service.dashboardUrl],
     ["logs", displayPath(serviceLogPath(service.slug))],
   ];
-  const summary = section(`${factoryName(factoryRoot)} is up`, [
+  const summary = section(`${path.basename(factoryRoot)} is up`, [
     ...columns(rows),
     ...hint("stop everything:", "pnpm exec jigs down"),
   ]);
@@ -219,18 +215,6 @@ async function printSummary(
 
 function redactPassword(url: string): string {
   return url.replace(/\/\/([^:/@]+):[^@]*@/, "//$1:***@");
-}
-
-function postgresPorts(factoryRoot: string): string[] {
-  const compose = readFileSync(path.join(factoryRoot, "docker-compose.yml"), "utf8");
-  return [...compose.matchAll(/"?(\d+):5432"?/g)].flatMap((m) =>
-    m[1] === undefined ? [] : [m[1]],
-  );
-}
-
-function publishedPostgresPorts(factoryRoot: string): string {
-  const ports = postgresPorts(factoryRoot);
-  return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
 export interface InFlightRun {

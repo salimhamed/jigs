@@ -18,14 +18,14 @@ any time the service is up.
 See [getting started](https://salimhamed.github.io/jigs/guide/getting-started).
 
 Every `jigs` below means `pnpm exec jigs`. The service listens on
-`:{{SERVICE_PORT}}`, its dashboard on `:{{DASHBOARD_PORT}}`, and Postgres on
-`:{{POSTGRES_PORT}}`. `jigs status` lists runs; `jigs status <run-id>` shows one,
+`JIGS_SERVICE_PORT`, its dashboard on `JIGS_DASHBOARD_PORT`, and Postgres on
+`JIGS_POSTGRES_PORT`. `jigs status` lists runs; `jigs status <run-id>` shows one,
 with the resources it recorded. All commands are in the
 [CLI reference](https://salimhamed.github.io/jigs/guide/cli).
 
 ## Layout
 
-- `jigs.config.ts` registers workflows, service settings, bindings and
+- `jigs.config.ts` registers the hub, workflows, bindings and
   schedules. Secrets live in `.env`.
 - `workflows/hello/hello.ts` is the starter workflow. Each workflow gets its
   own directory, with any `"use step"` functions of its own beside it. A

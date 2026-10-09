@@ -74,16 +74,6 @@ export const bindingSchema = z.strictObject({
   hookTimeoutMinutes: z.number().positive().default(10),
 });
 
-const portSchema = z.int().min(1).max(65535);
-
-const serviceSchema = z.strictObject({
-  port: portSchema.default(8990),
-  // Where this factory's service hosts the SDK's run dashboard. Required and
-  // never derived: a default would silently land on another factory's service
-  // port, and the two numbers have to be the operator's to move.
-  dashboardPort: portSchema,
-});
-
 // jigs acts on GitHub as the App the hub assigns this factory, so pull requests
 // come from `<app-slug>[bot]` and the operator can review them normally.
 export const githubSchema = z.strictObject({
@@ -133,15 +123,6 @@ export const factoryConfigSchema = z
     // The hub this factory hears its providers through. Its token is
     // JIGS_HUB_TOKEN in the factory's environment.
     hub: z.strictObject({ url: z.url() }),
-    // One service per factory repo, so the addresses belong to the factory
-    // rather than the machine. Only non-secret operating parameters live here —
-    // the World the service writes is a credential-bearing URL, so it stays in
-    // the factory's environment. An absent section is read as an empty one, so what
-    // it is missing reports itself by name.
-    service: z.preprocess<unknown, typeof serviceSchema, z.input<typeof serviceSchema>>(
-      (section) => section ?? {},
-      serviceSchema,
-    ),
     // Who the operator is on GitHub, and how they approve a merge.
     github: githubSchema.prefault({}),
     linear: linearSchema.prefault({}),

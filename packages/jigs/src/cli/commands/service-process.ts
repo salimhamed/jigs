@@ -10,7 +10,7 @@ import {
   statSync,
 } from "node:fs";
 import path from "node:path";
-import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
+import type { ResolvedService } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import {
@@ -129,7 +129,7 @@ type BundleDeps = Pick<ServiceLifecycleDeps, "processes">;
 // pick up.
 export function runningBundleHash(deps: BundleDeps): string | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   if (livePid(slug, processes) === undefined) return undefined;
   return readServiceRecord(slug).process?.bundle;
 }
@@ -151,9 +151,8 @@ export function serviceBehindSources(deps: BundleDeps): string | undefined {
   return undefined;
 }
 
-// The child inherits this process's environment. What jigs.config.ts declares
-// wins over it: the two addresses the child listens on, and the base URL
-// derived from the first of them.
+// The child inherits this process's environment, plus what jigs derives from
+// it: Nitro's PORT and the base URL.
 //
 // `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
 // dashboard's included — to the service's own workflow routes. Left unset the
@@ -163,7 +162,6 @@ function childEnv(service: ResolvedService): Record<string, string> {
   return {
     ...stringEnv(),
     PORT: String(service.port),
-    JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
     // The v5 Postgres package reads this when its module-level World is
     // created. Set it on the child itself, before any bundled module runs;

@@ -48,6 +48,8 @@ beforeEach(() => {
   // Pidfiles and logs live under the data dir, so redirecting it is enough
   // to keep the real filesystem effects inside the test's tmp dir.
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  vi.stubEnv("JIGS_SERVICE_PORT", "9100");
+  vi.stubEnv("JIGS_DASHBOARD_PORT", "9200");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -119,10 +121,7 @@ function psRows(io: Fake): string {
 
 // A factory repo that has already built its service, which is what every
 // verb but the unbuilt-repo test starts from.
-function builtFactory(
-  parent = tmp,
-  yml = { hub: { url: "https://hub.example.test" }, service: { port: 9100, dashboardPort: 9200 } },
-): string {
+function builtFactory(parent = tmp, yml = { hub: { url: "https://hub.example.test" } }): string {
   const root = makeFactoryRepo(parent, yml);
   const beforeBuild = new Date(Date.now() - 60_000);
   utimesSync(path.join(root, "jigs.config.ts"), beforeBuild, beforeBuild);

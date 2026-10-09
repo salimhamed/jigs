@@ -6,7 +6,6 @@ import { locateTemplates, packageRoot } from "../build/templates.ts";
 // Names jigs reads that a factory never puts in .env.
 const NOT_IN_ENV_EXAMPLE = new Set([
   // Set by jigs on the service process.
-  "JIGS_DASHBOARD_PORT",
   "WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN",
   // Inherited from the host environment.
   "PATH",

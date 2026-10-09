@@ -1,4 +1,4 @@
-import { existsSync, readFileSync } from "node:fs";
+import { existsSync } from "node:fs";
 import path from "node:path";
 import { JigsError } from "../../errors.ts";
 import { type ExecFile, execOrExplain, execOutput } from "../exec.ts";
@@ -36,18 +36,6 @@ export async function dockerCompose(
             ),
     },
   );
-}
-
-/**
- * The name the operator knows this factory by: its compose project, which
- * `jigs init` sets to the directory it scaffolded.
- */
-export function factoryName(factoryRoot: string): string {
-  const composeFile = path.join(factoryRoot, "docker-compose.yml");
-  const project = existsSync(composeFile)
-    ? readFileSync(composeFile, "utf8").match(/^name:\s*["']?([^"'\s#]+)/m)?.[1]
-    : undefined;
-  return project ?? path.basename(factoryRoot);
 }
 
 export interface PostgresNames {

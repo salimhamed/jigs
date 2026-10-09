@@ -279,18 +279,13 @@ export default defineWorkflow({
 });
 `;
 
-export function installCompiledCancellationFixture(factory, ports) {
+export function installCompiledCancellationFixture(factory) {
   writeFileSync(path.join(factory, "workflows", "cancel-e2e.ts"), fixtureSource);
   const config = path.join(factory, "jigs.config.ts");
-  const source = readFileSync(config, "utf8")
-    .replace(
-      /service: \{ port: \d+, dashboardPort: \d+ \}/,
-      `service: { port: ${ports.service}, dashboardPort: ${ports.dashboard} }`,
-    )
-    .replace(
-      "workflows: {",
-      'workflows: {\n    cancelE2e: () => import("./workflows/cancel-e2e.ts"),',
-    );
+  const source = readFileSync(config, "utf8").replace(
+    "workflows: {",
+    'workflows: {\n    cancelE2e: () => import("./workflows/cancel-e2e.ts"),',
+  );
   writeFileSync(config, source);
 }
 
@@ -1201,7 +1196,7 @@ function runtimeEnv(postgresUrl, dataHome, ports) {
   return {
     ...process.env,
     XDG_DATA_HOME: dataHome,
-    PORT: String(ports.service),
+    JIGS_SERVICE_PORT: String(ports.service),
     JIGS_DASHBOARD_PORT: String(ports.dashboard),
     WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${ports.service}`,
     WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",

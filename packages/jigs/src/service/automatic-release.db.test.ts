@@ -63,7 +63,7 @@ beforeAll(async () => {
   mkdirSync(factoryRoot, { recursive: true });
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-test" } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-test" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
   );
   registry = registrySql();
   await ensureRegistry(registry);

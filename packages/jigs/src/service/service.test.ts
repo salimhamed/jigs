@@ -22,22 +22,21 @@ afterEach(() => {
 });
 inTestFactory({
   hub: { url: "https://hub.example.test" },
-  service: { port: 8990, dashboardPort: 9090 },
 });
 
 test("the service runs on the configuration it was built with, whatever jigs.config.ts says now", () => {
   const { root } = currentFactoryContext();
   startService({ workflows: {} } as unknown as Factory, {
     hub: { url: "https://hub.example.test" },
-    service: { port: 7001, dashboardPort: 7002 },
+    github: { operator: "built" },
     workflows: {},
   });
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 8001, dashboardPort: 8002 }, workflows: {} };\n",
+    "export default { hub: { url: 'https://hub.example.test' }, github: { operator: 'edited' }, workflows: {} };\n",
   );
 
-  expect(currentFactoryContext().config.service.port).toBe(7001);
+  expect(currentFactoryContext().config.github.operator).toBe("built");
 });
 
 test("only active triggers and schedules start; each inactive one is logged, and its waiting occurrences skipped", () => {

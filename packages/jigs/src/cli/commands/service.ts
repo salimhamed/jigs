@@ -85,7 +85,7 @@ export async function ensureServiceCurrent(
 ): Promise<ServiceOutcome> {
   const { processes = nodeProcesses } = deps;
   const { root } = currentFactoryContext();
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   let outcome: ServiceOutcome = "started";
   // Compared against the bundle the running process started from, not the
   // one on disk before this build: a restart refused last time must still
@@ -127,7 +127,7 @@ export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<voi
  */
 export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   const state = inspectService(slug, processes, { cleanUp: true });
   const target: ServiceTarget =
     state.kind === "running"
@@ -154,7 +154,7 @@ export async function stopService(deps: ServiceLifecycleDeps): Promise<void> {
  */
 export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   const stop =
     "prune never stops or kills processes, so stop the service first: `pnpm exec jigs service stop`";
   const state = inspectService(slug, processes, { cleanUp: true });
@@ -184,7 +184,7 @@ export function requireServiceStopped(deps: ServiceLifecycleDeps): void {
 // For a caller deciding on liveness rather than reporting it.
 export function liveServicePid(deps: ServiceLifecycleDeps): number | undefined {
   const { processes = nodeProcesses } = deps;
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   return livePid(slug, processes);
 }
 
@@ -248,7 +248,7 @@ function signalSince(log: string, offset: number): string | undefined {
 // one shadowing the other.
 export function serviceLogs(deps: ServiceLifecycleDeps, options: { lines?: number } = {}): void {
   const { out } = deps;
-  const { slug } = resolveService(currentFactoryContext());
+  const { slug } = currentFactoryContext();
   const file = serviceLogPath(slug);
   if (!existsSync(file)) {
     throw new JigsError(

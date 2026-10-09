@@ -36,7 +36,7 @@ beforeEach(() => {
   mkdirSync(root, { recursive: true });
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };\n",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };\n",
   );
   vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://unused/test");
   runFrom(root);

@@ -58,7 +58,7 @@ const writeConfig = (github: object = {}) =>
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" },
     github: ${JSON.stringify(github)},
     bindings: {
       app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" },
@@ -391,7 +391,7 @@ test("opening a PR takes its installation, head and default branch from the work
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" },
     bindings: { docs: { remote: "git@github.com:acme/docs.git", installationName: "github-changed" } },
   };`,
   );
@@ -428,7 +428,7 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
   writeFileSync(
     path.join(root, "jigs.config.ts"),
     `export default {
-    hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 },
+    hub: { url: "https://hub.example.test" },
     github: { operator: "salimhamed", mergeApproval: "review" },
     bindings: { app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" } },
   };`,

@@ -21,7 +21,6 @@ import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   bindings: {
     app: { remote: "git@github.com:owner/app.git", installationName: "github-acme" },
   },
@@ -128,25 +127,6 @@ the files you put there yourself. `jigs unbind <name>` removes the binding and
 keeps the folder, since it may hold secrets. Add the other keys by hand. Both commands edit a plain object
 literal. If `bindings` is computed, they explain why and leave the file alone.
 
-## `service`
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `port` | `8990` | Where the service listens. The CLI talks to it here. |
-| `dashboardPort` | required | Where the service hosts the run dashboard. |
-
-`jigs init` picks ports for each factory so that two factories on one machine
-rarely clash.
-
-::: details Changing the Postgres port
-The Postgres port appears in both `docker-compose.yml` and
-`WORKFLOW_POSTGRES_URL` in `.env`. Change both together. The service and
-dashboard ports are separate settings in `jigs.config.ts`.
-
-`docker-compose.yml` publishes Postgres on `127.0.0.1` only, so other machines
-on your network cannot reach it. Keep that prefix if you change the port.
-:::
-
 ## `schedules` {#schedules}
 
 This schedules the `triage` workflow from [Build a workflow](/guide/build-a-workflow)
@@ -198,7 +178,6 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
@@ -574,6 +553,7 @@ is missing.
 
 | Variable | When you need it |
 | --- | --- |
+| `COMPOSE_PROJECT_NAME`, `JIGS_SERVICE_PORT`, `JIGS_DASHBOARD_PORT`, `JIGS_POSTGRES_PORT` | Always. This copy's docker compose project and ports; `jigs init` suggests values. `WORKFLOW_POSTGRES_URL` names the same port as `JIGS_POSTGRES_PORT`. |
 | `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
 | `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |

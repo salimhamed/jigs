@@ -1216,10 +1216,7 @@ if (hub === undefined) {
   );
   factory = factories.get("bare");
   if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
-  installCompiledCancellationFixture(factory, {
-    service: CANCEL_PORT,
-    dashboard: CANCEL_DASHBOARD_PORT,
-  });
+  installCompiledCancellationFixture(factory);
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,

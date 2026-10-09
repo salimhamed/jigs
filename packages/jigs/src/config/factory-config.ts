@@ -45,21 +45,25 @@ export interface ResolvedService {
   slug: string;
   port: number;
   serviceUrl: string;
-  dashboardPort: number;
   dashboardUrl: string;
 }
 
 // What is addressed per factory: the URL its CLI verbs talk to and the slug
 // that keys its service record and its bindings' directories.
 export function resolveService(ctx: FactoryContext): ResolvedService {
-  const { service } = ctx.config;
+  const port = requiredPort(ctx, "JIGS_SERVICE_PORT");
   return {
     slug: ctx.slug,
-    port: service.port,
-    serviceUrl: `http://localhost:${service.port}`,
-    dashboardPort: service.dashboardPort,
-    dashboardUrl: `http://localhost:${service.dashboardPort}`,
+    port,
+    serviceUrl: `http://localhost:${port}`,
+    dashboardUrl: `http://localhost:${requiredPort(ctx, "JIGS_DASHBOARD_PORT")}`,
   };
+}
+
+function requiredPort(ctx: FactoryContext, name: string): number {
+  const value = ctx.env(name);
+  if (value === undefined) throw new JigsError(`${name} is not set`);
+  return Number(value);
 }
 
 function factoryConfigPath(factoryRoot: string): string {
