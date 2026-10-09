@@ -1,7 +1,5 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
 import { expect, onTestFinished, test, vi } from "vitest";
-import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, removeTmpDir, useTestFactory } from "../test-fixtures.ts";
 import { githubMcp } from "../workflow/agents/github-mcp.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { agentGithubChecks } from "./agent-github.ts";
@@ -43,16 +41,12 @@ test("preflight checks a workflow's opted-in agents", () => {
 });
 
 test("doctor checks github-mcp-server is installed instead of probing it without a token", () => {
-  const factory = makeTmpDir();
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   onTestFinished(() => {
     vi.unstubAllEnvs();
-    removeTmpDir(factory);
   });
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
-  );
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  const parent = useTestFactory("export default { hub: { url: 'https://hub.example.test' } }");
+  onTestFinished(() => removeTmpDir(parent));
   const withMcp = harnesses.claude({
     model: "m",
     github: { installationName: "acme" },

@@ -7,6 +7,7 @@ import type { RegistrySql, ResourceRow } from "../../steps/runtime/registry.ts";
 import { readRunState } from "../../steps/runtime/run-state.ts";
 import { memoryLock, memoryRows } from "../../steps/runtime/test-fixtures.ts";
 import { commitToRemote, git, makeClonedBinding } from "../../steps/workspaces/test-fixtures.ts";
+import { runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { listResources, offlineFacts, runResourcesPrune } from "./resources.ts";
 import type { ServiceProcesses } from "./service-process.ts";
@@ -35,9 +36,10 @@ beforeEach(() => {
   mkdirSync(root, { recursive: true });
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };\n",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };\n",
   );
-  writeFileSync(path.join(root, ".env"), "WORKFLOW_POSTGRES_URL=postgres://unused/test\n");
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://unused/test");
+  runFrom(root);
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   memoryRows.length = 0;
   memoryLock.taken = undefined;
@@ -89,7 +91,6 @@ function scratch(runId = RUN): string {
 }
 
 const deps = (statuses?: Record<string, string>) => ({
-  cwd: root,
   out: (line: string) => lines.push(line),
   connect: () => database(statuses),
 });
@@ -498,10 +499,7 @@ const recordService = (pid: number, options: { exited?: true } = {}) =>
 const recordedProcess = () => readServiceRecord(factorySlug(root)).process;
 
 const prune = (processes: ServiceProcesses, connect: () => RegistrySql) =>
-  runResourcesPrune(
-    { cwd: root, out: (line) => lines.push(line), connect, processes },
-    { apply: true },
-  );
+  runResourcesPrune({ out: (line) => lines.push(line), connect, processes }, { apply: true });
 
 test("apply refuses a running service without opening the database", async () => {
   recordService(700);

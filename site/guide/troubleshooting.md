@@ -22,7 +22,12 @@ Read `jigs service logs`. The usual causes:
 - **A harness CLI is missing from the service's `PATH`.** The service checks
   the CLI of every harness your workflows require, and the log names the
   workflows that need it. Start `jigs up` from a shell where that CLI runs, or
-  for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in `.env`.
+  for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in this copy's environment.
+- **This copy has no hub connection**, and an active trigger, or an active
+  schedule whose workflow uses a provider, needs one. The log names them. Set
+  `hub` in `jigs.config.ts` and `JIGS_HUB_TOKEN` in this copy's environment,
+  or turn those off in this copy; see
+  [Active triggers and schedules](/guide/configuration#active).
 - **Codex or Pi is too old.** The log names the minimum version; upgrade the CLI.
 - **A binding's remote cannot be reached.** The service clones every binding
   into `~/.local/share/jigs/clones/` before it is ready, and exits with the Git
@@ -30,6 +35,15 @@ Read `jigs service logs`. The usual causes:
 
 Fix the cause and run `jigs up` again. Harness installation and authentication
 are covered in [Models and harnesses](/guide/models-and-harnesses).
+
+## A command says a variable is not set
+
+A message such as `JIGS_SERVICE_PORT is not set` or `WORKFLOW_POSTGRES_URL is
+not set` names a variable this copy's environment lacks. Set it in
+`.env.local` when it is this copy's own, such as a port, or in `.env` when
+every copy shares it, then run the command again. The `jigs.config.ts` that
+`jigs init` writes loads both files; if you changed that loader, check that
+yours still runs. See [The environment](/guide/configuration#env).
 
 ## `jigs up` says runs need workflows or steps that no longer exist
 
@@ -134,7 +148,7 @@ Then start the run again.
 An agent step that runs in a worktree writes what the agent does to a stream
 while it works: its text and reasoning, and each tool call and result. To watch
 it, open the run in the dashboard the service hosts (`jigs service status`
-prints its URL, on `dashboardPort`), go to the **Streams** tab and pick the
+prints its URL, on `JIGS_DASHBOARD_PORT`), go to the **Streams** tab and pick the
 stream of the step. The stream updates every few seconds while the run is
 active. Each attempt of a step starts with an `attempt-start` record naming the
 attempt, the harness and the worktree. Questions to an agent without a
@@ -191,7 +205,7 @@ is left, then delete the record.
 
 ## Starting the service says the URL is already served by another process
 
-Another program already listens on the factory's `service.port`, so the new
+Another program already listens on the factory's `JIGS_SERVICE_PORT`, so the new
 service could not take the port. jigs stops the service it just started and
 leaves the other process alone. The message names that process ID, or says the
 answer carried none when the program is not a jigs service.
@@ -199,7 +213,7 @@ answer carried none when the program is not a jigs service.
 Find the program with `ps -p <pid> -o pid,command`, or with `lsof -i :<port>`
 when no ID is named. Stop it if it should not be running, often a service
 another factory or checkout started, then run `jigs up` again. To keep both,
-give this factory another `service.port` in `jigs.config.ts`.
+give this factory another `JIGS_SERVICE_PORT`.
 
 ## A service command says the service record is unreadable
 

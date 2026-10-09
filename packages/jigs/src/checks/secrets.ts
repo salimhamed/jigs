@@ -1,10 +1,9 @@
 import type { FactoryContext } from "../config/factory-context.ts";
-import { readFactoryEnv } from "../config/factory-env.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
 import { ENV_NAME, mcpCredentialVariables } from "../steps/agents/shared/mcp-credentials.ts";
 import { AGENT_TOKEN_ENV } from "../workflow/agents/agent-access.ts";
 import { neededByUsers, type WorkflowManifests } from "./catalog.ts";
-import { type Check, failedCheck } from "./check.ts";
+import { type Check, type CheckResult, failedCheck } from "./check.ts";
 import type { WorkflowRequires } from "./index.ts";
 
 export interface SecretChecksOptions {
@@ -48,33 +47,22 @@ function invalidEntriesCheck(id: string, list: string, entries: number[]): Check
   );
 }
 
-// The service starts with the shell's environment overlaid by every non-empty
-// line of `.env`, so a value here with none in `.env` came from the shell.
+/** Passes when the variable is set, else names where to set it. */
+export function variableSet(name: string, value: string | undefined): CheckResult {
+  return value === undefined || value.trim() === ""
+    ? {
+        ok: false,
+        reason: `${name} is not set in the service's environment`,
+        repair: `set ${name} in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
+      }
+    : { ok: true };
+}
+
 function secretCheck(name: string, options: SecretChecksOptions): Check {
   return {
     id: `secret.${name}`,
     label: `secret ${name}`,
-    run: async () => {
-      const value = options.context.env(name);
-      if (value === undefined || value.trim() === "")
-        return {
-          ok: false,
-          reason: `${name} is not set in the service's environment`,
-          repair: `set ${name} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
-        };
-      let declared: string | undefined;
-      try {
-        declared = readFactoryEnv(options.context.root)[name];
-      } catch {
-        return { ok: true };
-      }
-      return declared === undefined || declared.trim() === ""
-        ? {
-            ok: true,
-            detail: "not set in .env; the service has it from the shell or an earlier .env",
-          }
-        : { ok: true };
-    },
+    run: async () => variableSet(name, options.context.env(name)),
   };
 }
 

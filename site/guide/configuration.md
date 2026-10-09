@@ -1,15 +1,23 @@
 # Configuration
 
-A factory is configured in two files. `jigs.config.ts` holds settings you
-commit. `.env` holds secrets and is never committed. There is no other
-configuration file.
+A factory is configured in two places:
+
+- **`jigs.config.ts` says what the factory is**: its workflows, bindings,
+  schedules and triggers, and its hub. You commit it, and every copy of the
+  factory runs the same one.
+- **The environment says how this running copy is set up**: its ports, its
+  docker compose project and database, its hub token, its secrets, and which
+  triggers and schedules are [active](#active), with any values of their own.
+
+A copy is one checkout of the factory running its own service: your main
+checkout, a [git worktree](/guide/worktrees), or a server.
 
 | You changed | Run |
 | --- | --- |
 | Workflow code or `jigs.config.ts` | `pnpm exec jigs up` |
-| `.env` | `pnpm exec jigs up --restart-service` |
+| The environment, such as `.env` or `.env.local` | `pnpm exec jigs up --restart-service` |
 
-The service reads `.env` when it starts. Here is a complete `jigs.config.ts`
+Here is a complete `jigs.config.ts`
 for a factory with the generated `hello` workflow and an `app` binding. Replace
 the repository URL with your own, and `github-acme` with the
 [installation name](/guide/hub#installation-names) of your GitHub App's
@@ -17,11 +25,15 @@ installation on its owner:
 
 ```ts
 // jigs.config.ts
+import { existsSync } from "node:fs";
 import { defineFactory } from "@jigs-ai/jigs";
+
+for (const file of [".env.local", ".env"]) {
+  if (existsSync(file)) process.loadEnvFile(file);
+}
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   bindings: {
     app: { remote: "git@github.com:owner/app.git", installationName: "github-acme" },
   },
@@ -39,12 +51,13 @@ from your configuration. These smaller blocks are configuration excerpts.
 
 ## `hub` {#hub}
 
-Every factory works through a [hub](/guide/hub). The hub receives the
-factory's GitHub, Linear, Slack and PagerDuty events and keeps them until the
-service collects them, so nothing is lost while the service is down. It also
-hands the factory every token it uses on those providers, for the
-[apps assigned](/guide/hub#apps) to it. The factory needs no public URL and
-holds no provider secret.
+A factory reaches GitHub, Linear, Slack and PagerDuty only through a
+[hub](/guide/hub). The hub receives the factory's events from them and keeps
+them until the service collects them, so nothing is lost while the service is
+down. It also hands the factory every token it uses on those providers, for
+the [apps assigned](/guide/hub#apps) to it. The factory needs no public URL and
+holds no provider secret. A factory that uses none of these providers needs no
+hub: leave `hub` out.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
@@ -55,17 +68,18 @@ hub: { url: "https://hub.example.com" },
 | --- | --- | --- |
 | `url` | required | The address the hub is reached at. |
 
-The hub shows a factory token once, when you
-[add the factory](/guide/hub#factories) to it. Set both with:
+A copy is connected to its hub when `hub` is set here and `JIGS_HUB_TOKEN` is
+set in its environment. When you [add the factory](/guide/hub#factories), the
+hub shows both lines to copy, once: the `hub` line for `jigs.config.ts`, and
+the `JIGS_HUB_TOKEN=` line for this copy's `.env.local`. Then run
+`pnpm exec jigs up`.
 
-```sh
-pnpm exec jigs hub connect https://hub.example.com <token>
-```
-
-It writes `url` here and the token to `.env` as `JIGS_HUB_TOKEN`. Then run
-`pnpm exec jigs up`. Without the token, `jigs up` stops and the service
-refuses to start. `jigs doctor` checks that the hub answers and takes the
-token.
+A copy with no connection still starts and runs workflows that use no
+provider. It refuses to start while an active trigger, or an active schedule
+whose workflow uses a provider, needs the hub, and a run that needs a provider
+fails its preflight with `this copy has no hub connection`. `jigs doctor` runs
+no hub or provider checks in such a copy, so a copy that is quiet on purpose
+gets a clean doctor.
 
 ## `workflows`
 
@@ -128,25 +142,6 @@ the files you put there yourself. `jigs unbind <name>` removes the binding and
 keeps the folder, since it may hold secrets. Add the other keys by hand. Both commands edit a plain object
 literal. If `bindings` is computed, they explain why and leave the file alone.
 
-## `service`
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `port` | `8990` | Where the service listens. The CLI talks to it here. |
-| `dashboardPort` | required | Where the service hosts the run dashboard. |
-
-`jigs init` picks ports for each factory so that two factories on one machine
-rarely clash.
-
-::: details Changing the Postgres port
-The Postgres port appears in both `docker-compose.yml` and
-`WORKFLOW_POSTGRES_URL` in `.env`. Change both together. The service and
-dashboard ports are separate settings in `jigs.config.ts`.
-
-`docker-compose.yml` publishes Postgres on `127.0.0.1` only, so other machines
-on your network cannot reach it. Keep that prefix if you change the port.
-:::
-
 ## `schedules` {#schedules}
 
 This schedules the `triage` workflow from [Build a workflow](/guide/build-a-workflow)
@@ -157,6 +152,7 @@ every Monday. Register `triage` in `workflows` as shown above and use its
 // Inside defineFactory({ ... }) in jigs.config.ts
 schedules: {
   "monday-triage": {
+    active: process.env.MONDAY_TRIAGE_ACTIVE === "true",
     workflow: "triage",
     cron: "0 9 * * 1",
     inputs: { binding: "app", report: "Saving a draft twice loses its title." },
@@ -164,6 +160,8 @@ schedules: {
 },
 ```
 
+- `active` is required. An inactive schedule never fires; see
+  [Active triggers and schedules](#active).
 - Cron uses five fields in the service host's local time.
 - Each tick validates inputs and runs preflight, like `jigs run`.
 - A tick is skipped while the schedule's previous run is still active.
@@ -197,12 +195,12 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
   triggers: {
     "checkout-pages": {
+      active: process.env.CHECKOUT_PAGES_ACTIVE === "true",
       workflow: "respond",
       source: pagerduty.incidents({
         installationName: "pagerduty-acme",
@@ -216,6 +214,8 @@ export default defineFactory({
 });
 ```
 
+- `active` is required. An inactive trigger starts no runs; see
+  [Active triggers and schedules](#active).
 - `source` takes the [installation name](/guide/hub#installation-names) it
   listens to, and the provider's own query parameters under the provider's own
   names. jigs adds no filter syntax; any finer judgement belongs in the run.
@@ -290,6 +290,7 @@ import { linear } from "@jigs-ai/jigs";
 // In defineFactory's `triggers`.
 const triggers = {
   "fix-on-mention": {
+    active: process.env.FIX_ON_MENTION_ACTIVE === "true",
     workflow: "fix",
     source: linear.agentSessions({
       installationName: "linear-acme",
@@ -313,6 +314,29 @@ The hub replies "Received — working on it." to every session before any
 factory reads it, so that reply appears even when this factory's filters skip
 the session and no run starts. Make the filters match what the app is for, so
 that a mention the app answers is one a run takes.
+
+## Active triggers and schedules {#active}
+
+Every schedule and trigger has a required `active` flag, and only active ones
+run. An inactive schedule never fires. An inactive trigger starts no runs, and
+`jigs doctor` does not check it. Neither needs a hub connection.
+
+The examples on this page read the flag from the environment, as in
+`active: process.env.MONDAY_TRIAGE_ACTIVE === "true"`, so each copy decides
+for itself:
+
+- A new copy is quiet until you turn something on. Set
+  `MONDAY_TRIAGE_ACTIVE=true` in the `.env.local` of the copy that should run
+  it, never in the shared `.env`, so a worktree you copy `.env` into does not
+  run it too.
+- A trigger can read its other per-copy values from the environment the same
+  way, such as the Slack channel a test copy listens in.
+- `active: true` runs it in every copy.
+- The service logs `[schedule] <name> inactive` or `[trigger] <name> inactive`
+  when it starts, and `jigs status` shows each under `STATE`.
+- A change takes `pnpm exec jigs up --restart-service`. When a trigger is
+  inactive, the service skips the occurrences it had waiting, so turning it on
+  again never starts runs for older events.
 
 ## `release` {#release}
 
@@ -507,7 +531,7 @@ the app to your Linear workspace in the hub, name that installation, such as
 `linear-acme`, and assign the app to the factory; the hub hands the factory its
 tokens and refreshes them. Every Linear step, routine, trigger and agent takes
 the `installationName` it acts through. Nothing about the app goes in
-`jigs.config.ts` or `.env`. `jigs doctor` checks each Linear installation the
+`jigs.config.ts` or the environment. `jigs doctor` checks each Linear installation the
 factory names, and says when a workspace must be connected again in the hub.
 
 Use one Linear app per purpose: two factories assigned the same app both answer
@@ -565,22 +589,62 @@ the workspace it acts in. Nothing about the app goes in `jigs.config.ts`. See
 [Start runs from messages](/guide/slack#start-runs-from-messages) to start runs
 from Slack.
 
-## `.env` {#env}
+## The environment {#env}
 
-`jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` stops if `.env`
-is missing.
+jigs reads only the process environment. It has no code of its own for `.env`
+files. The `jigs.config.ts` that `jigs init` writes fills the environment
+itself, by loading two files when they exist:
+
+```ts
+// jigs.config.ts
+import { existsSync } from "node:fs";
+
+for (const file of [".env.local", ".env"]) {
+  if (existsSync(file)) process.loadEnvFile(file);
+}
+```
+
+- **`.env.local`** holds this copy's values: the ones in the second table
+  below, the `*_ACTIVE` flags of the triggers and schedules it runs, and any
+  value only this copy uses, such as a test channel.
+- **`.env`** holds the values every copy shares: API keys, secrets and channel
+  IDs. Copy it into each new worktree.
+
+Neither file is committed. A value already set is never replaced, so the shell
+wins, then `.env.local`, then `.env`. That is also why other loaders work:
+start jigs under mise, direnv or `op run`, or load the files with dotenv
+instead, and jigs sees whatever ends up in the environment. A deployed copy
+needs neither file: set its variables through its platform, such as its
+container's environment or a secrets manager.
+
+The service inherits the environment of the `jigs up` that started it.
+
+`jigs init` writes `.env.example`, with the shared values, and
+`.env.local.example`, with this copy's values and the ports it suggests. Copy
+them to `.env` and `.env.local`. jigs treats an empty value as unset, but an
+empty `X=` in `.env.local` still hides the value of `X` in `.env`, so leave out
+what you don't set.
+
+These are the values every copy shares, in `.env`:
 
 | Variable | When you need it |
 | --- | --- |
-| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
-| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
+| `WORKFLOW_TARGET_WORLD` | Always. Filled in by `jigs init`; leave it. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
 
+These are this copy's own, in `.env.local`:
+
+| Variable | When you need it |
+| --- | --- |
+| `COMPOSE_PROJECT_NAME` | Always. This copy's docker compose project, so each copy has its own Postgres. |
+| `JIGS_SERVICE_PORT`, `JIGS_DASHBOARD_PORT`, `JIGS_POSTGRES_PORT` | Always. Where this copy's service, dashboard and Postgres listen. `jigs init` suggests ports from the factory's path. The service refuses to start without its two. |
+| `WORKFLOW_POSTGRES_URL` | Always. This copy's database, on `JIGS_POSTGRES_PORT`. |
+| `JIGS_HUB_TOKEN` | Once a workflow, binding or trigger uses GitHub, Linear, Slack or PagerDuty. The factory token the [hub](#hub) showed. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
+
 Also set any variable your `jigs.config.ts` names, such as an MCP server's
-`bearerTokenEnv`. An empty value counts as unset, so a value exported in your
-shell still reaches the service.
+`bearerTokenEnv`, in the file it belongs to.
 
 `JIGS_SERVICE_URL` is read by the CLI, not the service. Set it in your shell to
 point commands such as `jigs status` at a different service, or pass
@@ -590,5 +654,5 @@ point commands such as `jigs status` at a different service, or pass
 
 A workflow that reads a credential of its own lists the variable's name in
 `requires.secrets`, and its steps read the value from `process.env`. Add each
-name to `.env.example` with an empty value, so a new checkout knows to fill it
-in. See [Secrets](/guide/build-a-workflow#secrets).
+name to `.env.example` with an empty value, so a new
+checkout knows to fill it in. See [Secrets](/guide/build-a-workflow#secrets).

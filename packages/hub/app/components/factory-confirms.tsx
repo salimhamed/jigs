@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import { ConfirmForm } from "./confirm-form.tsx";
 
-/** Re-issues a factory's token once confirmed, then shows its new connect command. */
+/** Re-issues a factory's token once confirmed, then shows the new token to set. */
 export function ReissueTokenButton({
   factory,
   className,
@@ -16,7 +16,7 @@ export function ReissueTokenButton({
       action="/factories/new"
       fields={{ intent: "reissue", factoryId: factory.id }}
       title={`Re-issue token for ${factory.name}?`}
-      body={`The current token stops working right away. ${factory.name} stays offline until you run the new connect command on it.`}
+      body={`The current token stops working right away. ${factory.name} stays offline until its environment has the new one.`}
       confirmLabel="Re-issue token"
       className={className}
     >

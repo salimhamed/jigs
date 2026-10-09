@@ -19,11 +19,15 @@ import type { CheckResult } from "../checks/check.ts";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
+import { FACTORY_ENVIRONMENT } from "./credentials.ts";
 
 const HUB_TIMEOUT_MS = 30_000;
 
-export const HUB_CONNECT =
-  "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`";
+/** Why a copy with no hub connection cannot reach a provider, and its repair. */
+export const NO_HUB_CONNECTION = {
+  reason: "this copy has no hub connection",
+  repair: `set hub.url in jigs.config.ts and JIGS_HUB_TOKEN in ${FACTORY_ENVIRONMENT}`,
+};
 
 /** The hub answered with an error status. */
 export class HubResponseError extends JigsError {
@@ -64,11 +68,7 @@ export async function hubRequest(
   });
   if (response.ok) return response;
   if (response.status === 401)
-    throw new HubResponseError(
-      401,
-      `the hub at ${url.origin} rejected JIGS_HUB_TOKEN`,
-      HUB_CONNECT,
-    );
+    throw new HubResponseError(401, `the hub at ${url.origin} rejected JIGS_HUB_TOKEN`);
   const text = await response.text();
   let reason = text.slice(0, 500);
   try {
@@ -80,11 +80,11 @@ export async function hubRequest(
   );
 }
 
-/** Where this factory's hub is and its token there; throws when the factory is not connected. */
-export function hubConnection(ctx: FactoryContext): HubConnection {
+/** Where this copy's hub is and its token there; undefined when the copy has no hub connection. */
+export function hubConnection(ctx: FactoryContext): HubConnection | undefined {
   const token = ctx.env("JIGS_HUB_TOKEN");
-  if (token === undefined) throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
-  return { url: ctx.config.hub.url, token };
+  const hub = ctx.config.hub;
+  return hub === undefined || token === undefined ? undefined : { url: hub.url, token };
 }
 
 async function hubSend<T>(
@@ -92,7 +92,9 @@ async function hubSend<T>(
   apiPath: string,
   init: { method?: string; body?: unknown } = {},
 ): Promise<T> {
-  const response = await hubRequest(hubConnection(ctx), apiPath, init);
+  const hub = hubConnection(ctx);
+  if (hub === undefined) throw new JigsError(NO_HUB_CONNECTION.reason, NO_HUB_CONNECTION.repair);
+  const response = await hubRequest(hub, apiPath, init);
   return (await response.json()) as T;
 }
 

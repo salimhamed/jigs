@@ -121,7 +121,14 @@ async function manage(cookie: string, factoryId: string, name: string) {
   expect(await onFactory(cookie, factoryId, { intent: "rename", name })).toEqual({
     message: `Renamed the factory ${name}.`,
   });
-  expect(await reissue(cookie, factoryId)).toMatchObject({ connect: { id: factoryId, name } });
+  expect(await reissue(cookie, factoryId)).toMatchObject({
+    connect: {
+      id: factoryId,
+      name,
+      config: expect.stringMatching(/^hub: \{ url: "https?:\/\/[^"]+" \}$/),
+      env: expect.stringMatching(/^JIGS_HUB_TOKEN=\w+$/),
+    },
+  });
   expect(await onFactory(cookie, factoryId, { intent: "connect", appId })).toEqual({
     connected: appId,
   });

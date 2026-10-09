@@ -218,6 +218,12 @@ the factory it was typed in, and step code reads the process's own through
 `currentFactoryContext()`; everything below takes it from them.
 _Avoid_: credential root, factory root (for the whole of it)
 
+**Copy**: One checkout of a factory running its own service, such as the main
+checkout, a git worktree or a server. Every copy runs the same
+`jigs.config.ts`; its environment sets its ports, compose project, World, hub
+token and which triggers and schedules are active.
+_Avoid_: instance, environment (for the checkout), deployment
+
 **World**: The Workflow SDK's persistence and queue backend; one Postgres per
 factory.
 _Avoid_: database, store
@@ -247,6 +253,11 @@ _Avoid_: filter, feed
 such as a new incident or a top-level message. An event trigger starts at most
 one run per occurrence, ever.
 _Avoid_: event (for the deduplicated unit), delivery
+
+**Active**: Whether a schedule or event trigger runs in this copy, from its
+required `active` flag. An inactive schedule never fires; an inactive trigger
+is not armed or checked, and its waiting occurrences are withdrawn at start.
+_Avoid_: enabled, live
 
 **Preflight**: Checking a workflow's declared `requires` before a run exists.
 
@@ -318,3 +329,6 @@ _Avoid_: queue, inbox
 **Factory token**: The secret a factory proves itself to its hub with, shown
 once when the factory is added.
 _Avoid_: API key, hub key
+
+**Hub connection**: A copy's `hub` URL with its `JIGS_HUB_TOKEN`; a copy without
+both has none, and reaches no provider.

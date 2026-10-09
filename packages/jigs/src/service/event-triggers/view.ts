@@ -27,11 +27,12 @@ export interface TriggerFailure {
 /** Operator-facing state for one declared event trigger. */
 export interface TriggerView {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   source: string;
   lastOccurrence: string | null;
   pending: number;
-  active: number;
+  running: number;
   failed: number;
   /** The most recent failures, newest first. */
   failures: TriggerFailure[];
@@ -68,11 +69,12 @@ export async function listTriggers(
       ]);
       return {
         name,
+        state: trigger.active ? "active" : "inactive",
         workflow: trigger.workflow,
         source: trigger.source.kind,
         lastOccurrence: summary.lastOccurrence?.toISOString() ?? null,
         pending: summary.pending,
-        active,
+        running: active,
         failed: summary.failed,
         failures: summary.failures.map((row) => ({
           occurrence: row.occurrence,

@@ -76,8 +76,14 @@ const scheduledApp = appClient(
     workflows: {
       bound: { workflow: async () => undefined, inputs: z.object({}) },
     },
-    schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
-    triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
+    schedules: {
+      nightly: { active: true, workflow: "bound", cron: "always", inputs: {} },
+      quiet: { active: false, workflow: "bound", cron: "always", inputs: {} },
+    },
+    triggers: {
+      pages: { active: true, workflow: "bound", source: { kind: "nope.pages", params: {} } },
+      off: { active: false, workflow: "bound", source: { kind: "nope.pages", params: {} } },
+    },
   }),
 );
 
@@ -123,7 +129,7 @@ afterEach(() => {
 
 function seedFailures(): void {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
-  vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
+  vi.spyOn(process, "cwd").mockReturnValue(seededFactory);
 }
 
 const trigger = () =>
@@ -160,6 +166,7 @@ test("a trigger with several seeded failures is refused with all of them at once
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
+    "hub.connection",
     "linear.installations",
   ]);
   for (const failure of body.failures) {
@@ -179,7 +186,8 @@ test("the undeclared-binding failure names the exact jigs bind invocation", asyn
 });
 
 test("an input-driven workflow preflights the binding named by the run", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  vi.spyOn(process, "cwd").mockReturnValue(seededFactory);
   const res = await triggerInputBinding("playground");
   expect(res.status).toBe(424);
   const body = (await res.json()) as { failures: Failure[] };
@@ -189,12 +197,13 @@ test("an input-driven workflow preflights the binding named by the run", async (
 });
 
 test("an input-driven workflow ignores an unrelated static binding", async () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const workspace = makeTmpDir();
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
     bindings: { playground: { remote: remoteDir, installationName: "acme" } },
   });
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.spyOn(process, "cwd").mockReturnValue(factory);
   await ensureBindingClone({
     repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "playground" }),
     remote: remoteDir,
@@ -237,7 +246,7 @@ test("a green preflight lets the trigger call start()", async () => {
   const factory = makeFactoryRepo(workspace, {
     bindings: { api: { remote: remoteDir, installationName: "acme" } },
   });
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  vi.spyOn(process, "cwd").mockReturnValue(factory);
   vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
   // What the service does at start: preflight refuses a binding with no clone.
   await ensureBindingClone({
@@ -306,10 +315,15 @@ test("doctor reports a malformed schedule and trigger beside the catalog's own c
   const trigger = body.checks.find((check) => check.id === "trigger.pages");
   expect(trigger?.reason).toBe('source "nope.pages" is not a source this jigs version provides');
   expect(body.checks.some((check) => check.id.startsWith("harness."))).toBe(false);
+  // Inactive ones are never checked, however broken.
+  expect(
+    body.checks.filter((check) => ["schedule.quiet", "trigger.off"].includes(check.id)),
+  ).toEqual([]);
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", path.join(tmp, "no-factory-here"));
+  const broken = makeFactoryRepo(path.join(tmp, "broken"), 'throw new Error("unreadable");\n');
+  vi.spyOn(process, "cwd").mockReturnValue(broken);
   vi.stubGlobal("fetch", async () => Response.json({ data: { viewer: {} } }));
   const body = (await (await app.request("/api/doctor")).json()) as {
     checks: Failure[];

@@ -5,7 +5,9 @@ that factory's installed version of jigs. The exception is `init`, which runs
 before there is a factory:
 `pnpm dlx @jigs-ai/jigs init`.
 Add `--help` to a command to see its options, and run `jigs --version` to see
-which jigs is installed.
+which jigs is installed. Every command but `init` runs from the factory's root
+directory and loads `jigs.config.ts` first, which loads
+[the environment](/guide/configuration#env) for it.
 
 ::: tip Installing a very recent release
 If pnpm's minimum release age blocks a release you want to use, run:
@@ -25,7 +27,6 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 | `jigs up` | Install, start Postgres, build, start the service, wait until ready, then run `jigs doctor`. |
 | `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
 | `jigs doctor` | Check configuration, credentials and tools against the running service. |
-| `jigs hub connect <url> <token>` | Point the factory at its [hub](/guide/configuration#hub): the URL into `jigs.config.ts`, the token into `.env`. |
 
 ## Runs
 
@@ -33,10 +34,15 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 | --- | --- |
 | `jigs workflows` | List the workflows the running service can run, and their inputs. |
 | `jigs run <workflow> --input key=value` | Start a run. Repeat `--input` for each input. |
-| `jigs status [run]` | Show all runs and schedules, or one run's steps, result, resources and what it waits for. |
+| `jigs status [run]` | Show all runs, schedules and triggers, or one run's steps, result, resources and what it waits for. |
 | `jigs watch [run]` | Follow all runs, or one, printing a line per change. |
 | `jigs cancel <run>` | Cancel a run. |
 | `jigs poke <run>` | Ask a waiting run to check its condition now, without answering it. |
+
+Without a run, `jigs status` lists each schedule and trigger after the runs.
+`STATE` says whether it is [active](/guide/configuration#active) in this copy.
+`RUNNING` is a schedule's run in progress, or how many of a trigger's runs are
+in progress.
 
 ### Choosing a run
 
@@ -88,7 +94,8 @@ jigs keeps each binding's clone and worktrees under
 ## Service
 
 Use `jigs up` and `jigs down` to start and stop the factory, and
-`jigs up --restart-service` to restart after `.env` edits. The commands below
+`jigs up --restart-service` to restart after changing the environment, such as
+`.env` or `.env.local`. The commands below
 inspect or stop only the service.
 
 | Command | What it does |
@@ -235,6 +242,39 @@ an API they use, and `pnpm typecheck` tells you where.
 The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
 naming both versions. `jigs up` and `jigs down` still work.
+
+### Upgrading to 0.104
+
+0.104 moves each copy's own settings out of committed files and into the
+environment. Upgrade an existing factory like this:
+
+1. Note your current `service.port` and `service.dashboardPort` from
+   `jigs.config.ts`, and the compose `name:` and Postgres port from
+   `docker-compose.yml`. Until step 3 is done every jigs command refuses to
+   run, `jigs down` included.
+2. Set `@jigs-ai/jigs` to `0.104.0` in `package.json` and run `pnpm install`.
+3. In `jigs.config.ts`, add the environment loader at the top, as the
+   [complete example](/guide/configuration) has it. Delete `service`. Delete
+   `hub` if nothing uses it. Add `active` to every trigger and schedule, such
+   as `active: process.env.<NAME>_ACTIVE === "true"`.
+4. In `docker-compose.yml`, set `name: ${COMPOSE_PROJECT_NAME}` and the
+   Postgres port to `"127.0.0.1:${JIGS_POSTGRES_PORT:?is not set}:5432"`.
+5. Create `.env.local` with this copy's values:
+   - `COMPOSE_PROJECT_NAME`: exactly the old compose name. A different name
+     starts a new, empty database.
+   - `JIGS_SERVICE_PORT`, `JIGS_DASHBOARD_PORT` and `JIGS_POSTGRES_PORT`: the
+     old ports.
+   - `WORKFLOW_POSTGRES_URL`, and `JIGS_HUB_TOKEN` moved out of `.env`.
+   - `<NAME>_ACTIVE=true` for each trigger and schedule that should run here.
+
+   Leave out any variable you have no value for: an empty `X=` line hides the
+   value from `.env`. Keep only values every copy shares in `.env`.
+6. Add `.env.local` to `.gitignore`.
+7. Run `pnpm exec jigs up`, then `pnpm exec jigs doctor`, and check that
+   `jigs status` shows `STATE active` for each trigger and schedule meant to
+   run.
+
+`jigs hub connect` is gone: set `JIGS_HUB_TOKEN` in the environment instead.
 
 ## Cancelling
 

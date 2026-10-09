@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
@@ -16,6 +16,7 @@ let lines: string[];
 beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
+  runFrom(factory);
   lines = [];
 });
 afterEach(() => {
@@ -24,7 +25,6 @@ afterEach(() => {
 
 function deps(overrides: Partial<BindDeps> = {}): BindDeps {
   return {
-    cwd: factory,
     out: (line) => lines.push(line),
     ensureLabel: async () => "verified",
     ...overrides,
@@ -36,7 +36,7 @@ const API = "git@github.com:acme/Api.git";
 const writeConfig = (bindings: string, extra = "") =>
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    `export default { ${extra}hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, bindings: { ${bindings} }, workflows: {} };`,
+    `export default { ${extra}hub: { url: "https://hub.example.test" }, bindings: { ${bindings} }, workflows: {} };`,
   );
 
 test("bind writes the remote under a name derived from the repo", async () => {
@@ -272,7 +272,8 @@ test("a remote starting with a dash is refused before it can become a git option
 });
 
 test("bind outside a factory repo fails with guidance", async () => {
-  await expect(bindRepo(API, deps({ cwd: tmp }), { installation: "gh" })).rejects.toThrow(
+  runFrom(tmp);
+  await expect(bindRepo(API, deps(), { installation: "gh" })).rejects.toThrow(
     "not inside a factory repo",
   );
 });
@@ -286,25 +287,27 @@ afterEach(() => {
 
 const failLabel = (err: unknown) => deps({ ensureLabel: vi.fn().mockRejectedValue(err) });
 
-test("the label leg without a hub token fails with the hub's repair, after recording the binding", async () => {
+test("the label leg without a hub connection fails with its repair, after recording the binding", async () => {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
 
   const failure = await bindRepo(
     API,
-    { cwd: factory, out: (line) => lines.push(line) },
+    { out: (line) => lines.push(line) },
     { installation: "gh" },
   ).catch((err: unknown) => err);
 
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("jigs:approved label could not be ensured");
-  expect((failure as { hint?: string }).hint).toContain("pnpm exec jigs hub connect");
+  expect((failure as { hint?: string }).hint).toContain(
+    "JIGS_HUB_TOKEN in this copy's environment",
+  );
   expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
 });
 
 test("bind ensures every jigs label on every run, whatever the approval", async () => {
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { mergeApproval: "label" }, hub: { url: "https://hub.example.test" }, workflows: {} };',
   );
   const ensureLabel = vi.fn().mockResolvedValueOnce("created").mockResolvedValueOnce("verified");
 
@@ -327,7 +330,7 @@ test("a factory approving by review still gets the jigs labels", async () => {
   const ensureLabel = vi.fn().mockResolvedValue("verified");
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    'export default { github: { operator: "me" }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };',
+    'export default { github: { operator: "me" }, hub: { url: "https://hub.example.test" }, workflows: {} };',
   );
 
   await bindRepo(API, deps({ ensureLabel }), { installation: "gh" });
@@ -434,7 +437,7 @@ test("bind with a non-github remote skips the label leg", async () => {
 });
 
 test("unsupported bindings fail before modifying files or ensuring labels", async () => {
-  const text = `const bindings = {}; export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }, bindings };`;
+  const text = `const bindings = {}; export default { hub: { url: "https://hub.example.test" }, bindings };`;
   writeFileSync(path.join(factory, "jigs.config.ts"), text);
   const ensureLabel = vi.fn();
   await expect(bindRepo(API, deps({ ensureLabel }), { installation: "gh" })).rejects.toThrow(

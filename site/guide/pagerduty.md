@@ -4,7 +4,7 @@ A factory talks to PagerDuty through a PagerDuty app that its
 [hub](/guide/hub) holds and assigns to it. jigs reads incidents
 and adds notes to them as the app, never with a person's API key. The hub
 receives the app's incident events and hands the factory its tokens, so the
-factory's `.env` holds no PagerDuty secret.
+factory's environment holds no PagerDuty secret.
 
 ## 1. Set up the app in the hub
 
@@ -52,12 +52,12 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
   triggers: {
     "checkout-pages": {
+      active: process.env.CHECKOUT_PAGES_ACTIVE === "true",
       workflow: "respond",
       source: pagerduty.incidents({
         installationName: "pagerduty-acme",

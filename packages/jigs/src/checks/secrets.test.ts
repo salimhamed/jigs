@@ -1,5 +1,3 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { type FactoryContext, resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
@@ -10,10 +8,9 @@ import { runChecks } from "./catalog.ts";
 import type { WorkflowRequires } from "./index.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
 
-function factoryWithEnv(dotEnv: string): FactoryContext {
+function factory(): FactoryContext {
   const root = makeTmpDir();
   onTestFinished(() => removeTmpDir(root));
-  writeFileSync(path.join(root, ".env"), dotEnv);
   return resolveFactoryContext(root);
 }
 
@@ -21,13 +18,13 @@ afterEach(() => {
   vi.unstubAllEnvs();
 });
 
-async function outcomes(requires: WorkflowRequires, shell: Record<string, string>, dotEnv = "") {
-  for (const [name, value] of Object.entries(shell)) vi.stubEnv(name, value);
-  const report = await runChecks(secretChecks(requires, { context: factoryWithEnv(dotEnv) }));
+async function outcomes(requires: WorkflowRequires, env: Record<string, string>) {
+  for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value);
+  const report = await runChecks(secretChecks(requires, { context: factory() }));
   return report.checks;
 }
 
-test("a declared secret that is not set fails with the .env repair", async () => {
+test("a declared secret that is not set fails, naming this copy's environment", async () => {
   expect(await outcomes({ secrets: ["SNOWFLAKE_TOKEN"] }, {})).toEqual([
     {
       id: "secret.SNOWFLAKE_TOKEN",
@@ -35,7 +32,7 @@ test("a declared secret that is not set fails with the .env repair", async () =>
       ok: false,
       reason: "SNOWFLAKE_TOKEN is not set in the service's environment",
       repair:
-        "set SNOWFLAKE_TOKEN in the factory repo's .env, then: `pnpm exec jigs up --restart-service`",
+        "set SNOWFLAKE_TOKEN in this copy's environment, then: `pnpm exec jigs up --restart-service`",
     },
   ]);
 });
@@ -45,32 +42,13 @@ test("an empty secret counts as unset", async () => {
   expect(check).toMatchObject({ ok: false });
 });
 
-test("a secret set in .env passes without a detail", async () => {
-  const [check] = await outcomes(
-    { secrets: ["SNOWFLAKE_TOKEN"] },
-    { SNOWFLAKE_TOKEN: "from-env-file" },
-    "SNOWFLAKE_TOKEN=from-env-file\n",
-  );
+test("a set secret passes without a detail", async () => {
+  const [check] = await outcomes({ secrets: ["SNOWFLAKE_TOKEN"] }, { SNOWFLAKE_TOKEN: "value" });
   expect(check).toEqual({
     id: "secret.SNOWFLAKE_TOKEN",
     label: "secret SNOWFLAKE_TOKEN",
     ok: true,
   });
-});
-
-test("a secret only the shell provides passes, saying so without its value", async () => {
-  for (const dotEnv of ["", "SNOWFLAKE_TOKEN=\n", 'SNOWFLAKE_TOKEN="  "\n']) {
-    const [check] = await outcomes(
-      { secrets: ["SNOWFLAKE_TOKEN"] },
-      { SNOWFLAKE_TOKEN: "shell-value" },
-      dotEnv,
-    );
-    expect(check).toMatchObject({
-      ok: true,
-      detail: "not set in .env; the service has it from the shell or an earlier .env",
-    });
-    expect(JSON.stringify(check)).not.toContain("shell-value");
-  }
 });
 
 test("an entry that is not a variable name fails by position, without echoing it", async () => {
@@ -124,7 +102,7 @@ test("doctor checks each name once and names every workflow that needs it", asyn
         sync: { requires: { secrets: ["SNOWFLAKE_TOKEN"] } },
         report: { requires: { secrets: ["SNOWFLAKE_TOKEN", "bad name"] } },
       },
-      { context: factoryWithEnv("") },
+      { context: factory() },
     ),
   );
   expect(report.checks).toEqual([
@@ -141,17 +119,6 @@ test("doctor checks each name once and names every workflow that needs it", asyn
   ]);
 });
 
-test("without a factory .env a set secret still passes", async () => {
-  vi.stubEnv("SNOWFLAKE_TOKEN", "x");
-  const [check] = await runChecks(
-    secretChecks(
-      { secrets: ["SNOWFLAKE_TOKEN"] },
-      { context: resolveFactoryContext(path.join(makeTmpDir(), "no-factory")) },
-    ),
-  ).then((report) => report.checks);
-  expect(check).toMatchObject({ ok: true });
-});
-
 test("doctor leaves MCP credentials to the MCP server checks", () => {
   const analyst = harnesses.claude({
     model: "sonnet",
@@ -165,7 +132,7 @@ test("doctor leaves MCP credentials to the MCP server checks", () => {
   });
   const checks = doctorSecretChecks(
     { analysis: { requires: { agents: { analyst } } } },
-    { context: factoryWithEnv("") },
+    { context: factory() },
   );
   expect(checks).toEqual([]);
 });

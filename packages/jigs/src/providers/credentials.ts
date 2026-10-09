@@ -4,9 +4,9 @@
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 
-// The service belongs to a factory repo, so its environment file is that
-// repo's own .env and the restart is the CLI verb that supervises it.
-export const SERVICE_ENV_FILE = "the factory repo's .env";
+// The service inherits the environment of the CLI that starts it, so a
+// changed value takes a restart.
+export const FACTORY_ENVIRONMENT = "this copy's environment";
 export const RESTART_SERVICE = "pnpm exec jigs up --restart-service";
 
 export type EnvLookup = (name: string) => string | undefined;
@@ -21,7 +21,7 @@ export function requireCredential(
   if (value === undefined || value === "") {
     throw new JigsError(
       `${name} is not set${neededBy === undefined ? "" : `, and ${neededBy} needs it`}`,
-      `set ${name} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+      `set ${name} in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
     );
   }
   return value;

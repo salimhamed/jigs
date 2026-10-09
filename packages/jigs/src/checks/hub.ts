@@ -1,37 +1,25 @@
 import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import type { FactoryContext } from "../config/factory-context.ts";
-import { JigsError } from "../errors.ts";
-import {
-  fetchFactoryStatus,
-  HUB_CONNECT,
-  type HubConnection,
-  hubConnection,
-  hubRefused,
-  PROVIDER_NAMES,
-} from "../providers/hub.ts";
+import { hubConnection, hubRefused, NO_HUB_CONNECTION, PROVIDER_NAMES } from "../providers/hub.ts";
 import type { Provider } from "../workflow/providers.ts";
 import type { Check, CheckResult } from "./check.ts";
 
-/** Whether the hub answers and takes this factory's token. */
+/**
+ * Whether this copy has a hub connection and, given `status`, whether the hub answers and takes
+ * its token.
+ */
 export function hubChecks(
   ctx: FactoryContext,
-  status: (ctx: FactoryContext) => Promise<FactoryStatus> = fetchFactoryStatus,
+  status?: (ctx: FactoryContext) => Promise<FactoryStatus>,
 ): Check[] {
   return [
     {
       id: "hub.connection",
       label: "hub",
       run: async () => {
-        let hub: HubConnection;
-        try {
-          hub = hubConnection(ctx);
-        } catch (err) {
-          return {
-            ok: false,
-            reason: `${err instanceof Error ? err.message : String(err)}, so this factory hears nothing and gets no GitHub, Linear, Slack or PagerDuty token`,
-            repair: (err instanceof JigsError ? err.hint : undefined) ?? HUB_CONNECT,
-          };
-        }
+        const hub = hubConnection(ctx);
+        if (hub === undefined) return { ok: false, ...NO_HUB_CONNECTION };
+        if (status === undefined) return { ok: true };
         try {
           const { factory, organization } = await status(ctx);
           return { ok: true, detail: `factory ${factory.name} in ${organization.name}` };

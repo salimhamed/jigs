@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { testFactoryContext } from "../test-fixtures.ts";
+import { removeTmpDir, testFactoryContext, useTestFactory } from "../test-fixtures.ts";
 import {
   createSlackClient,
   SLACK_API_URL,
@@ -29,7 +29,7 @@ function reply(body: unknown, init: { status?: number; headers?: Record<string, 
   });
 }
 
-let factories = 0;
+const factoryParents: string[] = [];
 let answers: Array<() => Response>;
 let calls: FetchCall[];
 let sleeps: number[];
@@ -68,11 +68,11 @@ beforeEach(() => {
   };
   slackTokens = useSlackClient(deps);
   slack = createSlackClient({ ...deps, installationName: "acme" });
-  factories += 1;
-  vi.stubEnv("JIGS_FACTORY_ROOT", `/slack-test-${factories}`);
+  factoryParents.push(useTestFactory());
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const parent of factoryParents.splice(0)) removeTmpDir(parent);
   vi.unstubAllEnvs();
 });
 
@@ -201,7 +201,7 @@ test("the bot is read from the hub once per factory context", async () => {
     scopes: expect.any(Array),
   });
   expect(slackTokens).toHaveBeenCalledTimes(1);
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/another-factory");
+  factoryParents.push(useTestFactory());
   await slackBot("acme");
   expect(slackTokens).toHaveBeenCalledTimes(2);
   expect(calls).toHaveLength(0);

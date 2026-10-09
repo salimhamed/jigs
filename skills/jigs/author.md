@@ -9,7 +9,7 @@ The guides, in the order you need them:
 
 - `https://salimhamed.github.io/jigs/guide/build-a-workflow`: one workflow end to end.
 - `https://salimhamed.github.io/jigs/guide/recipes`: copying in a ready-made workflow such as linear-ticket-to-pr.
-- `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and `.env` variable.
+- `https://salimhamed.github.io/jigs/guide/configuration`: every `jigs.config.ts` key and environment variable.
 
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
@@ -239,12 +239,20 @@ feedback nor your completed work.
 
 ## Configuration and schedules
 
-`jigs.config.ts` declares its hub, ports, bindings,
-deferred workflow imports and schedules. Declare used credential providers in `requires.integrations`. Secrets remain in `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in `.env.example` with an empty value. A schedule names a `workflow`, cron
+`jigs.config.ts` declares its hub (optional until something uses a provider), bindings,
+deferred workflow imports, schedules and triggers; ports and everything else that differs
+between copies of the factory live in the environment. Declare used credential providers in `requires.integrations`. Secrets live in the environment, usually the shared `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in `.env.example` with an empty value. A schedule names a `workflow`, cron
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
 
-Agent harnesses don't inherit `.env`: each gets a small base set (`PATH`, `HOME`,
+Every schedule and trigger needs `active: boolean`. Write it as
+`active: process.env.<NAME>_ACTIVE === "true"` so a new copy is quiet until its
+`.env.local` turns it on, and tell the human to set `<NAME>_ACTIVE=true` in the
+`.env.local` of the copy that should run it, never in the shared `.env`. A value
+that differs per copy, such as a test channel, is read from `process.env` the
+same way. An environment change needs `jigs up --restart-service`.
+
+Agent harnesses don't inherit the service's environment: each gets a small base set (`PATH`, `HOME`,
 locale, proxies and similar) plus its driver's own variables. Give agents any
 other variable by listing its name in `agents: { env: [...] }`; names only.
 For GitHub, give a harness `github: { installationName }` instead of a token: the agent then acts as the App's bot through `gh` and HTTPS pushes,

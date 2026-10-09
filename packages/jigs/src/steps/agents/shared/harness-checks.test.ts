@@ -66,7 +66,7 @@ test("an ANTHROPIC_API_KEY overriding the subscription login fails and names the
     reason: expect.stringContaining("ANTHROPIC_API_KEY"),
     repair: expect.stringContaining("ANTHROPIC_API_KEY"),
   });
-  expect(result.ok === false && result.repair).toContain("the factory repo's .env");
+  expect(result.ok === false && result.repair).toContain("this copy's environment");
 });
 
 test("the probe spawns the CLI under the environment a Claude step gets", async () => {

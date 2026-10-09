@@ -279,18 +279,13 @@ export default defineWorkflow({
 });
 `;
 
-export function installCompiledCancellationFixture(factory, ports) {
+export function installCompiledCancellationFixture(factory) {
   writeFileSync(path.join(factory, "workflows", "cancel-e2e.ts"), fixtureSource);
   const config = path.join(factory, "jigs.config.ts");
-  const source = readFileSync(config, "utf8")
-    .replace(
-      /service: \{ port: \d+, dashboardPort: \d+ \}/,
-      `service: { port: ${ports.service}, dashboardPort: ${ports.dashboard} }`,
-    )
-    .replace(
-      "workflows: {",
-      'workflows: {\n    cancelE2e: () => import("./workflows/cancel-e2e.ts"),',
-    );
+  const source = readFileSync(config, "utf8").replace(
+    "workflows: {",
+    'workflows: {\n    cancelE2e: () => import("./workflows/cancel-e2e.ts"),',
+  );
   writeFileSync(config, source);
 }
 
@@ -316,16 +311,6 @@ export async function runCompiledCancellationMatrix({
   chmodSync(path.join(noDocker, "docker"), 0o755);
   const env = runtimeEnv(testUrl.toString(), dataHome, ports);
   let serviceEnv = env;
-
-  // Keeps the hub token `jigs hub connect` wrote: the service does not start without it.
-  const hubToken =
-    readFileSync(path.join(factory, ".env"), "utf8").match(/^JIGS_HUB_TOKEN=.*$/m)?.[0] ?? "";
-  const writeEnv = (workers) =>
-    writeFileSync(
-      path.join(factory, ".env"),
-      `WORKFLOW_POSTGRES_URL=${testUrl.toString()}\nWORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_WORKER_CONCURRENCY=${workers}\nWORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN=1\n${hubToken}\n`,
-    );
-  writeEnv(1);
 
   try {
     await admin.query(`CREATE DATABASE "${database}"`);
@@ -692,7 +677,6 @@ await (await getWorld()).close?.();`,
     mkdirSync(cancelledDir, { recursive: true });
     mkdirSync(survivorDir, { recursive: true });
     // Two workers, so the survivor's step runs beside the cancelled one.
-    writeEnv(2);
     serviceEnv = {
       ...env,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
@@ -881,7 +865,6 @@ await (await getWorld()).close?.();`,
     const survivorDir = path.join(codexRoot, "survivor");
     mkdirSync(cancelledDir, { recursive: true });
     mkdirSync(survivorDir, { recursive: true });
-    writeEnv(2);
     serviceEnv = {
       ...env,
       HOME: home,
@@ -1213,10 +1196,8 @@ function runtimeEnv(postgresUrl, dataHome, ports) {
   return {
     ...process.env,
     XDG_DATA_HOME: dataHome,
-    PORT: String(ports.service),
+    JIGS_SERVICE_PORT: String(ports.service),
     JIGS_DASHBOARD_PORT: String(ports.dashboard),
-    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${ports.service}`,
-    WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
     WORKFLOW_POSTGRES_URL: postgresUrl,
     WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "1",
     WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",

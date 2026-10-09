@@ -1,10 +1,10 @@
-import { copyFileSync, writeFileSync } from "node:fs";
+import { copyFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import * as hub from "../providers/hub.ts";
 import * as linearApi from "../providers/linear.ts";
-import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { inTestFactory, removeTmpDir, useTestFactory } from "../test-fixtures.ts";
 import { type Harness, harnesses, models } from "../workflow/agents/harness-config.ts";
 import { formatFailures, runChecks } from "./catalog.ts";
 import { type Check, failedCheck } from "./check.ts";
@@ -183,7 +183,7 @@ test("preflight lists a credential shared by a model and a Pi agent once", () =>
 });
 
 test("doctor checks the model source each Pi agent carries and names the workflows", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("TEAM_KEY", "");
   const checks = doctorChecks({
     one: {
@@ -214,7 +214,7 @@ test("doctor checks the model source each Pi agent carries and names the workflo
 });
 
 test("doctor checks the model sources a workflow declares", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({
     triage: { requires: { models: [models.openrouter("m", { apiKeyEnv: "TEAM_KEY" })] } },
   }).map((check) => check.id);
@@ -263,20 +263,20 @@ test("model requirements reject kind-only declarations", () => {
 });
 
 test("doctor does not infer a model credential without a descriptor", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("OPENROUTER_API_KEY", "configured");
   expect(doctorChecks({}).map((check) => check.id)).not.toContain("model.openrouter-api-key");
 });
 
 test("doctor omits checks that require a call-site model descriptor", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   expect(doctorChecks({}).map((check) => check.id)).not.toContain(
     "model.openai-compatible-runtime",
   );
 });
 
 test("doctor checks aws only when a workflow requires it", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("AWS_PROFILE", "some-profile");
   expect(doctorChecks({ hello: {} }).map((c) => c.id)).not.toContain("aws.credentials");
   vi.stubEnv("AWS_PROFILE", "");
@@ -288,7 +288,7 @@ test("doctor checks aws only when a workflow requires it", async () => {
 });
 
 test("a workflow's declared secrets are checked by preflight and doctor", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("SNOWFLAKE_TOKEN", "");
   expect(preflightIds({ secrets: ["SNOWFLAKE_TOKEN"] })).toEqual(["secret.SNOWFLAKE_TOKEN"]);
   const report = await runChecks(
@@ -307,7 +307,7 @@ test("generic workflows require neither Linear nor GitHub credentials", async ()
 
 test("preflight probes only the installations a workflow's agents name", async () => {
   vi.stubEnv("JIGS_HUB_TOKEN", "");
-  expect(preflightIds({ integrations: ["linear", "github"] })).toEqual([]);
+  expect(preflightIds({ integrations: ["linear", "github"] })).toEqual(["hub.connection"]);
   const named = {
     integrations: ["linear" as const],
     agents: {
@@ -323,41 +323,62 @@ test("preflight probes only the installations a workflow's agents name", async (
 });
 
 function factoryWith(config: string): string {
-  const factory = makeTmpDir();
-  onTestFinished(() => removeTmpDir(factory));
-  writeFileSync(path.join(factory, "jigs.config.ts"), `export default ${config}`);
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
-  return factory;
+  const parent = useTestFactory(`export default ${config}`);
+  onTestFinished(() => removeTmpDir(parent));
+  return path.join(parent, "factory");
 }
 
-test("doctor checks no provider credential for a factory whose workflows require none", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
+test("doctor checks neither the hub nor a provider for a factory whose workflows require none", async () => {
+  factoryWith("{}");
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  expect(await runChecks(doctorChecks({ hello: {} }))).toEqual({ ok: true, checks: [] });
+});
+
+test("doctor checks the hub a workflow's provider needs", async () => {
+  factoryWith('{ hub: { url: "https://hub.example.test" } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(hub, "fetchFactoryStatus").mockResolvedValue({
     factory: { name: "personal" },
     organization: { name: "Acme" },
     apps: [],
   });
-  const report = await runChecks(doctorChecks({ hello: {} }));
-  expect(report).toEqual({
+  const report = await runChecks(
+    doctorChecks({ answer: { requires: { integrations: ["slack"] } } }),
+  );
+  expect(report.checks.find((c) => c.id === "hub.connection")).toEqual({
+    id: "hub.connection",
+    label: "hub",
     ok: true,
-    checks: [{ id: "hub.connection", label: "hub", ok: true, detail: "factory personal in Acme" }],
+    detail: "factory personal in Acme",
   });
 });
 
-test("doctor fails a factory without its hub token, naming hub connect", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
-  const report = await runChecks(doctorChecks({ hello: {} }));
-  expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
-    ok: false,
-    repair: expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
-  });
+test("in a copy with no hub connection doctor checks nothing through the hub, and preflight refuses a run that needs it", async () => {
+  factoryWith(
+    `{ bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } }, linear: { operator: "salim@example.com" } }`,
+  );
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  const requires = { integrations: ["slack" as const] };
+  const doctor = doctorChecks({ answer: { requires } }).map((check) => check.id);
+  expect(doctor).toContain("binding.api");
+  expect(doctor.filter((id) => id.startsWith("hub.") || id.endsWith(".installations"))).toEqual([]);
+  expect(preflightIds({ bindings: ["api"] })).toContain("hub.connection");
+  const preflight = await runChecks(preflightChecks(requires));
+  expect(preflight.checks).toEqual([
+    {
+      id: "hub.connection",
+      label: "hub",
+      ok: false,
+      reason: "this copy has no hub connection",
+      repair: "set hub.url in jigs.config.ts and JIGS_HUB_TOKEN in this copy's environment",
+    },
+  ]);
 });
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
-  factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  factoryWith('{ hub: { url: "https://hub.example.test" } }');
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  hubStatus([]);
   const report = await runChecks(
     doctorChecks({
       hello: {},
@@ -375,7 +396,7 @@ test("doctor checks each provider a workflow requires and names the workflows", 
   });
 });
 
-const HUB = 'hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 }';
+const HUB = 'hub: { url: "https://hub.example.test" }';
 
 const hubStatus = (
   apps: Array<{ provider: "github" | "linear" | "slack" | "pagerduty"; installationName: string }>,
@@ -465,6 +486,7 @@ test("doctor reads the hub once for the hub check and every provider's", async (
 });
 
 test("doctor checks a provider the factory configuration asks for", () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(
     `{ ${HUB}, bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } } }`,
@@ -491,27 +513,14 @@ test("a provider in use with no named installation fails with the repair on the 
   });
 });
 
-test("doctor sweeps the hub's Slack installations for a workflow requiring slack, preflight does not", async () => {
-  factoryWith(`{ ${HUB} }`);
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
-  const slack = { integrations: ["slack" as const] };
-  expect(preflightIds(slack)).toEqual([]);
-  const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
-  expect(report.checks.find((c) => c.id === "slack.installations")).toMatchObject({
-    ok: false,
-    reason:
-      "could not read this factory's Slack installations from the hub: JIGS_HUB_TOKEN is not set (needed by workflow answer)",
-  });
-});
-
 test("doctor checks no harness for a factory whose workflows require none", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({ hello: {} }).map((check) => check.id);
   expect(ids.filter((id) => id.startsWith("harness."))).toEqual([]);
 });
 
 test("doctor checks each required harness and names the workflows that need it", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   vi.stubEnv("PATH", "/nowhere");
   vi.stubEnv("JIGS_CLAUDE_EXECUTABLE", "");
   const harness = doctorChecks({
@@ -551,8 +560,7 @@ test("preflight probes the PagerDuty installations a workflow's agents name", as
   const report = await runChecks(preflightChecks(pagerduty));
   expect(report.checks.find((c) => c.id === "pagerduty.installations")).toMatchObject({
     ok: false,
-    reason: "acme: the hub gave no PagerDuty token: JIGS_HUB_TOKEN is not set",
-    repair: expect.stringContaining("jigs hub connect"),
+    reason: "acme: the hub gave no PagerDuty token: this copy has no hub connection",
   });
 });
 
@@ -595,9 +603,7 @@ const probeServer = (credential: string) => ({
 });
 
 test("doctor probes each MCP server a required agent declares, from the factory root", async () => {
-  const factory = factoryWith(
-    "{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
-  );
+  const factory = factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   copyFileSync(PROBE_SERVER, path.join(factory, "mcp-probe-server.mjs"));
   vi.stubEnv("PROBE_SOURCE", "from-factory");
   const builder = harnesses.claude({
@@ -613,7 +619,7 @@ test("doctor probes each MCP server a required agent declares, from the factory 
 });
 
 test("doctor names the workflows whose agents declare a failing MCP server", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   const builder = harnesses.claude({
     model: "opus",
     mcpServers: { github: probeServer("MISSING_PROBE_TOKEN") },
@@ -637,7 +643,7 @@ test("doctor names the workflows whose agents declare a failing MCP server", asy
 });
 
 test("doctor reports an agent whose environment cannot be planned, rather than failing", async () => {
-  factoryWith("{ hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }");
+  factoryWith("{ hub: { url: 'https://hub.example.test' } }");
   // Built by hand: the harness builder would have filled in `compat`.
   const builder = {
     kind: "pi",
@@ -663,9 +669,7 @@ test("doctor reports an agent whose environment cannot be planned, rather than f
 });
 
 test("preflight and doctor check each declared skill folder, doctor naming the workflows", async () => {
-  const root = makeTmpDir();
-  onTestFinished(() => removeTmpDir(root));
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
+  const root = factoryWith(`{ ${HUB} }`);
   const analyst = harnesses.claude({ model: "opus", skills: ["skills/snowflake"] });
   expect(preflightIds({ agents: { analyst } })).toContain("skills.skills/snowflake");
 
@@ -688,7 +692,7 @@ test("the just-in-time checks cover the skills of the harness the body built", (
 });
 
 test("doctor shows a skill path once when no earlier entry could clash with it", () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nowhere");
+  factoryWith(`{ ${HUB} }`);
   const ids = doctorChecks({
     report: { requires: { agents: { a: harnesses.claude({ model: "opus", skills: ["s/a"] }) } } },
     audit: {

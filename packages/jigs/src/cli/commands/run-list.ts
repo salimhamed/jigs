@@ -27,19 +27,21 @@ export interface RunListRun {
 
 export interface RunListSchedule {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   cron: string;
   next: string | null;
-  active: string | null;
+  running: string | null;
 }
 
 export interface RunListTrigger {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   source: string;
   lastOccurrence: string | null;
   pending: number;
-  active: number;
+  running: number;
   failed: number;
   failures: Array<{
     occurrence: string;
@@ -122,13 +124,14 @@ export async function showRuns(
   if (result.schedules.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["SCHEDULE", "WORKFLOW", "CRON", "NEXT", "ACTIVE"],
+      ["SCHEDULE", "STATE", "WORKFLOW", "CRON", "NEXT", "RUNNING"],
       result.schedules.map((schedule) => [
         schedule.name,
+        schedule.state,
         schedule.workflow,
         schedule.cron,
         schedule.next ?? "-",
-        schedule.active ?? "-",
+        schedule.running ?? "-",
       ]),
     )) {
       deps.out(line);
@@ -141,14 +144,15 @@ export async function showRuns(
   if (result.triggers.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["TRIGGER", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
+      ["TRIGGER", "STATE", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "RUNNING", "FAILED"],
       result.triggers.map((trigger) => [
         trigger.name,
+        trigger.state,
         trigger.workflow,
         trigger.source,
         trigger.lastOccurrence ?? "-",
         String(trigger.pending),
-        String(trigger.active),
+        String(trigger.running),
         String(trigger.failed),
       ]),
     )) {

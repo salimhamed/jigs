@@ -64,6 +64,7 @@ export default {
           { text: "Recipes", link: "/guide/recipes" },
           { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },
+          { text: "Developing in worktrees", link: "/guide/worktrees" },
           { text: "PagerDuty", link: "/guide/pagerduty" },
           { text: "Triage a PagerDuty incident", link: "/guide/pagerduty-incidents" },
           { text: "CLI commands", link: "/guide/cli" },

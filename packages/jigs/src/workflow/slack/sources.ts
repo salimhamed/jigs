@@ -19,6 +19,7 @@ import type { SourceDescriptor } from "../factory.ts";
  *
  * const triggers = {
  *   "answer-questions": {
+ *     active: process.env.ANSWER_QUESTIONS_ACTIVE === "true",
  *     workflow: "answer",
  *     source: slack.mentions({ installationName: "acme", channels: ["C0123ABCD"] }),
  *   },

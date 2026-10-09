@@ -26,7 +26,7 @@ import {
   table,
   warningText,
 } from "../components/ui.ts";
-import { connectCommand } from "../factories.server.ts";
+import { connectLines } from "../factories.server.ts";
 import type { Route } from "./+types/new-factory.ts";
 import type { loader as appsLoader } from "./factory-apps.ts";
 import type { loader as lastSeenLoader } from "./factory-last-seen.ts";
@@ -56,7 +56,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       connect: {
         id: factory.id,
         name: factory.name,
-        command: connectCommand(context, token),
+        ...connectLines(context, token),
         // Stamped after re-issuing, so a poll with the old token cannot count as connecting.
         issuedAt: new Date().toISOString(),
         added: false,
@@ -72,7 +72,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       connect: {
         id: factory.id,
         name,
-        command: connectCommand(context, token),
+        ...connectLines(context, token),
         issuedAt: new Date().toISOString(),
         added: true,
       },
@@ -86,7 +86,7 @@ export async function action({ context, request }: Route.ActionArgs) {
 export default function NewFactory({ actionData }: Route.ComponentProps) {
   const connect = actionData && "connect" in actionData ? actionData.connect : undefined;
   useActionToast(actionData && "error" in actionData ? actionData : undefined);
-  if (connect) return <ConnectFactory key={connect.command} factory={connect} />;
+  if (connect) return <ConnectFactory key={connect.env} factory={connect} />;
   return (
     <div className="space-y-6">
       <PageHeader title="Add a factory" parent={{ to: "/factories", label: "Factories" }} />
@@ -115,12 +115,19 @@ const UP_COMMAND = "pnpm exec jigs up";
 
 /**
  * Setting a factory up: connecting its apps when it is new, the one-time
- * connect command, and starting it, then whether it has connected yet.
+ * lines that point it at this hub, and starting it, then whether it has connected yet.
  */
 function ConnectFactory({
   factory,
 }: {
-  factory: { id: string; name: string; command: string; issuedAt: string; added: boolean };
+  factory: {
+    id: string;
+    name: string;
+    config: string;
+    env: string;
+    issuedAt: string;
+    added: boolean;
+  };
 }) {
   const lastSeen = useFetcher<typeof lastSeenLoader>();
   const url = `/factories/${factory.id}/last-seen`;
@@ -171,12 +178,13 @@ function ConnectFactory({
           title="Point it at this hub"
           description={
             <>
-              Run this in the directory of <strong>{factory.name}</strong>, on the machine where it
-              runs.
+              Add the first line to <strong>{factory.name}</strong>'s <code>jigs.config.ts</code>,
+              and set the second in its environment on the machine where it runs.
             </>
           }
         >
-          <Command text={factory.command} />
+          <Snippet text={factory.config} label="Config line" />
+          <Snippet text={factory.env} label="Environment line" />
           <p className={`text-sm ${warningText}`}>
             The token is shown once. Copy it before leaving this page.
           </p>
@@ -192,7 +200,7 @@ function ConnectFactory({
             </>
           }
         >
-          <Command text={UP_COMMAND} />
+          <Snippet text={UP_COMMAND} label="Command" command />
           {gone ? (
             <p className={`text-sm ${warningText}`}>This factory was removed.</p>
           ) : connected ? (
@@ -251,14 +259,14 @@ function Step({
   );
 }
 
-function Command({ text }: { text: string }) {
+function Snippet({ text, label, command }: { text: string; label: string; command?: boolean }) {
   return (
     <div className={`${card} flex items-center gap-3 p-3`}>
       <code className="grow break-all text-sm">
-        <span className="select-none text-zinc-500">$ </span>
+        {command && <span className="select-none text-zinc-500">$ </span>}
         {text}
       </code>
-      <CopyButton text={text} label="Command" />
+      <CopyButton text={text} label={label} />
     </div>
   );
 }

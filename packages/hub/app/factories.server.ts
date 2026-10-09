@@ -70,9 +70,12 @@ export async function readFactory(
   return row ? withStatus(row) : null;
 }
 
-/** The command a factory's owner runs to connect it with its token. */
-export function connectCommand(context: AppLoadContext, token: string) {
-  return `pnpm exec jigs hub connect ${context.config.publicUrl.origin} ${token}`;
+/** What a factory's owner copies to connect it: a line for its `jigs.config.ts` and one for its environment. */
+export function connectLines(context: AppLoadContext, token: string) {
+  return {
+    config: `hub: { url: "${context.config.publicUrl.origin}" }`,
+    env: `JIGS_HUB_TOKEN=${token}`,
+  };
 }
 
 const PAGE_SIZE = 50;

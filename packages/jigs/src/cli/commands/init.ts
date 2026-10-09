@@ -45,8 +45,8 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   deps.out(heading("Next, in this directory"));
   const next: Array<[string, string?]> = [
     ["pnpm install"],
-    ["cp .env.example .env", "then fill in what your workflows need"],
-    ["pnpm exec jigs hub connect <url> <token>", "from your hub's Factories page"],
+    ["cp .env.example .env", "values every copy of this factory shares"],
+    ["cp .env.local.example .env.local", "this copy's own values, such as its ports"],
     ["pnpm exec jigs up", "start Postgres and the service, then run doctor"],
     ["pnpm exec jigs run hello"],
     ["pnpm exec jigs doctor", "re-check what your workflows need, any time"],

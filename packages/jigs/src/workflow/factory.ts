@@ -53,7 +53,7 @@ export interface WorkflowDefinition<S extends z.ZodType = z.ZodType> {
    * everything listed before every run. List only what the workflow uses.
    *
    * @remarks
-   * A secret is set in the factory's `.env` and read in a step from the
+   * A secret is set in the factory's environment and read in a step from the
    * process environment. The variables an agent's MCP servers name count as secrets
    * without being listed. Listing a secret does not pass it to agents.
    *
@@ -116,6 +116,8 @@ type AnyWorkflowDefinition = WorkflowDefinition<any>;
  * @group Factory and workflows
  */
 export interface Schedule {
+  /** An inactive schedule never fires. */
+  active: boolean;
   workflow: string;
   /** Five fields, evaluated in the service host's local time zone. */
   cron: string;
@@ -147,6 +149,8 @@ export interface SourceDescriptor {
  * @group Factory and workflows
  */
 export interface EventTrigger {
+  /** An inactive trigger is not armed: its source's occurrences start no runs. */
+  active: boolean;
   workflow: string;
   source: SourceDescriptor;
   inputs?: Record<string, unknown>;

@@ -64,13 +64,13 @@ test("a hub that cannot answer fails with its own repair", async () => {
   expect(
     await run({
       status: async () => {
-        throw new JigsError("JIGS_HUB_TOKEN is not set", "connect the factory");
+        throw new JigsError("this copy has no hub connection", "connect the factory");
       },
     }),
   ).toEqual({
     ok: false,
     reason:
-      "could not read this factory's Slack installations from the hub: JIGS_HUB_TOKEN is not set",
+      "could not read this factory's Slack installations from the hub: this copy has no hub connection",
     repair: "connect the factory",
   });
 });

@@ -8,6 +8,7 @@ import {
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
+  runFrom,
 } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { listBindings } from "./bindings.ts";
@@ -32,7 +33,8 @@ afterEach(() => {
 
 const printed = async (cwd = factory) => {
   const lines: string[] = [];
-  await listBindings({ cwd, out: (line) => lines.push(line) });
+  runFrom(cwd);
+  await listBindings({ out: (line) => lines.push(line) });
   expect(layoutProblems(lines)).toEqual([]);
   return lines;
 };

@@ -3,7 +3,13 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
 import { JigsError } from "../../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir, stubService } from "../../test-fixtures.ts";
+import {
+  makeFactoryRepo,
+  makeTmpDir,
+  removeTmpDir,
+  runFrom,
+  stubService,
+} from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { coerceInputs, launchRun, splitInputs, validateInputs } from "./run.ts";
 import { SERVICE_ENTRY } from "./service-process.ts";
@@ -341,10 +347,8 @@ test("a run launched over sources newer than the build says so, and still launch
   respondSchema();
   respondStarted();
 
-  await launchRun("deliver-feature", ["ticket=AGE-346"], {
-    ...deps(),
-    factoryCwd: factoryBuilt(-60_000),
-  });
+  runFrom(factoryBuilt(-60_000));
+  await launchRun("deliver-feature", ["ticket=AGE-346"], { ...deps(), ownService: true });
 
   expect(lines[0]).toContain("jigs.config.ts newer than the built service");
   expect(lines[2]).toContain("pnpm exec jigs up");
@@ -355,10 +359,8 @@ test("a build newer than the sources launches without a word about it", async ()
   respondSchema();
   respondStarted();
 
-  await launchRun("deliver-feature", ["ticket=AGE-346"], {
-    ...deps(),
-    factoryCwd: factoryBuilt(60_000),
-  });
+  runFrom(factoryBuilt(60_000));
+  await launchRun("deliver-feature", ["ticket=AGE-346"], { ...deps(), ownService: true });
 
   expect(lines[0]).toBe("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
 });
@@ -378,9 +380,8 @@ test("a workflow the bundle does not have yet hears about the stale build first"
     new Response(JSON.stringify({ knownWorkflows: ["ship"] }), { status: 404 }),
   );
 
-  const err = await failure(
-    launchRun("triage", [], { ...deps(), factoryCwd: factoryBuilt(-60_000) }),
-  );
+  runFrom(factoryBuilt(-60_000));
+  const err = await failure(launchRun("triage", [], { ...deps(), ownService: true }));
 
   expect(lines[0]).toContain("jigs.config.ts newer than the built service");
   expect(err?.message).toContain("unknown workflow: triage");
@@ -390,10 +391,8 @@ test("a freshness check that cannot read the factory costs no run", async () => 
   respondSchema();
   respondStarted();
 
-  await launchRun("deliver-feature", ["ticket=AGE-346"], {
-    ...deps(),
-    factoryCwd: tmp,
-  });
+  runFrom(tmp);
+  await launchRun("deliver-feature", ["ticket=AGE-346"], { ...deps(), ownService: true });
 
   expect(lines[0]).toBe("wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM  started");
 });

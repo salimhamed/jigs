@@ -15,11 +15,11 @@ test("examples stay isolated and report missing variables at their documentation
 
 test("configuration fragments validate properties without filling in identifiers", async () => {
   const examples = examplesIn(
-    "```ts factory-options\nservice: { dashboardPort: missingPort },\n```\n\n```ts factory-options\nunknownSetting: true,\n```\n",
+    "```ts factory-options\nhub: { url: missingUrl },\n```\n\n```ts factory-options\nunknownSetting: true,\n```\n",
     "configuration.md",
   );
   const errors = await checkExamples(examples);
   expect(errors).toHaveLength(2);
-  expect(errors[0]).toContain("configuration.md:2:27: Cannot find name 'missingPort'.");
+  expect(errors[0]).toContain("configuration.md:2:13: Cannot find name 'missingUrl'.");
   expect(errors[1]).toContain("'unknownSetting' does not exist");
 }, 30_000);

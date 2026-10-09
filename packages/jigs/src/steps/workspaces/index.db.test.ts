@@ -31,7 +31,7 @@ const admin = new Pool({ connectionString: postgresAdminUrl.toString(), max: 1 }
 const tmp = makeTmpDir();
 const factoryRoot = path.join(tmp, "factory");
 mkdirSync(factoryRoot, { recursive: true });
-vi.stubEnv("JIGS_FACTORY_ROOT", factoryRoot);
+vi.spyOn(process, "cwd").mockReturnValue(factoryRoot);
 vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 vi.stubEnv("WORKFLOW_POSTGRES_URL", testUrl.toString());
 
@@ -39,7 +39,7 @@ const dirs = { factoryRoot, bindingName: "api" };
 const { remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
-  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
 );
 
 const sql = () => registrySql();

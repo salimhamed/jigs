@@ -1,5 +1,9 @@
-import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { rmSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
+import { makeFactoryRepo } from "../../../test-fixtures.ts";
 import { askModel } from "../../../workflow/agents/ask-model.ts";
 import { harnesses, models } from "../../../workflow/agents/harness-config.ts";
 import {
@@ -44,17 +48,22 @@ vi.mock("node:fs", async (importOriginal) => ({
   mkdtempSync: boundaries.mkdtempSync,
 }));
 
+// Built with the real mkdtempSync, which this file mocks.
+let factoryParent: string;
+beforeAll(async () => {
+  const fs = await vi.importActual<typeof import("node:fs")>("node:fs");
+  factoryParent = fs.mkdtempSync(path.join(tmpdir(), "jigs-model-request-"));
+});
+afterAll(() => rmSync(factoryParent, { recursive: true, force: true }));
+beforeEach(() => {
+  vi.spyOn(process, "cwd").mockReturnValue(makeFactoryRepo(factoryParent));
+});
+
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
   vi.unstubAllEnvs();
   vi.unstubAllGlobals();
-});
-
-// Credentials come from the shell stubs; a factory without a .env adds none, and
-// building a real one would spend the mocked mkdtempSync.
-beforeEach(() => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nonexistent/jigs-test-factory");
 });
 
 const verdict = z.object({ ok: z.boolean() });
@@ -528,7 +537,7 @@ test("OpenRouter names the missing descriptor credential and its repair", async 
   ).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(Error);
   expect(String(error)).toMatch(
-    /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in the factory repo's \.env/s,
+    /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in this copy's environment/s,
   );
   expect(String(error)).not.toContain("unrelated-secret");
 });

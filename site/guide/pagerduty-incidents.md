@@ -130,12 +130,12 @@ import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { port: 8990, dashboardPort: 9090 },
   workflows: {
     "incident-triage": () => import("./workflows/incident-triage/incident-triage.ts"),
   },
   triggers: {
     "triage-checkout": {
+      active: process.env.TRIAGE_CHECKOUT_ACTIVE === "true",
       workflow: "incident-triage",
       source: pagerduty.incidents({ installationName: "pagerduty-acme", services: ["PABC123"] }),
     },

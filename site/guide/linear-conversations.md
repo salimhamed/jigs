@@ -78,6 +78,7 @@ import { linear } from "@jigs-ai/jigs";
 // In defineFactory's `triggers`.
 const triggers = {
   "converse-on-mention": {
+    active: process.env.CONVERSE_ON_MENTION_ACTIVE === "true",
     workflow: "converse",
     source: linear.agentSessions({ installationName: "linear-acme", teams: ["ENG"] }),
   },

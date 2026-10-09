@@ -2,13 +2,14 @@ import { mkdirSync, mkdtempSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test, vi } from "vitest";
+import { runFrom } from "../../test-fixtures.ts";
 import { type BuildDeps, buildFactoryService } from "./build.ts";
 
 function factory(): string {
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 59321 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };",
   );
   mkdirSync(path.join(root, "node_modules", ".bin"), { recursive: true });
   writeFileSync(path.join(root, "node_modules", ".bin", "nitro"), "");
@@ -28,8 +29,8 @@ test("prepares the factory, then runs the factory's own nitro", async () => {
   }));
   const lines: string[] = [];
 
+  runFrom(root);
   await buildFactoryService({
-    cwd: root,
     out: (line) => lines.push(line),
     prepare,
     execFile,
@@ -49,12 +50,12 @@ test("a factory with no nitro installed is told to install, not to guess", async
   const root = mkdtempSync(path.join(tmpdir(), "jigs-build-"));
   writeFileSync(
     path.join(root, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 59321 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} };",
   );
 
+  runFrom(root);
   await expect(
     buildFactoryService({
-      cwd: root,
       out: () => {},
       prepare: vi.fn(),
       execFile: ok,
@@ -73,9 +74,9 @@ test("a failing nitro prints its output and fails the verb", async () => {
       }),
     );
 
+  runFrom(root);
   await expect(
     buildFactoryService({
-      cwd: root,
       out: (line) => lines.push(line),
       prepare: vi.fn(),
       execFile,
@@ -88,8 +89,9 @@ test("outside a factory repo, the verb refuses before touching anything", async 
   const outside = mkdtempSync(path.join(tmpdir(), "jigs-nowhere-"));
   const prepare = vi.fn();
 
-  await expect(
-    buildFactoryService({ cwd: outside, out: () => {}, prepare, execFile: ok }),
-  ).rejects.toThrow(/not inside a factory repo/);
+  runFrom(outside);
+  await expect(buildFactoryService({ out: () => {}, prepare, execFile: ok })).rejects.toThrow(
+    /not inside a factory repo/,
+  );
   expect(prepare).not.toHaveBeenCalled();
 });

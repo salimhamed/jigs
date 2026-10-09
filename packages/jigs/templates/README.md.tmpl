@@ -6,10 +6,14 @@ A [jigs](https://salimhamed.github.io/jigs/) factory: workflows and the service 
 
 ```sh
 pnpm install
-cp .env.example .env
+cp .env.example .env && cp .env.local.example .env.local
 pnpm exec jigs up
 pnpm exec jigs run hello
 ```
+
+`.env` holds values every copy of this factory shares; `.env.local` holds this
+copy's own, such as its ports. See
+[the environment](https://salimhamed.github.io/jigs/guide/configuration#env).
 
 `jigs up` starts Postgres and the service and ends by running `jigs doctor`,
 which checks only what this factory's workflows use. `hello` needs no
@@ -18,15 +22,19 @@ any time the service is up.
 See [getting started](https://salimhamed.github.io/jigs/guide/getting-started).
 
 Every `jigs` below means `pnpm exec jigs`. The service listens on
-`:{{SERVICE_PORT}}`, its dashboard on `:{{DASHBOARD_PORT}}`, and Postgres on
-`:{{POSTGRES_PORT}}`. `jigs status` lists runs; `jigs status <run-id>` shows one,
+`JIGS_SERVICE_PORT`, its dashboard on `JIGS_DASHBOARD_PORT`, and Postgres on
+`JIGS_POSTGRES_PORT`. `jigs status` lists runs; `jigs status <run-id>` shows one,
 with the resources it recorded. All commands are in the
 [CLI reference](https://salimhamed.github.io/jigs/guide/cli).
+To run a second copy in a git worktree, see
+[Developing in worktrees](https://salimhamed.github.io/jigs/guide/worktrees).
 
 ## Layout
 
-- `jigs.config.ts` registers workflows, service settings, bindings and
-  schedules. Secrets live in `.env`.
+- `jigs.config.ts` says what the factory is: its workflows, bindings,
+  schedules and triggers, and its hub once it uses one. The environment says
+  how this copy runs: its ports, database, hub token, secrets and which
+  triggers and schedules are active.
 - `workflows/hello/hello.ts` is the starter workflow. Each workflow gets its
   own directory, with any `"use step"` functions of its own beside it. A
   workflow file has a `"use workflow"` function and a default export made with

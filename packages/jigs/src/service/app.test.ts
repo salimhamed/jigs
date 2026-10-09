@@ -74,11 +74,12 @@ const scheduled = {
   workflows: fixture.workflows,
   schedules: {
     "nightly-plain": {
+      active: true,
       workflow: "plain",
       cron: "0 3 * * *",
       inputs: { ticket: "AGE-317" },
     },
-    "broken-cron": { workflow: "plain", cron: "always", inputs: {} },
+    "broken-cron": { active: true, workflow: "plain", cron: "always", inputs: {} },
   },
 } satisfies Factory;
 const scheduledApp = appClient(createApp(scheduled, deps));
@@ -246,7 +247,6 @@ test("health names the factory and the process that answer here, and the injecte
 });
 
 test("health outside a factory reports a null root rather than failing liveness", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "");
   const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
   try {
     const res = await appClient(createApp(fixture)).request("/health");
@@ -269,7 +269,9 @@ test("GET /api/runs still answers with runs when the triggers cannot be read", a
     createApp(
       {
         ...fixture,
-        triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+        triggers: {
+          pages: { active: true, workflow: "run", source: { kind: "fake.pages", params: {} } },
+        },
       },
       deps,
     ),
@@ -577,14 +579,14 @@ test("GET /api/schedules answers with what the factory declared, and what is nex
     workflow: string;
     cron: string;
     next: string | null;
-    active: string | null;
+    running: string | null;
   }>;
   expect(body.map((s) => s.name)).toEqual(["nightly-plain", "broken-cron"]);
   expect(body[0]).toMatchObject({
     name: "nightly-plain",
     workflow: "plain",
     cron: "0 3 * * *",
-    active: null,
+    running: null,
   });
   expect(new Date(body[0]?.next ?? "").getTime()).toBeGreaterThan(Date.now());
   // Declared but unschedulable: it is still reported, with nothing to come.

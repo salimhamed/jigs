@@ -36,6 +36,7 @@ const factory = (schedules: NonNullable<Factory["schedules"]>): Factory => ({
 });
 
 const nightlySchedule: Schedule = {
+  active: true,
   workflow: "sweep",
   cron: "0 3 * * *",
   inputs: { target: "api" },
@@ -72,7 +73,7 @@ test("a cron croner rejects fails its check", async () => {
   const result = await check(
     "schedule.nightly",
     factory({
-      nightly: { workflow: "sweep", cron: "0 3 * *", inputs: { target: "a" } },
+      nightly: { active: true, workflow: "sweep", cron: "0 3 * *", inputs: { target: "a" } },
     }),
   );
   expect(result.ok).toBe(false);
@@ -86,6 +87,7 @@ test("a six-field cron is a rejection, not a seconds field", async () => {
     "schedule.nightly",
     factory({
       nightly: {
+        active: true,
         workflow: "sweep",
         cron: "0 0 3 * * *",
         inputs: { target: "a" },
@@ -99,7 +101,7 @@ test("inputs the workflow's schema rejects fail its check", async () => {
   const result = await check(
     "schedule.nightly",
     factory({
-      nightly: { workflow: "sweep", cron: "0 3 * * *", inputs: { deep: 1 } },
+      nightly: { active: true, workflow: "sweep", cron: "0 3 * * *", inputs: { deep: 1 } },
     }),
   );
   expect(result.ok).toBe(false);
@@ -122,8 +124,9 @@ test("a malformed schedule is logged with its repair and left unscheduled", () =
   const lines: string[] = [];
   const jobs = startSchedules(
     factory({
-      broken: { workflow: "sweep", cron: "always", inputs: { target: "a" } },
+      broken: { active: true, workflow: "sweep", cron: "always", inputs: { target: "a" } },
       nightly: {
+        active: true,
         workflow: "sweep",
         cron: "0 3 * * *",
         inputs: { target: "a" },
@@ -141,6 +144,20 @@ test("a malformed schedule is logged with its repair and left unscheduled", () =
   } finally {
     for (const job of jobs) job.stop();
   }
+});
+
+test("an inactive schedule is listed as inactive, with no next fire", async () => {
+  const quiet = factory({ off: { ...nightlySchedule, active: false } });
+  expect(await listSchedules(quiet, { listRuns: async () => [] })).toEqual([
+    {
+      name: "off",
+      state: "inactive",
+      workflow: "sweep",
+      cron: "0 3 * * *",
+      next: null,
+      running: null,
+    },
+  ]);
 });
 
 test("a fire while a run of the same schedule is active is skipped, naming the run", async () => {
@@ -240,7 +257,7 @@ test("the listing carries the next occurrence and the active run", async () => {
     name: "nightly",
     workflow: "sweep",
     cron: "0 3 * * *",
-    active: RUN,
+    running: RUN,
   });
   expect(new Date(view?.next ?? "").getTime()).toBeGreaterThan(Date.now());
 });
@@ -248,11 +265,11 @@ test("the listing carries the next occurrence and the active run", async () => {
 test("a schedule whose cron does not parse has no next occurrence to report", async () => {
   const views = await listSchedules(
     factory({
-      broken: { workflow: "sweep", cron: "always", inputs: { target: "a" } },
+      broken: { active: true, workflow: "sweep", cron: "always", inputs: { target: "a" } },
     }),
     { listRuns: async () => [] },
   );
-  expect(views[0]).toMatchObject({ next: null, active: null });
+  expect(views[0]).toMatchObject({ next: null, running: null });
 });
 
 test("a factory declaring no schedules lists none and reads no runs", async () => {

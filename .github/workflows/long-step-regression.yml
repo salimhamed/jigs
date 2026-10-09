@@ -19,6 +19,9 @@ jobs:
     services:
       postgres:
         image: postgres:17-alpine
+        credentials:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
         env:
           POSTGRES_USER: jigs
           POSTGRES_PASSWORD: jigs

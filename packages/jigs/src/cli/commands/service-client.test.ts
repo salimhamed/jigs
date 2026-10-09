@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { JigsError } from "../../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 import {
   resolveServiceUrl,
@@ -17,44 +17,48 @@ beforeEach(() => {
 afterEach(() => {
   removeTmpDir(tmp);
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 // The env var reaches this function as `explicit`: commander's `.env()`
 // fills the option before the action runs.
 test("an explicit --service-url / JIGS_SERVICE_URL wins over the factory config", () => {
-  const factory = makeFactoryRepo(tmp, {
-    hub: { url: "https://hub.example.test" },
-    service: { port: 9100, dashboardPort: 9200 },
-  });
-  expect(resolveServiceUrl(factory, "http://elsewhere:1234")).toBe("http://elsewhere:1234");
+  runFrom(
+    makeFactoryRepo(tmp, {
+      hub: { url: "https://hub.example.test" },
+    }),
+  );
+  expect(resolveServiceUrl("http://elsewhere:1234")).toBe("http://elsewhere:1234");
 });
 
 test("without an explicit url the factory the user stands in names its service", () => {
-  const factory = makeFactoryRepo(tmp, {
-    hub: { url: "https://hub.example.test" },
-    service: { port: 9100, dashboardPort: 9200 },
-  });
-  expect(resolveServiceUrl(factory)).toBe("http://localhost:9100");
+  vi.stubEnv("JIGS_SERVICE_PORT", "9100");
+  vi.stubEnv("JIGS_DASHBOARD_PORT", "9200");
+  runFrom(
+    makeFactoryRepo(tmp, {
+      hub: { url: "https://hub.example.test" },
+    }),
+  );
+  expect(resolveServiceUrl()).toBe("http://localhost:9100");
 });
 
 // One rule decides both where the run goes and whose sources the freshness
 // warning speaks about, so `JIGS_SERVICE_URL=` has to read as unset in both.
 test("an empty --service-url / JIGS_SERVICE_URL names no service at all", () => {
-  const factory = makeFactoryRepo(tmp, {
-    hub: { url: "https://hub.example.test" },
-    service: { port: 9100, dashboardPort: 9200 },
-  });
+  vi.stubEnv("JIGS_SERVICE_PORT", "9100");
+  vi.stubEnv("JIGS_DASHBOARD_PORT", "9200");
+  runFrom(
+    makeFactoryRepo(tmp, {
+      hub: { url: "https://hub.example.test" },
+    }),
+  );
   expect(usesFactoryService("")).toBe(true);
-  expect(resolveServiceUrl(factory, "")).toBe("http://localhost:9100");
-});
-
-test("a factory with no service section keeps the historic port", () => {
-  const factory = makeFactoryRepo(tmp, { bindings: {} });
-  expect(resolveServiceUrl(factory)).toBe("http://localhost:8990");
+  expect(resolveServiceUrl("")).toBe("http://localhost:9100");
 });
 
 test("outside a factory repo, with no explicit url, the walk fails with guidance", () => {
-  expect(() => resolveServiceUrl(tmp)).toThrow(/not inside a factory repo/);
+  runFrom(tmp);
+  expect(() => resolveServiceUrl()).toThrow(/not inside a factory repo/);
 });
 
 test("an unreachable service names the url and the lifecycle verbs", async () => {

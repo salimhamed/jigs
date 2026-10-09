@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { TEST_SLACK_BOT, useSlackClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
-import { testFactoryContext } from "../../test-fixtures.ts";
+import { removeTmpDir, testFactoryContext, useTestFactory } from "../../test-fixtures.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
 
@@ -87,15 +87,15 @@ beforeEach(() => {
     fetch: fake.fetch,
     context: testFactoryContext(),
   });
-  factories += 1;
-  vi.stubEnv("JIGS_FACTORY_ROOT", `/fetch-message-test-${factories}`);
+  factoryParents.push(useTestFactory());
 });
 afterEach(() => {
   vi.restoreAllMocks();
+  for (const parent of factoryParents.splice(0)) removeTmpDir(parent);
   vi.unstubAllEnvs();
 });
 
-let factories = 0;
+const factoryParents: string[] = [];
 
 test("a snapshot is the message, its permalink and its replies in order, with each author", async () => {
   routes["conversations.replies"] = () => ({

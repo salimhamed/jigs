@@ -32,6 +32,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(created.sort()).toEqual(
     [
       ".env.example",
+      ".env.local.example",
       ".gitignore",
       "README.md",
       "docker-compose.yml",
@@ -150,16 +151,22 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');
 });
 
-test("the docker project and ports all carry the factory", async () => {
+test("the docker project and ports are suggested in .env.local.example, never committed", async () => {
   const dir = scaffold("alpha");
   const a = await init(dir);
 
   const compose = readFileSync(path.join(dir, "docker-compose.yml"), "utf8");
-  expect(compose).toContain("name: alpha");
-  expect(compose).toContain(`"127.0.0.1:${a.postgresPort}:5432"`);
-  const yml = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
-  expect(yml).toContain(`port: ${a.servicePort}`);
-  expect(yml).toContain(`dashboardPort: ${a.dashboardPort}`);
+  expect(compose).toContain(`name: \${COMPOSE_PROJECT_NAME}`);
+  expect(compose).toContain(`"127.0.0.1:\${JIGS_POSTGRES_PORT:?is not set}:5432"`);
+  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).not.toContain(
+    String(a.servicePort),
+  );
+  const example = readFileSync(path.join(dir, ".env.local.example"), "utf8");
+  expect(example).toContain("\nCOMPOSE_PROJECT_NAME=alpha\n");
+  expect(example).toContain(`\nJIGS_SERVICE_PORT=${a.servicePort}\n`);
+  expect(example).toContain(`\nJIGS_DASHBOARD_PORT=${a.dashboardPort}\n`);
+  expect(example).toContain(`\nJIGS_POSTGRES_PORT=${a.postgresPort}\n`);
+  expect(readFileSync(path.join(dir, ".env.example"), "utf8")).not.toContain("PORT=");
 
   // One offset under 100 shared by three ranges 100 apart, so no factory's
   // service port can be another's dashboard or World port. Two scaffolds
@@ -171,8 +178,7 @@ test("the docker project and ports all carry the factory", async () => {
   expect(a.dashboardPort).toBe(9090 + offset);
   expect(a.postgresPort).toBe(5440 + offset);
 
-  // Derived from the path, never drawn fresh: jigs up, jigs bind and the
-  // committed jigs.config.ts all have to agree with what init printed.
+  // Derived from the path, never drawn fresh.
   const again = await init(dir);
   expect(again.created).toEqual([]);
   expect(again.servicePort).toBe(a.servicePort);
@@ -183,7 +189,9 @@ test("the docker project and ports all carry the factory", async () => {
   // the directory rather than the ports.
   const other = scaffold("beta");
   const b = await init(other);
-  expect(readFileSync(path.join(other, "docker-compose.yml"), "utf8")).toContain("name: beta");
+  expect(readFileSync(path.join(other, ".env.local.example"), "utf8")).toContain(
+    "\nCOMPOSE_PROJECT_NAME=beta\n",
+  );
   for (const port of [a.servicePort, b.servicePort]) {
     expect(a.dashboardPort).not.toBe(port);
     expect(b.dashboardPort).not.toBe(port);
@@ -197,14 +205,14 @@ test("an existing file is kept, never overwritten", async () => {
   await init(dir);
   writeFileSync(
     path.join(dir, "jigs.config.ts"),
-    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 9999 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, workflows: {} }; // edited",
   );
 
   const again = await init(dir);
 
   expect(again.created).toEqual([]);
   expect(again.skipped).toContain("jigs.config.ts");
-  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain("9999");
+  expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).toContain("// edited");
 });
 
 test("the next steps are printed, not run", async () => {
@@ -220,7 +228,7 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
-    "pnpm exec jigs hub connect <url> <token>",
+    "cp .env.local.example .env.local",
     "pnpm exec jigs up",
     "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
@@ -232,12 +240,14 @@ test("the next steps are printed, not run", async () => {
   // Printing them is the whole point: nothing was executed.
   expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
+  expect(existsSync(path.join(dir, ".env.local"))).toBe(false);
 });
 
 test("the scaffold leaves GitHub to its hub and the approval to its default", async () => {
   const dir = scaffold("github-factory");
   await init(dir);
   const config = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
+  expect(config).toContain('// hub: { url: "https://hub.example.com" },');
   expect(config).toContain('// github: { operator: "your-github-login" },');
   expect(config).not.toContain("merge");
 });
@@ -260,7 +270,6 @@ test("the scaffold's config is what jigs accepts, so the first `jigs up` loads",
   await init(dir);
   const parsed = parseFactoryConfig({
     hub: { url: "https://hub.example.test" },
-    service: { dashboardPort: 9090 },
     ...scaffoldedConfig(dir),
   });
   expect(parsed.github).toEqual({ mergeApproval: "review" });

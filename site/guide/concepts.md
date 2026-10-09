@@ -190,9 +190,12 @@ my-factory/
 ├── workflows/
 │   └── hello/
 │       └── hello.ts
-└── .env
+├── .env
+└── .env.local
 ```
 
 - `jigs.config.ts`: factory configuration and workflow registration.
 - `workflows/`: workflows you write.
-- `.env`: local configuration and credentials.
+- `.env` and `.env.local`: the [environment](/guide/configuration#env) of this
+  copy of the factory. `.env` holds what every copy shares, such as
+  credentials; `.env.local` holds this copy's own values, such as its ports.

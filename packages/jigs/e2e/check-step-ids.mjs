@@ -463,7 +463,7 @@ function bootOutcome(
   // The World is the stub whatever the shell says; the URL is the registry's.
   const env = {
     ...baseEnv,
-    PORT: String(BOOT_PORT),
+    JIGS_SERVICE_PORT: String(BOOT_PORT),
     JIGS_DASHBOARD_PORT: String(BOOT_DASHBOARD_PORT),
     WORKFLOW_TARGET_WORLD: BOOT_WORLD,
     WORKFLOW_POSTGRES_URL: postgresUrl,
@@ -670,9 +670,8 @@ export default defineWorkflow({ inputs: runtimeE2eInputs, workflow: runtimeE2eWo
 function runtimeEnv(postgresUrl) {
   return {
     ...process.env,
-    PORT: String(RUNTIME_PORT),
+    JIGS_SERVICE_PORT: String(RUNTIME_PORT),
     JIGS_DASHBOARD_PORT: String(RUNTIME_DASHBOARD_PORT),
-    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${RUNTIME_PORT}`,
     WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
     WORKFLOW_POSTGRES_URL: postgresUrl,
     WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",
@@ -947,9 +946,17 @@ async function checkScaffold(name) {
   // Exercise recipe discovery, copying and registration from the installed
   // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
-  if (hub !== undefined) {
-    writeFileSync(path.join(factory, ".env"), "");
-    run(path.join(factory, "node_modules", ".bin", "jigs"), ["hub", "connect", hub.url, hub.token]);
+  // Only the boot that reaches the hub needs a connection; the bare factory runs without one.
+  if (hub !== undefined && name === "linear-ticket-to-pr") {
+    writeFileSync(path.join(factory, ".env"), `JIGS_HUB_TOKEN=${hub.token}\n`);
+    const config = path.join(factory, "jigs.config.ts");
+    writeFileSync(
+      config,
+      readFileSync(config, "utf8").replace(
+        '// hub: { url: "https://hub.example.com" }',
+        `hub: { url: "${hub.url}" }`,
+      ),
+    );
   }
   if (name === "linear-ticket-to-pr") {
     run(path.join(factory, "node_modules", ".bin", "jigs"), [
@@ -1135,7 +1142,7 @@ if (hub === undefined) {
       { cwd: packageRoot, stdio: "inherit" },
     );
     console.log(
-      "\n=== bare boot: with no harness CLI and no provider credential, the bare factory starts and doctor is clean",
+      "\n=== bare boot: with no harness CLI, provider credential or hub connection, the bare factory starts and doctor is clean",
     );
     const recipeFactory = factory;
     factory = factories.get("bare");
@@ -1215,10 +1222,7 @@ if (hub === undefined) {
   );
   factory = factories.get("bare");
   if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
-  installCompiledCancellationFixture(factory, {
-    service: CANCEL_PORT,
-    dashboard: CANCEL_DASHBOARD_PORT,
-  });
+  installCompiledCancellationFixture(factory);
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,

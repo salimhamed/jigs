@@ -6,7 +6,7 @@ import { probeRemoteAuth } from "../providers/git.ts";
 import { githubGet } from "../providers/github-api.ts";
 import { GitHubApiError } from "../providers/github-http.ts";
 import { parseGithubRemote } from "../providers/github-remote.ts";
-import { HubResponseError, hubRefused } from "../providers/hub.ts";
+import { HubResponseError, hubConnection, hubRefused } from "../providers/hub.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
@@ -98,6 +98,7 @@ async function checkBinding(
       repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or a git credential helper for an https remote), then: \`${RESTART_SERVICE}\``,
     };
   }
+  if (hubConnection(ctx) === undefined) return { ok: true };
   return checkInstallationReach(ctx, name, binding);
 }
 

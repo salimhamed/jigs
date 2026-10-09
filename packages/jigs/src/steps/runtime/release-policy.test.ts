@@ -18,7 +18,6 @@ test("built-in, factory and workflow policies resolve in order", () => {
   expect(() =>
     parseFactoryConfig({
       hub: { url: "https://hub.example.test" },
-      service: { dashboardPort: 9000 },
       release: { onSuccess: "oops", onFailure: "keep" },
     }),
   ).toThrow("release.onSuccess");
@@ -44,7 +43,6 @@ test("two workflows can differ and match compiled IDs rather than config names",
 test("resolver combines compiled entry and the factory's own default", async () => {
   const parent = useTestFactory(`export default {
     hub: { url: "https://hub.example.test" },
-    service: { dashboardPort: 9000 },
     release: { onSuccess: "keep", onFailure: "keep" },
     workflows: {
       first: async () => ({

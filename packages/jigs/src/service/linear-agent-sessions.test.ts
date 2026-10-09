@@ -217,7 +217,11 @@ function sessionEngine(params: Omit<LinearAgentSessionsParams, "installationName
       },
     },
     triggers: {
-      mentions: { workflow: "answer", source: linear.agentSessions({ ...ACME, ...params }) },
+      mentions: {
+        active: true,
+        workflow: "answer",
+        source: linear.agentSessions({ ...ACME, ...params }),
+      },
     },
   };
   const engine = createTriggerEngine(factory, {

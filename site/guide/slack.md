@@ -3,7 +3,7 @@
 A factory talks to Slack through a Slack app that its
 [hub](/guide/hub) holds and assigns to it. The app always posts
 as its own bot. The hub receives the app's events and hands the factory its bot
-token, so the factory's `.env` holds no Slack token. This page connects the
+token, so the factory's environment holds no Slack token. This page connects the
 app to the factory and shows how workflows use it.
 
 ## 1. Set up the app in the hub
@@ -51,10 +51,10 @@ import { defineFactory, slack } from "@jigs-ai/jigs";
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },
-  service: { dashboardPort: 3456 },
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
   triggers: {
     "answer-questions": {
+      active: process.env.ANSWER_QUESTIONS_ACTIVE === "true",
       workflow: "answer",
       source: slack.mentions({ installationName: "slack-acme", channels: ["C0123ABCD"] }),
     },
@@ -311,7 +311,7 @@ export default defineWorkflow({
 
 Register it with the `slack.mentions` trigger from
 [Start runs from messages](#start-runs-from-messages). The decision model needs
-`OPENROUTER_API_KEY` in `.env`; see
+`OPENROUTER_API_KEY` in the factory's environment; see
 [Models and harnesses](/guide/models-and-harnesses#jev-decisions).
 
 ## Checks

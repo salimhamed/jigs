@@ -124,10 +124,11 @@ test("a scheduled run names the schedule that fired it", async () => {
     schedules: [
       {
         name: "nightly-sweep",
+        state: "active",
         workflow: "deliver-feature",
         cron: "0 3 * * *",
         next: "2026-08-27T03:00:00.000Z",
-        active: RUN,
+        running: RUN,
       },
     ],
     triggers: [],
@@ -137,30 +138,31 @@ test("a scheduled run names the schedule that fired it", async () => {
   // The schedule table is its own section, after the runs.
   expect(lines[2]).toBe("");
   expect(lines[3]).toBe(
-    "SCHEDULE       WORKFLOW         CRON       NEXT                      ACTIVE",
+    "SCHEDULE       STATE   WORKFLOW         CRON       NEXT                      RUNNING",
   );
   expect(lines[4]).toBe(
-    `nightly-sweep  deliver-feature  0 3 * * *  2026-08-27T03:00:00.000Z  ${RUN}`,
+    `nightly-sweep  active  deliver-feature  0 3 * * *  2026-08-27T03:00:00.000Z  ${RUN}`,
   );
 });
 
-test("a declared schedule that has never fired shows dashes, not blanks", async () => {
+test("an inactive schedule that has never fired says so, with dashes, not blanks", async () => {
   respond({
     runs: [],
     schedules: [
       {
         name: "weekly-audit",
+        state: "inactive",
         workflow: "audit",
         cron: "nonsense",
         next: null,
-        active: null,
+        running: null,
       },
     ],
     triggers: [],
   });
   await showRuns(deps(), { now: NOW });
   expect(lines[0]).toBe("no runs");
-  expect(lines[3]).toBe("weekly-audit  audit     nonsense  -     -");
+  expect(lines[3]).toBe("weekly-audit  inactive  audit     nonsense  -     -");
 });
 
 test("each trigger shows its counts, and each failed occurrence its repair", async () => {
@@ -170,11 +172,12 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
     triggers: [
       {
         name: "pages",
+        state: "active",
         workflow: "respond",
         source: "pagerduty.incidents",
         lastOccurrence: "2026-08-26T11:00:00.000Z",
         pending: 2,
-        active: 3,
+        running: 3,
         failed: 1,
         failures: [
           {
@@ -194,8 +197,8 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
   });
   await showRuns(deps(), { now: NOW });
   expect(lines.slice(2)).toEqual([
-    "TRIGGER  WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  ACTIVE  FAILED",
-    "pages    respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3       1",
+    "TRIGGER  STATE   WORKFLOW  SOURCE               LAST OCCURRENCE           PENDING  RUNNING  FAILED",
+    "pages    active  respond   pagerduty.incidents  2026-08-26T11:00:00.000Z  2        3        1",
     "FAIL pages PABC: GitHub installations: the hub gave no GitHub token: 401 Unauthorized",
     "  check hub.url in jigs.config.ts and that the hub is running",
   ]);

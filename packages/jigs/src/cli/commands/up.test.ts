@@ -1,7 +1,6 @@
-import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import {
   closedPort,
@@ -22,6 +21,7 @@ beforeEach(() => {
   tmp = makeTmpDir();
   lines = [];
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://jigs:jigs@localhost:5555/jigs");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -29,14 +29,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-// With the .env an operator makes from .env.example, which up never copies.
-const factory = (shape: Parameters<typeof scaffold>[1]) => {
-  const root = scaffold(tmp, shape);
-  if (shape.env === undefined && shape.example !== false) {
-    copyFileSync(path.join(root, ".env.example"), path.join(root, ".env"));
-  }
-  return root;
-};
+const factory = (shape: Parameters<typeof scaffold>[1]) => scaffold(tmp, shape);
 
 function up(
   root: string,
@@ -44,9 +37,9 @@ function up(
   extra: Partial<UpDeps> = {},
   options: UpOptions = {},
 ) {
+  runFrom(root);
   return upFactory(
     {
-      cwd: root,
       out: (line) => lines.push(line),
       execFile: io.exec.execFile,
       processes: io.procs.processes,
@@ -73,7 +66,6 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(result.ok).toBe(true);
   expect(statuses(result)).toEqual([
     "locate:ok",
-    "env:ok",
     "install:ok",
     "compose:ok",
     "bootstrap:ok",
@@ -97,16 +89,14 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(io.procs.spawns).toHaveLength(1);
 
-  // The slots that stay empty are named, not refused.
   const printed = lines.join("\n");
-  expect(printed).toMatch(/^ok {3}env \(\d+ms\)$/m);
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
   expect(lines.slice(-8)).toEqual([
     "",
     "acme-factory is up",
-    "  postgres   localhost:5555 (Docker container acme-factory-postgres-1)",
+    "  postgres   Docker container acme-factory-postgres-1",
     `  service    http://localhost:${port} (pid ${pid})`,
     "  dashboard  http://localhost:9200",
     `  logs       ${log}`,
@@ -123,10 +113,10 @@ test("a container compose cannot name is left out of the summary, not guessed", 
   const root = factory({ port: await fakeService(io.procs) });
 
   expect((await up(root, io)).ok).toBe(true);
-  expect(lines).toContain("  postgres   localhost:5555");
+  expect(lines).toContain("  postgres   running");
 });
 
-test("bootstrap is handed the World URL from .env explicitly", async () => {
+test("bootstrap is handed the World URL from the environment", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const port = await fakeService(io.procs);
   const root = factory({ port });
@@ -137,11 +127,6 @@ test("bootstrap is handed the World URL from .env explicitly", async () => {
   });
   await up(root, io, { migrate });
   expect(migrate).toHaveBeenCalledOnce();
-
-  const bootstrap = io.exec.calls.find((call) => path.basename(call.file) === "bootstrap");
-  expect(bootstrap?.options.env?.WORKFLOW_POSTGRES_URL).toBe(
-    "postgres://jigs:jigs@localhost:5555/jigs",
-  );
 });
 
 test("a second up on an unchanged factory leaves the running service alone", async () => {
@@ -330,7 +315,6 @@ test("without jigs.config.ts, up stops before touching the machine", async () =>
   expect(statuses(result)).toEqual(["locate:failed"]);
   expect(result.steps[0]?.repair).toContain("jigs init");
   expect(io.exec.calls).toHaveLength(0);
-  expect(existsSync(path.join(root, ".env"))).toBe(false);
 });
 
 test("outside a factory repo, locate fails with the existing error", async () => {
@@ -338,46 +322,6 @@ test("outside a factory repo, locate fails with the existing error", async () =>
   const result = await up(tmp, io);
   expect(statuses(result)).toEqual(["locate:failed"]);
   expect(result.steps[0]?.detail).toContain("not inside a factory repo");
-});
-
-test("no .env and no .env.example points back at jigs init", async () => {
-  const root = factory({ port: 1, example: false });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.repair).toContain("jigs init");
-  expect(io.exec.calls).toHaveLength(0);
-});
-
-test("a .env without the hub token stops at env, naming hub connect", async () => {
-  const root = factory({
-    port: 1,
-    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\n",
-  });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.repair).toContain("pnpm exec jigs hub connect <url> <token>");
-  expect(io.exec.calls).toHaveLength(0);
-});
-
-test("a missing .env fails env with the copy as its repair, and copies nothing", async () => {
-  const root = scaffold(tmp, { port: 1 });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.detail).toContain("no .env in");
-  expect(result.steps[1]?.repair).toBe(
-    "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
-  );
-  expect(existsSync(path.join(root, ".env"))).toBe(false);
-  expect(io.exec.calls).toHaveLength(0);
 });
 
 test("docker compose output is streamed under the compose step as it prints", async () => {
@@ -453,8 +397,9 @@ test("no docker-compose.yml fails compose before docker runs", async () => {
   expect(io.exec.calls.map((call) => call.file)).toEqual(["pnpm"]);
 });
 
-test("bootstrap refuses to run without a World URL in .env", async () => {
-  const root = factory({ port: 1, env: "JIGS_HUB_TOKEN=hub\n" });
+test("bootstrap refuses to run without a World URL", async () => {
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  const root = factory({ port: 1 });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);
@@ -474,7 +419,7 @@ test("a missing bootstrap bin names the package pnpm install did not bring", asy
   expect(result.steps.at(-1)?.repair).toContain("@workflow/world-postgres");
 });
 
-test("a World bootstrap cannot reach names both sides of the port mismatch", async () => {
+test("a World bootstrap cannot reach names the URL and the published port variable", async () => {
   const root = factory({ port: 1 });
   const io = {
     exec: fakeExec((call) =>
@@ -489,7 +434,7 @@ test("a World bootstrap cannot reach names both sides of the port mismatch", asy
 
   expect(statuses(result).at(-1)).toBe("bootstrap:failed");
   expect(result.steps.at(-1)?.detail).toContain("postgres://jigs:***@localhost:5555/jigs");
-  expect(result.steps.at(-1)?.repair).toContain(":5555");
+  expect(result.steps.at(-1)?.repair).toContain("JIGS_POSTGRES_PORT");
 });
 
 test("a failing build is nitro's failure, echoed, and nothing starts", async () => {

@@ -8,7 +8,6 @@ import path from "node:path";
 import type { RunCancellation } from "../run-cancellation.ts";
 import type { FactoryConfig } from "../workflow/factory-schema.ts";
 import { readFactoryConfig } from "./factory-config.ts";
-import { readFactoryEnv } from "./factory-env.ts";
 import { locateFactoryRoot } from "./factory-root.ts";
 import { factorySlug } from "./paths.ts";
 
@@ -16,9 +15,8 @@ export interface FactoryContext {
   readonly root: string;
   /** Keys this factory's rows, service record and clones apart from other factories'. */
   readonly slug: string;
-  /** Read on first use, so a verb that never needs it is not stopped by a config that fails. */
   readonly config: FactoryConfig;
-  /** The shell's value, else the factory's `.env`, read afresh on each call. Empty is unset. */
+  /** The process environment's value. Empty is unset. */
   env(name: string): string | undefined;
 }
 
@@ -37,14 +35,9 @@ function contextAt(root: string, config: () => FactoryConfig): FactoryContext {
     get config() {
       return config();
     },
-    // The shell wins: exporting a value for a single command is how an operator
-    // overrides the factory's own. The scaffolded `.env` declares every slot it
-    // knows about and leaves it empty, so empty is unset on either side.
     env: (name) => {
-      const exported = process.env[name];
-      if (exported !== undefined && exported !== "") return exported;
-      const declared = readFactoryEnv(root)[name];
-      return declared === undefined || declared === "" ? undefined : declared;
+      const value = process.env[name];
+      return value === "" ? undefined : value;
     },
   };
 }
@@ -63,23 +56,18 @@ export function seedFactoryContext(config: FactoryConfig): void {
   (globalThis as SeededGlobal)[SEEDED] = contextAt(root, () => config);
 }
 
-let current: { key: string; context: FactoryContext } | undefined;
+let current: { cwd: string; context: FactoryContext } | undefined;
 
 /**
- * The factory this process runs for. In the service, the one seeded at boot. Elsewhere,
- * `JIGS_FACTORY_ROOT` or the factory around the working directory, resolved once per process.
- * Throws outside a factory.
+ * The factory this process runs for. In the service, the one seeded at boot. Elsewhere, the
+ * factory around the working directory, resolved once per process. Throws outside a factory.
  */
 export function currentFactoryContext(): FactoryContext {
   const seeded = (globalThis as SeededGlobal)[SEEDED];
   if (seeded !== undefined) return seeded;
-  const override = process.env.JIGS_FACTORY_ROOT;
-  const key = override !== undefined && override !== "" ? override : process.cwd();
-  if (current?.key !== key) {
-    current = {
-      key,
-      context: resolveFactoryContext(key === override ? key : locateFactoryRoot(key)),
-    };
+  const cwd = process.cwd();
+  if (current?.cwd !== cwd) {
+    current = { cwd, context: resolveFactoryContext(locateFactoryRoot(cwd)) };
   }
   return current.context;
 }
@@ -87,9 +75,10 @@ export function currentFactoryContext(): FactoryContext {
 /**
  * This process's own environment, only for what a child process inherits and the variables the
  * operating system defines. A factory setting is read through {@link FactoryContext.env}.
+ * Empty values are left out, so an empty slot in an env file never reaches a child.
  */
 export function processEnv(): NodeJS.ProcessEnv {
-  return process.env;
+  return Object.fromEntries(Object.entries(process.env).filter(([, value]) => value !== ""));
 }
 
 /** Where jigs keeps what it owns on this machine: clones, logs, locks and harness homes. */
