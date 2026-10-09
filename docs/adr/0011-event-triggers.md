@@ -37,6 +37,11 @@ starts a second run for an occurrence.
 ## Consequences
 
 - Two triggers matching one event start two runs, one each.
+- Since [0018](./0018-environment-configures-each-copy.md), a trigger has a
+  required `active` flag, usually read from the environment. An inactive
+  trigger is not armed, and its waiting occurrences are withdrawn when the
+  service starts, so switching it on later starts from now, as a new trigger
+  does.
 - A new trigger starts from now. After downtime it catches up only within a
   per-trigger lookback window, about an hour by default, and older
   occurrences are recorded `skipped`, so switching a trigger on never floods

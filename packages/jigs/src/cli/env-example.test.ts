@@ -3,7 +3,7 @@ import path from "node:path";
 import { expect, test } from "vitest";
 import { locateTemplates, packageRoot } from "../build/templates.ts";
 
-// Names jigs reads that a factory never puts in .env.
+// Names jigs reads that a factory never puts in its .env files.
 const NOT_IN_ENV_EXAMPLE = new Set([
   // Set by jigs on the service process.
   "PORT",
@@ -64,10 +64,11 @@ function envNamesReadBySource(): Set<string> {
 
 function envExampleNames(): string[] {
   const text = readFileSync(path.join(locateTemplates(), ".env.example.tmpl"), "utf8");
-  return [...text.matchAll(/^([A-Z][A-Z0-9_]*)=/gm)].map(([, name]) => `${name}`);
+  // A copy's own values are listed commented out, so a .env copied from the file never carries them.
+  return [...text.matchAll(/^(?:# )?([A-Z][A-Z0-9_]*)=/gm)].map(([, name]) => `${name}`);
 }
 
-test(".env.example covers every variable jigs reads from a factory's .env", () => {
+test(".env.example covers every variable jigs reads from a factory's environment", () => {
   const listed = new Set(envExampleNames());
   const missing = [...envNamesReadBySource()].filter(
     (name) => !listed.has(name) && !NOT_IN_ENV_EXAMPLE.has(name),
@@ -75,12 +76,12 @@ test(".env.example covers every variable jigs reads from a factory's .env", () =
   expect(missing).toEqual([]);
 });
 
-test("the configuration guide's .env table lists exactly the .env.example variables", () => {
+test("the configuration guide's environment tables list exactly the .env.example variables", () => {
   const guide = readFileSync(
     path.join(packageRoot(), "..", "..", "site", "guide", "configuration.md"),
     "utf8",
   );
-  const start = guide.indexOf("## `.env` {#env}");
+  const start = guide.indexOf("## The environment {#env}");
   const table = guide.slice(start, guide.indexOf("\n## ", start + 1));
   const documented = [...table.matchAll(/^\| (.+?) \|/gm)].flatMap(([, variables]) =>
     [...`${variables}`.matchAll(/`([A-Z][A-Z0-9_]*)`/g)].map(([, name]) => `${name}`),

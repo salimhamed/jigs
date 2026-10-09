@@ -161,10 +161,10 @@ test("the docker project and ports are suggested in .env.example, never committe
     String(a.servicePort),
   );
   const example = readFileSync(path.join(dir, ".env.example"), "utf8");
-  expect(example).toContain("COMPOSE_PROJECT_NAME=alpha\n");
-  expect(example).toContain(`JIGS_SERVICE_PORT=${a.servicePort}\n`);
-  expect(example).toContain(`JIGS_DASHBOARD_PORT=${a.dashboardPort}\n`);
-  expect(example).toContain(`JIGS_POSTGRES_PORT=${a.postgresPort}\n`);
+  expect(example).toContain("\n# COMPOSE_PROJECT_NAME=alpha\n");
+  expect(example).toContain(`\n# JIGS_SERVICE_PORT=${a.servicePort}\n`);
+  expect(example).toContain(`\n# JIGS_DASHBOARD_PORT=${a.dashboardPort}\n`);
+  expect(example).toContain(`\n# JIGS_POSTGRES_PORT=${a.postgresPort}\n`);
 
   // One offset under 100 shared by three ranges 100 apart, so no factory's
   // service port can be another's dashboard or World port. Two scaffolds
@@ -188,7 +188,7 @@ test("the docker project and ports are suggested in .env.example, never committe
   const other = scaffold("beta");
   const b = await init(other);
   expect(readFileSync(path.join(other, ".env.example"), "utf8")).toContain(
-    "COMPOSE_PROJECT_NAME=beta\n",
+    "\n# COMPOSE_PROJECT_NAME=beta\n",
   );
   for (const port of [a.servicePort, b.servicePort]) {
     expect(a.dashboardPort).not.toBe(port);
@@ -226,6 +226,7 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
+    "$EDITOR .env.local",
     "pnpm exec jigs up",
     "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
@@ -237,6 +238,7 @@ test("the next steps are printed, not run", async () => {
   // Printing them is the whole point: nothing was executed.
   expect(existsSync(path.join(dir, "node_modules"))).toBe(false);
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
+  expect(existsSync(path.join(dir, ".env.local"))).toBe(false);
 });
 
 test("the scaffold leaves GitHub to its hub and the approval to its default", async () => {

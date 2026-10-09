@@ -46,7 +46,9 @@ has to keep:
 `process.env` everywhere but `src/config/factory-context.ts` and tests: read a
 setting through `currentFactoryContext().env`, and an environment for a child
 process through `processEnv()`. `processEnv()` is never a factory setting: a
-token, key or anything the factory's `.env` can hold goes through `ctx.env`.
+token, key or any other value from the factory's environment goes through
+`ctx.env`. jigs reads only the process environment; loading files into it, such
+as `.env.local` and `.env`, is the factory's own `jigs.config.ts`'s job.
 
 No file under `src/` carries a `"use workflow"` or `"use step"` directive; both
 live in `factory/steps.ts` and in factory code, including the copied recipes
@@ -56,7 +58,7 @@ also scans the built workflow bundle for `node:` specifiers and `process.env`.
 A factory reaches providers only through its hub: provider events arrive in
 `service/hub-client.ts`, and every GitHub, Linear, Slack and PagerDuty token
 comes from `providers/hub.ts`. A new provider feature takes the same two
-paths, and the factory's `.env` holds no provider secret.
+paths, and the factory's environment holds no provider secret.
 
 `@jigs-ai/hub-protocol` is private, so tsdown bundles it into `dist/`. Add it
 as a devDependency, never a dependency, and keep its types out of the public
