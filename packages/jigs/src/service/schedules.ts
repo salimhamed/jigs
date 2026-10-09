@@ -22,7 +22,7 @@ export interface ScheduleView {
   workflow: string;
   cron: string;
   next: string | null;
-  active: string | null;
+  running: string | null;
 }
 
 /** Injectable run operations and logging used by the schedule service. */
@@ -115,7 +115,7 @@ export async function listSchedules(
     workflow: schedule.workflow,
     cron: schedule.cron,
     next: schedule.active ? nextOccurrence(schedule.cron) : null,
-    active: activeRunId(rows, name),
+    running: activeRunId(rows, name),
   }));
 }
 

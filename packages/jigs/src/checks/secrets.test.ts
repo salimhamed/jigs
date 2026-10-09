@@ -24,7 +24,7 @@ async function outcomes(requires: WorkflowRequires, env: Record<string, string>)
   return report.checks;
 }
 
-test("a declared secret that is not set fails, naming the factory's environment", async () => {
+test("a declared secret that is not set fails, naming this copy's environment", async () => {
   expect(await outcomes({ secrets: ["SNOWFLAKE_TOKEN"] }, {})).toEqual([
     {
       id: "secret.SNOWFLAKE_TOKEN",
@@ -32,7 +32,7 @@ test("a declared secret that is not set fails, naming the factory's environment"
       ok: false,
       reason: "SNOWFLAKE_TOKEN is not set in the service's environment",
       repair:
-        "set SNOWFLAKE_TOKEN in the factory's environment, then: `pnpm exec jigs up --restart-service`",
+        "set SNOWFLAKE_TOKEN in this copy's environment, then: `pnpm exec jigs up --restart-service`",
     },
   ]);
 });

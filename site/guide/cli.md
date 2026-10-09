@@ -243,6 +243,39 @@ The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
 naming both versions. `jigs up` and `jigs down` still work.
 
+### Upgrading to 0.104
+
+0.104 moves each copy's own settings out of committed files and into the
+environment. Upgrade an existing factory like this:
+
+1. Note your current `service.port` and `service.dashboardPort` from
+   `jigs.config.ts`, and the compose `name:` and Postgres port from
+   `docker-compose.yml`. Until step 3 is done every jigs command refuses to
+   run, `jigs down` included.
+2. Set `@jigs-ai/jigs` to `0.104.0` in `package.json` and run `pnpm install`.
+3. In `jigs.config.ts`, add the environment loader at the top, as the
+   [complete example](/guide/configuration) has it. Delete `service`. Delete
+   `hub` if nothing uses it. Add `active` to every trigger and schedule, such
+   as `active: process.env.<NAME>_ACTIVE === "true"`.
+4. In `docker-compose.yml`, set `name: ${COMPOSE_PROJECT_NAME}` and the
+   Postgres port to `"127.0.0.1:${JIGS_POSTGRES_PORT:?is not set}:5432"`.
+5. Create `.env.local` with this copy's values:
+   - `COMPOSE_PROJECT_NAME`: exactly the old compose name. A different name
+     starts a new, empty database.
+   - `JIGS_SERVICE_PORT`, `JIGS_DASHBOARD_PORT` and `JIGS_POSTGRES_PORT`: the
+     old ports.
+   - `WORKFLOW_POSTGRES_URL`, and `JIGS_HUB_TOKEN` moved out of `.env`.
+   - `<NAME>_ACTIVE=true` for each trigger and schedule that should run here.
+
+   Leave out any variable you have no value for: an empty `X=` line hides the
+   value from `.env`. Keep only values every copy shares in `.env`.
+6. Add `.env.local` to `.gitignore`.
+7. Run `pnpm exec jigs up`, then `pnpm exec jigs doctor`, and check that
+   `jigs status` shows `STATE active` for each trigger and schedule meant to
+   run.
+
+`jigs hub connect` is gone: set `JIGS_HUB_TOKEN` in the environment instead.
+
 ## Cancelling
 
 `jigs cancel` ends a waiting run immediately, and asks first when the run is in

@@ -30,7 +30,7 @@ test("an unset AWS_PROFILE fails naming the env file and the restart", async () 
     ok: false,
     reason: expect.stringContaining("AWS_PROFILE is not set"),
     repair:
-      "set AWS_PROFILE in the factory's environment, then: `pnpm exec jigs up --restart-service`",
+      "set AWS_PROFILE in this copy's environment, then: `pnpm exec jigs up --restart-service`",
   });
 });
 

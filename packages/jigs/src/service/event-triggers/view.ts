@@ -32,7 +32,7 @@ export interface TriggerView {
   source: string;
   lastOccurrence: string | null;
   pending: number;
-  active: number;
+  running: number;
   failed: number;
   /** The most recent failures, newest first. */
   failures: TriggerFailure[];
@@ -74,7 +74,7 @@ export async function listTriggers(
         source: trigger.source.kind,
         lastOccurrence: summary.lastOccurrence?.toISOString() ?? null,
         pending: summary.pending,
-        active,
+        running: active,
         failed: summary.failed,
         failures: summary.failures.map((row) => ({
           occurrence: row.occurrence,

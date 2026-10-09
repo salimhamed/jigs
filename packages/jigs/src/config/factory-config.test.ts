@@ -140,6 +140,13 @@ test.each(["JIGS_SERVICE_PORT", "JIGS_DASHBOARD_PORT"])("an unset %s fails by na
   expect(() => resolveService(testFactoryContext({ env }))).toThrow(`${name} is not set`);
 });
 
+test.each(["0", "65536", "80.5", "eighty"])("JIGS_SERVICE_PORT=%s is not a port", (value) => {
+  const env = { JIGS_SERVICE_PORT: value, JIGS_DASHBOARD_PORT: "7002" };
+  expect(() => resolveService(testFactoryContext({ env }))).toThrow(
+    "JIGS_SERVICE_PORT is not a port",
+  );
+});
+
 test("agent environment names default to none and must be names, not values", () => {
   expect(
     parseFactoryConfig({

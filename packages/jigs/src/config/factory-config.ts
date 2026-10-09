@@ -63,7 +63,11 @@ export function resolveService(ctx: FactoryContext): ResolvedService {
 function requiredPort(ctx: FactoryContext, name: string): number {
   const value = ctx.env(name);
   if (value === undefined) throw new JigsError(`${name} is not set`);
-  return Number(value);
+  const port = Number(value);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new JigsError(`${name} is not a port`);
+  }
+  return port;
 }
 
 function factoryConfigPath(factoryRoot: string): string {

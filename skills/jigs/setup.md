@@ -45,7 +45,7 @@ creator.
 
 `jigs init` writes `jigs.config.ts`, a `hello` workflow in
 `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example`
-and build settings. It preserves existing files. The ports in `.env.example` come
+and build settings. It preserves existing files. The ports in `.env.local.example` come
 from the factory path; pick others if they are taken.
 
 ## 2. Install and the environment
@@ -162,13 +162,8 @@ no hub connection.
 
 ## Upgrading later
 
-Set the new `@jigs-ai/jigs` version in `package.json`, then:
-
-```sh
-pnpm install
-pnpm exec jigs up
-pnpm typecheck
-```
+Follow `https://salimhamed.github.io/jigs/guide/cli#upgrading-jigs`, including
+its steps for the release you are moving to, then run `pnpm typecheck`.
 
 `jigs up` stops if a waiting run needs a step the new build lacks; go back to
 the previous version, let it finish or cancel it, then upgrade again. Library imports come from the root `@jigs-ai/jigs`;

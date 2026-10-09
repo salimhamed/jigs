@@ -4,10 +4,10 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { processEnv } from "../config/factory-context.ts";
-import { FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
 import { stringEnv } from "../steps/agents/shared/env.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
+import { variableSet } from "./secrets.ts";
 
 const execFileAsync = promisify(execFile);
 
@@ -105,13 +105,8 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps = {}): Check {
     label: "AWS credentials",
     run: async (): Promise<CheckResult> => {
       const profile = env.AWS_PROFILE;
-      if (profile === undefined || profile === "") {
-        return {
-          ok: false,
-          reason: "AWS_PROFILE is not set in the service's environment",
-          repair: `set AWS_PROFILE in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
-        };
-      }
+      const set = variableSet("AWS_PROFILE", profile);
+      if (!set.ok || profile === undefined) return set;
 
       const probeEnv = stringEnv(env);
       const sso = await usesSso(exec, probeEnv, profile);

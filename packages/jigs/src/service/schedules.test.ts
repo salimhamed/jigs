@@ -155,7 +155,7 @@ test("an inactive schedule is listed as inactive, with no next fire", async () =
       workflow: "sweep",
       cron: "0 3 * * *",
       next: null,
-      active: null,
+      running: null,
     },
   ]);
 });
@@ -257,7 +257,7 @@ test("the listing carries the next occurrence and the active run", async () => {
     name: "nightly",
     workflow: "sweep",
     cron: "0 3 * * *",
-    active: RUN,
+    running: RUN,
   });
   expect(new Date(view?.next ?? "").getTime()).toBeGreaterThan(Date.now());
 });
@@ -269,7 +269,7 @@ test("a schedule whose cron does not parse has no next occurrence to report", as
     }),
     { listRuns: async () => [] },
   );
-  expect(views[0]).toMatchObject({ next: null, active: null });
+  expect(views[0]).toMatchObject({ next: null, running: null });
 });
 
 test("a factory declaring no schedules lists none and reads no runs", async () => {

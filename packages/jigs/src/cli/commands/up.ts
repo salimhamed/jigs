@@ -3,6 +3,7 @@ import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
+import { FACTORY_ENVIRONMENT } from "../../providers/credentials.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { columns, detail, displayPath, hint, section } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
@@ -166,7 +167,7 @@ async function bootstrapWorld(
   if (url === undefined) {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set",
-      "set it to this factory's World in the factory's environment",
+      `set it to this factory's World in ${FACTORY_ENVIRONMENT}`,
     );
   }
   const bin = path.join(ctx.root, "node_modules", ".bin", "bootstrap");

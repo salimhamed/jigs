@@ -76,8 +76,7 @@ run and reason), then the schedules and triggers if
 the factory declares any. Their `STATE` is `active` or `inactive`. An inactive
 one never fires in this copy because the copy's environment leaves it off
 (usually no `<NAME>_ACTIVE=true` in `.env.local`); that is a choice, not a fault. `RUNNING` is a
-schedule's run in progress or a trigger's count of them (`active` in `--json`;
-the flag is `state`). `TICKET` is the ticket the run was launched with, as
+schedule's run in progress or a trigger's count of them. `TICKET` is the ticket the run was launched with, as
 the operator typed it. `TRIGGER` says how the run started; a
 scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
 from the last time the run moved: `running` with a 20-minute `ACTIVITY` is
