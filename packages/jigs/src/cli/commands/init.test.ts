@@ -156,7 +156,7 @@ test("the docker project and ports are suggested in .env.example, never committe
 
   const compose = readFileSync(path.join(dir, "docker-compose.yml"), "utf8");
   expect(compose).toContain(`name: \${COMPOSE_PROJECT_NAME}`);
-  expect(compose).toContain(`"127.0.0.1:\${JIGS_POSTGRES_PORT}:5432"`);
+  expect(compose).toContain(`"127.0.0.1:\${JIGS_POSTGRES_PORT:?is not set}:5432"`);
   expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).not.toContain(
     String(a.servicePort),
   );

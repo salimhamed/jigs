@@ -118,7 +118,7 @@ jigs service logs  # the service process's own stdout, which is a different thin
 ```
 
 `jigs status <run-id>` also prints the run's page on the dashboard
-(`http://localhost:<dashboardPort>/run/<runId>`) and any queue job that died
+(`http://localhost:<JIGS_DASHBOARD_PORT>/run/<runId>`) and any queue job that died
 holding the run's resume, each with the SQL that puts it back on the queue.
 Print the SQL to the human; do not run it for them.
 

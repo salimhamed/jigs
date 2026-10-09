@@ -151,18 +151,9 @@ export function serviceBehindSources(deps: BundleDeps): string | undefined {
   return undefined;
 }
 
-// The child inherits this process's environment, plus what jigs derives from
-// it: Nitro's PORT and the base URL.
-//
-// `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
-// dashboard's included — to the service's own workflow routes. Left unset the
-// World guesses a port the process happens to listen on, and a queue job
-// delivered to a port with no workflow route dies after three 404s.
-function childEnv(service: ResolvedService): Record<string, string> {
+function childEnv(): Record<string, string> {
   return {
     ...stringEnv(),
-    PORT: String(service.port),
-    WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
     // The v5 Postgres package reads this when its module-level World is
     // created. Set it on the child itself, before any bundled module runs;
     // setting it only in the Nitro startup plugin can be too late.
@@ -195,7 +186,7 @@ export function spawnService(
     command: process.execPath,
     args: [SERVICE_ENTRY],
     cwd: factoryRoot,
-    env: childEnv(service),
+    env: childEnv(),
     logPath: logFile,
   });
   if (pid === undefined) {
@@ -256,7 +247,7 @@ export async function awaitReady(
       const other = health.pid === undefined ? "one that reports no pid" : `pid ${health.pid}`;
       throw new JigsError(
         `${serviceUrl} is already served by another process (${other}), so the ${slug} service could not listen there and was stopped`,
-        "stop that process, or give this factory another `service.port` in jigs.config.ts",
+        "stop that process, or give this factory another JIGS_SERVICE_PORT",
       );
     }
     if (health?.ready) return;

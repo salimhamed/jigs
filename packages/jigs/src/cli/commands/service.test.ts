@@ -183,10 +183,9 @@ function exitsOnTerm(io: Fake) {
   };
 }
 
-test("start runs the built entry in the factory root on the factory's port, with this process's environment", async () => {
+test("start runs the built entry in the factory root with this process's environment", async () => {
   const root = builtFactory();
   vi.stubEnv("LINEAR_API_KEY", "lin");
-  vi.stubEnv("PORT", "1234");
   const io = fake();
 
   await startService(deps(root, io));
@@ -195,21 +194,17 @@ test("start runs the built entry in the factory root on the factory's port, with
   expect(spec?.args).toEqual([SERVICE_ENTRY]);
   expect(spec?.cwd).toBe(root);
   expect(spec?.env.LINEAR_API_KEY).toBe("lin");
-  // jigs.config.ts, not the environment, is where a factory's address is declared.
-  expect(spec?.env.PORT).toBe("9100");
+  expect(spec?.env.JIGS_SERVICE_PORT).toBe("9100");
   expect(lines[0]).toContain("at http://localhost:9100");
 });
 
-test("the child is told where to host its dashboard and where its queue delivers", async () => {
+test("the child inherits its dashboard port and owns the World's shutdown", async () => {
   const root = builtFactory();
   const io = fake();
 
   await startService(deps(root, io));
 
   expect(io.spawns[0]?.env.JIGS_DASHBOARD_PORT).toBe("9200");
-  // Every queue worker in the child, the dashboard's included, dispatches to
-  // the service's own workflow routes rather than a guessed port.
-  expect(io.spawns[0]?.env.WORKFLOW_LOCAL_BASE_URL).toBe("http://localhost:9100");
   expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
   expect(lines).toContain("  dashboard  http://localhost:9200");
 });
@@ -435,7 +430,7 @@ test("a ready answer from another process on the port fails the start and stops 
   const err = await failure(startService(deps(root, io)));
 
   expect(err?.message).toContain("already served by another process (pid 777)");
-  expect(err?.hint).toContain("service.port");
+  expect(err?.hint).toContain("JIGS_SERVICE_PORT");
   expect(io.alive.has(4242)).toBe(false);
   expect(io.signals).not.toContainEqual(expect.objectContaining({ pid: 777 }));
   expect(recorded(root)).toBeUndefined();
@@ -449,7 +444,7 @@ test("an answer on the port without a pid fails the start and stops the new one"
   const err = await failure(startService(deps(root, io)));
 
   expect(err?.message).toContain("already served by another process (one that reports no pid)");
-  expect(err?.hint).toContain("service.port");
+  expect(err?.hint).toContain("JIGS_SERVICE_PORT");
   expect(io.alive.has(4242)).toBe(false);
   expect(recorded(root)).toBeUndefined();
 });

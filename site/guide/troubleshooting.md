@@ -134,7 +134,7 @@ Then start the run again.
 An agent step that runs in a worktree writes what the agent does to a stream
 while it works: its text and reasoning, and each tool call and result. To watch
 it, open the run in the dashboard the service hosts (`jigs service status`
-prints its URL, on `dashboardPort`), go to the **Streams** tab and pick the
+prints its URL, on `JIGS_DASHBOARD_PORT`), go to the **Streams** tab and pick the
 stream of the step. The stream updates every few seconds while the run is
 active. Each attempt of a step starts with an `attempt-start` record naming the
 attempt, the harness and the worktree. Questions to an agent without a

@@ -6,13 +6,9 @@ import { onShutdown } from "./shutdown.ts";
 
 // Hosted here rather than run standalone: a second process opening this World
 // runs a second queue worker, which steals the service's jobs.
-/** Start the optional Workflow dashboard and register its shutdown cleanup. */
+/** Start the Workflow dashboard and register its shutdown cleanup. */
 export async function startDashboard() {
   const port = Number(currentFactoryContext().env("JIGS_DASHBOARD_PORT"));
-  if (!Number.isInteger(port) || port <= 0) {
-    console.log("[service] dashboard skipped: JIGS_DASHBOARD_PORT unset");
-    return;
-  }
   // Nitro does not await its plugins, so touching the World through the
   // runtime is what makes the SDK's resolution win the process-global cache.
   const { getWorld } = await import("workflow/runtime");

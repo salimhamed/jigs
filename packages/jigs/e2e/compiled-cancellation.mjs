@@ -1198,8 +1198,6 @@ function runtimeEnv(postgresUrl, dataHome, ports) {
     XDG_DATA_HOME: dataHome,
     JIGS_SERVICE_PORT: String(ports.service),
     JIGS_DASHBOARD_PORT: String(ports.dashboard),
-    WORKFLOW_LOCAL_BASE_URL: `http://127.0.0.1:${ports.service}`,
-    WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN: "1",
     WORKFLOW_POSTGRES_URL: postgresUrl,
     WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "1",
     WORKFLOW_TARGET_WORLD: "@workflow/world-postgres",

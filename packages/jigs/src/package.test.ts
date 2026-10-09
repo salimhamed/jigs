@@ -265,6 +265,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   "service/service.ts": [
     "automaticReleaseAction",
     "createApp",
+    "listenOnServicePort",
     "reconcileAutomaticRelease",
     "startService",
   ],
