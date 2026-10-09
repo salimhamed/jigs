@@ -1,5 +1,51 @@
 # Changelog
 
+## [0.103.0](https://github.com/salimhamed/jigs/compare/jigs-v0.102.2...jigs-v0.103.0) (2026-10-09)
+
+
+### ⚠ BREAKING CHANGES
+
+* factories hear GitHub, Linear, Slack and PagerDuty through their hub and take every token from it
+* remove polling, so the hub is the only event path
+* make trigger sources push-only all the way down
+* name the installation on every hub call
+* **linear:** Linear agent conversations, with ticket runs talking through the Linear agent panel
+* **hub:** redesign the hub pages, rename apps and factories, member-owned factories
+* upgrade the Workflow SDK to 5.1
+* build factory steps into .jigs/ and remove jigs upgrade
+* restart only through jigs up, and confirm only over executing steps
+* factories receive events and tokens through a self-hosted hub
+
+### Features
+
+* build factory steps into .jigs/ and remove jigs upgrade ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* factories hear GitHub, Linear, Slack and PagerDuty through their hub and take every token from it ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* factories receive events and tokens through a self-hosted hub ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** add factories, their message lists and the factory API ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** add GitHub, Linear, Slack and PagerDuty apps, their events and tokens ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** add the hub's server, web app, database and secret encryption ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** connect a new factory's apps before starting it ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** redesign the hub pages, rename apps and factories, member-owned factories ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** sign in with GitHub, create the Organization, invite members ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **linear:** Linear agent conversations, with ticket runs talking through the Linear agent panel ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* make trigger sources push-only all the way down ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* name the installation on every hub call ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* remove polling, so the hub is the only event path ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* restart only through jigs up, and confirm only over executing steps ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* start runs from Linear agent mentions and assignments ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* upgrade the Workflow SDK to 5.1 ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+
+
+### Bug Fixes
+
+* **hub:** keep connections open longer than a load balancer does ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** keep invite links from members in the auth API ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **hub:** rate-limit sign-in by client IP behind a proxy and accept web forms behind it ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* keep pull request watches alive through GitHub server errors ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* let the hub stop while factories are connected ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* retry failed Slack wakes ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+* **service:** log a release pass only when it found a finished run ([7afda02](https://github.com/salimhamed/jigs/commit/7afda027cc64a4a0a961907679398078d4d20181))
+
 ## [0.102.2](https://github.com/salimhamed/jigs/compare/jigs-v0.102.1...jigs-v0.102.2) (2026-10-08)
 
 
