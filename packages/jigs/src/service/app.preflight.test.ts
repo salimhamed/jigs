@@ -186,6 +186,7 @@ test("the undeclared-binding failure names the exact jigs bind invocation", asyn
 });
 
 test("an input-driven workflow preflights the binding named by the run", async () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(process, "cwd").mockReturnValue(seededFactory);
   const res = await triggerInputBinding("playground");
   expect(res.status).toBe(424);
@@ -196,6 +197,7 @@ test("an input-driven workflow preflights the binding named by the run", async (
 });
 
 test("an input-driven workflow ignores an unrelated static binding", async () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const workspace = makeTmpDir();
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {

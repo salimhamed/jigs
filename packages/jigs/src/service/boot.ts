@@ -96,21 +96,20 @@ export interface HubGateDeps {
   error?: (line: string) => void;
 }
 
-// An active trigger in a copy with no hub hears nothing, and an active schedule
-// would fail every run it starts.
+// Every trigger source reads a provider, so an active trigger in a copy with no
+// hub hears nothing, and an active schedule would fail every run it starts.
 /**
- * Refuse service startup when an active trigger reads a provider, or an active schedule starts a
- * workflow that needs one, in a copy with no hub connection.
+ * Refuse service startup when a copy with no hub connection has an active trigger, or an active
+ * schedule whose workflow needs a provider.
  */
 export async function gateOnHubUse(live: Factory, deps: HubGateDeps = {}): Promise<boolean> {
-  const [{ hubConnection }, { needsHub }, { triggerInstallations }] = await Promise.all([
+  const [{ hubConnection }, { needsHub }] = await Promise.all([
     import("../providers/hub.ts"),
     import("../checks/index.ts"),
-    import("./event-triggers/view.ts"),
   ]);
   if (hubConnection(await (deps.context ?? serviceContext)()) !== undefined) return true;
   const offenders = [
-    ...Object.keys(triggerInstallations(live)).map((name) => `trigger ${name}`),
+    ...Object.keys(live.triggers ?? {}).map((name) => `trigger ${name}`),
     ...Object.entries(live.schedules ?? {})
       .filter(([, schedule]) => needsHub(live.workflows[schedule.workflow]?.requires ?? {}))
       .map(([name]) => `schedule ${name}`),

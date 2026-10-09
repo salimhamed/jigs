@@ -353,22 +353,32 @@ test("doctor checks the hub a workflow's provider needs", async () => {
   });
 });
 
-test("doctor and preflight fail a workflow needing a provider in a copy with no hub connection", async () => {
-  factoryWith("{}");
+test("in a copy with no hub connection doctor checks nothing through the hub, and preflight refuses a run that needs it", async () => {
+  factoryWith(
+    `{ bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } }, linear: { operator: "salim@example.com" } }`,
+  );
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const requires = { integrations: ["slack" as const] };
-  const doctor = await runChecks(doctorChecks({ answer: { requires } }));
+  const doctor = doctorChecks({ answer: { requires } }).map((check) => check.id);
+  expect(doctor).toContain("binding.api");
+  expect(doctor.filter((id) => id.startsWith("hub.") || id.endsWith(".installations"))).toEqual([]);
+  expect(preflightIds({ bindings: ["api"] })).toContain("hub.connection");
   const preflight = await runChecks(preflightChecks(requires));
-  for (const report of [doctor, preflight])
-    expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
+  expect(preflight.checks).toEqual([
+    {
+      id: "hub.connection",
+      label: "hub",
       ok: false,
       reason: "this copy has no hub connection",
-    });
+      repair: "set hub.url in jigs.config.ts and JIGS_HUB_TOKEN in this copy's environment",
+    },
+  ]);
 });
 
 test("doctor checks each provider a workflow requires and names the workflows", async () => {
   factoryWith('{ hub: { url: "https://hub.example.test" } }');
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  hubStatus([]);
   const report = await runChecks(
     doctorChecks({
       hello: {},
@@ -476,6 +486,7 @@ test("doctor reads the hub once for the hub check and every provider's", async (
 });
 
 test("doctor checks a provider the factory configuration asks for", () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   const ids = () => doctorChecks({ hello: {} }).map((check) => check.id);
   factoryWith(
     `{ ${HUB}, bindings: { api: { remote: "https://github.com/o/api.git", installationName: "acme" } } }`,
@@ -499,19 +510,6 @@ test("a provider in use with no named installation fails with the repair on the 
     reason:
       "no Slack installation is named and assigned to this factory on the hub (needed by workflow answer)",
     repair: expect.stringContaining("in the hub, name an installation of a Slack app"),
-  });
-});
-
-test("doctor sweeps the hub's Slack installations for a workflow requiring slack, preflight does not", async () => {
-  factoryWith(`{ ${HUB} }`);
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
-  const slack = { integrations: ["slack" as const] };
-  expect(preflightIds(slack)).toEqual(["hub.connection"]);
-  const report = await runChecks(doctorChecks({ answer: { requires: slack } }));
-  expect(report.checks.find((c) => c.id === "slack.installations")).toMatchObject({
-    ok: false,
-    reason:
-      "could not read this factory's Slack installations from the hub: this copy has no hub connection (needed by workflow answer)",
   });
 });
 

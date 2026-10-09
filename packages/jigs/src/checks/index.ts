@@ -3,7 +3,7 @@ import type { FactoryStatus } from "@jigs-ai/hub-protocol";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { githubInstallationProbe } from "../providers/github-checks.ts";
-import { fetchFactoryStatus } from "../providers/hub.ts";
+import { fetchFactoryStatus, hubConnection } from "../providers/hub.ts";
 import { linearInstallationProbe } from "../providers/linear-checks.ts";
 import { pagerDutyInstallationProbe } from "../providers/pagerduty-checks.ts";
 import { slackInstallationProbe } from "../providers/slack-checks.ts";
@@ -81,6 +81,15 @@ function agentInstallations(requires: WorkflowRequires, provider: Provider): str
   );
 }
 
+// An unreadable config connects nothing: the binding checks report it.
+function connected(ctx: FactoryContext): boolean {
+  try {
+    return hubConnection(ctx) !== undefined;
+  } catch {
+    return false;
+  }
+}
+
 // An unreadable config binds nothing: the binding checks report it.
 function hasBindings(ctx: FactoryContext): boolean {
   try {
@@ -144,7 +153,7 @@ export function preflightChecks(
         ];
   };
   return [
-    ...(integrations.length > 0 ? hubChecks(ctx) : []),
+    ...(needsHub({ ...requires, bindings }) ? hubChecks(ctx) : []),
     ...PROVIDERS.filter((provider) => integrations.includes(provider)).flatMap(installations),
     ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
@@ -329,7 +338,9 @@ export function doctorChecks(
       watching.map(([name]) => name),
     );
   };
-  const providers = PROVIDERS.flatMap(installations);
+  // Unconnected, nothing live needs the hub: the boot refuses an active trigger
+  // or schedule that does, and preflight refuses a run that does.
+  const providers = connected(ctx) ? PROVIDERS.flatMap(installations) : [];
   return [
     ...(providers.length > 0 ? hubChecks(ctx, status) : []),
     ...providers,

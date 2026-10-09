@@ -41,6 +41,10 @@ test("preflight checks a workflow's opted-in agents", () => {
 });
 
 test("doctor checks github-mcp-server is installed instead of probing it without a token", () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
   const parent = useTestFactory("export default { hub: { url: 'https://hub.example.test' } }");
   onTestFinished(() => removeTmpDir(parent));
   const withMcp = harnesses.claude({

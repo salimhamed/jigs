@@ -1,4 +1,4 @@
-import { expect, onTestFinished, test } from "vitest";
+import { expect, onTestFinished, test, vi } from "vitest";
 import { inTestFactory, removeTmpDir, useTestFactory } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { linearMcp } from "../workflow/agents/linear-mcp.ts";
@@ -26,6 +26,10 @@ test("preflight checks the installations of each provider a workflow's agents op
 });
 
 test("doctor leaves a hosted server reading an agent token to the step's own probe", () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  onTestFinished(() => {
+    vi.unstubAllEnvs();
+  });
   const parent = useTestFactory("export default { hub: { url: 'https://hub.example.test' } }");
   onTestFinished(() => removeTmpDir(parent));
   const triager = harnesses.claude({
