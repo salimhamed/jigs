@@ -153,6 +153,10 @@ Repository settings the release depends on:
 - A `RELEASE_PLEASE_TOKEN` secret: a fine-grained PAT on this repo with
   Contents, Pull requests and Issues read and write. `GITHUB_TOKEN` would not
   trigger checks on the release PR.
+- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets: a Docker Hub account and
+  a read-only access token. The `step-ids` and long-step regression jobs pull
+  `postgres` with them, since anonymous pulls from shared runners hit Docker
+  Hub's rate limit.
 - An npm trusted publisher for each of `@jigs-ai/jigs` and `@jigs-ai/hub`:
   repository `salimhamed/jigs`, workflow `release.yml`, no environment.
   Publishing uses OIDC, no npm token. A new package's first publish is by hand
