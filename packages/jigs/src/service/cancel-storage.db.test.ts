@@ -11,6 +11,7 @@ import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import { databaseUrl, dbTest, postgresAdminUrl } from "../db-test-fixtures.ts";
 import { ensureRegistry, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
 import { listRunDeadJobs } from "./queue.ts";
@@ -52,6 +53,7 @@ let world: ReturnType<typeof createWorld>;
 let registry: RegistrySql;
 let oldBaseUrl: string | undefined;
 let oldPostgresUrl: string | undefined;
+const factoryParent = makeTmpDir();
 
 beforeAll(async () => {
   await admin.query(`CREATE DATABASE "${database}"`);
@@ -65,7 +67,7 @@ beforeAll(async () => {
   process.env.WORKFLOW_LOCAL_BASE_URL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
   process.env.WORKFLOW_POSTGRES_URL = testUrl.toString();
   // The cancel route lists the run's worktrees under this factory's slug.
-  vi.stubEnv("JIGS_FACTORY_ROOT", "/nonexistent/jigs-cancel-factory");
+  vi.spyOn(process, "cwd").mockReturnValue(makeFactoryRepo(factoryParent));
   world = createWorld({
     connectionString: testUrl.toString(),
     queueConcurrency: 1,
@@ -78,6 +80,8 @@ beforeAll(async () => {
 
 afterAll(async () => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
+  removeTmpDir(factoryParent);
   deliveryHandlers.clear();
   await world?.close?.();
   await registry.$client.end();

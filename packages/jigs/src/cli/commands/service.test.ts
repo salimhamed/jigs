@@ -10,7 +10,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { factorySlug } from "../../config/paths.ts";
 import type { JigsError } from "../../errors.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import {
   awaitServiceReady,
@@ -136,16 +136,18 @@ const deps = (
   cwd: string,
   io: Fake,
   timeouts: { startTimeoutMs?: number; stopTimeoutMs?: number } = {},
-) => ({
-  cwd,
-  out: (line: string) => lines.push(line),
-  processes: io.processes,
-  probe: io.probe,
-  // The fake answers at once; the wait between probes is for a real boot.
-  startPollMs: 0,
-  killWaitMs: 0,
-  ...timeouts,
-});
+) => {
+  runFrom(cwd);
+  return {
+    out: (line: string) => lines.push(line),
+    processes: io.processes,
+    probe: io.probe,
+    // The fake answers at once; the wait between probes is for a real boot.
+    startPollMs: 0,
+    killWaitMs: 0,
+    ...timeouts,
+  };
+};
 
 test("resource maintenance exclusion closes the service restart race", async () => {
   const root = builtFactory();

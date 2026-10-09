@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { JIGS_LABELS } from "../../providers/github-label.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
-import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
 import { unbindRepo } from "./unbind.ts";
@@ -16,6 +16,7 @@ let lines: string[];
 beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
+  runFrom(factory);
   lines = [];
 });
 afterEach(() => {
@@ -24,7 +25,6 @@ afterEach(() => {
 
 function deps(overrides: Partial<BindDeps> = {}): BindDeps {
   return {
-    cwd: factory,
     out: (line) => lines.push(line),
     ensureLabel: async () => "verified",
     ...overrides,
@@ -272,7 +272,8 @@ test("a remote starting with a dash is refused before it can become a git option
 });
 
 test("bind outside a factory repo fails with guidance", async () => {
-  await expect(bindRepo(API, deps({ cwd: tmp }), { installation: "gh" })).rejects.toThrow(
+  runFrom(tmp);
+  await expect(bindRepo(API, deps(), { installation: "gh" })).rejects.toThrow(
     "not inside a factory repo",
   );
 });
@@ -291,7 +292,7 @@ test("the label leg without a hub token fails with the hub's repair, after recor
 
   const failure = await bindRepo(
     API,
-    { cwd: factory, out: (line) => lines.push(line) },
+    { out: (line) => lines.push(line) },
     { installation: "gh" },
   ).catch((err: unknown) => err);
 

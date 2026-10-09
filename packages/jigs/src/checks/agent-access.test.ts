@@ -1,7 +1,5 @@
-import { writeFileSync } from "node:fs";
-import path from "node:path";
-import { expect, onTestFinished, test, vi } from "vitest";
-import { inTestFactory, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
+import { expect, onTestFinished, test } from "vitest";
+import { inTestFactory, removeTmpDir, useTestFactory } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { linearMcp } from "../workflow/agents/linear-mcp.ts";
 import { pagerdutyMcp } from "../workflow/agents/pagerduty-mcp.ts";
@@ -28,16 +26,10 @@ test("preflight checks the installations of each provider a workflow's agents op
 });
 
 test("doctor leaves a hosted server reading an agent token to the step's own probe", () => {
-  const factory = makeTmpDir();
-  onTestFinished(() => {
-    vi.unstubAllEnvs();
-    removeTmpDir(factory);
-  });
-  writeFileSync(
-    path.join(factory, "jigs.config.ts"),
+  const parent = useTestFactory(
     "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
   );
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
+  onTestFinished(() => removeTmpDir(parent));
   const triager = harnesses.claude({
     model: "m",
     linear: { installationName: "acme" },

@@ -1,17 +1,16 @@
 import { existsSync } from "node:fs";
 import { removeBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { bindingFilesDir, cloneDir } from "../../steps/workspaces/layout.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { detail, displayPath, hint } from "../output.ts";
 
 export interface UnbindDeps {
-  cwd: string;
   out: (line: string) => void;
 }
 
 export function unbindRepo(name: string, deps: UnbindDeps): void {
-  const factoryRoot = factoryContextAt(deps.cwd).root;
+  const factoryRoot = currentFactoryContext().root;
   const text = readFactoryConfigText(factoryRoot);
   writeFactoryConfigText(factoryRoot, removeBinding(text, name));
   deps.out(`unbound ${name}`);

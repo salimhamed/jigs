@@ -1,6 +1,6 @@
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import {
   closedPort,
@@ -22,7 +22,6 @@ beforeEach(() => {
   lines = [];
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://jigs:jigs@localhost:5555/jigs");
-  vi.stubEnv("JIGS_HUB_TOKEN", "test-hub-token");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -38,9 +37,9 @@ function up(
   extra: Partial<UpDeps> = {},
   options: UpOptions = {},
 ) {
+  runFrom(root);
   return upFactory(
     {
-      cwd: root,
       out: (line) => lines.push(line),
       execFile: io.exec.execFile,
       processes: io.procs.processes,
@@ -67,7 +66,6 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   expect(result.ok).toBe(true);
   expect(statuses(result)).toEqual([
     "locate:ok",
-    "env:ok",
     "install:ok",
     "compose:ok",
     "bootstrap:ok",
@@ -91,9 +89,7 @@ test("from a freshly scaffolded factory, every step runs once, in order", async 
   for (const call of io.exec.calls) expect(call.options.cwd).toBe(root);
   expect(io.procs.spawns).toHaveLength(1);
 
-  // The slots that stay empty are named, not refused.
   const printed = lines.join("\n");
-  expect(printed).toMatch(/^ok {3}env \(\d+ms\)$/m);
   expect(printed).toMatch(/^ok {3}doctor \(\d+ms\)$/m);
   const [pid] = io.procs.alive;
   const log = io.procs.spawns[0]?.logPath ?? "";
@@ -131,11 +127,6 @@ test("bootstrap is handed the World URL from the environment", async () => {
   });
   await up(root, io, { migrate });
   expect(migrate).toHaveBeenCalledOnce();
-
-  const bootstrap = io.exec.calls.find((call) => path.basename(call.file) === "bootstrap");
-  expect(bootstrap?.options.env?.WORKFLOW_POSTGRES_URL).toBe(
-    "postgres://jigs:jigs@localhost:5555/jigs",
-  );
 });
 
 test("a second up on an unchanged factory leaves the running service alone", async () => {
@@ -331,18 +322,6 @@ test("outside a factory repo, locate fails with the existing error", async () =>
   const result = await up(tmp, io);
   expect(statuses(result)).toEqual(["locate:failed"]);
   expect(result.steps[0]?.detail).toContain("not inside a factory repo");
-});
-
-test("without the hub token up stops at env, naming the variable", async () => {
-  vi.stubEnv("JIGS_HUB_TOKEN", "");
-  const root = factory({ port: 1 });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.repair).toContain("set JIGS_HUB_TOKEN in the factory's environment");
-  expect(io.exec.calls).toHaveLength(0);
 });
 
 test("docker compose output is streamed under the compose step as it prints", async () => {

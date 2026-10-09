@@ -2,7 +2,6 @@
 // here: what is under test is the target jigs hands it, not what git does with
 // it.
 
-import { writeFileSync } from "node:fs";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import {
   git,
@@ -12,7 +11,7 @@ import {
   resolveRemoteUrl,
 } from "../../providers/git.ts";
 import { githubAuthFor } from "../../providers/github-auth.ts";
-import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { removeTmpDir, useTestFactory } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { pushApprovedChange, pushBranch } from "./branch.ts";
 
@@ -54,12 +53,9 @@ const remote = (url: string) =>
 const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]);
 
 beforeEach(() => {
-  factory = makeTmpDir();
-  writeFileSync(
-    `${factory}/jigs.config.ts`,
+  factory = useTestFactory(
     `export default { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }`,
   );
-  vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   memoryRows.length = 0;
   vi.mocked(git).mockResolvedValue("");
   // The first push creates the branch; every later one updates it.

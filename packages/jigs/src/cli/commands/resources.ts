@@ -1,3 +1,4 @@
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { RunFacts } from "../../steps/runtime/run-state.ts";
@@ -6,7 +7,6 @@ import {
   type ResourceRecord,
   UNRELEASED_STATES,
 } from "../../workflow/runtime/resources.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import {
   columns,
   detail,
@@ -32,7 +32,6 @@ export interface ResourcesOptions {
 }
 
 export interface ResourcesDeps {
-  cwd: string;
   out: (line: string) => void;
   processes?: ServiceProcesses;
   connect?: (url: string) => RegistrySql;
@@ -375,7 +374,7 @@ async function withDatabase<T>(
   deps: ResourcesDeps,
   action: (sql: RegistrySql, factory: string) => Promise<T>,
 ): Promise<T> {
-  const ctx = factoryContextAt(deps.cwd);
+  const ctx = currentFactoryContext();
   const url = ctx.env("WORKFLOW_POSTGRES_URL");
   if (url === undefined) {
     throw new JigsError(
@@ -406,11 +405,10 @@ export async function runResourcesPrune(
   options: ResourcesOptions = {},
 ): Promise<ResourceInventory> {
   if (options.apply !== true) return listResources(deps, options);
-  const ctx = factoryContextAt(deps.cwd);
-  const factoryRoot = ctx.root;
+  const ctx = currentFactoryContext();
   const releaseExclusion = acquireServiceExclusion(ctx.slug, "resources-prune");
   try {
-    requireServiceStopped({ cwd: factoryRoot, out: deps.out, processes: deps.processes });
+    requireServiceStopped({ out: deps.out, processes: deps.processes });
     const result = await withDatabase(deps, (sql, factory) => inventory(sql, factory, options));
     output(result, deps, options);
     return result;

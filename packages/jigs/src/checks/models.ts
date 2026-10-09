@@ -1,8 +1,9 @@
 import { currentFactoryContext } from "../config/factory-context.ts";
-import { type EnvLookup, FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
+import type { EnvLookup } from "../providers/credentials.ts";
 import type { OpenaiCompatibleSource } from "../workflow/agents/harness-config.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
+import { variableSet } from "./secrets.ts";
 
 const factorySetting: EnvLookup = (name) => currentFactoryContext().env(name);
 
@@ -11,16 +12,7 @@ export function modelApiKeyCheck(variable: string, env: EnvLookup = factorySetti
   return {
     id: `model.${variable.toLowerCase().replaceAll("_", "-")}`,
     label: `${variable} credential`,
-    run: async (): Promise<CheckResult> => {
-      const credential = env(variable);
-      return credential === undefined || credential.trim() === ""
-        ? {
-            ok: false,
-            reason: `${variable} is not set in the service's environment`,
-            repair: `set ${variable} in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
-          }
-        : { ok: true };
-    },
+    run: async () => variableSet(variable, env(variable)),
   };
 }
 

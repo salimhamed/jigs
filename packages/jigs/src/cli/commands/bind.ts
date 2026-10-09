@@ -2,7 +2,7 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { upsertBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
-import type { FactoryContext } from "../../config/factory-context.ts";
+import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
 import {
@@ -14,13 +14,11 @@ import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { installationNameSchema } from "../../workflow/factory-schema.ts";
-import { factoryContextAt } from "../factory-context.ts";
 import { detail, hint, note } from "../output.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export interface BindDeps {
-  cwd: string;
   out: (line: string) => void;
   ensureLabel?: (options: EnsureRepoLabelOptions) => Promise<"created" | "verified">;
 }
@@ -43,9 +41,7 @@ export async function bindRepo(
   deps: BindDeps,
   options: BindOptions = {},
 ): Promise<BindResult> {
-  // The GitHub credential belongs to the factory this verb was typed in, which
-  // need not be the one the process's own directory sits in.
-  const ctx = factoryContextAt(deps.cwd);
+  const ctx = currentFactoryContext();
   const factoryRoot = ctx.root;
   // The remote is handed to git in positional slots for the life of the
   // binding, so a leading dash is refused once, here, rather than defended

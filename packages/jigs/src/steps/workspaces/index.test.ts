@@ -37,7 +37,7 @@ beforeEach(() => {
   tmp = makeTmpDir();
   factoryRoot = path.join(tmp, "factory");
   mkdirSync(factoryRoot, { recursive: true });
-  vi.stubEnv("JIGS_FACTORY_ROOT", factoryRoot);
+  vi.spyOn(process, "cwd").mockReturnValue(factoryRoot);
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   log = [];
   vi.spyOn(console, "log").mockImplementation((line: string) => {

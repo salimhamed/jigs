@@ -3,7 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveService } from "../../config/factory-config.ts";
 import { resolveFactoryContext } from "../../config/factory-context.ts";
-import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { downFactory } from "./down.ts";
 import { serviceRecordPath } from "./service-record.ts";
@@ -33,8 +33,8 @@ afterEach(() => {
 });
 
 function down(root: string, io: { exec: ReturnType<typeof fakeExec>; procs: FakeProcesses }) {
+  runFrom(root);
   return downFactory({
-    cwd: root,
     out: (line) => lines.push(line),
     execFile: io.exec.execFile,
     processes: io.procs.processes,

@@ -246,7 +246,6 @@ test("health names the factory and the process that answer here, and the injecte
 });
 
 test("health outside a factory reports a null root rather than failing liveness", async () => {
-  vi.stubEnv("JIGS_FACTORY_ROOT", "");
   const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
   try {
     const res = await appClient(createApp(fixture)).request("/health");

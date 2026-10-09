@@ -11,7 +11,7 @@ export interface LaunchDeps extends ServiceDeps {
   // freshness warning speaks about the sources that service was built from.
   // An explicit --service-url is some other factory's, and this factory's sources
   // say nothing about it.
-  factoryCwd?: string;
+  ownService?: boolean;
 }
 
 export interface LaunchResult {
@@ -221,10 +221,10 @@ export async function launchRun(
 // A warning, not a refusal: the previous bundle is still a workflow, and the
 // operator may well mean to run it.
 function reportStaleBundle(deps: LaunchDeps): boolean {
-  if (deps.factoryCwd === undefined) return false;
+  if (deps.ownService !== true) return false;
   let behind: string | undefined;
   try {
-    behind = serviceBehindSources({ cwd: deps.factoryCwd });
+    behind = serviceBehindSources({});
   } catch {
     // A file that moved while the sources were being read is no reason to
     // lose the launch.

@@ -90,8 +90,8 @@ const snapshot: Omit<PullRequestSnapshot, "approval" | "appBot"> = {
 beforeEach(() => {
   root = makeTmpDir();
   writeConfig();
-  vi.stubEnv("JIGS_FACTORY_ROOT", root);
   vi.resetAllMocks();
+  vi.spyOn(process, "cwd").mockReturnValue(root);
   vi.mocked(githubAuthFor).mockReturnValue({
     bearer: async () => "token",
     invalidate: () => {},
@@ -115,6 +115,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.unstubAllEnvs();
+  vi.restoreAllMocks();
   removeTmpDir(root);
 });
 

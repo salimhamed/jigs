@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
-import { readFactoryConfig } from "../config/factory-config.ts";
+import { currentFactoryContext } from "../config/factory-context.ts";
 import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
@@ -34,8 +34,6 @@ const serviceOption = () =>
     "--service-url <url>",
     "jigs service URL (default: this factory's service.port in jigs.config.ts)",
   ).env("JIGS_SERVICE_URL");
-
-const serviceUrl = (explicit?: string) => resolveServiceUrl(process.cwd(), explicit);
 
 function makeConfirm(): ((question: string) => Promise<boolean>) | undefined {
   if (!process.stdin.isTTY || !process.stdout.isTTY) return undefined;
@@ -121,9 +119,8 @@ program.helpInformation = () => ROOT_HELP;
 // commander's own option defaults included, reads it.
 program.hook("preSubcommand", (_program, command) => {
   if (command.name() === "init") return;
-  const root = locateFactoryRoot(process.cwd());
-  process.chdir(root);
-  readFactoryConfig(root);
+  process.chdir(locateFactoryRoot(process.cwd()));
+  currentFactoryContext().config;
 });
 
 program
@@ -151,13 +148,13 @@ program
   .command("build")
   .description("compile this factory's workflows into its service bundle")
   .action(async () => {
-    await buildFactoryService({ cwd: process.cwd(), out });
+    await buildFactoryService({ out });
   });
 
 program
   .command("up")
   .description(
-    "take this factory from any state to a running service (env, install, compose, bootstrap, build, start, doctor)",
+    "take this factory from any state to a running service (install, compose, bootstrap, build, start, doctor)",
   )
   .option("--restart-service", "restart the service even when the bundle is unchanged")
   .option("--force", "restart over executing steps without asking")
@@ -166,7 +163,7 @@ program
     // Every step has already printed its own FAIL line and repair, so the
     // exit code is the only thing left to say.
     const result = await upFactory(
-      { cwd: process.cwd(), out, confirm: makeConfirm() },
+      { out, confirm: makeConfirm() },
       { ...options, restart: options.restartService },
     );
     if (!result.ok) process.exitCode = 1;
@@ -178,7 +175,7 @@ program
     "stop this factory's service process, then its Postgres container (docker compose down, volume kept)",
   )
   .action(async () => {
-    await downFactory({ cwd: process.cwd(), out });
+    await downFactory({ out });
   });
 
 program
@@ -196,7 +193,7 @@ program
   .action(async (remoteUrl: string, options: { bindingName?: string; installation?: string }) => {
     await bindRepo(
       remoteUrl,
-      { cwd: process.cwd(), out },
+      { out },
       {
         ...(options.bindingName === undefined ? {} : { name: options.bindingName }),
         ...(options.installation === undefined ? {} : { installation: options.installation }),
@@ -209,7 +206,7 @@ program
   .description("remove a binding")
   .argument("<binding-name>", "binding name")
   .action((name: string) => {
-    unbindRepo(name, { cwd: process.cwd(), out });
+    unbindRepo(name, { out });
   });
 
 program
@@ -226,8 +223,8 @@ program
   .action(async (workflow: string, options: { input: string[]; serviceUrl?: string }) => {
     await launchRun(workflow, options.input, {
       out,
-      factoryCwd: usesFactoryService(options.serviceUrl) ? process.cwd() : undefined,
-      serviceUrl: serviceUrl(options.serviceUrl),
+      ownService: usesFactoryService(options.serviceUrl),
+      serviceUrl: resolveServiceUrl(options.serviceUrl),
     });
   });
 
@@ -236,7 +233,7 @@ program
   .description("list the workflows this built factory can run and their inputs")
   .addOption(serviceOption())
   .action(async (options: { serviceUrl?: string }) => {
-    await listWorkflows({ out, serviceUrl: serviceUrl(options.serviceUrl) });
+    await listWorkflows({ out, serviceUrl: resolveServiceUrl(options.serviceUrl) });
   });
 
 program
@@ -246,7 +243,7 @@ program
   .option("--json", "print one JSON document instead of text output")
   .addOption(serviceOption())
   .action(async (runId: string | undefined, options: { json?: boolean; serviceUrl?: string }) => {
-    const deps = { out, serviceUrl: serviceUrl(options.serviceUrl) };
+    const deps = { out, serviceUrl: resolveServiceUrl(options.serviceUrl) };
     if (runId === undefined) await showRuns(deps, { json: options.json });
     else await showRunStatus(runId, deps, { json: options.json });
   });
@@ -276,7 +273,7 @@ program
       options: { json?: boolean; pollIntervalSeconds?: number; serviceUrl?: string },
     ) => {
       await watchRuns(
-        { out, serviceUrl: serviceUrl(options.serviceUrl) },
+        { out, serviceUrl: resolveServiceUrl(options.serviceUrl) },
         {
           json: options.json,
           runId,
@@ -299,7 +296,7 @@ program
   .action(async (run: string, options: { force?: boolean; serviceUrl?: string }) => {
     await cancelRun(run, {
       out,
-      serviceUrl: serviceUrl(options.serviceUrl),
+      serviceUrl: resolveServiceUrl(options.serviceUrl),
       confirm: makeConfirm(),
       force: options.force,
     });
@@ -311,7 +308,7 @@ program
   .argument("<run-id>", RUN_ID_HELP)
   .addOption(serviceOption())
   .action(async (runId: string, options: { serviceUrl?: string }) => {
-    await pokeRun(runId, { out, serviceUrl: serviceUrl(options.serviceUrl) });
+    await pokeRun(runId, { out, serviceUrl: resolveServiceUrl(options.serviceUrl) });
   });
 
 program
@@ -319,7 +316,7 @@ program
   .description("run the check catalog against the service, without launching")
   .addOption(serviceOption())
   .action(async (options: { serviceUrl?: string }) => {
-    await runDoctor({ out, serviceUrl: serviceUrl(options.serviceUrl) });
+    await runDoctor({ out, serviceUrl: resolveServiceUrl(options.serviceUrl) });
   });
 
 const resources = program
@@ -332,7 +329,7 @@ resources
   .option("--run <run-id>", `limit the inventory to one run: ${RUN_ID_HELP}`)
   .option("--json", "print one JSON document")
   .action(async (options: { run?: string; json?: boolean }) => {
-    await listResources({ cwd: process.cwd(), out }, options);
+    await listResources({ out }, options);
   });
 
 resources
@@ -344,7 +341,7 @@ resources
   .option("--apply", "remove them once the service and everything it started have stopped")
   .option("--json", "print one JSON document")
   .action(async (options: { run?: string; apply?: boolean; json?: boolean }) => {
-    await runResourcesPrune({ cwd: process.cwd(), out }, options);
+    await runResourcesPrune({ out }, options);
   });
 
 const service = program
@@ -355,14 +352,14 @@ service
   .command("stop")
   .description("stop this factory's service process and everything it started, dashboard included")
   .action(async () => {
-    await stopService({ cwd: process.cwd(), out });
+    await stopService({ out });
   });
 
 service
   .command("status")
   .description("report whether this factory's service process is running")
   .action(() => {
-    serviceStatus({ cwd: process.cwd(), out });
+    serviceStatus({ out });
   });
 
 service
@@ -376,21 +373,21 @@ service
     return lines;
   })
   .action((options: { lines?: number }) => {
-    serviceLogs({ cwd: process.cwd(), out }, { lines: options.lines });
+    serviceLogs({ out }, { lines: options.lines });
   });
 
 program
   .command("bindings")
   .description("list bindings with their clone state")
   .action(async () => {
-    await listBindings({ cwd: process.cwd(), out });
+    await listBindings({ out });
   });
 
 if (process.argv.length === 2) {
   program.outputHelp();
 } else {
-  // Commander exits itself on its own parse errors; this catch sees only
-  // action-handler failures (parseAsync wraps even synchronous throws).
+  // Commander exits itself on its own parse errors; this catch sees hook and
+  // action failures (parseAsync wraps even synchronous throws).
   program.parseAsync().catch((err: unknown) => {
     if (err instanceof JigsError) {
       for (const line of formatError(err)) console.error(line);
