@@ -11,3 +11,6 @@ packages import its TypeScript source from `src/index.ts`. So:
   the bundled copy breaks in a factory.
 - Keep it free of Node built-ins, `process.env` and I/O: it describes messages,
   it does not send them.
+- `src/index.ts` is types plus the paths and limits both sides agree on. The
+  hub and jigs both build against it, so a change to a shape changes both
+  sides in the same PR.

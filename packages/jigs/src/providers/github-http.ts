@@ -3,7 +3,7 @@
 // live beside the per-account credential choice in github-api.ts.
 
 import { runSignal } from "../config/factory-context.ts";
-import { ProviderApiError, type ProviderAuth, rateLimitWaits, reauthorize } from "./http.ts";
+import { ProviderApiError, type ProviderAuth, rateLimitWaits } from "./http.ts";
 
 const GITHUB_API_URL = "https://api.github.com";
 
@@ -24,6 +24,8 @@ export class GitHubApiError extends ProviderApiError {
   readonly githubMessage: string;
   /** The response body as GitHub sent it. */
   declare readonly body: string;
+  /** GitHub refused for its rate limit, and the waits for it ran out. */
+  rateLimited = false;
 
   constructor(status: number, apiPath: string, body: string, message?: string) {
     super({
@@ -77,11 +79,6 @@ export interface GithubSend {
   json?: unknown;
   /** Turns an error answer into the failure; defaults to a {@link GitHubApiError}. */
   refuse?: (res: Response, text: string) => Error;
-  /**
-   * Keeps a rate-limit wait going when the calling run is cancelled, for work shared between runs
-   * such as a token mint.
-   */
-  outlivesRun?: true;
 }
 
 export interface GithubClientDeps {
@@ -90,16 +87,9 @@ export interface GithubClientDeps {
 }
 
 export function createGithubClient(deps: GithubClientDeps = {}) {
-  async function send<T>({
-    auth,
-    method = "GET",
-    apiPath,
-    json,
-    refuse,
-    outlivesRun,
-  }: GithubSend): Promise<T> {
+  async function send<T>({ auth, method = "GET", apiPath, json, refuse }: GithubSend): Promise<T> {
     let reauthorized = false;
-    const waits = rateLimitWaits("github", outlivesRun ? null : runSignal, deps.sleep);
+    const waits = rateLimitWaits("github", runSignal, deps.sleep);
     for (;;) {
       const credential = await auth.bearer();
       const res = await (deps.fetch ?? fetch)(`${GITHUB_API_URL}${apiPath}`, {
@@ -113,7 +103,8 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         body: json === undefined ? undefined : JSON.stringify(json),
       });
       const text = await res.text();
-      if (res.status === 401 && !reauthorized && reauthorize(auth, credential)) {
+      if (res.status === 401 && !reauthorized) {
+        auth.invalidate(credential);
         reauthorized = true;
         continue;
       }
@@ -125,7 +116,11 @@ export function createGithubClient(deps: GithubClientDeps = {}) {
         (await waits.wait(SERVER_ERROR_WAIT_SECONDS, "server error"))
       )
         continue;
-      if (!res.ok) throw refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+      if (!res.ok) {
+        const refused = refuse?.(res, text) ?? new GitHubApiError(res.status, apiPath, text);
+        if (refused instanceof GitHubApiError) refused.rateLimited = isRateLimited(res);
+        throw refused;
+      }
       // 204 on a POST that adds nothing to say — assignees and labels do this.
       return (res.status === 204 || text === "" ? undefined : JSON.parse(text)) as T;
     }

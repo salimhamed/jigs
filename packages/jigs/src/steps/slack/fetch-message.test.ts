@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { useSlackClient } from "../../providers/test-fixtures.ts";
+import { TEST_SLACK_BOT, useSlackClient } from "../../providers/test-fixtures.ts";
 import { type FetchCall, fakeFetch } from "../../providers/test-support.ts";
 import { testFactoryContext } from "../../test-fixtures.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
@@ -85,7 +85,7 @@ beforeEach(() => {
   sent = fake.calls;
   useSlackClient({
     fetch: fake.fetch,
-    context: testFactoryContext({ env: { SLACK_BOT_TOKEN: "xoxb-test" } }),
+    context: testFactoryContext(),
   });
   factories += 1;
   vi.stubEnv("JIGS_FACTORY_ROOT", `/fetch-message-test-${factories}`);
@@ -102,7 +102,11 @@ test("a snapshot is the message, its permalink and its replies in order, with ea
     ok: true,
     messages: [human, botReply, humanReply],
   });
-  const snapshot = await fetchSlackMessage({ channel: CHANNEL, ts: human.ts });
+  const snapshot = await fetchSlackMessage({
+    installationName: "slack-acme",
+    channel: CHANNEL,
+    ts: human.ts,
+  });
   const salim = {
     id: "U01PW925E6N",
     name: "Salim",
@@ -157,7 +161,11 @@ test.each([
     ...fields,
   };
   routes["conversations.replies"] = () => ({ ok: true, messages: [announcement] });
-  const snapshot = await fetchSlackMessage({ channel: CHANNEL, ts: announcement.ts });
+  const snapshot = await fetchSlackMessage({
+    installationName: "slack-acme",
+    channel: CHANNEL,
+    ts: announcement.ts,
+  });
   expect(snapshot).toMatchObject({
     gone: false,
     text: announcement.text,
@@ -166,10 +174,28 @@ test.each([
   expect(calls("users.info")).toBe(0);
 });
 
+test("the factory's own post under a custom username, with no user, is its own bot's", async () => {
+  const own = {
+    type: "message",
+    subtype: "bot_message",
+    bot_id: "B0C5JPZUW1J",
+    app_id: TEST_SLACK_BOT.appId,
+    username: "Deploy bot",
+    ts: "1790723400.000200",
+    text: "posted by the factory under another name",
+  };
+  routes["conversations.replies"] = () => ({ ok: true, messages: [own] });
+  expect(
+    await fetchSlackMessage({ installationName: "slack-acme", channel: CHANNEL, ts: own.ts }),
+  ).toMatchObject({
+    author: { id: "B0C5JPZUW1J", bot: true, isOwnBot: true },
+  });
+});
+
 test("an author is looked up again on the next snapshot", async () => {
   routes["conversations.replies"] = () => ({ ok: true, messages: [human] });
-  await fetchSlackMessage({ channel: CHANNEL, ts: human.ts });
-  await fetchSlackMessage({ channel: CHANNEL, ts: human.ts });
+  await fetchSlackMessage({ installationName: "slack-acme", channel: CHANNEL, ts: human.ts });
+  await fetchSlackMessage({ installationName: "slack-acme", channel: CHANNEL, ts: human.ts });
   expect(calls("users.info")).toBe(2);
 });
 
@@ -179,7 +205,9 @@ test.each([
   ["a tombstone", () => ({ ok: true, messages: [tombstone, humanReply] })],
 ])("a deleted message is gone (%s)", async (_, route) => {
   routes["conversations.replies"] = route;
-  expect(await fetchSlackMessage({ channel: CHANNEL, ts: tombstone.ts })).toEqual({
+  expect(
+    await fetchSlackMessage({ installationName: "slack-acme", channel: CHANNEL, ts: tombstone.ts }),
+  ).toEqual({
     gone: true,
     channel: CHANNEL,
     ts: tombstone.ts,
@@ -190,7 +218,11 @@ test.each([
 test("a thread reply's ts fails at once, naming the top-level message's ts", async () => {
   // Slack answers a reply's ts with the reply alone.
   routes["conversations.replies"] = () => ({ ok: true, messages: [humanReply] });
-  const error = await fetchSlackMessage({ channel: CHANNEL, ts: humanReply.ts }).catch((e) => e);
+  const error = await fetchSlackMessage({
+    installationName: "slack-acme",
+    channel: CHANNEL,
+    ts: humanReply.ts,
+  }).catch((e) => e);
   expect(error).toMatchObject({
     fatal: true,
     message: `the Slack message ${CHANNEL} ${humanReply.ts} is a thread reply; pass its thread's top-level message ts, ${human.ts}`,
@@ -201,9 +233,9 @@ test("a thread reply's ts fails at once, naming the top-level message's ts", asy
 test("any other Slack error fails the snapshot, naming the missing scope", async () => {
   routes["conversations.replies"] = () => ({ ok: true, messages: [human] });
   routes["users.info"] = () => ({ ok: false, error: "missing_scope", needed: "users:read" });
-  await expect(fetchSlackMessage({ channel: CHANNEL, ts: human.ts })).rejects.toThrow(
-    "Slack users.info: missing_scope (needs users:read)",
-  );
+  await expect(
+    fetchSlackMessage({ installationName: "slack-acme", channel: CHANNEL, ts: human.ts }),
+  ).rejects.toThrow("Slack users.info: missing_scope (needs users:read)");
 });
 
 test("a post replies in the thread and returns the new message's ts", async () => {
@@ -212,9 +244,14 @@ test("a post replies in the thread and returns the new message's ts", async () =
     sent = params;
     return { ok: true, channel: CHANNEL, ts: "1790751555.052799" };
   };
-  expect(await postSlackMessage({ channel: CHANNEL, text: "*Done*", threadTs: human.ts })).toBe(
-    "1790751555.052799",
-  );
+  expect(
+    await postSlackMessage({
+      installationName: "slack-acme",
+      channel: CHANNEL,
+      text: "*Done*",
+      threadTs: human.ts,
+    }),
+  ).toBe("1790751555.052799");
   expect(Object.fromEntries(sent ?? [])).toEqual({
     channel: CHANNEL,
     text: "*Done*",

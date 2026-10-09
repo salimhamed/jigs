@@ -24,6 +24,7 @@ const outside = {
 
 export default defineConfig({
   test: {
+    globalSetup: ["./vitest.global-setup.ts"],
     // Output assertions are plain text whatever the developer's shell forces.
     env: { FORCE_COLOR: "0" },
     projects: [

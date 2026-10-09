@@ -1,81 +1,48 @@
-import { gitConfigEnv, githubAuthHeader, resolveRemoteUrl } from "../../../providers/git.ts";
-import {
-  type AppBot,
-  appBotFor,
-  type GithubAuth,
-  githubAuthFor,
-} from "../../../providers/github-auth.ts";
-import { parseGithubRemote } from "../../../providers/github-webhook.ts";
+import { AGENT_TOKEN_MIN_LIFETIME_MS } from "../../../providers/credentials.ts";
+import { gitConfigEnv, githubAuthHeader } from "../../../providers/git.ts";
+import { type GithubAuth, githubAuthFor } from "../../../providers/github-auth.ts";
 import { AGENT_TOKEN_ENV } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
-import { JigsError } from "../../../workflow/errors.ts";
-import type { ResolvedAppIdentity } from "../../../workflow/factory-schema.ts";
-
-// An agent's turn gets no refresh, so its token starts with close to the full hour.
-export const AGENT_TOKEN_MIN_LIFETIME_MS = 55 * 60 * 1000;
-
-/** Why an agent that sets `github` cannot run with a personal access token, and the way out. */
-export const NEEDS_APP_IDENTITY = {
-  reason:
-    "an agent's harness sets github, which needs a GitHub App identity, and this factory uses a personal access token",
-  repair:
-    "configure a GitHub App in github.identities in jigs.config.ts, or remove github from the harness and give the agent its own GitHub access",
-};
-
-// `fatal` is what the SDK's FatalError.is reads: a retry reads the same configuration.
-export class AgentGithubError extends JigsError {
-  readonly fatal = true;
-}
 
 export interface AgentGithubDeps {
-  remoteUrl(cwd: string): Promise<string>;
-  auth(owner: string): GithubAuth;
-  bot(identity: ResolvedAppIdentity, bearer: () => Promise<string>): Promise<AppBot>;
+  auth(installationName: string): GithubAuth;
 }
 
 const defaultDeps: AgentGithubDeps = {
-  remoteUrl: async (cwd) => (await resolveRemoteUrl(cwd)).url,
-  auth: githubAuthFor,
-  bot: appBotFor,
+  auth: (installationName) => githubAuthFor(installationName),
 };
-
-async function checkoutOwner(cwd: string, deps: AgentGithubDeps): Promise<string> {
-  const url = await deps.remoteUrl(cwd);
-  const ref = parseGithubRemote(url);
-  if (ref === null)
-    throw new AgentGithubError(
-      `the agent's harness sets github: true, but ${cwd} is not a checkout of a github.com repository; name the account with github: { owner }`,
-    );
-  return ref.owner;
-}
 
 /**
  * What a harness that sets `github` adds to its agent's environment `env`: a fresh installation
- * token for `gh` and MCP servers, git settings that reach the owner's repositories over HTTPS
+ * token for `gh` and MCP servers, git settings that reach the installation account's repositories over HTTPS
  * with it, and the App's bot as commit author. Nothing for a harness that does not set it.
  */
 export async function agentGithubEnv(
-  target: { harness: Harness; cwd: string },
+  harness: Harness,
   env: Record<string, string> = {},
   deps: AgentGithubDeps = defaultDeps,
 ): Promise<Record<string, string>> {
-  const { harness, cwd } = target;
   if (harness.github === undefined) return {};
-  const owner = harness.github === true ? await checkoutOwner(cwd, deps) : harness.github.owner;
-  const auth = deps.auth(owner);
-  if (auth.identity.mode === "pat")
-    throw new AgentGithubError(`${NEEDS_APP_IDENTITY.reason}; ${NEEDS_APP_IDENTITY.repair}`);
-  const token = await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS);
-  const bot = await deps.bot(auth.identity, () => auth.bearer());
+  const auth = deps.auth(harness.github.installationName);
+  const token = await auth.bearer(AGENT_TOKEN_MIN_LIFETIME_MS.github);
+  const [bot, owner] = await Promise.all([auth.bot(), auth.account()]);
   // An App cannot push over SSH. Only the owner's repositories move to HTTPS:
-  // the token cannot reach anyone else's, such as an SSH dependency.
+  // the token cannot reach anyone else's, such as an SSH dependency. git
+  // matches these prefixes case-sensitively while GitHub does not, so a remote
+  // spelling the owner in lowercase is rewritten too, onto the one spelling
+  // the token's header names.
   const https = `url.https://github.com/${owner}/.insteadOf`;
+  const lower = owner.toLowerCase();
+  const spellings = lower === owner ? [owner] : [owner, lower];
   return {
     [AGENT_TOKEN_ENV.github]: token,
     ...gitConfigEnv(
       [
-        [https, `git@github.com:${owner}/`],
-        [https, `ssh://git@github.com/${owner}/`],
+        ...spellings.flatMap((spelling): [string, string][] => [
+          [https, `git@github.com:${spelling}/`],
+          [https, `ssh://git@github.com/${spelling}/`],
+        ]),
+        ...(lower === owner ? [] : [[https, `https://github.com/${lower}/`] as [string, string]]),
         githubAuthHeader(token, owner),
       ],
       env,

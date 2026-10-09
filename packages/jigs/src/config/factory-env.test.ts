@@ -12,7 +12,7 @@ beforeEach(() => {
   tmp = makeTmpDir();
   factory = makeFactoryRepo(tmp);
   // Otherwise the shell-wins branch reads whatever the developer exports.
-  vi.stubEnv("GITHUB_TOKEN", "");
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
   vi.stubEnv("LINEAR_API_KEY", "");
 });
 afterEach(() => {
@@ -24,23 +24,23 @@ const writeEnv = (text: string) => writeFileSync(path.join(factory, ".env"), tex
 
 test("a factory with no .env reads as an empty environment", () => {
   expect(readFactoryEnv(factory)).toEqual({});
-  expect(resolveFactoryContext(factory).env("GITHUB_TOKEN")).toBeUndefined();
+  expect(resolveFactoryContext(factory).env("JIGS_HUB_TOKEN")).toBeUndefined();
 });
 
 test("declared values are read, and an empty slot counts as unset", () => {
-  writeEnv("GITHUB_TOKEN=ghp_declared\nLINEAR_API_KEY=\n");
+  writeEnv("JIGS_HUB_TOKEN=declared\nLINEAR_API_KEY=\n");
   expect(readFactoryEnv(factory)).toEqual({
-    GITHUB_TOKEN: "ghp_declared",
+    JIGS_HUB_TOKEN: "declared",
     LINEAR_API_KEY: "",
   });
-  expect(resolveFactoryContext(factory).env("GITHUB_TOKEN")).toBe("ghp_declared");
+  expect(resolveFactoryContext(factory).env("JIGS_HUB_TOKEN")).toBe("declared");
   expect(resolveFactoryContext(factory).env("LINEAR_API_KEY")).toBeUndefined();
 });
 
 test("an exported value wins over the file, and an empty export does not", () => {
-  writeEnv("GITHUB_TOKEN=ghp_declared\n");
-  vi.stubEnv("GITHUB_TOKEN", "ghp_exported");
-  expect(resolveFactoryContext(factory).env("GITHUB_TOKEN")).toBe("ghp_exported");
-  vi.stubEnv("GITHUB_TOKEN", "");
-  expect(resolveFactoryContext(factory).env("GITHUB_TOKEN")).toBe("ghp_declared");
+  writeEnv("JIGS_HUB_TOKEN=declared\n");
+  vi.stubEnv("JIGS_HUB_TOKEN", "exported");
+  expect(resolveFactoryContext(factory).env("JIGS_HUB_TOKEN")).toBe("exported");
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  expect(resolveFactoryContext(factory).env("JIGS_HUB_TOKEN")).toBe("declared");
 });

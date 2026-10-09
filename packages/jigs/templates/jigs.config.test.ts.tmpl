@@ -18,14 +18,6 @@ test("every entry carries a zod inputs schema and a workflow", () => {
   }
 });
 
-test("the scaffold names its identities outright", () => {
-  // `jigs init` wrote these into jigs.config.ts and into this test from the
-  // same values, so the identities this factory was scaffolded for should
-  // still be the ones it declares.
-  expect(factory.github).toEqual({{GITHUB_EXPECTED}});
-  expect(factory.linear).toEqual({{LINEAR_EXPECTED}});
-});
-
 // Inspect compiled IDs; source imports do not determine the emitted addresses.
 
 const BUNDLE = new URL("./.output/server/index.mjs", import.meta.url);
@@ -56,19 +48,11 @@ test("every id this factory owns is addressed by a path inside it", () => {
   const owned = emittedIds();
   expect(owned.length).toBeGreaterThan(0);
   for (const id of owned) {
-    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:workflows|jigs)\//);
+    expect(id).toMatch(/^(?:workflow|step)\/\/\.\/(?:workflows|\.jigs)\//);
   }
 });
 
 test("every workflow this factory registers emitted a workflow id", () => {
   const emitted = emittedIds().filter((id) => id.startsWith("workflow//"));
   expect(emitted).toHaveLength(Object.keys(workflows).length);
-});
-
-test("every step id is declared under workflows/ or in jigs/steps.ts", () => {
-  const steps = emittedIds().filter((id) => id.startsWith("step//"));
-  expect(steps.length).toBeGreaterThan(0);
-  for (const id of steps) {
-    expect(id).toMatch(/^step\/\/\.\/(?:workflows\/[^/]+(?:\/[^/]+)*|jigs\/steps)\/\/\w+$/);
-  }
 });

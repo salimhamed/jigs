@@ -1,0 +1,13 @@
+// Declarations for the `./factory/*` type-only exports. Emitted beside the
+// sources, against the built dist/ rather than src/, so a type the files infer
+// from an internal chunk is referenced by a path that resolves when installed.
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "noEmit": false,
+    "declaration": true,
+    "emitDeclarationOnly": true
+  },
+  "include": ["factory/*.ts"],
+  "exclude": ["factory/*.d.ts"]
+}

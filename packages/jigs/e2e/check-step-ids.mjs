@@ -28,6 +28,8 @@
 // install itself, and nothing says otherwise until the built service starts
 // in someone else's repo.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
+import { createHash, randomBytes } from "node:crypto";
+import { once } from "node:events";
 import {
   existsSync,
   lstatSync,
@@ -43,6 +45,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { Pool } from "pg";
 import { parse as parseYaml } from "yaml";
 import {
   installCompiledCancellationFixture,
@@ -152,12 +155,12 @@ const unresolvedSpecifiers = (source) =>
 // The CLI half of a package that is now also the service (ADR 0006). `jigs
 // init` runs from `pnpm dlx` on a machine that has installed nothing, and the
 // four runtime peers are the factory's to supply, so `dist/cli.js` must reach
-// none of the service runtime — nitro, hono, postgres, croner, the
+// none of the service runtime — nitro, express, postgres, croner, the
 // SDK. Two packages used to make that the package manager's business; one
 // package makes it import discipline, and a static import that crosses the
 // line is silent: the bundle grows, and `jigs init` starts needing packages
 // that are not there yet.
-const CLI_IMPORTS = ["commander", "ts-morph", "yaml", "zod"];
+const CLI_IMPORTS = ["commander", "ts-morph", "zod"];
 
 function cliBundleImports() {
   const seen = new Set();
@@ -303,7 +306,7 @@ function run(file, args) {
 }
 
 // No separate "the wrappers are still there" check: the scaffolded workflow
-// imports them, so a missing jigs/steps.ts fails the build below, and a moved
+// imports them, so a missing .jigs/steps.ts fails the build below, and a moved
 // one reports as the ids it took with it in the diff.
 function build() {
   run(path.join(factory, "node_modules", ".bin", "jigs"), ["build"]);
@@ -410,14 +413,12 @@ const [
   RUNTIME_DASHBOARD_PORT,
   CANCEL_PORT,
   CANCEL_DASHBOARD_PORT,
-] = await freePorts(6);
+  HUB_PORT,
+] = await freePorts(7);
 const BOOT_TIMEOUT_MS = 90_000;
 const SHUTDOWN_TIMEOUT_MS = 8_000;
 const READY_POLL_MS = 100;
-// The nudge line is in here because the startup sweep is what reconciles a
-// delivery lost while the service was down: if it stops running, nothing else
-// in this repo notices.
-const BOOT_MARKERS = ["Listening on:", "[service] dashboard:", "[nudge] pull requests:"];
+const BOOT_MARKERS = ["Listening on:", "[service] dashboard:"];
 const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 // A top-level import that cannot resolve exits the process; one behind a
 // plugin's dynamic import is caught by nitro and only costs the dashboard, so
@@ -943,30 +944,13 @@ async function checkScaffold(name) {
   console.log(`\n=== scaffold: ${name}`);
   scaffold(name);
   factories.set(name, factory);
-  // Formatting generated code must not trigger the build's exact-content drift check.
-  for (const file of ["jigs/steps.ts", "jigs/routines.ts"]) {
-    const generated = readFileSync(path.join(factory, file), "utf8");
-    const formatted = execFileSync(
-      path.join(workspaceRoot, "node_modules", ".bin", "biome"),
-      ["check", "--write", `--stdin-file-path=${file}`],
-      { cwd: packageRoot, input: generated, encoding: "utf8" },
-    );
-    if (formatted !== generated) {
-      fail(`generated ${file} changes under Biome`, `format templates/${file}.tmpl as TypeScript`);
-    }
-  }
-  const directives = readdirSync(path.join(factory, "jigs")).filter((file) =>
-    readFileSync(path.join(factory, "jigs", file), "utf8").includes('"use step"'),
-  );
-  if (existsSync(path.join(factory, "jigs.ts")) || directives.join() !== "steps.ts") {
-    fail(
-      `the generated directives are in ${directives.join(", ") || "no file"}, not only jigs/steps.ts`,
-      "every generated step wrapper belongs in jigs/steps.ts, and jigs.ts is no longer generated",
-    );
-  }
   // Exercise recipe discovery, copying and registration from the installed
   // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
+  if (hub !== undefined) {
+    writeFileSync(path.join(factory, ".env"), "");
+    run(path.join(factory, "node_modules", ".bin", "jigs"), ["hub", "connect", hub.url, hub.token]);
+  }
   if (name === "linear-ticket-to-pr") {
     run(path.join(factory, "node_modules", ".bin", "jigs"), [
       "recipe",
@@ -984,6 +968,15 @@ async function checkScaffold(name) {
   installFromTarball(tarballs.jigs);
   build();
   const ids = emittedIds();
+  const directives = readdirSync(path.join(factory, ".jigs")).filter((file) =>
+    readFileSync(path.join(factory, ".jigs", file), "utf8").includes('"use step"'),
+  );
+  if (directives.join() !== "steps.ts") {
+    fail(
+      `the copied directives are in ${directives.join(", ") || "no file"}, not only .jigs/steps.ts`,
+      "every step wrapper jigs ships belongs in packages/jigs/factory/steps.ts",
+    );
+  }
 
   const leaked = [...new Set(workflowBundle().match(/"node:[a-z/]+"/g) ?? [])];
   if (leaked.length > 0) {
@@ -1117,6 +1110,9 @@ async function checkScaffold(name) {
 }
 
 scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
+const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
+// Before the scaffolds, so each is built pointing at it.
+const hub = postgresUrl ? await startHub(postgresUrl) : undefined;
 tarballs = pack();
 checkCliBundle();
 checkDlxInit();
@@ -1126,8 +1122,7 @@ for (const name of cancellationOnly ? ["bare"] : ["bare", "linear-ticket-to-pr"]
 
 // Boot the recipe scaffold once: it registers hello and linear-ticket-to-pr, exercising the
 // optional recipe's deferred registration as well as all runtime peers.
-const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
-if (postgresUrl === undefined || postgresUrl === "") {
+if (hub === undefined) {
   console.log(
     "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
   );
@@ -1139,26 +1134,6 @@ if (postgresUrl === undefined || postgresUrl === "") {
       ["vitest", "run", "--project", "db", "src/service/cancel-storage.db.test.ts"],
       { cwd: packageRoot, stdio: "inherit" },
     );
-    console.log(
-      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",
-    );
-    // The service runs on the configuration it was built with: a config on
-    // disk that throws when loaded must not stop it.
-    const configFile = path.join(factory, "jigs.config.ts");
-    const builtConfig = readFileSync(configFile, "utf8");
-    writeFileSync(configFile, 'throw new Error("the service read jigs.config.ts");\n');
-    const boot = await bootOutcome(postgresUrl).finally(() =>
-      writeFileSync(configFile, builtConfig),
-    );
-    if (boot.problem === null) {
-      console.log(`ready after ${boot.readyMs}ms; exited 0 ${boot.exitMs}ms after SIGTERM`);
-    } else {
-      console.error(boot.output);
-      fail(
-        `the built service did not start and stop cleanly: ${boot.problem}`,
-        `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
-      );
-    }
     console.log(
       "\n=== bare boot: with no harness CLI and no provider credential, the bare factory starts and doctor is clean",
     );
@@ -1188,6 +1163,48 @@ if (postgresUrl === undefined || postgresUrl === "") {
       `ready after ${bareBoot.readyMs}ms with no ${HARNESS_CLIS.join(", ")} on PATH; doctor clean (${bareBoot.observed.checks.length} checks)`,
     );
     console.log(
+      "\n=== boot: the built bundle resolves every import, becomes ready, and exits on SIGTERM, without reading jigs.config.ts",
+    );
+    // The service runs on the configuration it was built with: a config on
+    // disk that throws when loaded must not stop it.
+    const configFile = path.join(factory, "jigs.config.ts");
+    const builtConfig = readFileSync(configFile, "utf8");
+    writeFileSync(configFile, 'throw new Error("the service read jigs.config.ts");\n');
+    // The hub stops first, while the factory still long-polls it, as a hub
+    // restarted under a running factory does. Later checks need no hub.
+    const whileConnected = async () => {
+      const version = await hub.seen();
+      // Reported, not failed here, so bootOutcome still stops the factory.
+      const hubStop = await hub.stop().then(
+        () => undefined,
+        (err) => err.message,
+      );
+      return hubStop === undefined ? version : { hubStop };
+    };
+    const boot = await bootOutcome(postgresUrl, { whileReady: whileConnected }).finally(() =>
+      writeFileSync(configFile, builtConfig),
+    );
+    if (boot.observed?.hubStop !== undefined)
+      fail(boot.observed.hubStop, "the hub's output above shows what kept it running");
+    if (boot.problem === null && boot.observed?.error !== undefined) {
+      console.error(boot.output);
+      fail(
+        `the built service never reached its hub: ${boot.observed.error}`,
+        "the service starts its hub client once it is ready; the output above shows what it said",
+      );
+    }
+    if (boot.problem === null) {
+      console.log(
+        `ready after ${boot.readyMs}ms; reached the hub as jigs ${boot.observed}; the hub stopped while it was connected; exited 0 ${boot.exitMs}ms after SIGTERM`,
+      );
+    } else {
+      console.error(boot.output);
+      fail(
+        `the built service did not start and stop cleanly: ${boot.problem}`,
+        `if the output above names a package it cannot find, the factory loads it by name at run time: it belongs in ${JIGS}'s peerDependencies and the factory package.json template`,
+      );
+    }
+    console.log(
       `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
     );
     await runtimeScenario(postgresUrl);
@@ -1202,7 +1219,6 @@ if (postgresUrl === undefined || postgresUrl === "") {
     service: CANCEL_PORT,
     dashboard: CANCEL_DASHBOARD_PORT,
   });
-  build();
   await runCompiledCancellationMatrix({
     adminPostgresUrl: postgresUrl,
     cli,
@@ -1212,7 +1228,106 @@ if (postgresUrl === undefined || postgresUrl === "") {
   });
 }
 
+await hub?.stop().catch((err) => fail(err.message, "see the hub's output above"));
 cleanup();
+
+// A real hub beside the test factories, on its own database, with one factory
+// added the way the hub stores one: its token only as a hash.
+async function startHub(adminUrl) {
+  const main = path.join(workspaceRoot, "packages", "hub", "dist", "main.js");
+  if (!existsSync(main)) fail(`no built hub at ${main}`, "pnpm build first");
+  const admin = new Pool({ connectionString: adminUrl, max: 1 });
+  const database = `jigs_e2e_hub_${crypto.randomUUID().replaceAll("-", "")}`;
+  await admin.query(`CREATE DATABASE "${database}"`);
+  const databaseUrl = new URL(adminUrl);
+  databaseUrl.pathname = `/${database}`;
+  const url = `http://127.0.0.1:${HUB_PORT}`;
+  const child = spawn(process.execPath, [main], {
+    env: {
+      ...process.env,
+      NODE_ENV: "production",
+      HOST: "127.0.0.1",
+      PORT: String(HUB_PORT),
+      HUB_PUBLIC_URL: url,
+      HUB_DATABASE_URL: databaseUrl.href,
+      HUB_ENCRYPTION_KEY: randomBytes(32).toString("base64"),
+      HUB_SIGN_IN_GITHUB_CLIENT_ID: "e2e",
+      HUB_SIGN_IN_GITHUB_CLIENT_SECRET: "e2e",
+      HUB_ADMIN_EMAIL: "e2e@example.com",
+    },
+    stdio: ["ignore", "pipe", "inherit"],
+  });
+  // Any other way out, fail() or a throw, still removes the hub and its database.
+  let stopped = false;
+  process.once("exit", () => {
+    if (stopped) return;
+    child.kill("SIGKILL");
+    execFileSync(
+      process.execPath,
+      [
+        "--input-type=module",
+        "--eval",
+        "import { Client } from \"pg\"; const c = new Client({ connectionString: process.argv[1] }); await c.connect(); await c.query('DROP DATABASE IF EXISTS \"' + process.argv[2] + '\" WITH (FORCE)'); await c.end();",
+        adminUrl,
+        database,
+      ],
+      { cwd: packageRoot, stdio: "inherit" },
+    );
+  });
+  const listening = await Promise.race([
+    once(child.stdout.setEncoding("utf8"), "data").then(() => true),
+    once(child, "exit").then(() => false),
+  ]);
+  if (!listening) fail("the hub exited before it listened", "see its output above");
+  child.stdout.resume();
+  const db = new Pool({ connectionString: databaseUrl.href, max: 1 });
+  const token = randomBytes(32).toString("hex");
+  await db.query(
+    "INSERT INTO organization (id, name, slug, created_at) VALUES ('e2e', 'e2e', 'e2e', now())",
+  );
+  const {
+    rows: [{ id }],
+  } = await db.query(
+    "INSERT INTO factories (organization_id, name, token_hash) VALUES ('e2e', 'e2e', $1) RETURNING id",
+    [createHash("sha256").update(token).digest("hex")],
+  );
+  return {
+    url,
+    token,
+    // Resolves with the jigs version once the hub has seen the factory run this tree's.
+    seen: async () => {
+      const { version } = JSON.parse(readFileSync(jigsPackage, "utf8"));
+      const seenVersion = async () =>
+        (await db.query("SELECT last_seen_version FROM factories WHERE id = $1", [id])).rows[0]
+          .last_seen_version;
+      await until(
+        async () => (await seenVersion()) === version,
+        `the hub never saw the factory run jigs ${version}`,
+        30_000,
+      );
+      return version;
+    },
+    // Stops the hub once, whatever calls it again; a hub that will not leave fails the run.
+    stop: async () => {
+      if (stopped) return;
+      await db.end();
+      const exited = once(child, "exit");
+      child.kill("SIGTERM");
+      const [code] = await Promise.race([
+        exited,
+        new Promise((resolve) => setTimeout(() => resolve([undefined]), SHUTDOWN_TIMEOUT_MS)),
+      ]);
+      if (code === undefined)
+        throw new Error(
+          `the hub did not exit within ${SHUTDOWN_TIMEOUT_MS}ms of SIGTERM while a factory was connected`,
+        );
+      if (code !== 0) throw new Error(`the hub exited with code ${code} on SIGTERM, not 0`);
+      await admin.query(`DROP DATABASE "${database}"`);
+      await admin.end();
+      stopped = true;
+    },
+  };
+}
 
 // Every socket stays open until all are bound, so the ports are distinct.
 async function freePorts(count) {

@@ -12,10 +12,12 @@ import { beforeEach, expect, test, vi } from "vitest";
 import { reviewTicket } from "./review-ticket.ts";
 
 const claim = {
+  installationName: "linear-acme",
   issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   identifier: "AGE-313",
-  token: "linear:ticket:68bc9696-35d5-442d-ab56-214c8cfefbec",
-  postedCommentIds: [] as string[],
+  token: "linear:ticket:linear-acme:68bc9696-35d5-442d-ab56-214c8cfefbec",
+  sessionId: "session-1",
+  consumedPromptIds: [] as string[],
 } as TicketClaim;
 
 const snapshot: TicketSnapshot = {
@@ -36,7 +38,6 @@ const snapshot: TicketSnapshot = {
 };
 
 const reply: HumanReply = {
-  commentId: "c9",
   body: "cap comments at 100",
   author: { id: "u1", name: "salim" },
   createdAt: "2026-08-26T14:00:00Z",
@@ -68,8 +69,8 @@ vi.mock("#jigs/routines", () => ({
 
 // The reply landed on the ticket, so each re-read carries one more comment.
 vi.mock("#jigs/steps", () => ({
-  fetchTicketSnapshot: async (issueId: string) => {
-    fake.fetched.push(issueId);
+  fetchTicketSnapshot: async (request: { installationName: string; issueId: string }) => {
+    fake.fetched.push(`${request.installationName}:${request.issueId}`);
     return {
       ...snapshot,
       description: `${snapshot.description}\n\nRound ${fake.fetched.length}: ${reply.body}`,
@@ -172,7 +173,7 @@ test("a needs-human verdict asks the questions and the about on the ticket, neve
   const call = fake.humanCalls[0];
   expect(call?.claim).toBe(claim);
   expect(call?.halt).toEqual({
-    headline: "jigs paused work on **AGE-313** and needs your answers before it writes any code.",
+    headline: "Work on **AGE-313** is paused: your answers are needed before any code is written.",
     where: "ticket review",
     about: "The tests leave files nobody can delete.",
     questions: [
@@ -202,7 +203,7 @@ test("each needs-human round re-reads the ticket, so the reply is what the next 
 
   expect(fake.agentCalls).toHaveLength(3);
   expect(fake.humanCalls).toHaveLength(2);
-  expect(fake.fetched).toEqual([snapshot.id, snapshot.id]);
+  expect(fake.fetched).toEqual([`linear-acme:${snapshot.id}`, `linear-acme:${snapshot.id}`]);
   expect(fake.agentCalls[0]?.prompt).not.toContain("cap comments at 100");
   expect(fake.agentCalls[1]?.prompt).toContain("Round 1: cap comments at 100");
   expect(fake.agentCalls[2]?.prompt).toContain("Round 2: cap comments at 100");

@@ -17,9 +17,11 @@ _Avoid_: task, node, stage
 step. Its file path and function name are the **step id**, so moving or
 renaming one changes the address, and a jigs version bump never does.
 
-**Generated integration**: The factory's committed `jigs/` directory, written by
-`jigs generate`: the step wrappers, and the routines bound to them. Custom code
-lives outside it.
+**Factory step files**: The step wrappers, and the routines bound to them, that
+the build writes into the factory's gitignored `.jigs/` from the package's
+`factory/` sources. Workflows import them as `#jigs/steps` and `#jigs/routines`.
+Custom code lives outside them.
+_Avoid_: generated integration
 
 **Routine**: A function a workflow calls that runs steps and may wait on
 something outside the run, such as `runAgent` or `watchPullRequest`. It has no
@@ -50,8 +52,8 @@ One key per pull request.
 a factory. Once copied it is factory code.
 _Avoid_: template, built-in workflow
 
-**Scaffold**: What `jigs init` writes: config, the generated integration and a
-trivial workflow. It presumes no process.
+**Scaffold**: What `jigs init` writes: config, the `#jigs/*` import mapping and
+a trivial workflow. It presumes no process.
 
 ## Runs
 
@@ -71,21 +73,34 @@ _Avoid_: pause
 **Gate**: A planned suspension, such as waiting for pull-request review, CI or
 closure.
 
-**Needs-human halt**: A suspension that asks a human on the ticket to answer a
-question or fix a problem; a verified reply lets the workflow continue.
+**Needs-human halt**: A suspension that asks a person, in the run's Linear
+agent session, to answer a question or fix a problem; any reply there lets the
+workflow continue.
 _Avoid_: failure, abort
 
-**Wake**: A signal that makes a suspended run recheck its condition: a webhook,
-the service's poll, `jigs poke` or reconciliation.
+**Wake**: A signal that makes a suspended run recheck its condition: a provider
+event from the hub, or `jigs poke`.
 
 **Claim**: A run-long hold on a ticket, keyed by a hook token that names it, so
-a second active run cannot take it.
+a second active run cannot take it. It carries the Linear agent session the run
+talks to people in. Nothing wakes it.
 _Avoid_: lock, lease
+
+**Session hook**: The hook a run holds for its whole life on the Linear agent
+session it talks in, keyed by a token that names the session, so a second run
+cannot take it. It marks the owner; nothing wakes it.
+_Avoid_: session claim, session lock
+
+**Listening hook**: The hook a run holds only while it reads what people send
+in its Linear agent session: during a conversation or a needs-human halt. A
+wake on it makes the run read the session's prompts again. A prompt that
+arrives while the owner holds none waits for the run to listen again.
 
 ## Resources
 
-**Binding**: A named target repository in `jigs.config.ts`, with its remote and
-how jigs merges and provisions worktrees there.
+**Binding**: A named target repository in `jigs.config.ts`, with its remote,
+the GitHub installation name that reaches it, and how jigs merges and
+provisions worktrees there.
 
 **Binding clone**: The copy of a binding's repository jigs keeps and cuts
 worktrees from. Nobody edits it by hand.
@@ -126,8 +141,9 @@ the agent loop, tools and session.
 _Avoid_: model, backend
 
 **Harness descriptor**: The plain data a workflow builds to name a harness,
-such as `harnesses.claude({ model })`. For Claude Code and Codex it is the
-provider's own settings type, minus the keys jigs owns.
+such as `harnesses.claude({ model })`. For Claude Code it is the Claude Agent
+SDK's own options type, and for Codex the provider's settings type, minus the
+keys jigs owns.
 _Avoid_: harness options, harness config
 
 **Model source**: An API endpoint that answers directly, with no agent program.
@@ -141,13 +157,46 @@ _Avoid_: adapter, provider
 source directly; `askJev` asks a model source typed yes-no, choice or score
 questions about one state.
 
-**Agent runner**: A Claude Code or Codex harness opened inside a factory's own
-step, with the same checks, environment and isolation as jigs' agent step.
+**Agent runner**: A Codex harness opened inside a factory's own step, with the
+same checks, environment and isolation as jigs' agent step.
 _Avoid_: executor, injected dependencies
 
 **Agent session**: One agent across several turns of a workflow. It resumes the
 harness session it holds, and starts fresh when that session is unusable.
 _Avoid_: role session, resumeOrRebuild
+
+**Linear agent session**: Linear's thread between people and a Linear app on
+one issue, opened by a mention of the app, an assignment to it, or a ticket run
+at its claim. One a person opened is the `linear.agentSessions` source's
+occurrence. Not an agent session.
+
+**Ticket note**: A message a ticket run posts in its Linear agent session that
+asks for nothing. Its `run` says what the run does next: an `ended` note ends
+the session, as a response even when the run failed; a `waiting` one leaves
+it awaiting input, so it never goes stale while the run waits on people.
+
+**Conversation**: One Claude session answering in one Linear agent session, run
+by one run: turns until it goes idle, someone stops it, or a turn fails.
+_Avoid_: chat, thread
+
+**Turn**: One agent call in an agent session or a conversation. A conversation
+turn also takes the replies that arrive while it runs, and ends once Claude has
+answered every message it took.
+
+**Live turn**: A conversation turn running in this service process, which can
+take a reply or a stop directly, without waking the run.
+
+**Prompt**: A message a person sent into a Linear agent session: a reply, or a
+stop when they pressed the stop button. Linear holds every prompt, so a run
+re-reads them rather than trusting a wake to carry one.
+_Avoid_: comment (for the session's own messages)
+
+**Consumed**: A prompt a turn took. The prompt ids a conversation has consumed
+are its cursor: the next turn takes every prompt not among them, so a turn
+retried after a crash neither drops nor repeats one.
+
+**Idle timeout**: How long a conversation waits for a reply before it ends and
+the run goes on (`idleFor`).
 
 **Session reference**: The small plain data that lets a later step resume the
 same harness session.
@@ -189,24 +238,15 @@ source, with fixed inputs and a cap on its active runs. It only starts runs;
 later events on a run's resources are wakes.
 _Avoid_: webhook trigger, subscription, event router
 
-**Source**: What an event trigger watches, in the provider's own query
-parameters, such as a PagerDuty service's incidents or a Slack channel's
-messages.
+**Source**: What an event trigger watches: one installation, and the
+provider's own query parameters, such as a PagerDuty service's incidents or a
+Slack channel's messages. It takes only events from its installation.
 _Avoid_: filter, feed
 
 **Occurrence**: One provider event a source counts as a reason to start a run,
 such as a new incident or a top-level message. An event trigger starts at most
 one run per occurrence, ever.
 _Avoid_: event (for the deduplicated unit), delivery
-
-**Delivery kind**: How a source learns of occurrences: polling, which every
-source has, or a push kind such as a webhook or a socket.
-_Avoid_: transport, mode
-
-**Ingress**: The optional webhook routes that turn provider events into wakes
-and occurrences. The poll does the same either way; ingress only makes it
-sooner.
-_Avoid_: webhook handler
 
 **Preflight**: Checking a workflow's declared `requires` before a run exists.
 
@@ -235,10 +275,46 @@ Linear OAuth app, a Slack bot or a PagerDuty connection. A provider can have
 several.
 _Avoid_: integration, connection or bot (for the general term)
 
+**Sign-in app**: The GitHub OAuth App people sign in to a hub's web pages
+with. One per hub, set in the hub's environment; it is not an **App** in the sense above, belongs to
+no Organization, and no factory uses it.
+_Avoid_: OAuth app, login app, GitHub app (for this one)
+
+**Installation**: Where an app is installed or connected: a GitHub account, a
+Linear workspace, a Slack workspace or a PagerDuty account. Tokens are for one
+installation.
+_Avoid_: workspace, connection (for the general term)
+
+**Installation name**: The name an admin gives an installation on the hub,
+such as `slack-js` or `linear-personal`, which factories use to say which
+installation they mean. Lowercase letters, digits and hyphens, starting with a
+letter, and unique in the Organization. `installationName` in code. Every token
+request, binding, step, harness, trigger and wait names one; nothing picks "the
+only one". An installation the hub learned of by itself has none until an
+admin sets it, and until then gets no tokens and its events reach no trigger
+or wait.
+_Avoid_: alias, label, account (the provider's own name for where it is installed)
+
 **Assignment**: An app allowed to a factory. A factory receives provider events
 from, and gets tokens for, only its assigned apps.
 _Avoid_: subscription, grant
 
 **Provider event**: One notification a provider sent through an app, kept as
-received. In a factory it becomes a wake, an occurrence, or nothing.
+received. It carries its installation's name, read when the factory collects
+it, so naming an installation later labels its earlier uncollected events;
+`null` while unnamed. In a factory it becomes a wake, an occurrence, or nothing.
 _Avoid_: webhook (for the general term), delivery, message
+
+**Message**: One entry in a factory's ordered list on the hub, which the
+factory confirms in order. Its kind is `event`, carrying a provider event, or
+`fellBehind`, telling the factory the hub dropped events it never confirmed,
+so every waiting run re-reads its provider.
+_Avoid_: delivery, notification
+
+**Event log**: A factory's messages as the hub keeps them, confirmed or not,
+until the retention expires.
+_Avoid_: queue, inbox
+
+**Factory token**: The secret a factory proves itself to its hub with, shown
+once when the factory is added.
+_Avoid_: API key, hub key

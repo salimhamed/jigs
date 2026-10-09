@@ -5,6 +5,7 @@ import {
   defaultPullRequestScope,
   defineWorkflow,
   harnesses,
+  installationNameSchema,
   JigsError,
   type NeedsHuman,
   renderTicketSnapshot,
@@ -24,16 +25,21 @@ import {
   postPullRequestNote,
   publishPullRequest,
 } from "#jigs/routines";
-import { provisionWorktree, pushBranch, setTicketStatus } from "#jigs/steps";
+import {
+  provisionWorktree,
+  pushBranch,
+  setLinearAgentSessionUrls,
+  setTicketStatus,
+} from "#jigs/steps";
 import { prompts, type Ticket } from "./prompts.ts";
 import { reviewTicket, type TicketHandoff } from "./review-ticket.ts";
 
 // The agents this workflow can run, by the part they play. A run picks one per
 // part by name; edit a line here to change a default model or harness. The
-// builder acts on GitHub as the factory's App (`github: true`), so it needs a
-// GitHub App identity.
+// builder also acts on GitHub as the factory's App, through the binding's
+// installation, which the run adds once it has the worktree.
 const agents = {
-  builder: harnesses.codex({ model: "gpt-5.6-sol", github: true }),
+  builder: harnesses.codex({ model: "gpt-5.6-sol" }),
   reviewer: harnesses.claude({ model: "opus" }),
 };
 const agentName = z.enum(["builder", "reviewer"]);
@@ -49,6 +55,8 @@ const approvalCovers: ApprovalCoverage = "latest-commit";
 
 const inputs = z.object({
   ticket: z.string().min(1),
+  // The Linear installation, as named on the hub, the ticket is in.
+  linearInstallation: installationNameSchema,
   binding: z.string().min(1),
   builder: agentName.default("builder"),
   reviewer: agentName.default("reviewer"),
@@ -65,90 +73,141 @@ const inputs = z.object({
 export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
 
-  const { claim, snapshot } = await acquireTicket(input.ticket);
-  await setTicketStatus(snapshot.id, "In Progress");
+  const installationName = input.linearInstallation;
+  const { claim, snapshot } = await acquireTicket({ installationName, reference: input.ticket });
+  // Every way out ends the ticket's session, or Linear shows the run working
+  // after it has gone: a stop with its own note, anything else with the error.
+  let ended = false;
+  try {
+    const setStatus = (stateName: string) =>
+      setTicketStatus({ installationName, issueId: snapshot.id, stateName });
+    await setStatus("In Progress");
 
-  const worktree = await provisionWorktree({ binding: input.binding, branch: snapshot.branchName });
-  const handoff = await reviewTicket({
-    claim,
-    snapshot,
-    harness: agents[input.reviewer],
-    cwd: worktree.path,
-  });
+    const worktree = await provisionWorktree({
+      binding: input.binding,
+      branch: snapshot.branchName,
+    });
+    const builder = {
+      ...agents[input.builder],
+      github: { installationName: worktree.installationName },
+    };
+    const handoff = await reviewTicket({
+      claim,
+      snapshot,
+      harness: agents[input.reviewer],
+      cwd: worktree.path,
+    });
 
-  const key = snapshot.identifier;
-  const cwd = worktree.path;
-  const delivery = {
-    work: ticket(handoff),
-    key,
-    worktree,
-    prompts,
-    builder: agentSession({ name: "builder", harness: agents[input.builder], cwd }),
-    reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
-  };
+    const key = snapshot.identifier;
+    const cwd = worktree.path;
+    const delivery = {
+      work: ticket(handoff),
+      key,
+      worktree,
+      prompts,
+      builder: agentSession({ name: "builder", harness: builder, cwd }),
+      reviewer: agentSession({ name: "reviewer", harness: agents[input.reviewer], cwd }),
+    };
 
-  // A stop leaves the work where it is, tells the ticket, and fails the run.
-  const stop = async (note: TicketNote): Promise<never> => {
-    await noteOnTicket(claim, note);
-    await setTicketStatus(snapshot.id, "Todo");
-    throw new JigsError(note.headline);
-  };
+    // An ending sets the ticket's status before its note, so the note is the
+    // run's last word.
+    const end = async (stateName: string, note: TicketNote) => {
+      await setStatus(stateName);
+      await noteOnTicket(claim, { ...note, run: "ended" });
+      ended = true;
+    };
+    // A stop leaves the work where it is, ends the ticket's session, and fails
+    // the run.
+    const stop = async (note: TicketNote): Promise<never> => {
+      await end("Todo", note);
+      throw new JigsError(note.headline);
+    };
 
-  const { reviewRounds, attemptsPerUpdate } = input.budget;
-  const built = await buildAndReview(delivery, { rounds: reviewRounds });
-  if (built.outcome === "stopped") {
-    // The push keeps committed work on the remote for whoever takes it over.
-    // Its error can name local paths, so it stays in the service log.
-    const pushed = await pushBranch(worktree).then(
-      () => true,
-      () => false,
+    const { reviewRounds, attemptsPerUpdate } = input.budget;
+    const built = await buildAndReview(delivery, { rounds: reviewRounds });
+    if (built.outcome === "stopped") {
+      // The push keeps committed work on the remote for whoever takes it over.
+      // Its error can name local paths, so it stays in the service log.
+      const pushed = await pushBranch(worktree).then(
+        () => true,
+        () => false,
+      );
+      return stop(stoppedNote(key, worktree, built, pushed));
+    }
+
+    // A title the writer gets wrong twice stops the run before anything is pushed.
+    const rejected: string[] = [];
+    const described = await describePullRequest(delivery, {
+      check: ({ title }) => {
+        const problems = titleProblems(title);
+        if (problems.length > 0) rejected.push(title);
+        return problems;
+      },
+    }).catch((error: unknown) =>
+      rejected.length === 2
+        ? stop(unconventionalNote(key, worktree, rejected))
+        : Promise.reject(error),
     );
-    return stop(stoppedNote(key, worktree, built, pushed));
+    const pr = await publishPullRequest(delivery, {
+      commit: built.reviewedCommit,
+      title: described.title,
+      body: withReviewerNotes(described.body, built.notes),
+    });
+    await setStatus("In Review");
+    await setLinearAgentSessionUrls({
+      installationName,
+      sessionId: claim.sessionId,
+      urls: [{ label: "Pull request", url: pr.url }],
+    });
+    // Linear marks a session stale after about 30 quiet minutes; one awaiting
+    // input never does.
+    await noteOnTicket(claim, openedNote(pr.url));
+
+    const followed = await followPullRequestToOutcome(delivery, pr, {
+      attemptsPerUpdate,
+      wake: builderWakeFacts,
+      mergeWhen: () => mergedBy === "jigs",
+      approvalCovers,
+      // A blocked merge is noted on the pull request, marked so it wakes no
+      // builder and a later run does not post it again. Anything else is only a
+      // note in the ticket's session: the ticket stays In Review while the run keeps watching.
+      onNeedsHuman: (facts) =>
+        facts.reason === "merge-blocked"
+          ? postPullRequestNote({
+              pr,
+              scope: defaultPullRequestScope(key),
+              headSha: facts.headSha,
+              reason: "merge-retry",
+              body: facts.detail,
+            })
+          : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
+    });
+    // The run completes: its work is pushed to the branch the note names, and
+    // the release policy keeps a dirty worktree or unmerged local commits. A
+    // push error can name local paths, so it stays in the service log.
+    if (followed.outcome === "closed") {
+      const pushed = await pushBranch(worktree).then(
+        () => true,
+        () => false,
+      );
+      await end("Todo", closedNote(worktree, pushed));
+      return { outcome: "closed" as const, pr: pr.url };
+    }
+
+    await end("Done", { headline: `Merged ${pr.url}.`, notes: [], closing: "" });
+    return { outcome: "merged" as const, pr: pr.url };
+  } catch (error) {
+    if (!ended) {
+      await noteOnTicket(claim, {
+        // The error can name local paths, so it stays in the service log and on the run's page.
+        headline: "The run failed. The run's page has the error.",
+        notes: [],
+        closing: "",
+        run: "ended",
+      }).catch(() => {});
+    }
+    throw error;
   }
-
-  // A title the writer gets wrong twice stops the run before anything is pushed.
-  const rejected: string[] = [];
-  const described = await describePullRequest(delivery, {
-    check: ({ title }) => {
-      const problems = titleProblems(title);
-      if (problems.length > 0) rejected.push(title);
-      return problems;
-    },
-  }).catch((error: unknown) =>
-    rejected.length === 2
-      ? stop(unconventionalNote(key, worktree, rejected))
-      : Promise.reject(error),
-  );
-  const pr = await publishPullRequest(delivery, {
-    commit: built.reviewedCommit,
-    title: described.title,
-    body: withReviewerNotes(described.body, built.notes),
-  });
-  await setTicketStatus(snapshot.id, "In Review");
-
-  const followed = await followPullRequestToOutcome(delivery, pr, {
-    attemptsPerUpdate,
-    wake: builderWakeFacts,
-    mergeWhen: () => mergedBy === "jigs",
-    approvalCovers,
-    // A blocked merge is noted on the pull request, marked so it wakes no
-    // builder and a later run does not post it again. Anything else is only a
-    // ticket note: the ticket stays In Review while the run keeps watching.
-    onNeedsHuman: (facts) =>
-      facts.reason === "merge-blocked"
-        ? postPullRequestNote({
-            pr,
-            scope: defaultPullRequestScope(key),
-            headSha: facts.headSha,
-            reason: "merge-retry",
-            body: facts.detail,
-          })
-        : noteOnTicket(claim, needsHumanNote(key, worktree, pr.url, attemptsPerUpdate, facts)),
-  });
-  if (followed.outcome === "closed") return stop(closedNote(key, worktree, pr.url));
-
-  await setTicketStatus(snapshot.id, "Done");
-  return { pr: pr.url };
 }
 
 /** The ticket and its implementation brief, as one statement of the work. */
@@ -182,9 +241,9 @@ const titleProblems = (title: string) =>
       ];
 
 // Notes name the branch, never the local worktree path: they are posted where
-// anyone on the ticket can read them, and `jigs status` shows the path.
+// anyone on the ticket can read them, and the operator can look the path up.
 const workLocation = (worktree: Worktree) =>
-  `The work is on branch \`${worktree.branch}\`, in the run's local worktree, which \`jigs status\` lists.`;
+  `The work is on branch \`${worktree.branch}\`; a local copy is kept on the factory's machine.`;
 
 function stoppedNote(
   key: string,
@@ -195,17 +254,17 @@ function stoppedNote(
   const why = {
     "rounds-exhausted": stopped.findings,
     uncommitted: [
-      "The builder left uncommitted changes; run `git status` in the run's worktree (`jigs status` lists it).",
+      "The builder left uncommitted changes in the local copy kept on the factory's machine.",
     ],
     "no-commits": [`The builder committed nothing new on branch \`${worktree.branch}\`.`],
   }[stopped.reason];
   return {
     headline:
       stopped.reason === "rounds-exhausted"
-        ? `jigs stopped work on ${key} after ${stopped.round} review round(s) without an approved change.`
+        ? `Work on ${key} stopped after ${stopped.round} review round(s) without an approved change.`
         : stopped.round === 1
-          ? `jigs stopped work on ${key} before review.`
-          : `jigs stopped work on ${key} in round ${stopped.round}, before its review.`,
+          ? `Work on ${key} stopped before review.`
+          : `Work on ${key} stopped in round ${stopped.round}, before its review.`,
     notes: [
       ...why,
       ...(pushed ? [] : ["Could not push the branch; the service log has the push error."]),
@@ -216,24 +275,29 @@ function stoppedNote(
   };
 }
 
+const openedNote = (url: string): TicketNote => ({
+  headline: `Pull request ${url} is open.`,
+  notes: [],
+  closing:
+    mergedBy === "jigs"
+      ? "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run."
+      : "It's yours to merge once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
+  run: "waiting",
+});
+
 const unconventionalNote = (key: string, worktree: Worktree, titles: string[]): TicketNote => ({
-  headline: `jigs stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
+  headline: `Stopped before opening a pull request for ${key}: its title is not a conventional commit.`,
   notes: [`Proposed titles: ${titles.join(", then ")}`, workLocation(worktree)],
   closing:
     "Nothing has been pushed and nothing is waiting on a reply here. Push the branch and open the pull request by hand, or start another run.",
 });
 
-// Nothing is pushed on the way out: unpublished local work stays for the person taking over.
-const closedNote = (key: string, worktree: Worktree, url: string): TicketNote => ({
-  headline: `jigs stopped pull request maintenance for ${key}.`,
-  notes: [
-    "The pull request was closed unmerged.",
-    `Unfinished pull request: ${url}`,
-    "Local work was retained without an automatic push.",
-    workLocation(worktree),
-  ],
-  closing:
-    "Inspect the existing pull request and retained worktree, then take over the unfinished work by hand.",
+const closedNote = (worktree: Worktree, pushed: boolean): TicketNote => ({
+  headline: "Stopped: the pull request was closed, so it won't be merged.",
+  notes: pushed
+    ? []
+    : ["Could not push the latest work; a local copy is kept on the factory's machine."],
+  closing: `The work is still on branch \`${worktree.branch}\` if you want it back.`,
 });
 
 const localState = (work: UnpublishedWork) =>
@@ -272,10 +336,11 @@ function needsHumanNote(
 ): TicketNote {
   const why = needsHumanWhy(attempts, facts);
   return {
-    headline: `jigs needs a person to move the pull request for ${key} forward.`,
+    headline: `The pull request for ${key} needs a person to move it forward.`,
     notes: [...why, `Pull request: ${url}`, workLocation(worktree)],
     closing:
-      "jigs is still watching the pull request: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+      "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read. The pull request is still being watched: the next change to it, such as a re-run check, a new comment or review, or an approval, picks the work back up.",
+    run: "waiting",
   };
 }
 

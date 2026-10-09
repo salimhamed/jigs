@@ -3,32 +3,25 @@ import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
 import { readFactoryEnv } from "../../config/factory-env.ts";
 import { JigsError } from "../../errors.ts";
-import { LINEAR_IDENTITY_VARIABLES } from "../../providers/linear-auth.ts";
-import { PAGERDUTY_IDENTITY_VARIABLES } from "../../providers/pagerduty-auth.ts";
-import { TERMINAL_RUN_STATUSES } from "../../run-status.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
-import type {
-  GithubIdentity,
-  LinearIdentity,
-  PagerDutyIdentity,
-} from "../../workflow/factory-schema.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
-import { columns, detail, displayPath, hint, section, tone } from "../output.ts";
+import { columns, detail, displayPath, hint, section } from "../output.ts";
 import { buildFactoryService, type Prepare } from "./build.ts";
 import { dockerCompose, factoryName, postgresNames } from "./compose.ts";
 import { runDoctor } from "./doctor.ts";
-import { type RunListRun, showRuns } from "./run-list.ts";
 import {
   awaitServiceReady,
   ensureServiceCurrent,
   liveServicePid,
   type ServiceOutcome,
 } from "./service.ts";
-import { resolveServiceUrl, ServiceVersionMismatch } from "./service-client.ts";
 import type { ServiceLifecycleDeps, ServiceProcesses } from "./service-process.ts";
 import { serviceLogPath } from "./service-record.ts";
 import { nested, type Step, StepFailed, stepRunner } from "./step-runner.ts";
+
+// Where the Workflow SDK's Nitro builder records the IDs it compiled.
+export const BUILD_MANIFEST = "node_modules/.nitro/workflow/manifest.json";
 
 // Takes a factory from any state to a running service: the commands a human
 // used to type after `jigs init`, run in order. Each step is idempotent, so a
@@ -39,7 +32,6 @@ export type UpStepName =
   | "locate"
   | "env"
   | "install"
-  | "generate"
   | "compose"
   | "bootstrap"
   | "build"
@@ -64,8 +56,8 @@ export interface UpDeps {
   execFile?: ExecFile;
   processes?: ServiceProcesses;
   prepare?: Prepare;
-  generate?: () => Promise<void>;
   migrate?: (url: string) => Promise<void>;
+  runsInFlight?: (worldUrl: string) => Promise<InFlightRun[]>;
   confirm?: (question: string) => Promise<boolean>;
   readyTimeoutMs?: number;
 }
@@ -76,32 +68,17 @@ export interface UpOptions {
   doctor?: boolean;
 }
 
-// Read by the suspension primitives; empty slots are the expected state of a
-// freshly copied .env, so they are reported, not refused.
-const credentialSlots = (
-  linear: LinearIdentity,
-  github: GithubIdentity[],
-  pagerduty: PagerDutyIdentity | undefined,
-): string[] => [
-  ...LINEAR_IDENTITY_VARIABLES[linear.mode],
-  ...(github.some((identity) => identity.mode === "pat") ? ["GITHUB_TOKEN"] : []),
-  ...(pagerduty !== undefined ? PAGERDUTY_IDENTITY_VARIABLES : []),
-];
-
 export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<UpResult> {
   const execFile = deps.execFile ?? nodeExecFile;
   const runner = stepRunner<UpStepName>(deps.out);
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service, linear, github, pagerduty } = await runner.run(
-      "locate",
-      (note) => {
-        const located = locate(deps.cwd);
-        note(located.factoryRoot);
-        return located;
-      },
-    );
+    const { factoryRoot, service } = await runner.run("locate", (note) => {
+      const located = locate(deps.cwd);
+      note(located.factoryRoot);
+      return located;
+    });
     result.factoryRoot = factoryRoot;
     result.serviceUrl = service.serviceUrl;
     result.dashboardUrl = service.dashboardUrl;
@@ -113,7 +90,6 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     };
 
     const env = await runner.run("env", () => ensureEnv(factoryRoot));
-    reportEmptyCredentials(env, credentialSlots(linear, github, pagerduty), deps.out);
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -123,19 +99,16 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       }),
     );
 
-    if (deps.generate !== undefined) {
-      await runner.run("generate", deps.generate);
-    }
-
     await runner.run("compose", () =>
       dockerCompose(execFile, factoryRoot, ["up", "-d", "--wait"], deps.out),
     );
 
-    await runner.run("bootstrap", async () => {
+    const worldUrl = await runner.run("bootstrap", async () => {
       const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
       const migrate =
         deps.migrate ?? (await import("../../steps/runtime/registry.ts")).migrateRegistry;
       await migrate(url);
+      return url;
     });
 
     await runner.run("build", () =>
@@ -147,13 +120,14 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       }),
     );
 
-    // The spawn and the wait are two steps here, so each gets its own line
-    // and its own failure; the wait itself is the one `jigs service start`
-    // does.
+    // The spawn and the wait are two steps, so each gets its own line and
+    // its own failure.
     result.service = await runner.run("service", async (note) => {
+      const inFlight = await (deps.runsInFlight ?? runsInFlight)(worldUrl);
+      refuseStrandedRuns(inFlight, factoryRoot, deps.out);
       const outcome = await ensureServiceCurrent(lifecycle, {
         restart: options.restart,
-        beforeRestart: () => confirmRestart(factoryRoot, service, deps, options),
+        beforeRestart: () => confirmRestart(inFlight, service, deps, options),
       });
       if (outcome === "unchanged") note("unchanged, not restarted");
       return outcome;
@@ -188,23 +162,9 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   }
 }
 
-function locate(cwd: string): {
-  factoryRoot: string;
-  service: ResolvedService;
-  linear: LinearIdentity;
-  github: GithubIdentity[];
-  pagerduty: PagerDutyIdentity | undefined;
-} {
+function locate(cwd: string): { factoryRoot: string; service: ResolvedService } {
   const ctx = factoryContextAt(cwd);
-  const service = resolveService(ctx);
-  const { config } = ctx;
-  return {
-    factoryRoot: ctx.root,
-    service,
-    linear: config.linear.identity,
-    github: config.github.identities,
-    pagerduty: config.pagerduty?.identity,
-  };
+  return { factoryRoot: ctx.root, service: resolveService(ctx) };
 }
 
 // Never copied for the operator: a .env is where they decide which
@@ -222,17 +182,15 @@ function ensureEnv(factoryRoot: string): Record<string, string> {
       "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
     );
   }
-  return readFactoryEnv(factoryRoot);
-}
-
-function reportEmptyCredentials(
-  env: Record<string, string>,
-  slots: string[],
-  out: (line: string) => void,
-): void {
-  const empty = slots.filter((key) => (env[key] ?? "") === "");
-  if (empty.length === 0) return;
-  out(`  ${empty.join(", ")} empty in .env ${detail("fill them in before a workflow needs them")}`);
+  const env = readFactoryEnv(factoryRoot);
+  // The service refuses to start without it, so nothing after this step could work.
+  if ((env.JIGS_HUB_TOKEN ?? "") === "") {
+    throw new JigsError(
+      "JIGS_HUB_TOKEN is not set in .env",
+      "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`",
+    );
+  }
+  return env;
 }
 
 // The World URL travels in the child's environment explicitly, never left to
@@ -325,61 +283,106 @@ function publishedPostgresPorts(factoryRoot: string): string {
   return ports.length === 0 ? "no port for 5432" : `:${ports.join(", :")}`;
 }
 
-async function confirmRestart(
+export interface InFlightRun {
+  runId: string;
+  workflow: string;
+  steps: string[];
+  executing: boolean;
+}
+
+// Read from the World, not the service: the service may be stopped, or on
+// another jigs whose run listing this CLI cannot read.
+async function runsInFlight(worldUrl: string): Promise<InFlightRun[]> {
+  const { Client } = (await import("pg")).default;
+  const client = new Client({ connectionString: worldUrl });
+  await client.connect();
+  try {
+    const { rows } = await client.query<{
+      id: string;
+      name: string;
+      steps: string[];
+      executing: boolean;
+    }>(
+      `select r.id, r.name,
+         array_remove(array_agg(distinct s.step_name), null) as steps,
+         coalesce(bool_or(s.status = 'running'), false) as executing
+       from "workflow"."workflow_runs" r
+       left join "workflow"."workflow_steps" s on s.run_id = r.id
+       where r.status in ('pending', 'running')
+       group by r.id
+       order by r.created_at`,
+    );
+    return rows.map((row) => ({
+      runId: row.id,
+      workflow: row.name,
+      steps: row.steps,
+      executing: row.executing,
+    }));
+  } finally {
+    await client.end();
+  }
+}
+
+// A waiting or running run replays its workflow and recorded steps by ID, and
+// fails on one the new build no longer has. Only factory-local IDs: the SDK's
+// own are its contract.
+function refuseStrandedRuns(
+  runs: InFlightRun[],
   factoryRoot: string,
+  out: (line: string) => void,
+): void {
+  if (runs.length === 0) return;
+  type Entries = Record<string, Record<string, { stepId?: string; workflowId?: string }>>;
+  const manifest = JSON.parse(readFileSync(path.join(factoryRoot, BUILD_MANIFEST), "utf8")) as {
+    steps: Entries;
+    workflows: Entries;
+  };
+  const built = new Set(
+    [...Object.values(manifest.steps), ...Object.values(manifest.workflows)].flatMap((file) =>
+      Object.values(file).map((entry) => entry.stepId ?? entry.workflowId),
+    ),
+  );
+  const stranded = runs.flatMap((run) => {
+    const missing = [run.workflow, ...run.steps].filter(
+      (id) => /^(?:step|workflow)\/\/\.\//.test(id) && !built.has(id),
+    );
+    return missing.length === 0 ? [] : [{ run, missing }];
+  });
+  if (stranded.length === 0) return;
+  for (const { run, missing } of stranded) out(`  ${run.runId}: ${missing.join(", ")}`);
+  throw new JigsError(
+    `${stranded.length} run(s) need workflows or steps this build no longer has`,
+    "put back the previous jigs version and code, then `pnpm install` and `pnpm exec jigs up`\nlet those runs finish, or cancel each: `pnpm exec jigs cancel <run-id>`\nthen try the change again",
+  );
+}
+
+// A parked run loses nothing to a restart; an executing step is cut off and
+// runs again from its start.
+async function confirmRestart(
+  inFlight: InFlightRun[],
   service: ResolvedService,
   deps: UpDeps,
   options: UpOptions,
 ): Promise<void> {
-  const inFlight = await listRunsInFlight(factoryRoot);
-  // Warned even under --force: a parked run replays on the new bundle, and an
-  // upgrade that changed the steps it replays fails it.
-  const consequence =
-    "a restart cuts off active steps, and parked runs resume on the new bundle, failing if it changed the steps they replay";
-  // Every upgrade meets an older service, so asking here would ask every time;
-  // `jigs status` before the upgrade, on matching versions, is the real check.
-  if (inFlight === undefined) {
-    deps.out(
-      `  warning: the running service is another jigs version, so its runs cannot be listed; ${consequence}`,
-    );
-    return;
-  }
-  if (inFlight.length === 0) return;
-  deps.out(`  warning: ${inFlight.length} run(s) parked or active; ${consequence}:`);
-  for (const line of columns(inFlight.map((run) => [run.runId, run.workflow, tone(run.status)]))) {
+  const busy = inFlight.filter((run) => run.executing);
+  if (busy.length === 0) return;
+  // Warned even under --force: the restart cuts their steps off.
+  deps.out(`  warning: ${busy.length} run(s) have a step executing, which a restart cuts off:`);
+  for (const line of columns(busy.map((run) => [run.runId, run.workflow]))) {
     deps.out(`    ${line}`);
   }
-  const runs = `${inFlight.length} in-flight run(s)`;
+  const runs = `${busy.length} run(s) with a step executing`;
   if (options.force === true) return;
   if (deps.confirm === undefined) {
     throw new JigsError(
       `refusing to restart ${service.slug} over ${runs} without confirmation`,
-      "restart anyway: `pnpm exec jigs up --force`\nor cancel each run first: `pnpm exec jigs cancel <run-id>`",
+      "retry when their steps finish: `pnpm exec jigs up`\nor cut that work off: `pnpm exec jigs up --force`",
     );
   }
   if (!(await deps.confirm(`restart ${service.slug} over ${runs}?`))) {
     throw new JigsError(
       "restart declined, so the service still runs the previous bundle",
-      "when the runs finish, run: `pnpm exec jigs up`",
+      "when their steps finish, run: `pnpm exec jigs up`",
     );
   }
-}
-
-// Empty when the service is unreachable: a service nobody can reach is
-// holding no run this restart could cut off. A service on another jigs
-// version answers in a shape this CLI may not read: undefined, its runs unknown.
-async function listRunsInFlight(factoryRoot: string): Promise<RunListRun[] | undefined> {
-  let runs: RunListRun[];
-  try {
-    // `jigs status` already knows how to find them; it prints, so it is handed a
-    // sink and read for its return value.
-    ({ runs } = await showRuns({
-      serviceUrl: resolveServiceUrl(factoryRoot),
-      out: () => {},
-    }));
-  } catch (err) {
-    if (err instanceof ServiceVersionMismatch) return undefined;
-    return [];
-  }
-  return runs.filter((run) => !TERMINAL_RUN_STATUSES.has(run.status));
 }

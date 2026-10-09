@@ -18,7 +18,7 @@ test("a wake is readable by the run it was sent to", () => {
 // One pull request outlives the run that opened it: the next run to work on it
 // holds the same token, and must not read the previous run's wake as its own.
 test("the next run to hold a pull request starts with no wake", () => {
-  recordWake(TOKEN, RUN_A, "nudge sweep");
+  recordWake(TOKEN, RUN_A, "hub fell behind");
   expect(lastWake(TOKEN, RUN_B)).toBeUndefined();
 
   recordWake(TOKEN, RUN_B, "poke");

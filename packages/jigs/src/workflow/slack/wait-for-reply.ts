@@ -22,6 +22,8 @@ export interface SlackReplySteps {
  * @group Slack messages
  */
 export interface SlackQuestion {
+  /** The Slack installation, as named on the hub, the thread is read through; only its events wake the wait. */
+  installationName: string;
   channel: string;
   threadTs: string;
   lastRead: string;
@@ -57,8 +59,8 @@ const ISO_TIMESTAMP = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?(Z|[+-]\d{
  * Without `until`, waits until a reply or `jigs cancel`. With it, the thread is
  * read at least once, so a reply already there wins even when `until` has
  * passed; after that the wait ends `timed-out` at `until`, and a later
- * reply wakes nothing. Socket Mode, the service's poll and `jigs poke` each
- * make it read the thread again. Replies from bots, including the factory's
+ * reply wakes nothing. A reply heard through the hub and `jigs poke` each make
+ * it read the thread again. Replies from bots, including the factory's
  * own, never count. `threadTs` must be the thread's top-level message: a
  * reply's ts fails the wait, naming the top-level message's ts. A reply
  * already in the thread returns at once, and may not answer the question the
@@ -73,7 +75,7 @@ export async function waitForSlackReply(
   steps: SlackReplySteps,
 ): Promise<SlackReplyResult> {
   const { fetchSlackMessage } = steps;
-  const { channel, threadTs, lastRead, until } = question;
+  const { installationName, channel, threadTs, lastRead, until } = question;
   const deadline = until === undefined ? undefined : new Date(until);
   if (
     deadline !== undefined &&
@@ -81,14 +83,14 @@ export async function waitForSlackReply(
   ) {
     throw new JigsError(`until must be an ISO 8601 timestamp, got ${JSON.stringify(until)}`);
   }
-  const token = slackThreadToken(channel, threadTs);
+  const token = slackThreadToken(installationName, channel, threadTs);
   // The wake carries nothing; it only makes the routine read the thread again.
   const hook = createHook<unknown>({ token });
   let expired: Promise<"timed-out"> | undefined;
   try {
     const since = tsValue(lastRead);
     while (true) {
-      const thread = await fetchSlackMessage({ channel, ts: threadTs });
+      const thread = await fetchSlackMessage({ installationName, channel, ts: threadTs });
       if (thread.gone) return { outcome: "gone" };
       const replies = thread.replies.filter((post) => !post.author.bot && tsValue(post.ts) > since);
       if (replies.length > 0) return { outcome: "replied", replies };

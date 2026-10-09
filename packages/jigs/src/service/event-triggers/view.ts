@@ -1,10 +1,14 @@
 // What `jigs status` and doctor show for a factory's event triggers.
 
-import { type Check, failedCheck, failedChecks } from "../../checks/index.ts";
+import {
+  type Check,
+  failedCheck,
+  failedChecks,
+  type TriggerInstallation,
+} from "../../checks/index.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { registrySql } from "../../steps/runtime/registry.ts";
 import type { Factory } from "../../workflow/factory.ts";
-import type { Provider } from "../../workflow/providers.ts";
 import { liveRunsByAttribute, OCCURRENCE_ATTRIBUTE, runStatuses } from "../runs.ts";
 import { tally } from "./capacity.ts";
 import { SOURCES, type SourceRegistry } from "./sources.ts";
@@ -124,15 +128,28 @@ export function triggerChecks(
   });
 }
 
-/** Each declared trigger whose source this jigs version provides, with the provider it polls. */
-export function triggerProviders(
+/**
+ * Each declared trigger whose source this jigs version provides, with the
+ * provider it reads and the installation it names.
+ */
+export function triggerInstallations(
   factory: Factory,
   sources: SourceRegistry = SOURCES,
-): Record<string, Provider> {
+): Record<string, TriggerInstallation> {
   return Object.fromEntries(
     Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
       const source = sources[trigger.source.kind];
-      return source === undefined ? [] : [[name, source.provider]];
+      if (source === undefined) return [];
+      const { installationName } = trigger.source.params;
+      return [
+        [
+          name,
+          {
+            provider: source.provider,
+            ...(typeof installationName === "string" ? { installationName } : {}),
+          },
+        ],
+      ];
     }),
   );
 }

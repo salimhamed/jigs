@@ -8,11 +8,8 @@ import {
   type factoryConfigSchema,
   type githubSchema,
   type linearSchema,
-  type pagerDutySchema,
   parseFactoryConfig,
-  type slackSchema,
   type WorkflowImport,
-  type webhooksSchema,
 } from "./factory-schema.ts";
 import type { ReleasePolicy } from "./runtime/release.ts";
 
@@ -171,18 +168,14 @@ export interface Factory {
   workflows: Record<string, AnyWorkflowDefinition>;
   schedules?: Record<string, Schedule>;
   triggers?: Record<string, EventTrigger>;
-  /** Which provider webhook routes the service mounts. Absent, it mounts none. */
-  webhooks?: WebhooksDefinition;
 }
 
 /**
- * Who jigs is on GitHub, the operator's own token or a GitHub App installation, and how the
- * operator approves a pull request for merging.
+ * Who the operator is on GitHub, and how they approve a pull request for merging.
  *
  * @remarks
- * `mergeApproval` defaults to `label` with a token and to `review` with an App. A token cannot use
- * `review`: jigs opens pull requests as the operator, and GitHub does not let the author approve
- * their own pull request.
+ * jigs acts on GitHub as the GitHub App the hub assigns this factory, so its pull requests come
+ * from `<app-slug>[bot]` and the operator can approve them. `mergeApproval` defaults to `review`.
  *
  * @example
  * Use this value for `github` in `jigs.config.ts`.
@@ -190,7 +183,7 @@ export interface Factory {
  * import type { GitHubDefinition } from "@jigs-ai/jigs";
  *
  * const github = {
- *   identities: [{ mode: "pat" }],
+ *   operator: "octocat",
  *   mergeApproval: "label",
  * } satisfies GitHubDefinition;
  * ```
@@ -200,18 +193,15 @@ export interface Factory {
 export type GitHubDefinition = z.input<typeof githubSchema>;
 
 /**
- * Who jigs is on Linear, and who its comments mention.
+ * Who a ticket run's Linear questions and notes mention.
  *
  * @remarks
- * `identity`: `key` acts as the user whose `LINEAR_API_KEY` is in `.env`, `app`
- * acts as a Linear OAuth application from `LINEAR_CLIENT_ID` and
- * `LINEAR_CLIENT_SECRET`. Defaults to `key`.
- *
  * `operator` is the email of the Linear user who runs the factory. With it,
- * every Linear comment jigs posts mentions the operator and the ticket's
- * assignee; without it, the ticket's creator and assignee. `jigs doctor` fails
- * when no Linear user has the email. Steps read it from the built factory, so
- * a change takes effect after a rebuild, which `jigs up` does.
+ * every question and note a ticket run posts mentions the operator and the
+ * ticket's assignee; without it, the ticket's creator and assignee.
+ * `jigs doctor` fails when no Linear user has the email. Steps read it from
+ * the built factory, so a change takes effect after a rebuild, which
+ * `jigs up` does.
  *
  * @example
  * Use this value for `linear` in `jigs.config.ts`.
@@ -219,7 +209,6 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
  * import type { LinearDefinition } from "@jigs-ai/jigs";
  *
  * const linear = {
- *   identity: { mode: "app" },
  *   operator: "salim@example.com",
  * } satisfies LinearDefinition;
  * ```
@@ -229,78 +218,12 @@ export type GitHubDefinition = z.input<typeof githubSchema>;
 export type LinearDefinition = z.input<typeof linearSchema>;
 
 /**
- * Who jigs is on PagerDuty: a scoped OAuth application acting on one account.
+ * A repository this factory works in: its remote, the GitHub installation
+ * that reaches it, and how a worktree cut from it is provisioned.
  *
  * @remarks
- * `identity.mode` is `app`, the only mode: jigs mints its own token from
- * `PAGERDUTY_CLIENT_ID` and `PAGERDUTY_CLIENT_SECRET` in `.env`. `subdomain`
- * and `region` name the account, as in `acme.pagerduty.com` on the `us`
- * service region.
- *
- * `from` is required: the email of a real PagerDuty user. PagerDuty refuses a
- * write that names no user, so every note jigs adds is attributed to them.
- * `jigs doctor` fails when no PagerDuty user has the email.
- *
- * @example
- * Use this value for `pagerduty` in `jigs.config.ts`.
- * ```ts
- * import type { PagerDutyDefinition } from "@jigs-ai/jigs";
- *
- * const pagerduty = {
- *   identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
- * } satisfies PagerDutyDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type PagerDutyDefinition = z.input<typeof pagerDutySchema>;
-
-/**
- * The factory's Slack app, which posts as its own bot.
- *
- * @remarks
- * The bot token goes in `.env` as `SLACK_BOT_TOKEN`. With `socketMode` on, the
- * service also receives messages over Socket Mode as they are posted, and needs
- * the app-level token in `SLACK_APP_TOKEN`; the service refuses to start
- * without it. Polling runs either way, every `service.pollIntervalSeconds.slack`
- * seconds. `scopes` lists extra bot scopes the factory's own Slack calls need,
- * such as `reactions:write`, so `jigs doctor` checks the bot holds them.
- *
- * @example
- * Use this value for `slack` in `jigs.config.ts`.
- * ```ts
- * import type { SlackDefinition } from "@jigs-ai/jigs";
- *
- * const slack = { socketMode: true } satisfies SlackDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type SlackDefinition = z.input<typeof slackSchema>;
-
-/**
- * Where provider webhooks reach the service, and which providers send them.
- * A provider left out sends none. Without this section the service still wakes
- * parked runs by polling.
- *
- * @example
- * Use this value for `webhooks` in `jigs.config.ts`.
- * ```ts
- * import type { WebhooksDefinition } from "@jigs-ai/jigs";
- *
- * const webhooks = {
- *   url: "https://factory.example.ts.net",
- *   github: { enabled: true },
- * } satisfies WebhooksDefinition;
- * ```
- *
- * @group Factory and workflows
- */
-export type WebhooksDefinition = z.input<typeof webhooksSchema>;
-
-/**
- * A repository this factory works in: its remote and how a worktree cut from
- * it is provisioned.
+ * `installationName` is the name an admin gave the GitHub App installation on
+ * the hub. Pushes, pull requests and their events go through it.
  *
  * @example
  * Use this value for `bindings.api` in `jigs.config.ts`.
@@ -309,6 +232,7 @@ export type WebhooksDefinition = z.input<typeof webhooksSchema>;
  *
  * const api = {
  *   remote: "git@github.com:acme/api.git",
+ *   installationName: "github-acme",
  *   postCreate: ["pnpm install"],
  * } satisfies BindingDefinition;
  * ```

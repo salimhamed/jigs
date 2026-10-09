@@ -3,6 +3,7 @@ import type { PullRequestSnapshot } from "../pull-requests/snapshot.ts";
 import { builderWakeFacts } from "./wake.ts";
 
 const opened: PullRequestSnapshot = {
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,
@@ -206,9 +207,5 @@ describe("the builder's own replies, posted as the App's bot", () => {
   test("a review by the bot still wakes", () => {
     const own = { ...review("COMMENTED", "Done"), user: APP_BOT };
     expect(wakes(asBot, { ...asBot, reviews: [own] })).toBe(true);
-  });
-
-  test("with a personal token there is no bot to recognize", () => {
-    expect(wakes(opened, { ...opened, conversationComments: [reply] })).toBe(true);
   });
 });

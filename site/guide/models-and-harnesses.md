@@ -150,8 +150,9 @@ its own session.
 
 ## Harness settings
 
-Claude Code and Codex descriptors use the provider's own JSON-serializable
-settings, except for execution policy and lifecycle settings owned by jigs:
+Claude Code descriptors take the Claude Agent SDK's own JSON-serializable
+options, and Codex descriptors the Codex provider's settings, except for
+execution policy and lifecycle settings owned by jigs:
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs";
@@ -248,8 +249,9 @@ harness built in the workflow body is checked when its agent starts.
 `harnesses.claude({ model, ...settings })` is a harness for `runAgent` and
 `askAgent`. Install Claude Code, keep `claude` on the service's `PATH` (or set
 `JIGS_CLAUDE_EXECUTABLE`), and run `claude auth login`. Calls use that account.
-jigs runs it unattended with permission prompts bypassed. `askAgent` uses the
-model without tools, MCP servers or filesystem settings.
+jigs drives that `claude` through the Claude Agent SDK and runs it unattended
+with permission prompts bypassed. `askAgent` uses the model without tools, MCP
+servers or filesystem settings.
 
 ## Codex
 
@@ -334,24 +336,41 @@ access the files your user can access.
 
 ## GitHub access for agents {#github-access}
 
-With a [GitHub App identity](/guide/configuration#github-identity), jigs acts
+With its [GitHub App](/guide/configuration#github-app), jigs acts
 on GitHub as one bot, `<app-slug>[bot]`. An agent can act as the same bot: set
-`github: true` on its harness.
+`github: { installationName }` on its harness, naming the App installation it
+acts through.
 
 ```ts
 import { harnesses } from "@jigs-ai/jigs";
 
-harnesses.codex({ model: "gpt-5.6-sol", github: true });
+harnesses.codex({ model: "gpt-5.6-sol", github: { installationName: "github-acme" } });
+```
+
+An agent working in a worktree usually acts through its binding's
+installation, which the worktree carries. Add it to the harness in the
+workflow, once the worktree exists:
+
+```ts
+// workflows/fix/fix.ts
+import { harnesses } from "@jigs-ai/jigs";
+import { provisionWorktree } from "#jigs/steps";
+
+const agents = { builder: harnesses.codex({ model: "gpt-5.6-sol" }) };
+
+export async function builderFor(binding: string, branch: string) {
+  const worktree = await provisionWorktree({ binding, branch });
+  return { ...agents.builder, github: { installationName: worktree.installationName } };
+}
 ```
 
 jigs uses the bot to open, label and merge pull requests and to post its notes.
 An agent that opts in uses it to read the discussion, reply and push its fixes.
 When such an agent starts, jigs gives it:
 
-- **`GH_TOKEN`**, a new token for the App's installation on the account that
-  owns the agent's worktree. `gh` picks it up, so `gh` works as the bot with no
-  login of its own.
-- **HTTPS for that account's repositories.** Git settings in the agent's
+- **`GH_TOKEN`**, a new token for that installation. `gh` picks it up, so `gh`
+  works as the bot with no login of its own.
+- **HTTPS for the installation account's repositories.** Git settings in the agent's
   environment send its fetches and pushes for that account's repositories over
   HTTPS with the token, even where the remote is an SSH URL. Repositories of
   other accounts, such as a dependency fetched over SSH, keep their own
@@ -361,9 +380,8 @@ When such an agent starts, jigs gives it:
   configuration still signs, so signed commits still show as Verified.
 
 The token lasts an hour and is not renewed during a turn: a turn longer than
-that loses GitHub access, and the next turn gets a new token. For an agent with
-no worktree, name the account: `github: { owner: "acme" }`. An agent step acts
-on one account.
+that loses GitHub access, and the next turn gets a new token. An agent step acts
+through one installation.
 
 The token carries all of the App's permissions on that installation, so it
 could merge a pull request. Prompts can tell an agent not to merge, but what
@@ -375,10 +393,7 @@ The agent still runs as your user on your machine. It can read any file you
 can, your SSH keys and other credentials included: the token limits what the
 agent does as itself, not what it could find on disk.
 
-It needs an App identity. With a personal access token, a run whose workflow
-declares such an agent fails preflight, and the agent's step fails before the
-agent starts. Install the [GitHub CLI](https://cli.github.com); `jigs doctor`
-checks for it.
+Install the [GitHub CLI](https://cli.github.com); `jigs doctor` checks for it.
 
 ### GitHub's MCP server
 
@@ -388,7 +403,11 @@ optional, and only a harness that sets `github` can use it:
 ```ts
 import { githubMcp, harnesses } from "@jigs-ai/jigs";
 
-harnesses.claude({ model: "opus", github: true, mcpServers: { github: githubMcp() } });
+harnesses.claude({
+  model: "opus",
+  github: { installationName: "github-acme" },
+  mcpServers: { github: githubMcp() },
+});
 ```
 
 It runs the local
@@ -399,19 +418,23 @@ the model may call: `githubMcp({ tools: ["pull_request_read", "add_issue_comment
 
 ## Linear and PagerDuty access for agents {#provider-access}
 
-An agent can also act as the factory on Linear and PagerDuty: set `linear: true`
-or `pagerduty: true` on its harness. When it starts, jigs puts the factory's own
-token in its environment:
+An agent can also act as the factory on Linear and PagerDuty: set
+`linear: { installationName }` or `pagerduty: { installationName }` on its
+harness. When it starts, jigs puts that installation's token in its
+environment:
 
-- **`JIGS_LINEAR_TOKEN`** holds the [Linear identity](/guide/configuration#linear-identity)'s
-  credential: the app's token in `app` mode, so the agent acts as the factory's
-  Linear app, or the API key in `key` mode.
-- **`JIGS_PAGERDUTY_TOKEN`** holds a token for the factory's
-  [PagerDuty](/guide/configuration#pagerduty) OAuth app, with the scopes jigs
-  itself uses: the agent can read and update incidents and read users.
+- **`JIGS_LINEAR_TOKEN`** holds a token of the
+  [Linear app](/guide/configuration#linear-app) installation, from the hub, so
+  the agent acts as that app.
+- **`JIGS_PAGERDUTY_TOKEN`** holds a token of the
+  [PagerDuty app](/guide/configuration#pagerduty) installation, from the hub, with the
+  scopes jigs itself uses: the agent can read and update incidents and read
+  users.
 
-A run whose workflow declares such an agent checks that identity in preflight,
-as it would for a workflow that requires the provider.
+A run whose workflow declares such an agent checks that installation in
+preflight. An agent step whose harness sets `github` also checks that `gh` is
+installed before the agent starts, even when the installation is added at run
+time.
 
 `linearMcp()` and `pagerdutyMcp()` add each service's own hosted MCP server
 with that token. Only a harness that opts in can use them:
@@ -421,8 +444,8 @@ import { harnesses, linearMcp, pagerdutyMcp } from "@jigs-ai/jigs";
 
 harnesses.claude({
   model: "opus",
-  linear: true,
-  pagerduty: true,
+  linear: { installationName: "linear-acme" },
+  pagerduty: { installationName: "pagerduty-acme" },
   mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp() },
 });
 ```
@@ -436,7 +459,7 @@ import { harnesses, pagerdutyMcp } from "@jigs-ai/jigs";
 
 harnesses.codex({
   model: "gpt-5.6-sol",
-  pagerduty: true,
+  pagerduty: { installationName: "pagerduty-acme" },
   mcpServers: { pagerduty: { ...pagerdutyMcp(), url: "https://mcp.eu.pagerduty.com/mcp" } },
 });
 ```

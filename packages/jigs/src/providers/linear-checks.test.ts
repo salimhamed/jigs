@@ -1,177 +1,57 @@
 import { expect, test } from "vitest";
-import { runChecks } from "../checks/catalog.ts";
-import type { LinearIdentity } from "../workflow/factory-schema.ts";
-import {
-  type LinearIdentityProbes,
-  type LinearOperatorProbes,
-  linearIdentityChecks,
-  linearOperatorChecks,
-} from "./linear-checks.ts";
+import { testFactoryContext } from "../test-fixtures.ts";
+import { HubResponseError } from "./hub.ts";
+import { type LinearInstallationProbeDeps, linearInstallationProbe } from "./linear-checks.ts";
 
-function probes(overrides: Partial<LinearIdentityProbes> = {}) {
-  const calls: string[] = [];
-  const base: LinearIdentityProbes = {
-    viewer: async () => {
-      calls.push("viewer");
-      return { id: "u1", name: "jigs-factory" };
-    },
-  };
-  return { probes: { ...base, ...overrides }, calls };
-}
+const issue = async () => ({
+  token: "t",
+  expiresAt: "2999-01-01T00:00:00Z",
+  app: { name: "jigs", userId: "app-user" },
+});
 
-const outcome = async (
-  identity: LinearIdentity,
-  env: Record<string, string>,
-  p: LinearIdentityProbes,
-) => {
-  const report = await runChecks(linearIdentityChecks(identity, p, (name) => env[name]));
-  const found = report.checks.find((check) => check.id === "linear.identity");
-  if (found === undefined) throw new Error("no linear.identity check");
-  return found;
-};
+const probe = (deps: LinearInstallationProbeDeps) =>
+  linearInstallationProbe(testFactoryContext(), { issue, ...deps })("acme");
 
-const rejecting = () =>
-  probes({
-    viewer: async () => {
-      throw new Error("Linear API 401: authentication required");
-    },
-  }).probes;
+const users =
+  (found: Record<string, { id: string; name: string }>) =>
+  async (installationName: string, email: string) =>
+    installationName === "acme" ? (found[email] ?? null) : null;
 
-test("an unset LINEAR_API_KEY fails before any probe runs", async () => {
-  const { probes: p, calls } = probes();
-  expect(await outcome({ mode: "key" }, {}, p)).toMatchObject({
+test("an installation the hub hands a token for passes, naming the app", async () => {
+  expect(await probe({})).toEqual({ ok: true, detail: "acting as jigs" });
+});
+
+test("a workspace that needs reconnecting fails with the hub's reason and the repair", async () => {
+  expect(
+    await probe({
+      issue: async () => {
+        throw new HubResponseError(
+          503,
+          "the hub answered 503: Connect acme to jigs again on the hub",
+          "in the hub, connect the Linear workspace again",
+        );
+      },
+    }),
+  ).toMatchObject({
     ok: false,
-    reason: "linear.identity uses key but LINEAR_API_KEY is not set",
-    repair: expect.stringContaining(
-      "set LINEAR_API_KEY (a Linear personal API key) in the factory repo's .env",
-    ),
+    reason: expect.stringContaining("Connect acme to jigs again"),
+    repair: "in the hub, connect the Linear workspace again",
   });
-  expect(calls).toEqual([]);
 });
 
-test("an app identity names each client variable it is missing", async () => {
-  const { probes: p, calls } = probes();
-  expect(await outcome({ mode: "app" }, { LINEAR_CLIENT_ID: "id" }, p)).toMatchObject({
+test("an operator email no Linear user in the installation has fails with a repair naming the setting", async () => {
+  expect(await probe({ operator: "typo@example.com", userByEmail: users({}) })).toEqual({
     ok: false,
-    reason: "linear.identity uses app but LINEAR_CLIENT_SECRET is not set",
-    repair: expect.stringContaining("set LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET"),
+    reason: "no active Linear user has the email typo@example.com",
+    repair: expect.stringContaining("set linear.operator in jigs.config.ts"),
   });
-  expect(await outcome({ mode: "app" }, {}, p)).toMatchObject({
-    reason: "linear.identity uses app but LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET are not set",
-  });
-  expect(calls).toEqual([]);
-});
-
-test("a rejected key surfaces the provider error and a re-issue repair", async () => {
-  expect(await outcome({ mode: "key" }, { LINEAR_API_KEY: "stale" }, rejecting())).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("Linear API 401"),
-    repair: expect.stringContaining("re-issue the key"),
-  });
-});
-
-test("rejected app credentials point back at the OAuth application", async () => {
-  const env = { LINEAR_CLIENT_ID: "id", LINEAR_CLIENT_SECRET: "wrong" };
-  expect(await outcome({ mode: "app" }, env, rejecting())).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("Linear API 401"),
-    repair: expect.stringContaining("against the Linear OAuth application"),
-  });
-});
-
-test("an accepted credential is green and names who jigs acts as", async () => {
-  const { probes: p, calls } = probes();
-  expect(await outcome({ mode: "key" }, { LINEAR_API_KEY: "lin" }, p)).toEqual({
-    id: "linear.identity",
-    label: "Linear identity",
-    ok: true,
-    detail: "acting as jigs-factory",
-  });
-  const env = { LINEAR_CLIENT_ID: "id", LINEAR_CLIENT_SECRET: "secret" };
-  expect(await outcome({ mode: "app" }, env, p)).toMatchObject({
-    ok: true,
-    detail: "acting as the app jigs-factory",
-  });
-  expect(calls).toEqual(["viewer", "viewer"]);
-});
-
-const operatorProbes = (
-  users: Record<string, { id: string; name: string }>,
-  viewer = { id: "u1", name: "jigs-factory" },
-): LinearOperatorProbes => ({
-  viewer: async () => viewer,
-  userByEmail: async (email) => users[email] ?? null,
-});
-
-const operatorOutcomes = async (identity: LinearIdentity, email: string, p: LinearOperatorProbes) =>
-  (await runChecks(linearOperatorChecks(identity, email, p))).checks;
-
-test("an operator email no Linear user has fails with a repair naming the setting", async () => {
-  expect(await operatorOutcomes({ mode: "app" }, "typo@example.com", operatorProbes({}))).toEqual([
-    {
-      id: "linear.operator",
-      label: "Linear operator",
-      ok: false,
-      reason: "no active Linear user has the email typo@example.com",
-      repair: expect.stringContaining("set linear.operator in jigs.config.ts"),
-    },
-  ]);
 });
 
 test("a found operator passes and names who is mentioned", async () => {
-  const salim = { id: "u2", name: "Salim" };
   expect(
-    await operatorOutcomes(
-      { mode: "app" },
-      "salim@example.com",
-      operatorProbes({ "salim@example.com": salim }, salim),
-    ),
-  ).toEqual([
-    { id: "linear.operator", label: "Linear operator", ok: true, detail: "mentions Salim" },
-  ]);
-});
-
-test("in key mode, an operator who owns the API key passes with a warning to use the app identity", async () => {
-  const salim = { id: "u2", name: "Salim" };
-  const [outcome] = await operatorOutcomes(
-    { mode: "key" },
-    "salim@example.com",
-    operatorProbes({ "salim@example.com": salim }, salim),
-  );
-  expect(outcome).toMatchObject({ ok: true, detail: expect.stringContaining("warning") });
-  expect(outcome).toMatchObject({ detail: expect.stringContaining('{ mode: "app" }') });
-  expect(outcome).toMatchObject({ detail: expect.stringContaining("will not notify") });
-});
-
-test("in key mode, an operator who is someone else passes without a warning", async () => {
-  const [outcome] = await operatorOutcomes(
-    { mode: "key" },
-    "dana@example.com",
-    operatorProbes({ "dana@example.com": { id: "u3", name: "Dana" } }),
-  );
-  expect(outcome).toMatchObject({ ok: true, detail: "mentions Dana" });
-});
-
-test("no operator configured means no operator check", () => {
-  expect(linearOperatorChecks({ mode: "key" }, undefined, operatorProbes({}))).toEqual([]);
-});
-
-test("in app mode, an operator who is the viewer gets no key-mode warning", async () => {
-  const salim = { id: "u2", name: "Salim" };
-  const [outcome] = await operatorOutcomes(
-    { mode: "app" },
-    "salim@example.com",
-    operatorProbes({ "salim@example.com": salim }, salim),
-  );
-  expect(outcome).toMatchObject({ ok: true, detail: "mentions Salim" });
-});
-
-test("in key mode, a viewer lookup that fails still passes the found operator", async () => {
-  const [outcome] = await operatorOutcomes({ mode: "key" }, "salim@example.com", {
-    viewer: async () => {
-      throw new Error("Linear API 500");
-    },
-    userByEmail: async () => ({ id: "u2", name: "Salim" }),
-  });
-  expect(outcome).toMatchObject({ ok: true, detail: "mentions Salim" });
+    await probe({
+      operator: "salim@example.com",
+      userByEmail: users({ "salim@example.com": { id: "u2", name: "Salim" } }),
+    }),
+  ).toEqual({ ok: true, detail: "acting as jigs, mentions Salim" });
 });

@@ -3,7 +3,14 @@
   "private": true,
   "type": "module",
   "imports": {
-    "#jigs/*": "./jigs/*.ts"
+    "#jigs/steps": {
+      "types": "@jigs-ai/jigs/factory/steps",
+      "default": "./.jigs/steps.ts"
+    },
+    "#jigs/routines": {
+      "types": "@jigs-ai/jigs/factory/routines",
+      "default": "./.jigs/routines.ts"
+    }
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -11,9 +18,9 @@
   },
   "dependencies": {
     "@jigs-ai/jigs": "{{JIGS_VERSION}}",
-    "@workflow/web": "5.0.0-beta.57",
-    "@workflow/world-postgres": "5.0.0-beta.47",
-    "workflow": "5.0.0-beta.57",
+    "@workflow/web": "5.0.2",
+    "@workflow/world-postgres": "5.0.2",
+    "workflow": "5.1.0",
     "zod": "4.5.4"
   },
   "devDependencies": {

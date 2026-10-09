@@ -1,11 +1,17 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    // factory/ imports this package by name, as the factory it is copied into does.
+    "paths": {
+      "@jigs-ai/jigs": ["./src/index.ts"],
+      "@jigs-ai/jigs/routines": ["./src/workflow/routines.ts"],
+      "@jigs-ai/jigs/steps/*": ["./src/steps/*/index.ts"]
+    },
     "plugins": [
       {
         "name": "workflow"
       }
     ]
   },
-  "include": ["src", "tsdown.config.ts"]
+  "include": ["src", "factory", "tsdown.config.ts"]
 }

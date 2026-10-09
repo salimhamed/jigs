@@ -16,11 +16,11 @@ import {
   type PullRequestSnapshot,
   postPrComment,
   postPullRequestReview,
+  type RepositoryRef,
   replyToReviewThread,
 } from "../../providers/github.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
-import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -36,7 +36,8 @@ export type OpenedPullRequest = PullRequestRef & {
   url: string;
 };
 
-function repositoryOf(binding: string) {
+// The installation is the worktree's, the one its pushes went through.
+function repositoryOf({ binding, installationName }: Worktree): RepositoryRef {
   const { remote } = resolveBinding(currentFactoryContext().config, binding);
   const ref = parseGithubRemote(remote);
   if (ref === null) {
@@ -44,7 +45,7 @@ function repositoryOf(binding: string) {
       `binding ${binding} points at ${remote}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
     );
   }
-  return ref;
+  return { installationName, ...ref };
 }
 
 /**
@@ -64,27 +65,25 @@ export async function createPullRequest(request: {
   draft?: boolean | undefined;
 }): Promise<OpenedPullRequest> {
   const { worktree, title, body, draft } = request;
-  const repo = repositoryOf(worktree.binding);
+  const repo = repositoryOf(worktree);
   const { branch: head, defaultBranch: base } = worktree;
-  const { identity } = githubAuthFor(repo.owner);
-  // In App mode the pull request's author is the bot, which is what lets the
+  // The pull request's author is the App's bot, which is what lets the
   // operator approve it. The assignee and the opening line are how the
   // operator still shows up on it — GitHub has no second author field.
-  const operator = identity.mode === "app" ? identity.operator : null;
+  const operator = currentFactoryContext().config.github.operator ?? null;
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
     const { number, html_url } = await createPr({
-      owner: repo.owner,
-      repo: repo.repo,
+      ...repo,
       head,
       base,
       title,
       body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
       ...(draft === undefined ? {} : { draft }),
     });
-    opened = { owner: repo.owner, repo: repo.repo, number, url: html_url };
+    opened = { ...repo, number, url: html_url };
   }
-  const pr = { owner: opened.owner, repo: opened.repo, number: opened.number };
+  const { url: _, ...pr } = opened;
   if (operator !== null) await assignPullRequest(pr, [operator]);
   return opened;
 }
@@ -220,7 +219,7 @@ export async function mergePullRequest(
   // A snapshot that still reads mergeable after GitHub refused the merge is
   // one no later wake will read differently: the method was disabled since it
   // was read, or a protection GitHub does not express in `mergeable_state`
-  // stopped it. Retrying that on every nudge would never end.
+  // stopped it. Retrying that on every wake would never end.
   return {
     merged: false,
     ...(mergeRefusal(after, expectedHeadSha) ?? {
@@ -237,16 +236,16 @@ async function allowedMergeMethod(pr: PullRequestRef): Promise<MergeMethod> {
   const method = METHOD_PREFERENCE.find((candidate) => allowed.has(candidate));
   if (method !== undefined) return method;
   throw new JigsError(
-    `GitHub allows no merge method on ${pr.owner}/${pr.repo} that jigs can use`,
-    "enable squash merging, merge commits or rebase merging in the repository's settings, and give jigs' GitHub credential write access to it",
+    `GitHub allows none of squash, merge commit or rebase merging on ${pr.owner}/${pr.repo}`,
+    "enable squash merging, merge commits or rebase merging in the repository's settings, and give the factory's GitHub App write access to it",
   );
 }
 
 /**
  * The commit-message body jigs supplies, or nothing at all.
  *
- * GitHub makes a squash commit's author the pull request's author, which in App
- * mode is the bot, so the `Co-authored-by` trailer is how the operator keeps the
+ * GitHub makes a squash commit's author the pull request's author, which is the
+ * App's bot, so the `Co-authored-by` trailer is how the operator keeps the
  * credit. Sending `commit_message` *replaces* the body GitHub would generate,
  * so jigs applies its own preservation policy before adding the trailer: for a
  * one-commit branch it keeps that commit's body, and for several commits it
@@ -259,12 +258,10 @@ async function suppliedCommitMessageBody(
   pr: PullRequestRef,
   method: MergeMethod,
 ): Promise<undefined | string> {
-  const { identity } = githubAuthFor(pr.owner);
-  if (method === "rebase" || identity.mode !== "app" || identity.coAuthor === undefined) {
-    return undefined;
-  }
+  const { coAuthor } = currentFactoryContext().config.github;
+  if (method === "rebase" || coAuthor === undefined) return undefined;
   const body = preservedCommitMessageBody(await fetchPrCommitMessages(pr));
-  const trailer = `Co-authored-by: ${identity.coAuthor}`;
+  const trailer = `Co-authored-by: ${coAuthor}`;
   return body === "" ? trailer : `${body}\n\n${trailer}`;
 }
 

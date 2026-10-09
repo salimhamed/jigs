@@ -17,9 +17,10 @@ import tsdownConfig from "../tsdown.config.ts";
 const packageDir = fileURLToPath(new URL("..", import.meta.url));
 const templatesDir = path.join(packageDir, "templates");
 const pkg = JSON.parse(await readFile(path.join(packageDir, "package.json"), "utf8"));
-const exportTargets: string[] = Object.values(pkg.exports).flatMap((entry) =>
-  typeof entry === "string" ? [entry] : Object.values(entry as object),
-);
+// factory/ is types only: its code runs from the copies a factory build writes.
+const exportTargets: string[] = Object.entries(pkg.exports)
+  .filter(([subpath]) => !subpath.startsWith("./factory/"))
+  .flatMap(([, entry]) => (typeof entry === "string" ? [entry] : Object.values(entry as object)));
 
 const directive = /^\s*["']use (step|workflow)["']/m;
 const optionalPeers = new Set(
@@ -56,7 +57,7 @@ test("no compiled source carries a workflow directive — the factory writes its
   // version out of every memoization key. A directive sneaking back in here
   // compiles clean and resurrects a version-bearing id, so this is the guard
   // that has to hold. src/ is what this package compiles; the directives in
-  // templates/ are .tmpl files a factory compiles, never this one.
+  // factory/ compile only in the factory each build copies them into.
   const directed: string[] = [];
   for (const file of await sourceFiles("src")) {
     const source = await readFile(path.join(packageDir, file), "utf8");
@@ -107,7 +108,7 @@ test("every tsdown entry is reachable through the exports map or the bin", () =>
   }
 });
 
-test("the root, the routines entry, the steps entry and the nine step topics are the factory's subpaths", () => {
+test("the root, the routines entry, the steps entry, the nine step topics and the factory types are the factory's subpaths", () => {
   const topics = [
     "agents",
     "human",
@@ -121,7 +122,15 @@ test("the root, the routines entry, the steps entry and the nine step topics are
   ];
   const service = ["./nitro", "./build", "./service"];
   expect(Object.keys(pkg.exports).sort()).toEqual(
-    [".", "./routines", "./steps", ...service, ...topics.map((topic) => `./steps/${topic}`)].sort(),
+    [
+      ".",
+      "./routines",
+      "./steps",
+      ...service,
+      ...topics.map((topic) => `./steps/${topic}`),
+      "./factory/steps",
+      "./factory/routines",
+    ].sort(),
   );
   expect(pkg.exports["./steps"]).toEqual({
     types: "./dist/steps/index.d.ts",
@@ -191,7 +200,7 @@ test("the factory template pins the same versions this package peers on", async 
     const section = FACTORY_SUPPLIED.includes(name) ? "dependencies" : "devDependencies";
     expect(template[section][name], name).toBe(range);
   }
-  for (const name of ["croner", "hono", "postgres"]) {
+  for (const name of ["croner", "express", "postgres"]) {
     expect(template.dependencies[name], name).toBeUndefined();
   }
   // Pinned to the exact version of the CLI that scaffolded it, never a range
@@ -217,8 +226,10 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "haltQuestionSchema",
     "harnessKinds",
     "harnesses",
+    "installationNameSchema",
     "interpolate",
     "isPullRequestMergeReady",
+    "linear",
     "linearMcp",
     "models",
     "pagerduty",
@@ -245,12 +256,12 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "bindGitSteps",
     "bindLinearSteps",
     "bindPullRequestSteps",
-    "claimTicket",
+    "linearAgentConversation",
     "postPullRequestNote",
     "waitForSlackReply",
   ],
   "service/nitro.ts": ["defineJigsService"],
-  "service/build.ts": ["generateFactoryIntegration", "prepare"],
+  "service/build.ts": ["prepare", "prepareJigs"],
   "service/service.ts": [
     "automaticReleaseAction",
     "createApp",
@@ -260,17 +271,21 @@ const BARREL_EXPORTS: Record<string, string[]> = {
   "steps/human/index.ts": [],
   "steps/workspaces/index.ts": ["provisionWorktree"],
   "steps/linear/index.ts": [
+    "executeLinearAgentTurn",
+    "listLinearAgentSessionPrompts",
+    "openLinearAgentSession",
+    "postLinearAgentActivity",
+    "setLinearAgentSessionUrls",
     "fetchTicketSnapshot",
     "createComment",
     "createIssueInProject",
     "findIssueInProject",
-    "checkForTicketHumanReply",
-    "postTicketHumanInputRequest",
-    "postTicketNote",
-    "renderNeedsHumanComment",
+    "renderHumanInputRequest",
     "renderTicketNote",
     "resolveLinearIssue",
     "setTicketStatus",
+    "postTicketHumanInputRequest",
+    "postTicketNote",
   ],
   "steps/pagerduty/index.ts": ["fetchIncidentSnapshot", "postIncidentNote"],
   "steps/pull-requests/index.ts": [

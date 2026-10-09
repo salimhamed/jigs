@@ -4,18 +4,20 @@ import { type AskableHarness, harnesses, models } from "./harness-config.ts";
 import { buildAskAgentRequest } from "./plan.ts";
 import { describeHarness } from "./result.ts";
 
+const GITHUB = { installationName: "github-acme" };
+
 test("a harness opts in to GitHub as plain data that counts toward its identity", () => {
-  const builder = harnesses.codex({ model: "gpt-5.5", github: true });
-  expect(builder).toEqual({ kind: "codex", model: "gpt-5.5", github: true });
-  expect(harnesses.claude({ model: "opus", github: { owner: "acme" } }).github).toEqual({
-    owner: "acme",
-  });
-  expect(harnesses.pi(models.openaiCodex("gpt-5.5"), { github: true }).github).toBe(true);
+  const builder = harnesses.codex({ model: "gpt-5.5", github: GITHUB });
+  expect(builder).toEqual({ kind: "codex", model: "gpt-5.5", github: GITHUB });
+  expect(harnesses.pi(models.openaiCodex("gpt-5.5"), { github: GITHUB }).github).toEqual(GITHUB);
   expect(describeHarness(builder)).not.toBe(describeHarness(harnesses.codex({ model: "gpt-5.5" })));
+  expect(describeHarness(builder)).not.toBe(
+    describeHarness(harnesses.codex({ model: "gpt-5.5", github: { installationName: "other" } })),
+  );
 });
 
 test("a harness with GitHub access is not one askAgent can run", () => {
-  const harness = harnesses.claude({ model: "opus", github: true });
+  const harness = harnesses.claude({ model: "opus", github: GITHUB });
   expectTypeOf(harness).not.toExtend<AskableHarness>();
   expect(() =>
     buildAskAgentRequest({ harness: harness as unknown as AskableHarness, prompt: "p" }),
@@ -41,7 +43,7 @@ test("githubMcp for Pi allows the named tools and the probe tool", () => {
   ]);
   expect(() =>
     harnesses.pi(models.openaiCodex("gpt-5.5"), {
-      github: true,
+      github: GITHUB,
       mcpServers: { github: githubMcp({ tools: ["issue_read"] }) },
     }),
   ).not.toThrow();
@@ -49,7 +51,7 @@ test("githubMcp for Pi allows the named tools and the probe tool", () => {
 
 test("githubMcp is only valid on a harness that sets github", () => {
   expect(() =>
-    harnesses.claude({ model: "opus", github: true, mcpServers: { github: githubMcp() } }),
+    harnesses.claude({ model: "opus", github: GITHUB, mcpServers: { github: githubMcp() } }),
   ).not.toThrow();
   expect(() => harnesses.claude({ model: "opus", mcpServers: { github: githubMcp() } })).toThrow(
     "MCP server 'github' reads GH_TOKEN",

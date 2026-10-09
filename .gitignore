@@ -19,3 +19,6 @@ site/.vitepress/cache/
 # Copied in by the package's prepack so the tarball ships the root copies.
 /packages/jigs/README.md
 /packages/jigs/LICENSE
+/packages/hub/build/
+/packages/hub/.react-router/
+/packages/jigs/factory/*.d.ts

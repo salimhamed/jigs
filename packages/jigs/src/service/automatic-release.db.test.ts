@@ -65,7 +65,7 @@ beforeAll(async () => {
   mkdirSync(factoryRoot, { recursive: true });
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-test" } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
   );
   registry = registrySql();
   await ensureRegistry(registry);
@@ -166,7 +166,7 @@ async function createCompletedRun(): Promise<string> {
       deploymentId: "postgres",
       workflowName: "workflow//./workflows/cleanup//cleanup",
       input: new Uint8Array(),
-      executionContext: { workflowCoreVersion: "5.0.0-beta.57", workflowVm: "node" },
+      executionContext: { workflowCoreVersion: "5.1.0", workflowVm: "node" },
     },
   });
   if (created.run === undefined) throw new Error("run_created returned no run");

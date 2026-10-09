@@ -5,15 +5,7 @@ import { expect, test } from "vitest";
 import { packageRoot } from "../../build/templates.ts";
 import { parseFactoryConfig } from "../../workflow/factory-schema.ts";
 import { layoutProblems } from "../output-layout.ts";
-import { initFactory, resolveIdentityOptions } from "./init.ts";
-
-const APP = {
-  mode: "app",
-  appId: 4958325,
-  installations: { salimhamed: 162033982 },
-  privateKeyPath: "github-app.private-key.pem",
-  operator: "salimhamed",
-} as const;
+import { initFactory } from "./init.ts";
 
 const scaffold = (name: string) => {
   const dir = path.join(mkdtempSync(path.join(tmpdir(), "jigs-init-")), name);
@@ -45,8 +37,6 @@ test("scaffolds a factory that can be installed and built", async () => {
       "docker-compose.yml",
       "jigs.config.test.ts",
       "jigs.config.ts",
-      "jigs/routines.ts",
-      "jigs/steps.ts",
       "nitro.config.ts",
       "package.json",
       "workflows/hello/hello.ts",
@@ -61,7 +51,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(pkg.dependencies.workflow).toBeDefined();
   expect(pkg.dependencies["@workflow/world-postgres"]).toBeDefined();
   expect(pkg.dependencies["@workflow/web"]).toBeDefined();
-  expect(pkg.dependencies.hono).toBeUndefined();
+  expect(pkg.dependencies.express).toBeUndefined();
   // The scaffolded ids test needs its runner.
   expect(pkg.devDependencies.vitest).toBeDefined();
   expect(pkg.scripts.test).toBe("vitest run");
@@ -99,26 +89,19 @@ test("every placeholder a template carries is filled in", async () => {
   }
 });
 
-// Root-anchored specifiers are the factory's own import spelling; the map has
-// to mirror the directory layout exactly, because an alias pointing at another
-// real file would silently re-address the steps declared in it. Plain string
-// targets only: a conditional target keyed on "node" resolves in neither tsc
-// nor the workflows bundle, whose esbuild conditions are default, import and
-// workflow.
-test("the scaffold's imports map mirrors its layout with plain .ts targets", async () => {
+// Types come from the package, so a fresh clone typechecks before any build;
+// code runs from the copies the build writes into .jigs/, so each step's
+// durable ID is a path in the factory.
+test("the scaffold's imports map takes types from the package and code from .jigs/", async () => {
   const dir = scaffold("iota");
   await init(dir);
 
   const pkg = JSON.parse(readFileSync(path.join(dir, "package.json"), "utf8"));
-  expect(pkg.imports).toEqual({ "#jigs/*": "./jigs/*.ts" });
-  for (const target of Object.values(pkg.imports as Record<string, unknown>)) {
-    expect(typeof target, String(target)).toBe("string");
-    expect(String(target).endsWith(".ts"), String(target)).toBe(true);
-  }
-  expect(existsSync(path.join(dir, "jigs", "steps.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "jigs", "routines.ts"))).toBe(true);
-  expect(existsSync(path.join(dir, "jigs", "index.ts"))).toBe(false);
-  expect(existsSync(path.join(dir, "jigs.ts"))).toBe(false);
+  expect(pkg.imports).toEqual({
+    "#jigs/steps": { types: "@jigs-ai/jigs/factory/steps", default: "./.jigs/steps.ts" },
+    "#jigs/routines": { types: "@jigs-ai/jigs/factory/routines", default: "./.jigs/routines.ts" },
+  });
+  expect(existsSync(path.join(dir, "jigs"))).toBe(false);
 });
 
 // Both spellings of a relative parent import: `from "../x"` and the dynamic
@@ -127,8 +110,8 @@ test("the scaffold's imports map mirrors its layout with plain .ts targets", asy
 const RELATIVE_PARENT_IMPORT = /(?:from|import\s*\()\s*["']\.\.\//;
 
 test("the relative-import guard catches both import spellings", () => {
-  expect('import { a } from "../../jigs/steps.ts";').toMatch(RELATIVE_PARENT_IMPORT);
-  expect('const a = await import("../../jigs/steps.ts");').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('import { a } from "../../shared/steps.ts";').toMatch(RELATIVE_PARENT_IMPORT);
+  expect('const a = await import("../../shared/steps.ts");').toMatch(RELATIVE_PARENT_IMPORT);
   expect('import { a } from "#jigs/steps";').not.toMatch(RELATIVE_PARENT_IMPORT);
   expect('const a = await import("./workflows/hello/hello.ts");').not.toMatch(
     RELATIVE_PARENT_IMPORT,
@@ -161,36 +144,10 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   const tsconfig = readFileSync(path.join(dir, "tsconfig.json"), "utf8");
   const { include, exclude } = JSON.parse(tsconfig) as { include: string[]; exclude: string[] };
   // A recipe's tests sit in nested workflow directories.
-  expect(include).toEqual(expect.arrayContaining(["workflows/**/*.ts", "jigs/**/*.ts"]));
+  expect(include).toEqual(expect.arrayContaining(["workflows/**/*.ts"]));
   expect(exclude).toEqual(["node_modules", ".jigs"]);
   expect(tsconfig).toContain('"jigs.config.test.ts"');
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');
-});
-
-// Each exported "use step" function's name is half a durable step id, so the
-// scaffold's wrappers are the ids every factory's World records. e2e reads
-// them back out of a real build and diffs them against e2e/expected-ids.linear-ticket-to-pr.txt;
-// here the template is held to that same recorded list without a build.
-test("the wrappers scaffolded are the step ids this repo has recorded", async () => {
-  const dir = scaffold("theta");
-  await init(dir);
-
-  const wrappers = readFileSync(path.join(dir, "jigs", "steps.ts"), "utf8");
-  const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
-    .map((match) => `step//./jigs/steps//${match[1]}`)
-    .sort();
-  expect(steps).toHaveLength(31);
-  const recorded = readFileSync(
-    path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
-    "utf8",
-  )
-    .split("\n")
-    .filter((line) => line.startsWith("step//./jigs/steps//"))
-    .sort();
-  expect(recorded).toEqual(steps);
-  // Every wrapper has its directive: one without it compiles clean and runs
-  // unmemoized.
-  expect(wrappers.match(/"use step";/g)).toHaveLength(steps.length);
 });
 
 test("the docker project and ports all carry the factory", async () => {
@@ -240,7 +197,7 @@ test("an existing file is kept, never overwritten", async () => {
   await init(dir);
   writeFileSync(
     path.join(dir, "jigs.config.ts"),
-    "export default { service: { port: 9999 }, workflows: {} };",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { port: 9999 }, workflows: {} };",
   );
 
   const again = await init(dir);
@@ -263,6 +220,7 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
+    "pnpm exec jigs hub connect <url> <token>",
     "pnpm exec jigs up",
     "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",
@@ -276,44 +234,14 @@ test("the next steps are printed, not run", async () => {
   expect(existsSync(path.join(dir, ".env"))).toBe(false);
 });
 
-test("the scaffold states an identity and leaves the approval to its default", async () => {
-  const patFactory = scaffold("pat-factory");
-  await init(patFactory);
-  const pat = readFileSync(path.join(patFactory, "jigs.config.ts"), "utf8");
-  expect(pat).toContain('identities: [{ mode: "pat" }]');
-  expect(pat).not.toContain("merge");
-
-  const appFactory = scaffold("app-factory");
-  const lines: string[] = [];
-  await initFactory({ cwd: appFactory, out: (line) => lines.push(line), identity: APP });
-  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
-  expect(app).toContain('mode: "app"');
-  expect(app).toContain("installations: { salimhamed: 162033982 }");
-  expect(app).toContain('operator: "salimhamed"');
-  expect(app).not.toContain("merge");
-  // App mode needs the key locked down.
-  expect(lines.join("\n")).toContain("chmod 600 github-app.private-key.pem");
-  // The App's private key is a credential, and a scaffolded repo is a git repo.
-  expect(readFileSync(path.join(appFactory, ".gitignore"), "utf8")).toContain("*.private-key.pem");
+test("the scaffold leaves GitHub to its hub and the approval to its default", async () => {
+  const dir = scaffold("github-factory");
+  await init(dir);
+  const config = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
+  expect(config).toContain('// github: { operator: "your-github-login" },');
+  expect(config).not.toContain("merge");
 });
 
-// What the scaffolded jigs.config.test.ts asserts, evaluated here: the file
-// itself cannot run until the factory installs jigs, and a scaffold whose own
-// test is red on day one is the failure this guards.
-const scaffoldedExpectations = (dir: string) => {
-  const text = readFileSync(path.join(dir, "jigs.config.test.ts"), "utf8");
-  const [, github, linear] =
-    /expect\(factory\.github\)\.toEqual\((.+?)\);\n\s*expect\(factory\.linear\)\.toEqual\((.+?)\);/s.exec(
-      text,
-    ) ?? [];
-  if (github === undefined || linear === undefined) {
-    throw new Error("the scaffolded test no longer asserts the identities");
-  }
-  return { github: evaluate(github), linear: evaluate(linear) };
-};
-
-// Both files carry settings objects rather than data formats, so both are read
-// the same way: as the literal they are.
 const evaluate = (literal: string): unknown => new Function(`return ${literal}`)();
 
 // The scaffolded config is TypeScript that imports jigs, so it is read the way
@@ -324,102 +252,17 @@ const scaffoldedConfig = (dir: string) => {
     text.indexOf("defineFactory({") + "defineFactory(".length,
     text.lastIndexOf(")"),
   );
-  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as {
-    github: unknown;
-    linear: unknown;
-  };
+  return evaluate(body.replace(/workflows:\s*\{[^}]*\},?/s, "")) as Record<string, unknown>;
 };
 
-test.each([
-  ["pat", "key"],
-  ["app", "app"],
-] as const)(
-  "the %s/%s scaffold's own test asserts what its config declares",
-  async (mode, linearMode) => {
-    const dir = scaffold(`${mode}-agreement`);
-    await initFactory({
-      cwd: dir,
-      out: () => {},
-      identity: mode === "app" ? APP : { mode: "pat" },
-      linearIdentity: { mode: linearMode },
-    });
-    const expectations = scaffoldedExpectations(dir);
-    const config = scaffoldedConfig(dir);
-    expect(config.github).toEqual(expectations.github);
-    expect(config.linear).toEqual({ identity: { mode: linearMode } });
-    expect(config.linear).toEqual(expectations.linear);
-    // And what it declares is what jigs accepts, so the first `jigs up` loads.
-    const parsed = parseFactoryConfig({ service: { dashboardPort: 9090 }, ...config });
-    expect(parsed.github).toEqual({
-      ...(expectations.github as object),
-      mergeApproval: mode === "app" ? "review" : "label",
-    });
-    expect(parsed.linear).toEqual(expectations.linear);
-  },
-);
-
-test("the scaffold names its Linear identity and the variables that mode reads", async () => {
-  const keyFactory = scaffold("key-factory");
-  await init(keyFactory);
-  const key = readFileSync(path.join(keyFactory, "jigs.config.ts"), "utf8");
-  expect(key).toContain('identity: { mode: "key" }');
-  expect(key).toContain("LINEAR_API_KEY");
-
-  const appFactory = scaffold("linear-app-factory");
-  await initFactory({ cwd: appFactory, out: () => {}, linearIdentity: { mode: "app" } });
-  const app = readFileSync(path.join(appFactory, "jigs.config.ts"), "utf8");
-  expect(app).toContain('identity: { mode: "app" }');
-  expect(app).toContain("LINEAR_CLIENT_ID and LINEAR_CLIENT_SECRET");
-  // Both modes' slots are scaffolded, so switching mode needs no new .env line.
-  const example = readFileSync(path.join(appFactory, ".env.example"), "utf8");
-  for (const name of ["LINEAR_API_KEY=", "LINEAR_CLIENT_ID=", "LINEAR_CLIENT_SECRET="])
-    expect(example).toContain(name);
-});
-
-test("app mode is refused rather than stubbed when a fact is missing", () => {
-  expect(() => resolveIdentityOptions("app", {})).toThrow("--github-app-id");
-  expect(() => resolveIdentityOptions("app", { githubAppId: "1" })).toThrow(
-    "--github-app-installation",
-  );
-  expect(() =>
-    resolveIdentityOptions("app", {
-      githubAppId: "0",
-      githubAppInstallation: ["salimhamed=2"],
-      githubAppPrivateKeyPath: "k.pem",
-      githubOperatorLogin: "salimhamed",
-    }),
-  ).toThrow("--github-app-id must be a positive whole number");
-  expect(resolveIdentityOptions("pat", {})).toEqual({ mode: "pat" });
-  expect(
-    resolveIdentityOptions("app", {
-      githubAppId: "4958325",
-      githubAppInstallation: ["salimhamed=162033982"],
-      githubAppPrivateKeyPath: "github-app.private-key.pem",
-      githubOperatorLogin: "salimhamed",
-      gitCoAuthor: "Salim Hamed <salim@example.com>",
-    }),
-  ).toEqual({ ...APP, coAuthor: "Salim Hamed <salim@example.com>" });
-});
-
-test("repeatable installations scaffold a loadable account map", async () => {
-  const options = {
-    githubAppId: "1",
-    githubAppPrivateKeyPath: "app.pem",
-    githubOperatorLogin: "human",
-    githubAppInstallation: ["some-org=10", "Other=20"],
-  };
-  const identity = resolveIdentityOptions("app", options);
-  expect(identity).toMatchObject({ installations: { "some-org": 10, Other: 20 } });
-  const dir = scaffold("installation-map");
-  await initFactory({ cwd: dir, out: () => {}, identity });
-  expect(
-    parseFactoryConfig({ service: { dashboardPort: 9090 }, ...scaffoldedConfig(dir) }).github
-      .identities,
-  ).toEqual([identity]);
-  expect(() =>
-    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["Other=1", "other=2"] }),
-  ).toThrow("duplicate");
-  expect(() =>
-    resolveIdentityOptions("app", { ...options, githubAppInstallation: ["bad"] }),
-  ).toThrow("<account>=<id>");
+test("the scaffold's config is what jigs accepts, so the first `jigs up` loads", async () => {
+  const dir = scaffold("accepted");
+  await init(dir);
+  const parsed = parseFactoryConfig({
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 9090 },
+    ...scaffoldedConfig(dir),
+  });
+  expect(parsed.github).toEqual({ mergeApproval: "review" });
+  expect(parsed.linear).toEqual({});
 });

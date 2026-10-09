@@ -155,48 +155,44 @@ function editableBindings(text: string, manualEdit?: string) {
   };
 }
 
-export function upsertBinding(text: string, name: string, remote: string): string {
+export function upsertBinding(
+  text: string,
+  name: string,
+  entry: { remote: string; installationName: string },
+): string {
+  const initializer = `{ remote: ${JSON.stringify(entry.remote)}, installationName: ${JSON.stringify(entry.installationName)} }`;
   const {
     source,
     object,
     property: bindingsProperty,
     insertedBindings,
     fail,
-  } = editableBindings(
-    text,
-    `the binding to add: \`${JSON.stringify(name)}: { remote: ${JSON.stringify(remote)} }\``,
-  );
+  } = editableBindings(text, `the binding to add: \`${JSON.stringify(name)}: ${initializer}\``);
   const property = namedProperty(object, name) as PropertyAssignment | undefined;
   if (!property) {
     if (insertedBindings) {
-      object.addPropertyAssignment({
-        name: propertyKey(name),
-        initializer: `{ remote: ${JSON.stringify(remote)} }`,
-      });
+      object.addPropertyAssignment({ name: propertyKey(name), initializer });
       return source.getFullText();
     }
-    return insertEntry(
-      text,
-      object,
-      bindingsProperty,
-      `${propertyKey(name)}: { remote: ${JSON.stringify(remote)} },`,
-    );
-  } else {
-    const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
-    const remoteProperty = namedProperty(binding, "remote") as PropertyAssignment | undefined;
-    if (remoteProperty) {
-      const value = remoteProperty.getInitializer();
-      if (!value || !Node.isStringLiteral(value))
-        fail(`binding ${name}'s remote is not a string literal`);
-      if ((value as StringLiteral).getLiteralValue() === remote) return text;
-      remoteProperty.setInitializer(JSON.stringify(remote));
-    } else
-      binding.addPropertyAssignment({
-        name: "remote",
-        initializer: JSON.stringify(remote),
-      });
+    return insertEntry(text, object, bindingsProperty, `${propertyKey(name)}: ${initializer},`);
   }
-  return source.getFullText();
+  const binding = property.getInitializerIfKindOrThrow(SyntaxKind.ObjectLiteralExpression);
+  let changed = false;
+  for (const [key, wanted] of Object.entries(entry)) {
+    const existing = namedProperty(binding, key) as PropertyAssignment | undefined;
+    if (!existing) {
+      binding.addPropertyAssignment({ name: key, initializer: JSON.stringify(wanted) });
+      changed = true;
+      continue;
+    }
+    const value = existing.getInitializer();
+    if (!value || !Node.isStringLiteral(value))
+      fail(`binding ${name}'s ${key} is not a string literal`);
+    if ((value as StringLiteral).getLiteralValue() === wanted) continue;
+    existing.setInitializer(JSON.stringify(wanted));
+    changed = true;
+  }
+  return changed ? source.getFullText() : text;
 }
 
 export function removeBinding(text: string, name: string): string {
@@ -228,4 +224,35 @@ export function addWorkflow(text: string, name: string): string | undefined {
   validate(workflows, "workflows");
   if (namedProperty(workflows, name)) return undefined;
   return insertEntry(text, workflows, property, workflowEntry(name));
+}
+
+/** Point the factory at its hub, adding the `hub` section when there is none. */
+export function setHubUrl(text: string, url: string): string {
+  const fail = (reason: string): never => {
+    throw new JigsError(
+      `Cannot set the hub in ${FACTORY_CONFIG_FILE}: ${reason}.`,
+      `no files were changed\nset it by hand: \`hub: { url: ${JSON.stringify(url)} },\``,
+    );
+  };
+  const { source, root } = editableConfig(text, fail);
+  const property = namedProperty(root, "hub");
+  if (!property) {
+    const entry = `hub: { url: ${JSON.stringify(url)} },`;
+    const first = root.getProperties()[0];
+    if (!first) return fail("the configuration object is empty");
+    // Before any comment above the first property, which belongs to it.
+    const at = first.getLeadingCommentRanges()[0]?.getPos() ?? first.getStart();
+    const separator =
+      text.lastIndexOf("\n", at - 1) < root.getStart() ? " " : `\n${leadingWhitespace(text, at)}`;
+    return `${text.slice(0, at)}${entry}${separator}${text.slice(at)}`;
+  }
+  const hub = property.getInitializer();
+  if (!hub || !Node.isObjectLiteralExpression(hub)) return fail("hub is not a direct object");
+  const urlProperty = namedProperty(hub, "url");
+  const value = urlProperty?.getInitializer();
+  if (!urlProperty || !value || !Node.isStringLiteral(value))
+    return fail("hub.url is not a string literal");
+  if (value.getLiteralValue() === url) return text;
+  urlProperty.setInitializer(JSON.stringify(url));
+  return source.getFullText();
 }

@@ -1,22 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { FatalError } from "workflow";
+import { AGENT_TOKEN_MIN_LIFETIME_MS } from "../../../providers/credentials.ts";
 import type { GithubAuth } from "../../../providers/github-auth.ts";
 import { git, makeTmpDir, removeTmpDir } from "../../../test-fixtures.ts";
 import { type Harness, harnesses } from "../../../workflow/agents/harness-config.ts";
-import {
-  AGENT_TOKEN_MIN_LIFETIME_MS,
-  type AgentGithubDeps,
-  agentGithubEnv,
-} from "./github-access.ts";
+import { type AgentGithubDeps, agentGithubEnv } from "./github-access.ts";
 
-const APP = {
-  mode: "app",
-  appId: 1,
-  installationId: 2,
-  privateKeyPath: "/key.pem",
-  operator: "salimhamed",
-} as const;
 const TOKEN = "ghs_agent_token";
 
 let tmp: string;
@@ -25,20 +14,26 @@ beforeEach(() => {
 });
 afterEach(() => removeTmpDir(tmp));
 
-function deps(identity: GithubAuth["identity"] = APP, remote = "git@github.com:acme/api.git") {
+function deps(
+  account = "acme",
+  bot: GithubAuth["bot"] = async () => ({ login: "jigs-dev[bot]", id: 4242 }),
+) {
   const bearer = vi.fn(async () => TOKEN);
-  const auth = vi.fn((_owner: string): GithubAuth => ({ identity, bearer }));
-  const fake: AgentGithubDeps = {
-    remoteUrl: async () => remote,
-    auth,
-    bot: async () => ({ login: "jigs-dev[bot]", id: 4242 }),
-  };
+  const auth = vi.fn(
+    (_installationName: string): GithubAuth => ({
+      bearer,
+      invalidate: () => {},
+      bot,
+      account: async () => account,
+    }),
+  );
+  const fake: AgentGithubDeps = { auth };
   return { fake, auth, bearer };
 }
 
-const optedIn = harnesses.claude({ model: "m", github: true });
+const optedIn = harnesses.claude({ model: "m", github: { installationName: "github-acme" } });
 const envFor = (harness: Harness, fake: AgentGithubDeps, base: Record<string, string> = {}) =>
-  agentGithubEnv({ harness, cwd: tmp }, base, fake);
+  agentGithubEnv(harness, base, fake);
 
 // git run under nothing but the agent's environment.
 function gitUnder(env: Record<string, string>) {
@@ -64,8 +59,11 @@ test("an agent whose harness does not opt in gets nothing", async () => {
 
 test("an opted-in agent gets the token and the bot as author", async () => {
   const { fake, auth } = deps();
-  const env = await envFor(harnesses.codex({ model: "m", github: true }), fake);
-  expect(auth).toHaveBeenCalledWith("acme");
+  const env = await envFor(
+    harnesses.codex({ model: "m", github: { installationName: "github-acme" } }),
+    fake,
+  );
+  expect(auth).toHaveBeenCalledWith("github-acme");
   expect(env).toMatchObject({
     GH_TOKEN: TOKEN,
     GIT_AUTHOR_NAME: "jigs-dev[bot]",
@@ -85,11 +83,11 @@ test("the committer, user and signing settings stay the operator's own", async (
 test("the token has close to a full hour left when the step starts", async () => {
   const { fake, bearer } = deps();
   await envFor(optedIn, fake);
-  expect(bearer).toHaveBeenCalledWith(AGENT_TOKEN_MIN_LIFETIME_MS);
-  expect(AGENT_TOKEN_MIN_LIFETIME_MS).toBeGreaterThanOrEqual(55 * 60_000);
+  expect(bearer).toHaveBeenCalledWith(AGENT_TOKEN_MIN_LIFETIME_MS.github);
+  expect(AGENT_TOKEN_MIN_LIFETIME_MS.github).toBeGreaterThanOrEqual(55 * 60_000);
 });
 
-test("git reaches the owner's repositories over HTTPS with the token, from the environment alone", async () => {
+test("git reaches the installation account's repositories over HTTPS with the token, from the environment alone", async () => {
   const run = gitUnder(await envFor(optedIn, deps().fake));
   for (const remote of ["git@github.com:acme/api.git", "ssh://git@github.com/acme/api.git"])
     expect(run("ls-remote", "--get-url", remote)).toBe("https://github.com/acme/api.git");
@@ -100,7 +98,7 @@ test("git reaches the owner's repositories over HTTPS with the token, from the e
   expect(git(tmp, "config", "--local", "--list")).not.toContain("extraheader");
 });
 
-test("another owner's repositories keep their transport and never see the token", async () => {
+test("another account's repositories keep their transport and never see the token", async () => {
   const run = gitUnder(await envFor(optedIn, deps().fake));
   expect(run("ls-remote", "--get-url", "git@github.com:other/dep.git")).toBe(
     "git@github.com:other/dep.git",
@@ -129,40 +127,35 @@ test("git settings already in the agent's environment keep their place", async (
   );
 });
 
-test("github with an owner acts on that account, with no checkout needed", async () => {
-  const { fake, auth } = deps();
-  const remoteUrl = vi.fn();
-  await envFor(harnesses.claude({ model: "m", github: { owner: "Other" } }), {
-    ...fake,
-    remoteUrl,
-  });
-  expect(auth).toHaveBeenCalledWith("Other");
-  expect(remoteUrl).not.toHaveBeenCalled();
+test("git setup covers the account the hub names for the installation", async () => {
+  const run = gitUnder(await envFor(optedIn, deps("other-org").fake));
+  expect(run("ls-remote", "--get-url", "git@github.com:other-org/api.git")).toBe(
+    "https://github.com/other-org/api.git",
+  );
+  expect(run("ls-remote", "--get-url", "git@github.com:acme/api.git")).toBe(
+    "git@github.com:acme/api.git",
+  );
 });
 
-test("github: true outside a github.com checkout asks for the owner", async () => {
-  const { fake } = deps(APP, "https://gitlab.com/acme/api.git");
-  await expect(envFor(optedIn, fake)).rejects.toThrow("github: { owner }");
-});
-
-test("with a personal access token, an opted-in agent fails before it starts, without a retry", async () => {
-  const { fake, bearer } = deps({ mode: "pat" });
-  const failure = await envFor(optedIn, fake).catch((err: unknown) => err);
-  expect(failure).toMatchObject({
-    message: expect.stringContaining("needs a GitHub App identity"),
-  });
-  expect(FatalError.is(failure)).toBe(true);
-  expect(bearer).not.toHaveBeenCalled();
+test("a remote spelling the account in lowercase still goes over HTTPS with the token", async () => {
+  const run = gitUnder(await envFor(optedIn, deps("JungleScout").fake));
+  for (const remote of [
+    "git@github.com:junglescout/api.git",
+    "ssh://git@github.com/junglescout/api.git",
+    "https://github.com/junglescout/api.git",
+    "git@github.com:JungleScout/api.git",
+  ])
+    expect(run("ls-remote", "--get-url", remote)).toBe("https://github.com/JungleScout/api.git");
+  expect(
+    run("config", "--get-urlmatch", "http.extraheader", "https://github.com/JungleScout/api"),
+  ).not.toBeNull();
 });
 
 test("a failure after the token is minted never names it", async () => {
-  const { fake } = deps();
-  const failure = await envFor(optedIn, {
-    ...fake,
-    bot: async () => {
-      throw new Error("GitHub API 502 on /users/jigs-dev[bot]");
-    },
-  }).catch((err: unknown) => err);
+  const { fake } = deps(undefined, async () => {
+    throw new Error("the hub answered 502");
+  });
+  const failure = await envFor(optedIn, fake).catch((err: unknown) => err);
   expect(String(failure)).toContain("502");
   expect(String(failure)).not.toContain(TOKEN);
 });

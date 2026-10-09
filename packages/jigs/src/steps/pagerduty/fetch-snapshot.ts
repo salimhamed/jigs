@@ -2,7 +2,7 @@
 // every step in one activation sees the same incident, and a resumed run
 // reads it afresh.
 
-import { pagerDutyClientFor } from "../../providers/pagerduty.ts";
+import { pagerDutyFor } from "../../providers/pagerduty.ts";
 import { type IncidentSnapshot, toIncidentSnapshot } from "../../workflow/pagerduty/snapshot.ts";
 
 /**
@@ -11,8 +11,14 @@ import { type IncidentSnapshot, toIncidentSnapshot } from "../../workflow/pagerd
  *
  * @group Read
  */
-export async function fetchIncidentSnapshot(incidentId: string): Promise<IncidentSnapshot> {
-  const raw = await pagerDutyClientFor().getIncident(incidentId);
+export async function fetchIncidentSnapshot({
+  installationName,
+  incidentId,
+}: {
+  installationName: string;
+  incidentId: string;
+}): Promise<IncidentSnapshot> {
+  const raw = await pagerDutyFor(installationName).getIncident(incidentId);
   const snapshot = toIncidentSnapshot(raw, new Date().toISOString());
   console.log(
     `[incident snapshot] fetched incident=${incidentId} number=${snapshot.number} status=${snapshot.status} urgency=${snapshot.urgency} assignees=${snapshot.assignees.length}`,

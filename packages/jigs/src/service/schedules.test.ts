@@ -202,12 +202,11 @@ test("a failed preflight is logged with its repairs under the schedule's name, a
         ok: false,
         checks: [
           {
-            id: "github.identity",
-            label: "GitHub identity",
+            id: "github.installations",
+            label: "GitHub installations",
             ok: false,
-            reason:
-              "github.identities uses pat but GITHUB_TOKEN is not set in the service's environment",
-            repair: "set GITHUB_TOKEN in the factory repo's .env",
+            reason: "the hub gave no GitHub token: 401 Unauthorized",
+            repair: "check hub.url in jigs.config.ts and that the hub is running",
           },
         ],
       },
@@ -215,7 +214,7 @@ test("a failed preflight is logged with its repairs under the schedule's name, a
     log: (line) => lines.push(line),
   });
   expect(lines).toEqual([
-    "[schedule] nightly not fired: preflight failed\nGitHub identity: github.identities uses pat but GITHUB_TOKEN is not set in the service's environment\n  → set GITHUB_TOKEN in the factory repo's .env",
+    "[schedule] nightly not fired: preflight failed\nGitHub installations: the hub gave no GitHub token: 401 Unauthorized\n  → check hub.url in jigs.config.ts and that the hub is running",
   ]);
 });
 

@@ -1,9 +1,12 @@
 import path from "node:path";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
-import { parseGithubRemote } from "../providers/github-webhook.ts";
+import { githubGet } from "../providers/github-api.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
+import { parseGithubRemote } from "../providers/github-remote.ts";
+import { HubResponseError, hubRefused } from "../providers/hub.ts";
 import { hasBindingClone } from "../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
@@ -11,7 +14,6 @@ import {
   type BindingEntry,
   FACTORY_CONFIG_FILE,
   type FactoryConfig,
-  installationFor,
 } from "../workflow/factory-schema.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { type Check, type CheckResult, failedCheck } from "./check.ts";
@@ -53,13 +55,13 @@ export function bindingChecks(options: BindingChecksOptions): Check[] {
   return (options.names ?? Object.keys(config.bindings)).map((name) => ({
     id: `binding.${name}`,
     label: `binding ${name}`,
-    run: () => checkBinding(factoryRoot, config, name, config.bindings[name]),
+    run: () => checkBinding(options.context, factoryRoot, name, config.bindings[name]),
   }));
 }
 
 async function checkBinding(
+  ctx: FactoryContext,
   factoryRoot: string,
-  config: FactoryConfig,
   name: string,
   binding: BindingEntry | undefined,
 ): Promise<CheckResult> {
@@ -75,21 +77,6 @@ async function checkBinding(
 
   const copyFailure = checkCopySources(factoryRoot, name, binding.copy);
   if (copyFailure !== null) return copyFailure;
-
-  const account = parseGithubRemote(binding.remote)?.owner;
-  if (account) {
-    try {
-      installationFor(config.github.identities, account);
-    } catch (err) {
-      if (err instanceof JigsError)
-        return {
-          ok: false,
-          reason: err.message,
-          repair: err.hint ?? "repair github installations",
-        };
-      throw err;
-    }
-  }
 
   // A binding declared while the service was running has no clone, and the
   // worktree request would be the first thing to say so — mid-run.
@@ -108,10 +95,39 @@ async function checkBinding(
     return {
       ok: false,
       reason: `git could not reach ${binding.remote}: ${stderr}`,
-      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or GITHUB_TOKEN in ${SERVICE_ENV_FILE}), then: \`${RESTART_SERVICE}\``,
+      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or a git credential helper for an https remote), then: \`${RESTART_SERVICE}\``,
     };
   }
-  return { ok: true };
+  return checkInstallationReach(ctx, name, binding);
+}
+
+// Pushes go over git, but pull requests, labels and wakes go through the
+// binding's GitHub installation, which may not include the repository.
+async function checkInstallationReach(
+  ctx: FactoryContext,
+  name: string,
+  { remote, installationName }: BindingEntry,
+): Promise<CheckResult> {
+  const repository = parseGithubRemote(remote);
+  if (repository === null) return { ok: true };
+  const slug = `${repository.owner}/${repository.repo}`;
+  try {
+    await githubGet(installationName, `/repos/${slug}`, ctx);
+    return { ok: true };
+  } catch (err) {
+    if (err instanceof HubResponseError)
+      return hubRefused(`the hub gave no token for GitHub installation ${installationName}`, err);
+    const missing = err instanceof GitHubApiError && err.status === 404;
+    return {
+      ok: false,
+      reason: missing
+        ? `GitHub installation ${installationName} cannot reach ${slug}`
+        : `could not read ${slug} through GitHub installation ${installationName}: ${err instanceof Error ? err.message : String(err)}`,
+      repair: missing
+        ? `in GitHub, give installation ${installationName} access to ${slug}, or set bindings.${name}.installationName in ${FACTORY_CONFIG_FILE} to an installation that has it, then: \`pnpm exec jigs up\``
+        : "retry: `pnpm exec jigs doctor`, and check GitHub's status page if it repeats",
+    };
+  }
 }
 
 // Provisioning would refuse the same entries, but only after the run started.

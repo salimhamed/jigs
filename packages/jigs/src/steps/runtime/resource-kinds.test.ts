@@ -34,7 +34,6 @@ const at = new Date("2026-09-25T00:00:00.000Z");
 beforeEach(() => {
   tmp = mkdtempSync(path.join(tmpdir(), "jigs-kinds-test-"));
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   github = fakeGithub();
   ({ repoDir, worktreesDir } = makeClonedBinding(tmp));
 });

@@ -173,9 +173,10 @@ export function startAutomaticRelease(
         },
       );
       if (stopped) return;
-      deps.log(
-        `[release] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
-      );
+      if (report.considered > 0)
+        deps.log(
+          `[release] reconciled ${report.considered}: ${report.released} released, ${report.kept} kept, ${report.busy} active, ${report.failed} failed`,
+        );
     } catch (error) {
       deps.warn(`[release] reconciliation failed: ${String(error)}`);
     } finally {

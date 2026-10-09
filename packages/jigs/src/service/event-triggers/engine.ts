@@ -16,8 +16,14 @@ import {
   OCCURRENCE_ATTRIBUTE,
   runStatuses,
 } from "../runs.ts";
+import { worthRetrying } from "../worth-retrying.ts";
 import { tally } from "./capacity.ts";
-import { SOURCES, type SourceOccurrence, type SourceRegistry } from "./sources.ts";
+import {
+  type PushedEvent,
+  SOURCES,
+  type SourceOccurrence,
+  type SourceRegistry,
+} from "./sources.ts";
 import { DELIVERY_SETTLE_MS, startConfirmation } from "./start-confirmation.ts";
 import { type Occurrence, type TriggerMarker, type TriggerStore, triggerStore } from "./store.ts";
 import { issues, resolveTrigger, type ValidTrigger } from "./validate.ts";
@@ -40,18 +46,24 @@ export interface TriggerDeps {
   log?: (line: string) => void;
 }
 
-/** One factory's valid event triggers, ready to poll, take pushes and start runs. */
+/** One factory's valid event triggers, ready to take pushes and start runs. */
 export interface TriggerEngine {
   readonly triggers: ReadonlyArray<{ name: string; provider: Provider }>;
   /** Write each trigger's first-enabled marker, then begin starting any leftover pending occurrence. */
   arm(): Promise<void>;
-  poll(name: string): Promise<void>;
-  /** Record the occurrence a pushed event is for, and return the triggers that took it. */
-  push(provider: Provider, event: unknown): Promise<string[]>;
+  /**
+   * Record the occurrence a pushed event is for, and return the triggers that took it. Rejects
+   * when a trigger could not read the event, after the others have taken it.
+   */
+  push(provider: Provider, event: PushedEvent): Promise<string[]>;
   /** Start waiting occurrences, oldest first, up to each trigger's cap. */
   drain(): Promise<void>;
   /** Start nothing more, and settle once the drain in flight has. */
   stop(): Promise<void>;
+  /** The rows this factory's triggers on `provider` recorded for the occurrence `key`. */
+  recorded(provider: Provider, key: string): Promise<Occurrence[]>;
+  /** Skip a recorded row no start has claimed, so it never starts. False when one has. */
+  withdraw(row: Pick<Occurrence, "trigger" | "occurrence">): Promise<boolean>;
 }
 
 interface Armed extends ValidTrigger {
@@ -104,14 +116,13 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }
     armed.push(resolved);
   }
-  const byName = new Map(armed.map((entry) => [entry.name, entry]));
 
   let stopped = false;
   let marking: Promise<void> | undefined;
   let chain: Promise<void> = Promise.resolve();
 
-  // Polls and pushes wait on this alone, never on a drain: a restart with a
-  // backlog of pending rows must not hold a provider's push past its deadline.
+  // Pushes wait on this alone, never on a drain: a restart with a backlog of
+  // pending rows must not hold up the hub client's batch of events.
   const markers = () =>
     (marking ??= (async () => {
       const at = now();
@@ -122,14 +133,14 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     }));
 
   // Occurrences before the trigger was first enabled are not its business at
-  // all; ones older than the lookback are recorded so they are never started.
+  // all, and the lookback cannot say so: a service down while a trigger was
+  // added gets the hub's backlog on restart, and events in it from before the
+  // trigger existed must not start runs however recent. Ones older than the
+  // lookback are recorded so they are never started.
   // The comparison is by whole second, since some providers stamp only seconds
   // and an occurrence in the second of enabling must not read as before it.
-  async function observe(
-    entry: Armed,
-    seen: SourceOccurrence,
-    occurrence: string,
-  ): Promise<boolean> {
+  async function observe(entry: Armed, seen: SourceOccurrence): Promise<boolean> {
+    const occurrence = seen.key;
     const enabledAt = entry.marker?.enabledAt;
     if (enabledAt === undefined || seen.at.getTime() < floorToSecond(enabledAt)) return false;
     const stale = seen.at.getTime() < now().getTime() - entry.lookbackMinutes * 60_000;
@@ -280,7 +291,7 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
     triggers: armed.map((entry) => ({ name: entry.name, provider: entry.source.provider })),
     async arm() {
       // Before the markers: arm runs once the World is ready, and a failed
-      // marker write, retried by the polls, must not leave the clock unset.
+      // marker write, retried by the next push, must not leave the clock unset.
       bootedAt ??= now();
       await markers();
       void drain();
@@ -290,82 +301,47 @@ export function createTriggerEngine(factory: Factory, deps: TriggerDeps = {}): T
       stopped = true;
       return chain;
     },
-    async poll(name) {
-      const entry = byName.get(name);
-      if (entry === undefined) return;
-      try {
-        await markers();
-        const marker = entry.marker as TriggerMarker;
-        const stored = entry.source.cursor.safeParse(marker.cursor);
-        if (marker.cursor !== null && !stored.success)
-          log(`[trigger] ${name} reads from its lookback: its stored cursor is not one it wrote`);
-        // Nothing before the trigger was enabled is its business, and nothing
-        // older than the lookback would start a run.
-        const floor = new Date(
-          Math.max(
-            floorToSecond(marker.enabledAt),
-            now().getTime() - entry.lookbackMinutes * 60_000,
+    async recorded(provider, key) {
+      const rows = await Promise.all(
+        armed
+          .filter((entry) => entry.source.provider === provider)
+          .map((entry) =>
+            store().byAttribute(entry.name, [occurrenceAttribute(slug(), entry.name, key)]),
           ),
-        );
-        const polled = await entry.source.poll(
-          entry.params,
-          stored.success ? stored.data : undefined,
-          floor,
-        );
-        let fresh = 0;
-        let lost = 0;
-        for (const seen of polled.occurrences) {
-          // An occurrence the source cannot key would fail the same way on every
-          // poll, so it is passed over rather than held for.
-          let occurrence: string;
-          try {
-            occurrence = entry.source.occurrence(seen.inputs);
-          } catch (error) {
-            log(`[trigger] ${name} passed over an occurrence it could not key: ${String(error)}`);
-            continue;
-          }
-          try {
-            if (await observe(entry, seen, occurrence)) fresh += 1;
-          } catch (error) {
-            lost += 1;
-            log(`[trigger] ${name} could not record an occurrence: ${String(error)}`);
-          }
-        }
-        // The cursor stays put, so the next poll reads the lost occurrence
-        // again; what this poll did record is deduplicated then. The whole
-        // trigger holds, not just the lost occurrence's channel: a failed
-        // write is the store failing, which every occurrence shares, and a
-        // held channel delays nothing it already recorded, only re-reads it.
-        if (lost === 0) {
-          await store().advance(name, polled.cursor);
-          entry.marker = { ...marker, cursor: polled.cursor };
-        } else {
-          log(`[trigger] ${name}: ${lost} not recorded, reading them again next poll`);
-        }
-        log(`[trigger] ${name}: polled, ${polled.occurrences.length} seen, ${fresh} new`);
-      } catch (error) {
-        log(`[trigger] ${name} poll failed: ${String(error)}`);
-        return;
-      }
-      await drain();
+      );
+      return rows.flat();
     },
+    withdraw: (row) => store().withdraw(row.trigger, row.occurrence),
     async push(provider, event) {
+      const watching = armed.filter((entry) => entry.source.provider === provider);
+      if (watching.length === 0) return [];
       await markers();
       const taken: string[] = [];
-      for (const entry of armed) {
-        if (entry.source.provider !== provider) continue;
+      const failures: unknown[] = [];
+      for (const entry of watching) {
         try {
           const pushed = await entry.source.fromPush(entry.params, event);
-          if (pushed === null) continue;
-          const occurrence = entry.source.occurrence(pushed.inputs);
-          if (await observe(entry, pushed, occurrence)) taken.push(entry.name);
+          if (pushed !== null && (await observe(entry, pushed))) taken.push(entry.name);
         } catch (error) {
+          if (!worthRetrying(error)) {
+            log(`[trigger] ${entry.name} passed over an event it cannot read: ${String(error)}`);
+            continue;
+          }
+          failures.push(error);
           log(`[trigger] ${entry.name} could not read a pushed event: ${String(error)}`);
         }
       }
-      // Not awaited: a provider wants its answer in seconds, and the row
-      // already recorded is what makes the start certain.
+      // Not awaited: the hub client routes its batch in order, so a start
+      // must not hold up the next event, and the recorded row already makes
+      // the start certain.
       if (taken.length > 0) void drain();
+      // A trigger that could not tell whether the event was its occurrence
+      // must not read as one that passed it over.
+      if (failures.length > 0)
+        throw new AggregateError(
+          failures,
+          `${failures.length} trigger(s) could not read the event`,
+        );
       return taken;
     },
   };

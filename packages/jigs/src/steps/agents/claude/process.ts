@@ -1,8 +1,7 @@
 import { spawn } from "node:child_process";
 import { EventEmitter } from "node:events";
 import { PassThrough } from "node:stream";
-import type { ClaudeCodeSettings, SpawnedProcess, SpawnOptions } from "ai-sdk-provider-claude-code";
-import { processEnv } from "../../../config/factory-context.ts";
+import type { Options, SpawnedProcess, SpawnOptions } from "@anthropic-ai/claude-agent-sdk";
 import { resolveClaudeExecutable } from "../shared/executables.ts";
 import { groupReaper, OWN_GROUP } from "../shared/process-group.ts";
 
@@ -23,7 +22,7 @@ interface ClaudeLaunch {
 
 function spawnClaudeCode(
   options: SpawnOptions,
-  env: Record<string, string>,
+  env: NodeJS.ProcessEnv,
   owner: string,
   cancel: AbortSignal | undefined,
 ): ClaudeLaunch {
@@ -81,7 +80,7 @@ function spawnClaudeCode(
     options.signal.removeEventListener("abort", stop);
   };
 
-  // The SDK closes its reader after the result message, so a failure that
+  // The driver stops reading after the result message, so a failure that
   // lands on this stream afterwards has no listener. Keep it from becoming an
   // uncaught exception; the SDK's own listener still sees it while reading.
   stdout.on("error", () => {});
@@ -117,9 +116,8 @@ function spawnClaudeCode(
     const torndown = options.signal.aborted || stopRequested;
     const failed = !torndown && (code !== 0 || signal !== null);
     if (failed) {
-      // The pinned SDK does not pass its stderr callback into a custom spawn
-      // hook. Put the bounded stderr on the process failure so the provider's
-      // existing classifier and capped-tail formatter still own the error.
+      // The SDK reads no stderr from a custom spawn hook, so the bounded
+      // stderr goes on the process failure the SDK raises from the stream.
       const message = stderr.trim()
         ? `Claude Code process failed. stderr: ${stderr.trim()}`
         : "Claude Code process failed";
@@ -189,7 +187,7 @@ function spawnClaudeCode(
 export const CLAUDE_ENV = ["CLAUDE_CONFIG_DIR"];
 
 /** A Claude Code launch hook that also knows the processes it started. */
-export type ClaudeProcessSpawner = NonNullable<ClaudeCodeSettings["spawnClaudeCodeProcess"]> & {
+export type ClaudeProcessSpawner = NonNullable<Options["spawnClaudeCodeProcess"]> & {
   /**
    * Resolve once every Claude Code this hook started has exited and its process group is
    * stopped. One still running after a short grace is stopped.
@@ -202,7 +200,6 @@ export interface ClaudeLaunchOptions {
   signal?: AbortSignal;
   /** Names the launch in stop diagnostics, such as `Claude Code for run wrun_123`. */
   owner?: string;
-  host?: NodeJS.ProcessEnv;
 }
 
 function exitedWithin(launch: ClaudeLaunch, ms: number): Promise<boolean> {
@@ -216,32 +213,17 @@ function exitedWithin(launch: ClaudeLaunch, ms: number): Promise<boolean> {
   });
 }
 
-// The provider rebuilds the child environment from the host (every
-// ANTHROPIC_*, CLAUDE_*, AWS_* and GOOGLE_* variable among others), so the
-// launch hook replaces it with the step's own. What the SDK itself added, the
-// keys the host does not have, is kept; the SDK also writes its version marker
-// into the host, so that prefix is kept by name.
-export function claudeProcessSpawner(
-  env: Record<string, string>,
-  options: ClaudeLaunchOptions = {},
-): ClaudeProcessSpawner {
-  const { signal, owner = "Claude Code", host = processEnv() } = options;
+// Given `env`, the SDK builds the child's environment from it alone, adding
+// only its own markers, so a host variable the step did not allow never
+// reaches Claude Code.
+export function claudeProcessSpawner(options: ClaudeLaunchOptions = {}): ClaudeProcessSpawner {
+  const { signal, owner = "Claude Code" } = options;
   const live = new Set<ClaudeLaunch>();
   const spawnHook = (spawnOptions: SpawnOptions): SpawnedProcess => {
-    const sdkAdded = Object.entries(spawnOptions.env).filter(
-      (entry): entry is [string, string] =>
-        entry[1] !== undefined &&
-        !(entry[0] in env) &&
-        (!(entry[0] in host) || entry[0].startsWith("CLAUDE_AGENT_SDK_")),
-    );
     const launch = spawnClaudeCode(
       spawnOptions,
-      {
-        ...Object.fromEntries(sdkAdded),
-        ...env,
-        // Replaces any inherited parent-session marker.
-        CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
-      },
+      // Replaces any inherited parent-session marker.
+      { ...spawnOptions.env, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" },
       owner,
       signal,
     );
@@ -262,18 +244,18 @@ export function claudeProcessSpawner(
 }
 
 /**
- * Claude Code settings for one step: the step's environment, and a launch hook that runs Claude
- * in its own process group and stops that group when `signal` aborts. Call the hook's `close`
- * once the model is done.
+ * Claude Agent SDK options for one step: the step's environment, the installed `claude`, and a
+ * launch hook that runs Claude in its own process group and stops that group when `signal`
+ * aborts. Call the hook's `close` once the query is done.
  */
 export function claudeStepSettings(
-  options: ClaudeCodeSettings & { env: Record<string, string> } & Omit<ClaudeLaunchOptions, "host">,
-): ClaudeCodeSettings & { spawnClaudeCodeProcess: ClaudeProcessSpawner } {
+  options: Options & { env: Record<string, string> } & ClaudeLaunchOptions,
+): Options & { spawnClaudeCodeProcess: ClaudeProcessSpawner } {
   const { signal, owner, ...settings } = options;
   return {
     ...settings,
     pathToClaudeCodeExecutable: settings.pathToClaudeCodeExecutable ?? resolveClaudeExecutable(),
-    spawnClaudeCodeProcess: claudeProcessSpawner(settings.env, {
+    spawnClaudeCodeProcess: claudeProcessSpawner({
       ...(signal === undefined ? {} : { signal }),
       ...(owner === undefined ? {} : { owner }),
     }),

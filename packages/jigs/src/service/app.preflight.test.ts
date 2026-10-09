@@ -2,8 +2,6 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { useGithubClient } from "../providers/test-fixtures.ts";
-import { fakeFetch, jsonResponse } from "../providers/test-support.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
@@ -15,6 +13,7 @@ import {
   removeTmpDir,
 } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
+import { appClient } from "./test-fixtures.ts";
 
 // File-scoped so it cannot disturb app.test.ts: the whole point of AC1 is
 // that a refused trigger never reaches start().
@@ -36,40 +35,51 @@ const { createApp } = await import("./app.ts");
 // A fixture rather than a demo: what preflight owes the trigger path is the
 // same whatever workflows a factory declares, and this one declares exactly
 // the requirement the assertions below are about.
-const app = createApp({
-  workflows: {
-    bound: {
-      workflow: async () => undefined,
-      inputs: z.object({}),
-      requires: {
-        bindings: ["api"],
-        agents: { builder: harnesses.claude({ model: "opus" }) },
-        integrations: ["linear", "github"],
+const app = appClient(
+  createApp({
+    workflows: {
+      bound: {
+        workflow: async () => undefined,
+        inputs: z.object({}),
+        requires: {
+          bindings: ["api"],
+          agents: {
+            builder: harnesses.claude({
+              model: "opus",
+              linear: { installationName: "linear-acme" },
+            }),
+          },
+          integrations: ["linear", "github"],
+        },
       },
     },
-  },
-});
+  }),
+);
 
-const inputBoundApp = createApp({
-  workflows: {
-    ship: {
-      workflow: async () => undefined,
-      inputs: z.object({ binding: z.string() }),
-      // Deliberately absent from the fixtures: the run input must replace it.
-      requires: { bindings: ["unrelated"] },
+const inputBoundApp = appClient(
+  createApp({
+    workflows: {
+      ship: {
+        workflow: async () => undefined,
+        inputs: z.object({ binding: z.string() }),
+        // Deliberately absent from the fixtures: the run input must replace it.
+        requires: { bindings: ["unrelated"] },
+      },
     },
-  },
-});
+  }),
+);
 
 // Doctor's schedule half needs a factory that declares one: those checks are
 // the factory's own, so they can only arrive through the app.
-const scheduledApp = createApp({
-  workflows: {
-    bound: { workflow: async () => undefined, inputs: z.object({}) },
-  },
-  schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
-  triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
-});
+const scheduledApp = appClient(
+  createApp({
+    workflows: {
+      bound: { workflow: async () => undefined, inputs: z.object({}) },
+    },
+    schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
+    triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
+  }),
+);
 
 let tmp: string;
 let claudeStub: string;
@@ -111,9 +121,8 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-function seedThreeFailures(): void {
-  vi.stubEnv("LINEAR_API_KEY", "");
-  vi.stubEnv("GITHUB_TOKEN", "");
+function seedFailures(): void {
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
   vi.stubEnv("JIGS_FACTORY_ROOT", seededFactory);
 }
 
@@ -138,8 +147,8 @@ interface Failure {
   repair: string;
 }
 
-test("a trigger with three seeded failures is refused with all three at once", async () => {
-  seedThreeFailures();
+test("a trigger with several seeded failures is refused with all of them at once", async () => {
+  seedFailures();
   const res = await trigger();
   expect(res.status).toBe(424);
 
@@ -151,8 +160,7 @@ test("a trigger with three seeded failures is refused with all three at once", a
   expect(body.error).toBe("preflight failed");
   expect(body.failures.map((failure) => failure.id).sort()).toEqual([
     "binding.api",
-    "github.identity",
-    "linear.identity",
+    "linear.installations",
   ]);
   for (const failure of body.failures) {
     expect(failure.reason).not.toBe("");
@@ -163,7 +171,7 @@ test("a trigger with three seeded failures is refused with all three at once", a
 });
 
 test("the undeclared-binding failure names the exact jigs bind invocation", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await trigger()).json()) as { failures: Failure[] };
   const binding = body.failures.find((failure) => failure.id === "binding.api");
   expect(binding?.repair).toContain("jigs bind");
@@ -184,7 +192,7 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
   const workspace = makeTmpDir();
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { playground: { remote: remoteDir } },
+    bindings: { playground: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   await ensureBindingClone({
@@ -199,8 +207,8 @@ test("an input-driven workflow ignores an unrelated static binding", async () =>
 });
 
 test("GET /api/doctor reports rejected configured credentials without creating a run", async () => {
-  seedThreeFailures();
-  vi.stubEnv("GITHUB_TOKEN", "rejected-token");
+  seedFailures();
+  vi.stubEnv("JIGS_HUB_TOKEN", "rejected-token");
   vi.stubGlobal("fetch", async () =>
     Response.json({ message: "Bad credentials" }, { status: 401 }),
   );
@@ -213,7 +221,7 @@ test("GET /api/doctor reports rejected configured credentials without creating a
   };
   expect(body.ok).toBe(false);
   const failed = body.checks.filter((check) => !("ok" in check && check.ok));
-  expect(failed.map((check) => check.id)).toContain("github.identity");
+  expect(failed.map((check) => check.id)).toContain("github.installations");
   for (const failure of failed) expect(failure.repair).not.toBe("");
   // Doctor reads every workflow's manifest for the harnesses the factory uses.
   expect(body.checks.map((check) => check.id)).toContain("harness.claude-auth");
@@ -227,7 +235,7 @@ test("a green preflight lets the trigger call start()", async () => {
   // ls-remote against the URL, and this one answers offline.
   const { remoteDir } = makeRemoteBackedRepo(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { api: { remote: remoteDir } },
+    bindings: { api: { remote: remoteDir, installationName: "acme" } },
   });
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
@@ -236,21 +244,44 @@ test("a green preflight lets the trigger call start()", async () => {
     repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
     remote: remoteDir,
   });
-  vi.stubEnv("LINEAR_API_KEY", "lin_live");
-  vi.stubEnv("GITHUB_TOKEN", "ghp_live");
+  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.stubGlobal("fetch", async (input: unknown) => {
     const url = String(input);
-    if (url.startsWith("https://api.linear.app/")) {
-      return Response.json({ data: { viewer: { id: "u1", name: "Dev" } } });
+    if (url === "https://hub.example.test/api/factory/tokens/linear") {
+      return Response.json({
+        token: "lin_oauth",
+        expiresAt: "2999-01-01T00:00:00Z",
+        app: { name: "jigs", userId: "app-user" },
+      });
+    }
+    if (url === "https://hub.example.test/api/factory/tokens/github") {
+      return Response.json({
+        token: "ghs_test",
+        expiresAt: "2999-01-01T00:00:00Z",
+        account: "acme",
+        app: { slug: "jigs-dev", botUserId: 1 },
+      });
+    }
+    if (url === "https://hub.example.test/api/factory/status") {
+      return Response.json({
+        factory: { name: "dev" },
+        organization: { name: "Acme" },
+        apps: [
+          {
+            provider: "github",
+            name: "jigs-dev",
+            installations: [{ account: "acme", installationName: "acme" }],
+          },
+          {
+            provider: "linear",
+            name: "jigs",
+            installations: [{ account: "Acme", installationName: "acme-linear" }],
+          },
+        ],
+      });
     }
     throw new Error(`unexpected fetch: ${url}`);
   });
-  const github = fakeFetch((call) =>
-    call.url.pathname === "/user"
-      ? jsonResponse({ login: "dev" })
-      : jsonResponse({ message: `unexpected ${call.url.pathname}` }, 500),
-  );
-  useGithubClient({ fetch: github.fetch });
 
   const res = await trigger();
   expect(res.status).toBe(201);
@@ -263,7 +294,7 @@ test("a green preflight lets the trigger call start()", async () => {
 });
 
 test("doctor reports a malformed schedule and trigger beside the catalog's own checks", async () => {
-  seedThreeFailures();
+  seedFailures();
   const body = (await (await scheduledApp.request("/api/doctor")).json()) as {
     ok: boolean;
     checks: Failure[];
@@ -278,8 +309,6 @@ test("doctor reports a malformed schedule and trigger beside the catalog's own c
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {
-  vi.stubEnv("LINEAR_API_KEY", "lin");
-  vi.stubEnv("GITHUB_TOKEN", "gh");
   vi.stubEnv("JIGS_FACTORY_ROOT", path.join(tmp, "no-factory-here"));
   vi.stubGlobal("fetch", async () => Response.json({ data: { viewer: {} } }));
   const body = (await (await app.request("/api/doctor")).json()) as {

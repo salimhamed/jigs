@@ -8,7 +8,10 @@ import { currentFactoryContext, seedFactoryContext } from "./factory-context.ts"
 let parent: string;
 
 beforeEach(() => {
-  parent = useTestFactory({ service: { port: 8990, dashboardPort: 9090 } });
+  parent = useTestFactory({
+    hub: { url: "https://hub.example.test" },
+    service: { port: 8990, dashboardPort: 9090 },
+  });
 });
 afterEach(() => {
   delete (globalThis as Record<symbol, unknown>)[Symbol.for("jigs.factory-context")];
@@ -19,7 +22,11 @@ afterEach(() => {
 test("a seeded context answers with the built configuration and never reads jigs.config.ts", () => {
   const root = currentFactoryContext().root;
   seedFactoryContext(
-    parseFactoryConfig({ service: { port: 7001, dashboardPort: 7002 }, workflows: {} }),
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { port: 7001, dashboardPort: 7002 },
+      workflows: {},
+    }),
   );
   writeFileSync(path.join(root, "jigs.config.ts"), 'throw new Error("read from disk");\n');
 
@@ -30,7 +37,11 @@ test("a seeded context answers with the built configuration and never reads jigs
 
 test("a seeded context outlives a change of working factory", () => {
   seedFactoryContext(
-    parseFactoryConfig({ service: { port: 7001, dashboardPort: 7002 }, workflows: {} }),
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { port: 7001, dashboardPort: 7002 },
+      workflows: {},
+    }),
   );
   const seeded = currentFactoryContext();
   vi.stubEnv("JIGS_FACTORY_ROOT", path.join(parent, "elsewhere"));

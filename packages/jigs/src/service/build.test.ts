@@ -1,17 +1,13 @@
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { expect, test } from "vitest";
-import { generateFactoryIntegration } from "../build/integration.ts";
+import { packageRoot } from "../build/templates.ts";
 import { prepare } from "./build.ts";
 
 const GENERATED = ".jigs";
 
-const factory = () => {
-  const root = mkdtempSync(path.join(tmpdir(), "jigs-factory-"));
-  generateFactoryIntegration(root);
-  return root;
-};
+const factory = () => mkdtempSync(path.join(tmpdir(), "jigs-factory-"));
 
 test("the entry is a real file that composes the app from the factory's config", () => {
   const root = factory();
@@ -36,15 +32,19 @@ test("the service plugin is generated beside the entry and starts the factory's 
   expect(source).toContain("startService(factory, config)");
 });
 
-test("preparing writes only the entry and the plugin, dropping what an earlier release wrote", () => {
+test("preparing writes the entry, the plugin and the step files, dropping what an earlier release wrote", () => {
   const root = factory();
   mkdirSync(path.join(root, GENERATED));
   writeFileSync(path.join(root, GENERATED, "schedules.ts"), "// stale\n");
   prepare(root);
 
-  expect(existsSync(path.join(root, GENERATED, "schedules.ts"))).toBe(false);
-  expect(existsSync(path.join(root, GENERATED, "server.ts"))).toBe(true);
-  expect(existsSync(path.join(root, GENERATED, "service.ts"))).toBe(true);
+  expect(readdirSync(path.join(root, GENERATED)).sort()).toEqual([
+    "routines.ts",
+    "server.ts",
+    "service.ts",
+    "steps.ts",
+  ]);
+  expect(readFileSync(path.join(root, GENERATED, "steps.ts"), "utf8")).toContain('"use step"');
 });
 
 test("preparing twice restores a hand-edited entry", () => {
@@ -64,8 +64,28 @@ test("the entry resolves deferred modules only inside the service", () => {
   expect(source).toContain("(await load()).default");
 });
 
-test("the factory carries the triggers and webhook settings the service reads", () => {
+test("the factory carries the triggers the service reads", () => {
   const source = readFileSync(prepare(factory()), "utf8");
   expect(source).toContain("triggers: definition.triggers");
-  expect(source).toContain("webhooks: definition.webhooks");
+});
+
+// Each exported "use step" function's name is half a durable step id, so these
+// wrappers are the ids every factory's World records. e2e reads them back out
+// of a real build; here the source is held to that same recorded list.
+test("the step wrappers are the step ids this repo has recorded", () => {
+  const wrappers = readFileSync(path.join(packageRoot(), "factory", "steps.ts"), "utf8");
+  const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
+    .map((match) => `step//./.jigs/steps//${match[1]}`)
+    .sort();
+  expect(steps).toHaveLength(35);
+  const recorded = readFileSync(
+    path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
+    "utf8",
+  )
+    .split("\n")
+    .filter((line) => line.startsWith("step//./.jigs/steps//"))
+    .sort();
+  expect(recorded).toEqual(steps);
+  // One without its directive compiles clean and runs unmemoized.
+  expect(wrappers.match(/"use step";/g)).toHaveLength(steps.length);
 });

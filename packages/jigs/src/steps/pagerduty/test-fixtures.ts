@@ -1,19 +1,14 @@
 import { readFileSync } from "node:fs";
 import { vi } from "vitest";
 import { createPagerDutyClient, type PagerDutyClient } from "../../providers/pagerduty.ts";
-import type { PagerDutyIdentity } from "../../workflow/factory-schema.ts";
+import { testFactoryContext } from "../../test-fixtures.ts";
 
 // Recorded from api.pagerduty.com against a sandbox incident, with the account
 // and the responder's name replaced.
 export const recorded = (name: "incident" | "note") =>
   JSON.parse(readFileSync(new URL(`./fixtures/${name}.json`, import.meta.url), "utf8"));
 
-const IDENTITY: PagerDutyIdentity = {
-  mode: "app",
-  subdomain: "acme",
-  region: "us",
-  from: "oncall@example.com",
-};
+const context = testFactoryContext({ config: { pagerduty: { from: "oncall@example.com" } } });
 
 export interface RecordedCall {
   method: string;
@@ -38,8 +33,13 @@ export function recordedClient(respond: (call: RecordedCall) => unknown): {
     calls.push(call);
     return new Response(JSON.stringify(respond(call)), { status: 200 });
   });
-  const client = createPagerDutyClient(IDENTITY, {
-    auth: { identity: IDENTITY, bearer: async () => "token", invalidate: () => {} },
+  const client = createPagerDutyClient({
+    installationName: "pagerduty-test",
+    tokens: {
+      issued: async () => ({ token: "token", from: "oncall@example.com" }),
+      invalidate: () => {},
+    },
+    context,
     fetch: fetch as unknown as typeof globalThis.fetch,
   });
   return { client, calls };

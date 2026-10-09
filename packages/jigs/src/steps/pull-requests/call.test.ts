@@ -11,7 +11,6 @@ let factory: string;
 
 beforeEach(() => {
   factory = useTestFactory();
-  vi.stubEnv("GITHUB_TOKEN", "ghp-test");
   vi.spyOn(console, "log").mockImplementation(() => {});
   const fake = fakeFetch(() => reply());
   calls = fake.calls;
@@ -29,29 +28,30 @@ test("any endpoint is called with the factory's token and returns GitHub's JSON"
   const body = await callGitHub<{ number: number }>(
     "POST",
     "/repos/acme/app/pulls/7/requested_reviewers",
-    { body: { reviewers: ["octocat"] } },
+    { installationName: "github-acme", body: { reviewers: ["octocat"] } },
   );
   expect(body).toEqual({ number: 7, requested_reviewers: [{ login: "octocat" }] });
   const call = calls[0] as FetchCall;
   expect(call.url.href).toBe("https://api.github.com/repos/acme/app/pulls/7/requested_reviewers");
   expect(call.method).toBe("POST");
-  expect(call.headers.authorization).toBe("Bearer ghp-test");
+  expect(call.headers.authorization).toBe("Bearer ghs_test");
   expect(call.json).toEqual({ reviewers: ["octocat"] });
 });
 
 test("a no-content answer returns undefined", async () => {
   reply = () => new Response(null, { status: 204 });
   await expect(
-    callGitHub("DELETE", "/repos/acme/app/issues/7/labels/jigs"),
+    callGitHub("DELETE", "/repos/acme/app/issues/7/labels/jigs", {
+      installationName: "github-acme",
+    }),
   ).resolves.toBeUndefined();
 });
 
-test("an endpoint outside a repository authenticates for the account it names", async () => {
+test("an endpoint outside a repository uses the installation it names", async () => {
   reply = () => Response.json([{ slug: "platform" }]);
-  await expect(callGitHub("GET", "/orgs/acme/teams")).rejects.toThrow("requires an account");
-  await expect(callGitHub("GET", "/orgs/acme/teams", { account: "acme" })).resolves.toEqual([
-    { slug: "platform" },
-  ]);
+  await expect(
+    callGitHub("GET", "/orgs/acme/teams", { installationName: "github-acme" }),
+  ).resolves.toEqual([{ slug: "platform" }]);
 });
 
 test("a GitHub error carries the status and GitHub's message", async () => {
@@ -61,6 +61,7 @@ test("a GitHub error carries the status and GitHub's message", async () => {
       { status: 422 },
     );
   const error = await callGitHub("POST", "/repos/acme/app/pulls/7/requested_reviewers", {
+    installationName: "github-acme",
     body: { reviewers: ["stranger"] },
   }).catch((e: unknown) => e);
   expect(error).toBeInstanceOf(GitHubApiError);
@@ -71,8 +72,8 @@ test("a GitHub error carries the status and GitHub's message", async () => {
 });
 
 test("a path without a leading slash is refused before any request", async () => {
-  await expect(callGitHub("GET", "repos/acme/app/pulls")).rejects.toThrow(
-    "GitHub path repos/acme/app/pulls must start with /",
-  );
+  await expect(
+    callGitHub("GET", "repos/acme/app/pulls", { installationName: "github-acme" }),
+  ).rejects.toThrow("GitHub path repos/acme/app/pulls must start with /");
   expect(calls).toHaveLength(0);
 });

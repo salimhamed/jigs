@@ -1,11 +1,16 @@
 import { beforeEach, expect, test, vi } from "vitest";
 
-vi.mock("../../providers/linear.ts", () => ({
-  fetchIssueStates: vi.fn(),
-  updateIssueState: vi.fn(),
-}));
+const { fetchIssueStates, updateIssueState, linearFor } = vi.hoisted(() => {
+  const fetchIssueStates = vi.fn();
+  const updateIssueState = vi.fn();
+  return {
+    fetchIssueStates,
+    updateIssueState,
+    linearFor: vi.fn(() => ({ fetchIssueStates, updateIssueState })),
+  };
+});
+vi.mock("../../providers/linear.ts", () => ({ linearFor }));
 
-import { fetchIssueStates, updateIssueState } from "../../providers/linear.ts";
 import { setTicketStatus } from "./status.ts";
 
 const states = {
@@ -29,17 +34,26 @@ beforeEach(() => {
 });
 
 test("matches status names without regard to case and updates once", async () => {
-  await expect(setTicketStatus("issue-1", "in review")).resolves.toEqual({
+  await expect(
+    setTicketStatus({
+      installationName: "linear-acme",
+      issueId: "issue-1",
+      stateName: "in review",
+    }),
+  ).resolves.toEqual({
     from: "Todo",
     to: "In Review",
     changed: true,
   });
   expect(updateIssueState).toHaveBeenCalledTimes(1);
   expect(updateIssueState).toHaveBeenCalledWith("issue-1", "review");
+  expect(linearFor).toHaveBeenCalledWith("linear-acme");
 });
 
 test("does not write when the ticket already has the target state", async () => {
-  await expect(setTicketStatus("issue-1", "todo")).resolves.toEqual({
+  await expect(
+    setTicketStatus({ installationName: "linear-acme", issueId: "issue-1", stateName: "todo" }),
+  ).resolves.toEqual({
     from: "Todo",
     to: "Todo",
     changed: false,
@@ -48,7 +62,9 @@ test("does not write when the ticket already has the target state", async () => 
 });
 
 test("names the team and its available states when no name matches", async () => {
-  await expect(setTicketStatus("issue-1", "Blocked")).rejects.toThrow(
+  await expect(
+    setTicketStatus({ installationName: "linear-acme", issueId: "issue-1", stateName: "Blocked" }),
+  ).rejects.toThrow(
     "Linear team Development has no state named Blocked. Available states: Todo, In Review.",
   );
   expect(updateIssueState).not.toHaveBeenCalled();

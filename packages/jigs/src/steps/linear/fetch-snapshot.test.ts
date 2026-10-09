@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import type { RawIssueSnapshot } from "../../providers/linear.ts";
+import { answerHubTokens } from "../../providers/test-fixtures.ts";
 import { inTestFactory } from "../../test-fixtures.ts";
 import { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 
@@ -7,12 +8,16 @@ const fetchMock = vi.fn();
 
 beforeEach(() => {
   vi.stubGlobal("fetch", fetchMock);
-  vi.stubEnv("LINEAR_API_KEY", "lin_test_key");
+  answerHubTokens("linear", async () => ({
+    token: "lin_oauth",
+    expiresAt: "2999-01-01T00:00:00Z",
+    app: { name: "jigs", userId: "app-user" },
+  }));
   fetchMock.mockReset();
 });
 afterEach(() => {
   vi.unstubAllGlobals();
-  vi.unstubAllEnvs();
+  vi.restoreAllMocks();
 });
 inTestFactory();
 
@@ -81,8 +86,14 @@ test("a later fetch carries the new comment while the earlier copy keeps its own
     }),
   });
 
-  const launch = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
-  const later = await fetchTicketSnapshot("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const launch = await fetchTicketSnapshot({
+    installationName: "linear-acme",
+    issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  });
+  const later = await fetchTicketSnapshot({
+    installationName: "linear-acme",
+    issueId: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+  });
 
   expect(launch.comments.map((c) => c.id)).toEqual(["c1"]);
   expect(later.comments.map((c) => c.id)).toEqual(["c1", "c2"]);

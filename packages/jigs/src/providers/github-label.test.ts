@@ -8,7 +8,6 @@ const label = (name: string) => ({ name, color: "1d76db", description: "Managed 
 let github: FakeGithub;
 
 beforeEach(() => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   github = fakeGithub();
 });
 
@@ -22,7 +21,12 @@ test("an existing repository label is verified without a write", async () => {
   github.reply(new Response(JSON.stringify(label("ship it"))));
 
   await expect(
-    ensureRepoLabel({ owner: "acme", repo: "api", label: label("ship it") }),
+    ensureRepoLabel({
+      installationName: "acme",
+      owner: "acme",
+      repo: "api",
+      label: label("ship it"),
+    }),
   ).resolves.toBe("verified");
 
   expect(github.calls).toHaveLength(1);
@@ -36,7 +40,12 @@ test("a missing repository label is created with its name, colour and descriptio
     .reply(new Response(JSON.stringify(label("ship-it"))));
 
   await expect(
-    ensureRepoLabel({ owner: "acme", repo: "api", label: label("ship-it") }),
+    ensureRepoLabel({
+      installationName: "acme",
+      owner: "acme",
+      repo: "api",
+      label: label("ship-it"),
+    }),
   ).resolves.toBe("created");
 
   expect(github.calls).toHaveLength(2);
@@ -55,7 +64,12 @@ test("an error other than absence is not mistaken for a missing label", async ()
   github.reply(new Response("forbidden", { status: 403 }));
 
   await expect(
-    ensureRepoLabel({ owner: "acme", repo: "api", label: label("ship-it") }),
+    ensureRepoLabel({
+      installationName: "acme",
+      owner: "acme",
+      repo: "api",
+      label: label("ship-it"),
+    }),
   ).rejects.toThrow("403");
   expect(github.calls).toHaveLength(1);
 });

@@ -3,16 +3,14 @@ import { WorkflowRunNotFoundError } from "workflow/errors";
 import { JigsError } from "../errors.ts";
 import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
-import { inTestFactory } from "../test-fixtures.ts";
+import { inTestFactory, testFactoryContext } from "../test-fixtures.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import {
-  announceSlackApp,
   fenceTerminalWorkflowDeliveries,
   gateOnBindingClones,
   gateOnHarnessRuntimes,
+  gateOnHubToken,
   gateOnRegistry,
-  gateOnSlackAppToken,
-  gateOnWebhookSecrets,
   gateOnWorldStart,
 } from "./boot.ts";
 
@@ -147,7 +145,7 @@ test("a rejected ensure exits the process instead of leaving the service up", as
 
   const proceed = await gateOnRegistry({
     sql: connected,
-    ensure: () => Promise.reject(new Error("migration 0001_resource_table failed")),
+    ensure: () => Promise.reject(new Error("migration 0000_init failed")),
     exit: (code) => exits.push(code),
     error: (line) => errors.push(line),
     log: () => {},
@@ -155,7 +153,7 @@ test("a rejected ensure exits the process instead of leaving the service up", as
 
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
-  expect(errors[0]).toContain("migration 0001_resource_table failed");
+  expect(errors[0]).toContain("migration 0000_init failed");
 });
 
 test("a connection that cannot be opened exits too, rather than throwing past the gate", async () => {
@@ -458,133 +456,27 @@ test("the boot gate checks exactly the harnesses derived from the factory", asyn
   expect(checked).toEqual([["claude"]]);
 });
 
-const WEBHOOKS = {
-  url: "https://factory.example.ts.net",
-  github: { enabled: true },
-  linear: { enabled: false },
-  pagerduty: { enabled: false },
-};
-
-test("an enabled provider without its secret refuses the boot and names the variable", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
+test("without its hub token the service refuses the boot and says how to connect", async () => {
   const exit = vi.fn();
   const error = vi.fn();
-  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit, error })).toBe(false);
-  expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("GITHUB_WEBHOOK_SECRET"));
-  expect(error.mock.calls[0]?.[0]).not.toContain("LINEAR_WEBHOOK_SECRET");
-});
-
-test("both providers on and unsigned name both variables", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
-  const error = vi.fn();
-  await gateOnWebhookSecrets({
-    webhooks: async () => ({ ...WEBHOOKS, linear: { enabled: true } }),
-    exit: vi.fn(),
-    error,
-  });
-  expect(error.mock.calls[0]?.[0]).toContain("GITHUB_WEBHOOK_SECRET and LINEAR_WEBHOOK_SECRET");
-});
-
-test.each([
-  ["no webhooks section", undefined],
-  ["both providers off", { ...WEBHOOKS, github: { enabled: false } }],
-])("%s needs no secret to boot", async (_name, webhooks) => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "");
-  vi.stubEnv("LINEAR_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  expect(await gateOnWebhookSecrets({ webhooks: async () => webhooks, exit })).toBe(true);
-  expect(exit).not.toHaveBeenCalled();
-});
-
-test("PagerDuty webhooks switched on without their secret refuse the boot", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
-  vi.stubEnv("PAGERDUTY_WEBHOOK_SECRET", "");
-  const exit = vi.fn();
-  const error = vi.fn();
-  await gateOnWebhookSecrets({
-    webhooks: async () => ({ ...WEBHOOKS, pagerduty: { enabled: true } }),
-    exit,
-    error,
-  });
+  expect(await gateOnHubToken({ context: async () => testFactoryContext(), exit, error })).toBe(
+    false,
+  );
   expect(exit).toHaveBeenCalledWith(1);
   expect(error).toHaveBeenCalledExactlyOnceWith(
-    expect.stringContaining("PAGERDUTY_WEBHOOK_SECRET is not set"),
+    expect.stringMatching(
+      /^\[service\] JIGS_HUB_TOKEN is not set\n.*pnpm exec jigs hub connect <url> <token>.*, then restart the service$/,
+    ),
   );
 });
 
-test("an enabled provider with its secret boots", async () => {
-  vi.stubEnv("GITHUB_WEBHOOK_SECRET", "signed");
-  expect(await gateOnWebhookSecrets({ webhooks: async () => WEBHOOKS, exit: vi.fn() })).toBe(true);
-});
-
-test("Socket Mode without its app-level token refuses the boot and names the variable", async () => {
-  vi.stubEnv("SLACK_APP_TOKEN", "");
+test("a hub token lets the boot continue", async () => {
   const exit = vi.fn();
-  const error = vi.fn();
   expect(
-    await gateOnSlackAppToken({
-      slack: async () => ({ socketMode: true, scopes: [] }),
+    await gateOnHubToken({
+      context: async () => testFactoryContext({ env: { JIGS_HUB_TOKEN: "token" } }),
       exit,
-      error,
-    }),
-  ).toBe(false);
-  expect(exit).toHaveBeenCalledWith(1);
-  expect(error).toHaveBeenCalledExactlyOnceWith(expect.stringContaining("SLACK_APP_TOKEN"));
-});
-
-test.each([
-  ["no slack section", undefined],
-  ["Socket Mode off", { socketMode: false, scopes: [] }],
-])("%s needs no app-level token to boot", async (_name, slack) => {
-  vi.stubEnv("SLACK_APP_TOKEN", "");
-  const exit = vi.fn();
-  expect(await gateOnSlackAppToken({ slack: async () => slack, exit })).toBe(true);
-  expect(exit).not.toHaveBeenCalled();
-});
-
-test("Socket Mode with its app-level token boots", async () => {
-  vi.stubEnv("SLACK_APP_TOKEN", "xapp-set");
-  expect(
-    await gateOnSlackAppToken({
-      slack: async () => ({ socketMode: true, scopes: [] }),
-      exit: vi.fn(),
     }),
   ).toBe(true);
-});
-
-const holder = (slug: string) => ({ slug, pid: 1, startedAt: "2026-10-02T12:00:00.000Z" });
-
-test("a Slack app no other service holds is recorded without a warning", () => {
-  const log = vi.fn();
-  const hold = { others: [], forget: vi.fn() };
-  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
-  expect(log).not.toHaveBeenCalled();
-});
-
-test("a Slack app another service holds is warned about once, and the boot goes on", () => {
-  const log = vi.fn();
-  const hold = { others: [holder("jigs-factory-js-1a2b3c4d")], forget: vi.fn() };
-  expect(announceSlackApp({ hold: () => hold, log })).toBe(hold);
-  expect(log.mock.calls).toEqual([
-    [
-      "[slack] the service jigs-factory-js-1a2b3c4d on this machine uses the same Slack app for Socket Mode; Slack splits its events between them, so each factory misses some until its poll catches up. Give each factory its own Slack app",
-    ],
-  ]);
-});
-
-test("a Slack app record that cannot be written is logged and does not stop the boot", () => {
-  const log = vi.fn();
-  expect(
-    announceSlackApp({
-      hold: () => {
-        throw new Error("EACCES: permission denied");
-      },
-      log,
-    }),
-  ).toBeUndefined();
-  expect(log).toHaveBeenCalledWith(
-    "[slack] could not record which Slack app this service uses: EACCES: permission denied",
-  );
+  expect(exit).not.toHaveBeenCalled();
 });

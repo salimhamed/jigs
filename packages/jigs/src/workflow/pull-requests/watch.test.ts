@@ -30,8 +30,9 @@ beforeEach(() => {
   }));
 });
 
-const pr = { owner: "Acme", repo: "App", number: 7 };
+const pr = { installationName: "github-acme", owner: "Acme", repo: "App", number: 7 };
 const snapshot = (patch: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot => ({
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,
@@ -64,7 +65,7 @@ test("reads immediately and releases the existing PR token on early exit", async
     expect(state).toEqual(first);
     break;
   }
-  expect(createHook).toHaveBeenCalledWith({ token: "github:pr:acme/app#7" });
+  expect(createHook).toHaveBeenCalledWith({ token: "github:pr:github-acme:acme/app#7" });
   expect(fetch).toHaveBeenCalledExactlyOnceWith(pr, undefined);
   expect(hook.awaited).toBe(0);
   expect(hook.disposed).toBe(1);

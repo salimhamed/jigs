@@ -1,6 +1,6 @@
 // Descriptors are tagged plain data: nothing live crosses the workflow/step boundary.
 
-import type { ClaudeCodeSettings } from "ai-sdk-provider-claude-code";
+import type { Options as ClaudeAgentOptions } from "@anthropic-ai/claude-agent-sdk";
 import type { CodexAppServerSettings } from "ai-sdk-provider-codex-cli";
 import { JigsError } from "../errors.ts";
 import { assertAgentAccess } from "./agent-access.ts";
@@ -24,15 +24,15 @@ export type McpToolProbe = { tool: string; arguments?: Record<string, unknown> }
  * ```ts
  * import { harnesses } from "@jigs-ai/jigs";
  *
- * // The server reads PAGERDUTY_USER_API_KEY; its value comes from the service's PD_USER_TOKEN.
- * const triager = harnesses.claude({
+ * // The server reads BRAVE_API_KEY; its value comes from the service's SEARCH_API_KEY.
+ * const researcher = harnesses.claude({
  *   model: "opus",
  *   mcpServers: {
- *     pagerduty: {
- *       command: "uvx",
- *       args: ["pagerduty-mcp"],
- *       env: { PAGERDUTY_USER_API_KEY: "PD_USER_TOKEN" },
- *       probe: { tool: "get_user_data" },
+ *     search: {
+ *       command: "npx",
+ *       args: ["-y", "@brave/brave-search-mcp-server"],
+ *       env: { BRAVE_API_KEY: "SEARCH_API_KEY" },
+ *       probe: { tool: "brave_web_search", arguments: { query: "jigs", count: 1 } },
  *     },
  *   },
  * });
@@ -120,8 +120,8 @@ export type PiMcpHttpServerConfig = Omit<
 export type PiMcpServerConfig = PiMcpStdioServerConfig | PiMcpHttpServerConfig;
 
 // A value that can be written down: nothing callable anywhere inside it. Keys
-// typed `unknown` or `any` count as data. Depth is capped so the provider's
-// large settings types stay cheap to check.
+// typed `unknown` or `any` count as data. Depth is capped so the large
+// settings types stay cheap to check.
 type IsData<T, Depth extends unknown[] = []> = unknown extends T
   ? true
   : Depth["length"] extends 6
@@ -168,23 +168,24 @@ export const claudePolicyKeys = [
   "resumeSessionAt",
   "resumeDropsTurn",
   "extraArgs",
-  "sdkOptions",
+  "outputFormat",
   "agents",
   "settings",
   "plugins",
+  "projectConfigRoot",
   "skills",
-] as const satisfies readonly (keyof ClaudeCodeSettings)[];
+] as const satisfies readonly (keyof ClaudeAgentOptions)[];
 /**
- * A Claude Code setting a descriptor cannot name, because jigs sets it itself or holds it as
+ * A Claude Code option a descriptor cannot name, because jigs sets it itself or holds it as
  * policy.
  *
  * @remarks
- * jigs sets the working directory, environment, executable and session for every step, and holds
- * permissions, setting sources and MCP servers as policy. `extraArgs` and `sdkOptions` would
- * rewrite any of those. `agents`, `settings` and `plugins` would bring in unprobed MCP servers,
- * environment, permissions and hooks from outside the worktree; they come from the repository's
- * project settings instead. jigs fills `plugins` itself to load the descriptor's `skills`, which
- * replace Claude Code's own `skills` setting.
+ * jigs sets the working directory, environment, executable, session and output format for every
+ * step, and holds permissions, setting sources and MCP servers as policy. `extraArgs` would
+ * rewrite any of those. `agents`, `settings`, `plugins` and `projectConfigRoot` would bring in
+ * unprobed MCP servers, environment, permissions and hooks from outside the worktree; they come
+ * from the repository's project settings instead. jigs fills `plugins` itself to load the
+ * descriptor's `skills`, which replace Claude Code's own `skills` option.
  *
  * @group Harnesses and models
  */
@@ -216,19 +217,28 @@ export const codexPolicyKeys = [
 export type CodexPolicyKey = (typeof codexPolicyKeys)[number];
 
 /**
- * Lets an agent act on GitHub as the factory's GitHub App: the same bot jigs posts as.
+ * Names the installation, as an admin named it on the hub, an agent acts through.
  *
  * @remarks
- * `true` acts on the account that owns the agent's worktree; `{ owner }` names the account, for
- * an agent with no worktree. The agent gets a fresh installation token in `GH_TOKEN`, so `gh`
- * works as the bot, and git reaches that account's repositories over HTTPS with that token. Its
- * commits are authored by the bot, while your own git configuration stays the committer and
- * signer. It needs a GitHub App identity: with a personal access token, an agent that sets it
- * fails before it starts.
+ * On `github`, the agent gets a fresh token of that GitHub App installation in `GH_TOKEN`, so
+ * `gh` works as the App's bot, and git reaches the installation account's repositories over
+ * HTTPS with that token. Its commits are authored by the bot, while your own git configuration
+ * stays the committer and signer. On `linear`, the workspace's token goes in
+ * `JIGS_LINEAR_TOKEN`; on `pagerduty`, the account's token goes in `JIGS_PAGERDUTY_TOKEN`.
+ *
+ * @example
+ * ```ts
+ * import { harnesses } from "@jigs-ai/jigs";
+ *
+ * const builder = harnesses.codex({
+ *   model: "gpt-5.6-sol",
+ *   github: { installationName: "github-acme" },
+ * });
+ * ```
  *
  * @group Harnesses and models
  */
-export type AgentGithub = true | { owner: string };
+export type AgentInstallation = { installationName: string };
 
 /**
  * Skill folders an agent loads, each holding a `SKILL.md` and any files it refers to.
@@ -246,21 +256,22 @@ export type AgentGithub = true | { owner: string };
 export type HarnessSkills = { skills?: string[] };
 
 /**
- * A Claude Code harness descriptor: the provider's own settings that are data, minus each
+ * A Claude Code harness descriptor: the Claude Agent SDK's own options that are data, minus each
  * {@link ClaudePolicyKey}, plus the model, jigs' MCP server shape and {@link HarnessSkills}.
  *
  * @group Harnesses and models
  */
-export type ClaudeHarness = JsonOnly<Omit<ClaudeCodeSettings, ClaudePolicyKey>> &
+export type ClaudeHarness = JsonOnly<Omit<ClaudeAgentOptions, ClaudePolicyKey>> &
   HarnessSkills & {
     kind: "claude";
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
-    github?: AgentGithub;
-    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-    linear?: true;
-    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-    pagerduty?: true;
+    /** Acts on GitHub as the factory's App, through this installation. */
+    github?: AgentInstallation;
+    /** Acts on Linear as the factory's app, through this installation. */
+    linear?: AgentInstallation;
+    /** Acts on PagerDuty as the factory's app, through this installation. */
+    pagerduty?: AgentInstallation;
   };
 /**
  * A Codex harness descriptor: the provider's own settings that are data, minus each
@@ -273,22 +284,24 @@ export type CodexHarness = JsonOnly<Omit<CodexAppServerSettings, CodexPolicyKey>
     kind: "codex";
     model: string;
     mcpServers?: Record<string, McpServerConfig>;
-    github?: AgentGithub;
-    /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-    linear?: true;
-    /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-    pagerduty?: true;
+    /** Acts on GitHub as the factory's App, through this installation. */
+    github?: AgentInstallation;
+    /** Acts on Linear as the factory's app, through this installation. */
+    linear?: AgentInstallation;
+    /** Acts on PagerDuty as the factory's app, through this installation. */
+    pagerduty?: AgentInstallation;
   };
 type SharedPiHarness = HarnessSkills & {
   kind: "pi";
   thinking?: "off" | "minimal" | "low" | "medium" | "high" | "xhigh" | "max";
   tools?: string[];
   mcpServers?: Record<string, PiMcpServerConfig>;
-  github?: AgentGithub;
-  /** Acts as the factory on Linear: its Linear credential goes in `JIGS_LINEAR_TOKEN`. */
-  linear?: true;
-  /** Acts as the factory's PagerDuty app: a token with jigs' scopes goes in `JIGS_PAGERDUTY_TOKEN`. */
-  pagerduty?: true;
+  /** Acts on GitHub as the factory's App, through this installation. */
+  github?: AgentInstallation;
+  /** Acts on Linear as the factory's app, through this installation. */
+  linear?: AgentInstallation;
+  /** Acts on PagerDuty as the factory's app, through this installation. */
+  pagerduty?: AgentInstallation;
 };
 
 /**

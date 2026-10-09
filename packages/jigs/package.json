@@ -88,11 +88,18 @@
     "./steps/runtime": {
       "types": "./dist/steps/runtime/index.d.ts",
       "default": "./dist/steps/runtime/index.js"
+    },
+    "./factory/steps": {
+      "types": "./factory/steps.d.ts"
+    },
+    "./factory/routines": {
+      "types": "./factory/routines.d.ts"
     }
   },
   "files": [
     "dist",
     "docs/api",
+    "factory",
     "templates",
     "recipes",
     "migrations"
@@ -103,7 +110,7 @@
   },
   "scripts": {
     "dev": "node src/cli/cli.ts",
-    "build": "tsdown",
+    "build": "tsdown && tsc -p tsconfig.factory.json",
     "test": "vitest run --project unit",
     "test:db": "vitest run --project db",
     "test:watch": "vitest --project unit",
@@ -116,29 +123,28 @@
   },
   "dependencies": {
     "@ai-sdk/openai-compatible": "3.0.53",
+    "@anthropic-ai/claude-agent-sdk": "0.3.292",
     "@modelcontextprotocol/sdk": "^1.30.0",
     "@openrouter/ai-sdk-provider": "3.1.0",
     "ai": "^7.0.103",
-    "ai-sdk-provider-claude-code": "4.3.1",
     "ai-sdk-provider-codex-cli": "2.2.1",
     "commander": "^15.0.0",
     "croner": "10.0.1",
     "drizzle-orm": "0.45.2",
-    "hono": "^4.13.4",
+    "express": "^5.2.1",
     "pg": "8.20.0",
     "pi-mcp-adapter": "2.36.0",
     "semver": "^7.8.5",
     "smol-toml": "^1.8.0",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^28.0.0",
-    "ulid": "3.0.2",
-    "yaml": "^2.9.0"
+    "ulid": "3.0.2"
   },
   "peerDependencies": {
-    "@workflow/web": "5.0.0-beta.57",
-    "@workflow/world-postgres": "5.0.0-beta.47",
+    "@workflow/web": "5.0.2",
+    "@workflow/world-postgres": "5.0.2",
     "nitro": "3.0.260610-beta",
-    "workflow": "5.0.0-beta.57",
+    "workflow": "5.1.0",
     "zod": "4.5.4"
   },
   "peerDependenciesMeta": {
@@ -156,19 +162,22 @@
     }
   },
   "devDependencies": {
+    "@jigs-ai/hub-protocol": "workspace:*",
     "@swc/core": "1.15.3",
+    "@types/express": "^5.0.6",
     "@types/node": "^26.2.0",
     "@types/pg": "8.23.1",
     "@types/semver": "^7.8.0",
-    "@workflow/web": "5.0.0-beta.57",
-    "@workflow/world": "5.0.0-beta.39",
-    "@workflow/world-postgres": "5.0.0-beta.47",
+    "@workflow/web": "5.0.2",
+    "@workflow/world": "5.0.2",
+    "@workflow/world-postgres": "5.0.2",
     "dependency-cruiser": "^18.5.0",
     "nitro": "3.0.260610-beta",
     "tsdown": "^0.22.14",
     "typescript": "^7.0.2",
     "vitest": "^4.1.10",
-    "workflow": "5.0.0-beta.57",
+    "workflow": "5.1.0",
+    "yaml": "^2.9.0",
     "zod": "4.5.4"
   }
 }

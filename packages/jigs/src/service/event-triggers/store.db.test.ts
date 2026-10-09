@@ -87,27 +87,10 @@ dbTest("pending rows come oldest first, and the summary counts and names failure
   expect(await triggerStore(db, "factory-c").pending("pages")).toEqual([]);
 });
 
-dbTest("the first enable is kept, and advancing moves only the cursor", async () => {
+dbTest("the first enable is kept", async () => {
   const store = triggerStore(db, "factory-d");
-  expect(await store.enable("pages", at(0))).toEqual({ enabledAt: at(0), cursor: null });
-  await store.advance("pages", at(5).toISOString());
-  expect(await store.enable("pages", at(10))).toEqual({
-    enabledAt: at(0),
-    cursor: at(5).toISOString(),
-  });
-});
-
-dbTest("a source's cursor round-trips through the store as it was written", async () => {
-  const store = triggerStore(db, "factory-d");
-  for (const cursor of [
-    { C0123ABCD: "1790723244.335019", G0123ABCD: "1790723300.000000" },
-    "1790723244.335019",
-    "2026-09-29T12:05:00.000Z",
-    [1, "two", { three: null }],
-  ]) {
-    await store.advance("pages", cursor);
-    expect((await store.enable("pages", at(10))).cursor).toEqual(cursor);
-  }
+  expect(await store.enable("pages", at(0))).toEqual({ enabledAt: at(0) });
+  expect(await store.enable("pages", at(10))).toEqual({ enabledAt: at(0) });
 });
 
 dbTest(
@@ -138,6 +121,31 @@ dbTest(
     expect(await store.startedSince("pages", at(41))).toEqual([]);
     // A started row is never claimed again.
     expect(await store.attempt("pages", "P1", at(50))).toBe(false);
+  },
+);
+
+dbTest(
+  "only a row no start has claimed is withdrawn, and a withdrawn row never starts",
+  async () => {
+    const store = triggerStore(db, "factory-w");
+    for (const occurrence of ["P1", "P2"])
+      await store.record({
+        trigger: "pages",
+        occurrence,
+        state: "pending",
+        inputs: {},
+        attribute: `attr-${occurrence}`,
+        occurredAt: at(0),
+      });
+    expect(await store.attempt("pages", "P2", at(1))).toBe(true);
+
+    expect(await store.withdraw("pages", "P1")).toBe(true);
+    expect(await store.withdraw("pages", "P2")).toBe(false);
+    expect(await store.withdraw("pages", "P1")).toBe(false);
+
+    expect((await store.byAttribute("pages", ["attr-P1"]))[0]?.state).toBe("skipped");
+    expect(await store.attempt("pages", "P1", at(2))).toBe(false);
+    expect((await store.pending("pages")).map((row) => row.occurrence)).toEqual(["P2"]);
   },
 );
 

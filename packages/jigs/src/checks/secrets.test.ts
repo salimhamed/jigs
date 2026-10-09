@@ -4,6 +4,8 @@ import { afterEach, expect, onTestFinished, test, vi } from "vitest";
 import { type FactoryContext, resolveFactoryContext } from "../config/factory-context.ts";
 import { makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
+import { linearMcp } from "../workflow/agents/linear-mcp.ts";
+import { pagerdutyMcp } from "../workflow/agents/pagerduty-mcp.ts";
 import { runChecks } from "./catalog.ts";
 import type { WorkflowRequires } from "./index.ts";
 import { doctorSecretChecks, secretChecks } from "./secrets.ts";
@@ -33,7 +35,7 @@ test("a declared secret that is not set fails with the .env repair", async () =>
       ok: false,
       reason: "SNOWFLAKE_TOKEN is not set in the service's environment",
       repair:
-        "set SNOWFLAKE_TOKEN in the factory repo's .env, then: `pnpm exec jigs service restart`",
+        "set SNOWFLAKE_TOKEN in the factory repo's .env, then: `pnpm exec jigs up --restart-service`",
     },
   ]);
 });
@@ -166,4 +168,27 @@ test("doctor leaves MCP credentials to the MCP server checks", () => {
     { context: factoryWithEnv("") },
   );
   expect(checks).toEqual([]);
+});
+
+test("the agent tokens jigs mints for an opted-in harness are not asked of the service", async () => {
+  const requires: WorkflowRequires = {
+    agents: {
+      triager: harnesses.claude({
+        model: "sonnet",
+        linear: { installationName: "linear-test" },
+        pagerduty: { installationName: "pagerduty-test" },
+        mcpServers: {
+          linear: linearMcp(),
+          pagerduty: pagerdutyMcp(),
+          warehouse: {
+            url: "https://mcp.example.com",
+            bearerTokenEnv: "WAREHOUSE_TOKEN",
+            probe: { tool: "ping" },
+          },
+        },
+      }),
+    },
+  };
+  const checks = await outcomes(requires, {});
+  expect(checks.map((check) => check.id)).toEqual(["secret.WAREHOUSE_TOKEN"]);
 });

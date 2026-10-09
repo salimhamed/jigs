@@ -33,15 +33,15 @@ Two different readers, and confusing them is the usual failure.
 
 - The **brief** is read by a builder agent working in this repository. It may
   be as technical as it needs to be.
-- The **about**, the **questions** and the **assumptions** are posted as a
-  comment on the ticket and read by a person. That person has no knowledge of
+- The **about**, the **questions** and the **assumptions** are asked in the
+  ticket's agent session and read by a person. That person has no knowledge of
   this repository and no code open. They may be reading on a phone, days after
   they wrote the ticket.
 
-## Read the comment thread first
+## Read the replies first
 
-You may not be the first round. If the ticket's comments already hold a
-question jigs asked and an answer a human gave, that answer is now part of the
+You may not be the first round. If the ticket's comment thread already holds a
+human's reply to a question jigs asked, that answer is now part of the
 ticket. Take it as settled, fold it into the brief, and never ask it again.
 Ask only about what the answer left open.
 

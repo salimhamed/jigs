@@ -1,6 +1,10 @@
 # Agents act on GitHub as the factory's App
 
-Status: accepted
+Status: accepted; token source superseded by [0015](./0015-hub.md)
+
+The App is now the one the factory's hub assigns it, and every installation
+token comes from the hub. Identity modes are gone, so the App mode and token
+mode below no longer exist: every factory acts as an App.
 
 A coding agent that maintains a pull request has to read comments, reply and push
 fixes. Factories gave it the operator's own token and SSH key, so its replies,
@@ -15,7 +19,8 @@ checkout. The agent then acts as the App's bot:
 
 - **The token** is the installation token jigs uses itself: the whole
   installation, with the App's permissions, freshly minted for each agent step
-  and valid for one hour. It is not narrowed to repositories or permissions:
+  and valid for one hour. Installation tokens now come from the hub
+  ([0015](./0015-hub.md)). It is not narrowed to repositories or permissions:
   narrowing adds a second minting path, and the token fails to mint whenever
   the App's grants change. Push and merge need the same permission anyway, so
   branch protection, not the token, keeps the agent from merging. The owner is

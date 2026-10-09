@@ -5,11 +5,9 @@ import { z } from "zod";
 import type { CheckReport } from "../../checks/index.ts";
 import { coerceInputs, splitInputs } from "../../cli/commands/run.ts";
 import { hintLines } from "../../cli/output.ts";
-import * as slackApi from "../../providers/slack.ts";
 import type { EventTrigger, Factory } from "../../workflow/factory.ts";
 import type { PreparedRun } from "../launch.ts";
 import { eventTriggerId, runIdTime } from "../runs.ts";
-import { slackSources } from "../slack-sources.ts";
 import { memoryTriggerStore } from "../test-fixtures.ts";
 import { createTriggerEngine, type TriggerDeps } from "./engine.ts";
 import { startTriggers } from "./runner.ts";
@@ -35,36 +33,22 @@ afterAll(() => {
 const T0 = new Date("2026-09-29T12:00:00.000Z");
 const minutes = (n: number) => new Date(T0.getTime() + n * 60_000);
 
-// A source whose provider hands back whatever the test queued, and whose
-// pushed events are `{ page }` objects. Its cursor is when it last polled, and
-// `polls` records where each poll began reading.
-function fakeSource(now: () => Date = () => T0) {
-  const queued: SourceOccurrence[] = [];
-  const polls: Date[] = [];
-  const source: Source<{ service: string }, string> = {
+// A source whose pushed payloads are `{ page, at }` objects.
+function fakeSource() {
+  const source: Source<{ service: string }> = {
     provider: "github",
     params: z.object({ service: z.string() }),
-    cursor: z.iso.datetime(),
     sampleInputs: { page: "P0" },
-    occurrence: (inputs) => {
-      if (typeof inputs.page !== "string") throw new Error("no page id in the event");
-      return inputs.page;
-    },
-    poll: async (_params, cursor, floor) => {
-      const through = now();
-      polls.push(
-        new Date(Math.max(cursor === undefined ? 0 : Date.parse(cursor), floor.getTime())),
-      );
-      return { occurrences: queued.splice(0), cursor: through.toISOString() };
-    },
     fromPush: async (_params, event) => {
-      const page = (event as { page?: unknown }).page;
-      return typeof page === "string" ? { inputs: { page }, at: minutes(1) } : null;
+      const { page, at } = event.payload as { page?: string; at?: Date };
+      return page === undefined ? null : { key: page, inputs: { page }, at: at ?? minutes(1) };
     },
     describe: (inputs) => `page ${String(inputs.page)}`,
   };
-  return { source, queued, polls };
+  return { source };
 }
+
+const pushed = (payload: unknown) => ({ installationName: "acme", payload });
 
 const memoryStore = (now: () => Date = () => T0) => memoryTriggerStore(now, T0);
 
@@ -139,7 +123,7 @@ function harness(
   } = {},
 ) {
   let clock = T0;
-  const { source, queued, polls } = fakeSource(() => clock);
+  const { source } = fakeSource();
   const memory = options.memory ?? memoryStore(() => clock);
   const lines: string[] = [];
   const starts: Array<{ inputs: unknown; triggerId: string }> = [];
@@ -226,8 +210,6 @@ function harness(
   return {
     engine,
     deps,
-    queued,
-    polls,
     memory,
     lines,
     starts,
@@ -236,6 +218,12 @@ function harness(
     cancelled,
     cancelFailures,
     sources,
+    /** Push each occurrence, then start what is waiting. */
+    see: async (...occurrences: SourceOccurrence[]) => {
+      for (const { inputs, at } of occurrences)
+        await engine.push("github", pushed({ ...inputs, at }));
+      await engine.drain();
+    },
     /** The queued deliveries create their runs. */
     deliver: () => {
       for (const run of runs) run.inWorld = true;
@@ -272,17 +260,18 @@ const activeOf = async (h: ReturnType<typeof harness>) =>
     })
   )[0]?.active;
 
-const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({ inputs: { page }, at });
+const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({
+  key: page,
+  inputs: { page },
+  at,
+});
 
-test("an occurrence seen twice, polled then pushed, starts one run", async () => {
+test("an occurrence pushed twice starts one run", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(2));
-  h.queued.push(occurrenceAt("P1", minutes(1)));
-  await h.engine.poll("pages");
-  expect(await h.engine.push("github", { page: "P1" })).toEqual([]);
-  h.queued.push(occurrenceAt("P1", minutes(1)));
-  await h.engine.poll("pages");
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual([]);
   await h.engine.drain();
 
   expect(h.starts).toEqual([
@@ -293,6 +282,33 @@ test("an occurrence seen twice, polled then pushed, starts one run", async () =>
     state: "started",
     runId: h.runs[0]?.runId,
   });
+});
+
+test("the rows an occurrence was recorded under are found by its key, on its provider only", async () => {
+  const h = harness();
+  await h.engine.arm();
+  h.at(minutes(2));
+  await h.see(occurrenceAt("P1", minutes(1)));
+
+  expect(await h.engine.recorded("github", "P1")).toEqual([
+    expect.objectContaining({ trigger: "pages", state: "started", runId: h.runs[0]?.runId }),
+  ]);
+  expect(await h.engine.recorded("github", "P2")).toEqual([]);
+  expect(await h.engine.recorded("linear", "P1")).toEqual([]);
+});
+
+test("a recorded occurrence withdrawn before its start never starts", async () => {
+  const h = harness();
+  await h.memory.store.enable("pages", minutes(-60));
+  await pendingRow(h.memory.store, "P1", minutes(-5));
+  const [row] = await h.engine.recorded("github", "P1");
+
+  expect(row && (await h.engine.withdraw(row))).toBe(true);
+  await h.engine.arm();
+  await h.engine.drain();
+
+  expect(h.starts).toEqual([]);
+  expect(h.memory.state("pages", "P1")?.state).toBe("skipped");
 });
 
 test("a pushed event is recorded and started, and answers before the run starts", async () => {
@@ -308,7 +324,7 @@ test("a pushed event is recorded and started, and answers before the run starts"
   await h.engine.arm();
   h.at(minutes(2));
 
-  expect(await h.engine.push("github", { page: "P7" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P7" }))).toEqual(["pages"]);
   expect(h.memory.state("pages", "P7")?.state).toBe("pending");
   release();
   await h.engine.drain();
@@ -318,8 +334,8 @@ test("a pushed event is recorded and started, and answers before the run starts"
 test("a push for another provider, or not an occurrence, is not taken", async () => {
   const h = harness();
   await h.engine.arm();
-  expect(await h.engine.push("linear", { page: "P1" })).toEqual([]);
-  expect(await h.engine.push("github", { other: true })).toEqual([]);
+  expect(await h.engine.push("linear", pushed({ page: "P1" }))).toEqual([]);
+  expect(await h.engine.push("github", pushed({ other: true }))).toEqual([]);
   expect(h.memory.rows.size).toBe(0);
 });
 
@@ -350,7 +366,7 @@ test("runs this trigger did not start do not count against its cap", async () =>
   const h = harness({ runs, trigger: { ...pagesTrigger, maxActive: 1 } });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
+  await h.engine.push("github", pushed({ page: "P1" }));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
 });
@@ -359,13 +375,8 @@ test("past maxActive, occurrences wait and start oldest first as runs finish", a
   const h = harness({ trigger: { ...pagesTrigger, maxActive: 2 } });
   await h.engine.arm();
   h.at(minutes(10));
-  h.queued.push(
-    occurrenceAt("P4", minutes(4)),
-    occurrenceAt("P1", minutes(1)),
-    occurrenceAt("P3", minutes(3)),
-    occurrenceAt("P2", minutes(2)),
-  );
-  await h.engine.poll("pages");
+  for (const page of [4, 1, 3, 2]) await pendingRow(h.memory.store, `P${page}`, minutes(page));
+  await h.engine.drain();
 
   expect(h.starts.map((start) => start.triggerId)).toEqual([
     eventTriggerId("pages", "P1"),
@@ -387,18 +398,15 @@ test("the cap defaults to twenty", async () => {
   const h = harness();
   await h.engine.arm();
   h.at(minutes(30));
-  h.queued.push(...Array.from({ length: 21 }, (_, i) => occurrenceAt(`P${i + 1}`, minutes(i + 1))));
-  await h.engine.poll("pages");
+  await h.see(...Array.from({ length: 21 }, (_, i) => occurrenceAt(`P${i + 1}`, minutes(i + 1))));
   expect(h.starts).toHaveLength(20);
 });
 
 test("a new trigger starts from now: nothing before its first enable is recorded", async () => {
   const h = harness();
   await h.engine.arm();
-  h.queued.push(occurrenceAt("OLD", minutes(-1)), occurrenceAt("NEW", minutes(0)));
-  await h.engine.poll("pages");
+  await h.see(occurrenceAt("OLD", minutes(-1)), occurrenceAt("NEW", minutes(0)));
 
-  expect(h.polls).toEqual([T0]);
   expect(h.memory.state("pages", "OLD")).toBeUndefined();
   expect(h.memory.state("pages", "NEW")?.state).toBe("started");
 });
@@ -408,25 +416,20 @@ test("an occurrence stamped in the second its trigger was enabled is admitted, a
   const enabled = new Date(T0.getTime() + 700);
   h.at(enabled);
   await h.engine.arm();
-  h.queued.push(occurrenceAt("BEFORE", new Date(T0.getTime() - 1)), occurrenceAt("SAME", T0));
-  await h.engine.poll("pages");
+  await h.see(occurrenceAt("BEFORE", new Date(T0.getTime() - 1)), occurrenceAt("SAME", T0));
 
   expect(h.memory.marks.get("pages")?.enabledAt).toEqual(enabled);
   expect(h.memory.state("pages", "BEFORE")).toBeUndefined();
   expect(h.memory.state("pages", "SAME")).toMatchObject({ state: "started", occurredAt: T0 });
 });
 
-test("after downtime, the source reads from the lookback, past it is skipped and recent ones start", async () => {
+test("after downtime, occurrences past the lookback are skipped and recent ones start", async () => {
   const h = harness({ trigger: { ...pagesTrigger, lookbackMinutes: 30 } });
   await h.memory.store.enable("pages", minutes(-600));
-  await h.memory.store.advance("pages", minutes(-500).toISOString());
   h.at(minutes(0));
   await h.engine.arm();
-  // A source may hand back occurrences from behind its floor, as PagerDuty's overlap does.
-  h.queued.push(occurrenceAt("STALE", minutes(-45)), occurrenceAt("FRESH", minutes(-10)));
-  await h.engine.poll("pages");
+  await h.see(occurrenceAt("STALE", minutes(-45)), occurrenceAt("FRESH", minutes(-10)));
 
-  expect(h.polls).toEqual([minutes(-30)]);
   expect(h.memory.state("pages", "STALE")?.state).toBe("skipped");
   expect(h.memory.state("pages", "FRESH")?.state).toBe("started");
   expect(h.starts).toHaveLength(1);
@@ -437,62 +440,20 @@ test("the lookback defaults to an hour", async () => {
   const h = harness();
   await h.memory.store.enable("pages", minutes(-600));
   await h.engine.arm();
-  h.queued.push(occurrenceAt("A", minutes(-61)), occurrenceAt("B", minutes(-59)));
-  await h.engine.poll("pages");
+  await h.see(occurrenceAt("A", minutes(-61)), occurrenceAt("B", minutes(-59)));
   expect(h.memory.state("pages", "A")?.state).toBe("skipped");
   expect(h.memory.state("pages", "B")?.state).toBe("started");
-});
-
-test("each poll reads from where the last one began", async () => {
-  const h = harness();
-  await h.engine.arm();
-  h.at(minutes(5));
-  await h.engine.poll("pages");
-  h.at(minutes(10));
-  await h.engine.poll("pages");
-  expect(h.polls).toEqual([T0, minutes(5)]);
-});
-
-test("a stored cursor the source does not recognise reads from the floor", async () => {
-  const h = harness();
-  await h.memory.store.enable("pages", T0);
-  await h.memory.store.advance("pages", { channel: "not this source's" });
-  await h.engine.arm();
-  h.at(minutes(5));
-  await h.engine.poll("pages");
-  expect(h.polls).toEqual([T0]);
-  expect(h.memory.marks.get("pages")?.cursor).toBe(minutes(5).toISOString());
-  expect(h.lines).toContain(
-    "[trigger] pages reads from its lookback: its stored cursor is not one it wrote",
-  );
-});
-
-test("a failed poll leaves the cursor where it was", async () => {
-  const h = harness();
-  await h.engine.arm();
-  const poll = h.sources["fake.pages"] as Source;
-  const original = poll.poll;
-  poll.poll = async () => {
-    throw new Error("provider down");
-  };
-  h.at(minutes(5));
-  await h.engine.poll("pages");
-  poll.poll = original;
-  h.at(minutes(10));
-  await h.engine.poll("pages");
-  expect(h.polls).toEqual([T0]);
-  expect(h.lines).toContain("[trigger] pages poll failed: Error: provider down");
 });
 
 const preflightFailure: CheckReport = {
   ok: false,
   checks: [
     {
-      id: "github.identity",
-      label: "GitHub identity",
+      id: "github.installations",
+      label: "GitHub installations",
       ok: false,
-      reason: "GITHUB_TOKEN is not set",
-      repair: "set GITHUB_TOKEN in the factory repo's .env",
+      reason: "the hub gave no GitHub token: 401 Unauthorized",
+      repair: "check hub.url in jigs.config.ts and that the hub is running",
     },
   ],
 };
@@ -507,7 +468,7 @@ test("a start that fails preflight is recorded failed with its report, and never
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P5" });
+  await h.engine.push("github", pushed({ page: "P5" }));
   await h.engine.drain();
   await h.engine.drain();
 
@@ -516,7 +477,9 @@ test("a start that fails preflight is recorded failed with its report, and never
     state: "failed",
     report: preflightFailure,
   });
-  expect(h.lines).toContain("[trigger] pages P5 failed: GitHub identity: GITHUB_TOKEN is not set");
+  expect(h.lines).toContain(
+    "[trigger] pages P5 failed: GitHub installations: the hub gave no GitHub token: 401 Unauthorized",
+  );
 });
 
 test("inputs the workflow rejects at start are recorded failed with a repair", async () => {
@@ -528,7 +491,7 @@ test("inputs the workflow rejects at start are recorded failed with a repair", a
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P6" });
+  await h.engine.push("github", pushed({ page: "P6" }));
   await h.engine.drain();
   const report = h.memory.state("pages", "P6")?.report;
   expect(report?.checks[0]).toMatchObject({
@@ -548,7 +511,7 @@ test("a preflight that throws is retried without an attempt, and keeps its own c
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
+  await h.engine.push("github", pushed({ page: "P1" }));
   await h.engine.drain();
   // The push's own drain, then this one: each a plain retry.
   expect(calls).toBe(2);
@@ -686,8 +649,8 @@ test("a first arm whose markers fail still starts the settle clock, so an unconf
   };
   await expect(h.engine.arm()).rejects.toThrow("db blip");
   await pendingRow(h.memory.store, "P1", T0);
-  // A later poll retries the markers; the drain starts P1, whose start throws.
-  await h.engine.poll("pages");
+  // A later push retries the markers; the drain starts P1, whose start throws.
+  await h.engine.push("github", pushed({ other: true }));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
   h.at(minutes(4));
@@ -800,8 +763,8 @@ const unansweredReport = (reason: string): CheckReport => ({
   ok: false,
   checks: [
     {
-      id: "github.identity",
-      label: "GitHub identity",
+      id: "github.installations",
+      label: "GitHub installations",
       ok: false,
       reason,
       repair: "retry",
@@ -832,7 +795,7 @@ for (const [variant, reason] of [
     await engine.drain();
     expect(h.memory.state("pages", "P1")).toMatchObject({ state: "pending", attemptedAt: null });
     expect(h.lines).toContain(
-      `[trigger] pages P1 waits: preflight did not answer: GitHub identity: ${reason}`,
+      `[trigger] pages P1 waits: preflight did not answer: GitHub installations: ${reason}`,
     );
     await engine.drain();
     expect(h.memory.state("pages", "P1")?.state).toBe("started");
@@ -1063,131 +1026,32 @@ test("a push after a restart answers without waiting for the leftover backlog to
   h.at(minutes(2));
 
   // The leftover start is still held behind its gate.
-  expect(await h.engine.push("github", { page: "P2" })).toEqual(["pages"]);
+  expect(await h.engine.push("github", pushed({ page: "P2" }))).toEqual(["pages"]);
   open();
   await h.engine.drain();
   expect(h.memory.state("pages", "P2")?.state).toBe("started");
 });
 
-test("an occurrence that could not be recorded is polled again, not skipped past", async () => {
+test("a push whose occurrence could not be recorded rejects, and its redelivery starts it", async () => {
   const memory = memoryStore();
   let failing = true;
   const flaky: TriggerStore = {
     ...memory.store,
     record: async (row) => {
-      if (failing && row.occurrence === "P9") throw new Error("connection reset");
+      if (failing) throw new Error("connection reset");
       return memory.store.record(row);
     },
   };
   const h = harness({ store: flaky });
   await h.engine.arm();
   h.at(minutes(10));
-  h.queued.push(occurrenceAt("P8", minutes(2)), occurrenceAt("P9", minutes(4)));
-  await h.engine.poll("pages");
-  failing = false;
-  h.at(minutes(20));
-  h.queued.push(occurrenceAt("P9", minutes(4)));
-  await h.engine.poll("pages");
-
-  expect(h.polls[1]?.getTime()).toBeLessThan(minutes(4).getTime());
-  expect(memory.state("pages", "P9")?.state).toBe("started");
-});
-
-test("an occurrence the source cannot key is passed over, not held", async () => {
-  const h = harness();
-  await h.engine.arm();
-  h.at(minutes(10));
-  h.queued.push({ inputs: {}, at: minutes(2) }, occurrenceAt("P1", minutes(3)));
-  await h.engine.poll("pages");
-  h.at(minutes(20));
-  await h.engine.poll("pages");
-
-  expect(h.polls[1]).toEqual(minutes(10));
-  expect(h.memory.state("pages", "P1")?.state).toBe("started");
-  expect(h.lines).toContain(
-    "[trigger] pages passed over an occurrence it could not key: Error: no page id in the event",
+  await expect(h.engine.push("github", pushed({ page: "P9", at: minutes(4) }))).rejects.toThrow(
+    "1 trigger(s) could not read the event",
   );
-});
-
-test("a cursor held for an unrecorded occurrence never reaches back past the lookback", async () => {
-  const memory = memoryStore();
-  const failing: TriggerStore = {
-    ...memory.store,
-    record: async () => {
-      throw new Error("connection reset");
-    },
-  };
-  const h = harness({ store: failing });
-  await memory.store.enable("pages", minutes(-600));
-  await memory.store.advance("pages", minutes(-300).toISOString());
-  await h.engine.arm();
-  for (let poll = 0; poll < 2; poll += 1) {
-    h.queued.push(occurrenceAt("P1", minutes(-30)));
-    await h.engine.poll("pages");
-  }
-  expect(h.polls).toEqual([minutes(-60), minutes(-60)]);
-  expect(memory.marks.get("pages")?.cursor).toBe(minutes(-300).toISOString());
-  expect(h.lines).toContain("[trigger] pages: 1 not recorded, reading them again next poll");
-});
-
-test("a Slack channel that fails one poll holds back only itself, and its message starts on the next", async () => {
-  const message = (at: Date) => ({
-    type: "message",
-    user: "U0HUMAN01",
-    ts: (at.getTime() / 1000).toFixed(6),
-  });
-  const first = message(minutes(7));
-  const second = message(minutes(5));
-  const channels: Record<string, Array<ReturnType<typeof message>>> = {
-    C0FIRST01: [first],
-    C0SECOND1: [second],
-  };
-  const reads: Array<[string, string]> = [];
-  let failing = true;
-  vi.spyOn(console, "log").mockImplementation(() => {});
-  vi.spyOn(slackApi, "slackBot").mockResolvedValue({
-    userId: "U0BOT0001",
-    botId: "B0BOT0001",
-    user: "jigs",
-    team: "T",
-    scopes: [],
-  });
-  vi.spyOn(slackApi, "slackHistory").mockImplementation(async (channel, { oldest = "" }) => {
-    reads.push([channel, oldest]);
-    if (channel === "C0SECOND1" && failing) {
-      failing = false;
-      throw new slackApi.SlackApiError("conversations.history", "ratelimited");
-    }
-    return (channels[channel] ?? []).filter((message) => Number(message.ts) > Number(oldest));
-  });
-  try {
-    let clock = () => T0;
-    const h = harness({
-      sources: slackSources(() => clock()),
-      trigger: {
-        workflow: "respond",
-        source: { kind: "slack.messages", params: { channels: ["C0FIRST01", "C0SECOND1"] } },
-        inputs: { page: "slack", team: "infra" },
-      },
-    });
-    clock = h.deps.now;
-    const started = () => h.starts.map((start) => (start.inputs as { channel: string }).channel);
-    await h.engine.arm();
-    h.at(minutes(10));
-    await h.engine.poll("pages");
-    expect(started()).toEqual(["C0FIRST01"]);
-
-    h.at(minutes(20));
-    await h.engine.poll("pages");
-    expect(started()).toEqual(["C0FIRST01", "C0SECOND1"]);
-    const ts = (at: Date) => (at.getTime() / 1000).toFixed(6);
-    expect(reads.slice(2)).toEqual([
-      ["C0FIRST01", ts(minutes(10))],
-      ["C0SECOND1", ts(T0)],
-    ]);
-  } finally {
-    vi.restoreAllMocks();
-  }
+  failing = false;
+  expect(await h.engine.push("github", pushed({ page: "P9", at: minutes(4) }))).toEqual(["pages"]);
+  await h.engine.drain();
+  expect(memory.state("pages", "P9")?.state).toBe("started");
 });
 
 test("one trigger's failing start holds up no other trigger", async () => {
@@ -1199,7 +1063,7 @@ test("one trigger's failing start holds up no other trigger", async () => {
   });
   await h.engine.arm();
   h.at(minutes(2));
-  expect(await h.engine.push("github", { page: "P1" })).toEqual(["alpha", "beta"]);
+  expect(await h.engine.push("github", pushed({ page: "P1" }))).toEqual(["alpha", "beta"]);
   await h.engine.drain();
   expect(h.memory.state("alpha", "P1")?.state).toBe("pending");
   expect(h.memory.state("beta", "P1")?.state).toBe("started");
@@ -1216,8 +1080,8 @@ test("stopping waits for the start in flight and starts nothing after", async ()
   });
   await h.engine.arm();
   h.at(minutes(2));
-  await h.engine.push("github", { page: "P1" });
-  await h.engine.push("github", { page: "P2" });
+  await h.engine.push("github", pushed({ page: "P1" }));
+  await h.engine.push("github", pushed({ page: "P2" }));
   await vi.waitFor(() => expect(starts).toBe(1));
 
   let settled = false;
@@ -1298,59 +1162,52 @@ test("a factory declaring no triggers lists none and starts nothing", async () =
   expect(startTriggers({ workflows: {} }).triggers).toEqual([]);
 });
 
-test("a failed arm at boot is retried by the polls, and the timers still run", async () => {
-  const { source, polls } = fakeSource();
+test("a failed arm at boot is retried by the next push, and the drain timer still runs", async () => {
   const timers: Array<{ ms: number; fire: () => void }> = [];
   const memory = memoryStore();
   let enables = 0;
   const lines: string[] = [];
-  startTriggers(factory({ pages: pagesTrigger }), {
+  const engine = startTriggers(factory({ pages: pagesTrigger }), {
     store: {
       ...memory.store,
       enable: async (trigger, now) => {
         enables += 1;
-        if (enables <= 2) throw new Error("registry unreachable");
+        if (enables <= 1) throw new Error("registry unreachable");
         return memory.store.enable(trigger, now);
       },
     },
-    sources: { "fake.pages": source },
+    sources: { "fake.pages": fakeSource().source },
     now: () => T0,
     log: (line) => lines.push(line),
     runStatuses: async () => new Map(),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
-    random: () => 0,
     setTimer: (fire, ms) => {
       timers.push({ fire, ms });
       return () => {};
     },
   });
-  await vi.waitFor(() => expect(timers.map((timer) => timer.ms).sort()).toEqual([30_000, 300_000]));
-  expect(polls).toEqual([]);
-  timers.find((timer) => timer.ms === 300_000)?.fire();
-  await vi.waitFor(() => expect(polls).toEqual([T0]));
-  expect(lines[0]).toContain("could not enable triggers, retrying on each poll");
+  await vi.waitFor(() => expect(timers.map((timer) => timer.ms)).toEqual([30_000]));
+  expect(lines[0]).toContain("could not enable triggers, retrying on each push");
+  expect(memory.marks.get("pages")).toBeUndefined();
+  await engine.push("github", pushed({ other: true }));
+  expect(memory.marks.get("pages")).toEqual({ enabledAt: T0 });
 });
 
-test("the service arms, polls each trigger at once and again on its provider's interval", async () => {
-  const { source, polls } = fakeSource();
+test("the service arms each trigger once ready and drains on a timer", async () => {
   const timers: Array<{ ms: number; fire: () => void }> = [];
   const memory = memoryStore();
   startTriggers(factory({ pages: pagesTrigger }), {
     store: memory.store,
-    sources: { "fake.pages": source },
+    sources: { "fake.pages": fakeSource().source },
     now: () => T0,
     log: () => {},
     runStatuses: async () => new Map(),
     ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
-    random: () => 0,
     setTimer: (fire, ms) => {
       timers.push({ fire, ms });
       return () => {};
     },
   });
-  await vi.waitFor(() => expect(timers.map((timer) => timer.ms).sort()).toEqual([30_000, 300_000]));
-  expect(polls).toEqual([T0]);
-  expect(memory.marks.get("pages")).toEqual({ enabledAt: T0, cursor: T0.toISOString() });
+  await vi.waitFor(() => expect(timers.map((timer) => timer.ms)).toEqual([30_000]));
+  expect(memory.marks.get("pages")).toEqual({ enabledAt: T0 });
 });

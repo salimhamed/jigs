@@ -11,29 +11,10 @@ const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
 const run = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
 
-test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
+test("init scaffolds through the CLI parser, and bind records its binding", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "jigs-cli-"));
   try {
-    const result = run(
-      cwd,
-      "init",
-      "--github-identity-mode",
-      "app",
-      "--github-app-id",
-      "123",
-      "--github-app-installation",
-      "some-org=10",
-      "--github-app-installation",
-      "Other=20",
-      "--github-app-private-key-path",
-      "app.pem",
-      "--github-operator-login",
-      "human",
-      "--git-co-author",
-      "Human <human@example.com>",
-      "--linear-identity-mode",
-      "app",
-    );
+    const result = run(cwd, "init");
     expect(result.stderr).toBe("");
     expect(result.status).toBe(0);
     // Scaffold installation is a separate command; load only its emitted settings here.
@@ -51,23 +32,17 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
       "git@github.com:some-org/example.git",
       "--binding-name",
       "example-alias",
+      "--installation",
+      "github-some-org",
     );
-    // With no real App behind it the label leg fails, after the binding is recorded.
+    // With no hub behind it the label leg fails, after the binding is recorded.
     expect(bound.status).not.toBe(0);
     expect(bound.stderr).toContain("jigs:approved label could not be ensured");
     const config = readFactoryConfig(cwd);
-    expect(config.github.identities).toEqual([
-      {
-        mode: "app",
-        appId: 123,
-        installations: { "some-org": 10, Other: 20 },
-        privateKeyPath: "app.pem",
-        operator: "human",
-        coAuthor: "Human <human@example.com>",
-      },
-    ]);
-    expect(config.linear).toEqual({ identity: { mode: "app" } });
-    expect(config.bindings["example-alias"]?.remote).toBe("git@github.com:some-org/example.git");
+    expect(config.bindings["example-alias"]).toMatchObject({
+      remote: "git@github.com:some-org/example.git",
+      installationName: "github-some-org",
+    });
   } finally {
     rmSync(cwd, { recursive: true, force: true });
   }
@@ -75,9 +50,6 @@ test("explicit GitHub flags reach the scaffold through the CLI parser", () => {
 
 test("renamed value flags reach validation instead of falling back to defaults", () => {
   const cwd = tmpdir();
-  expect(run(cwd, "upgrade", "--to-version", "latest").stderr).toContain(
-    "--to-version takes an exact version",
-  );
   expect(run(cwd, "watch", "--poll-interval-seconds", "0").stderr).toContain(
     "--poll-interval-seconds must be a positive number",
   );
@@ -102,7 +74,7 @@ test("root and no-argument help are side-effect-free, grouped and exact", () => 
       "Repositories:",
       "Recipes:",
       "Resources:",
-      "Generated code:",
+      "Build:",
       "Options:",
     ]);
     expect(noArgs.stdout).toMatch(/^ {2}down {2,}Stop the service and Postgres; data is kept$/m);
@@ -149,13 +121,13 @@ test("repository and recipe command help uses explicit placeholders", () => {
   const bind = run(cwd, "bind", "--help").stdout;
   expect(bind).toContain("<remote-url>");
   expect(bind).toContain("<binding-name>");
+  expect(bind).toContain("--installation <installation-name>");
   expect(run(cwd, "unbind", "--help").stdout).toContain("<binding-name>");
   expect(run(cwd, "recipe", "add", "--help").stdout).toContain("<recipe-name>");
 });
 
-test("upgrade and service command help uses explicit placeholders", () => {
+test("service command help uses explicit placeholders", () => {
   const cwd = tmpdir();
-  expect(run(cwd, "upgrade", "--help").stdout).toContain("<version>");
   expect(run(cwd, "service", "logs", "--help").stdout).toContain("<line-count>");
 });
 

@@ -27,6 +27,8 @@ export function defineJigsService(): NitroConfig {
     // root): bounding it to workflows/ would make a misfiled workflow
     // silently invisible, which is worse than scanning a little extra.
     rolldownConfig: { external: [OPTIONAL_TELEMETRY] },
-    routes: { "/**": `./${GENERATED_DIR}/${GENERATED_ENTRY_FILE}` },
+    routes: {
+      "/**": { handler: `./${GENERATED_DIR}/${GENERATED_ENTRY_FILE}`, format: "node" },
+    },
   };
 }

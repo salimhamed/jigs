@@ -11,6 +11,8 @@
 export interface Worktree {
   /** The named repository binding in the factory configuration. */
   binding: string;
+  /** The binding's GitHub installation, as named on the hub, that reaches its repository. */
+  installationName: string;
   path: string;
   branch: string;
   defaultBranch: string;

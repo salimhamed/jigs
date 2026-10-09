@@ -1,5 +1,6 @@
-import { expect, test } from "vitest";
+import { expect, onTestFinished, test } from "vitest";
 import { z } from "zod";
+import { removeTmpDir, useTestFactory } from "../../test-fixtures.ts";
 import { parseFactoryConfig } from "../../workflow/factory-schema.ts";
 import {
   effectiveReleasePolicy,
@@ -16,6 +17,7 @@ test("built-in, factory and workflow policies resolve in order", () => {
   expect(effectiveReleasePolicy(discard, keep)).toEqual(discard);
   expect(() =>
     parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9000 },
       release: { onSuccess: "oops", onFailure: "keep" },
     }),
@@ -40,23 +42,24 @@ test("two workflows can differ and match compiled IDs rather than config names",
 });
 
 test("resolver combines compiled entry and the factory's own default", async () => {
-  const definition = {
+  const parent = useTestFactory(`export default {
+    hub: { url: "https://hub.example.test" },
     service: { dashboardPort: 9000 },
-    release: keep,
+    release: { onSuccess: "keep", onFailure: "keep" },
     workflows: {
       first: async () => ({
         default: {
           workflow: Object.assign(async () => {}, { workflowId: "compiled" }),
-          inputs: z.object({}),
-          release: discard,
+          release: { onSuccess: "release", onFailure: "release" },
         },
       }),
     },
-  };
-  expect(
-    await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "compiled" }, definition),
-  ).toEqual(discard);
-  expect(
-    await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "missing" }, definition),
-  ).toEqual(keep);
+  };`);
+  onTestFinished(() => removeTmpDir(parent));
+  expect(await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "compiled" })).toEqual(
+    discard,
+  );
+  expect(await resolveReleasePolicy({ workflowRunId: "run_1", workflowName: "missing" })).toEqual(
+    keep,
+  );
 });

@@ -9,17 +9,21 @@ import { doctorChecks, preflightChecks } from "./index.ts";
 
 inTestFactory();
 
-test("preflight checks the identity of each provider a workflow's agents opt in to", () => {
+test("preflight checks the installations of each provider a workflow's agents opt in to", () => {
   const ids = (harness: ReturnType<typeof harnesses.codex>) =>
     preflightChecks({ agents: { agent: harness } }).map((check) => check.id);
-  expect(ids(harnesses.codex({ model: "m", linear: true }))).toContain("linear.identity");
-  expect(ids(harnesses.codex({ model: "m", pagerduty: true }))).toContain("pagerduty.identity");
-  expect(ids(harnesses.codex({ model: "m" }))).not.toContain("linear.identity");
-  // Declared as an integration too, each identity is still checked once.
+  expect(ids(harnesses.codex({ model: "m", linear: { installationName: "acme" } }))).toContain(
+    "linear.installations",
+  );
+  expect(ids(harnesses.codex({ model: "m", pagerduty: { installationName: "acme" } }))).toContain(
+    "pagerduty.installations",
+  );
+  expect(ids(harnesses.codex({ model: "m" }))).not.toContain("linear.installations");
+  // Declared as an integration too, each provider is still checked once.
   const both = preflightChecks({
     integrations: ["linear"],
-    agents: { agent: harnesses.codex({ model: "m", linear: true }) },
-  }).filter((check) => check.id === "linear.identity");
+    agents: { agent: harnesses.codex({ model: "m", linear: { installationName: "acme" } }) },
+  }).filter((check) => check.id === "linear.installations");
   expect(both).toHaveLength(1);
 });
 
@@ -31,18 +35,18 @@ test("doctor leaves a hosted server reading an agent token to the step's own pro
   });
   writeFileSync(
     path.join(factory, "jigs.config.ts"),
-    "export default { service: { dashboardPort: 9090 } }",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } }",
   );
   vi.stubEnv("JIGS_FACTORY_ROOT", factory);
   const triager = harnesses.claude({
     model: "m",
-    linear: true,
-    pagerduty: true,
+    linear: { installationName: "acme" },
+    pagerduty: { installationName: "acme" },
     mcpServers: { linear: linearMcp(), pagerduty: pagerdutyMcp() },
   });
   const ids = doctorChecks({ triage: { requires: { agents: { triager } } } }).map(
     (check) => check.id,
   );
-  expect(ids).toEqual(expect.arrayContaining(["linear.identity", "pagerduty.identity"]));
+  expect(ids).toEqual(expect.arrayContaining(["linear.installations", "pagerduty.installations"]));
   expect(ids.filter((id) => id.startsWith("mcp."))).toEqual([]);
 });

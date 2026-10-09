@@ -1,9 +1,11 @@
 # Set a factory up
 
 From nothing to a service that answers. The human-facing walkthrough is
-`https://salimhamed.github.io/jigs/guide/getting-started`; identity, merge
-settings, bindings and webhooks are in
-`https://salimhamed.github.io/jigs/guide/configuration`.
+`https://salimhamed.github.io/jigs/guide/getting-started`; merge settings,
+bindings and the factory's hub settings are in
+`https://salimhamed.github.io/jigs/guide/configuration`. Running a hub, and
+creating each provider's app in it, is in
+`https://salimhamed.github.io/jigs/guide/hub`.
 
 Print each command for the human to run, or run it and show them the output.
 Nothing below is safe to run silently: every step can fail in a way only a
@@ -33,21 +35,17 @@ mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 ```
 
-Choose the GitHub identity now; `jigs init --help` lists the flags.
-`--github-identity-mode pat` (the default) makes jigs act as the operator, with
-a `jigs:approved` label as the merge approval. `--github-identity-mode app`
-makes jigs act as a GitHub App and takes the App's id, installations, private
-key path and the operator's login; approval is then a GitHub review. An App
-factory may set `github.mergeApproval: "label"` instead; a PAT factory cannot
-use review. `--linear-identity-mode key|app` does the same for Linear. Both are
-written to `jigs.config.ts`, so changing one later is a config edit. Add
-`linear.operator: "<operator's Linear email>"` there so ticket comments mention
-the operator and the assignee rather than the ticket's creator; with `key`
-mode and the operator's own key, Linear will not notify them, so prefer `app`.
+jigs acts on GitHub, Linear, Slack and PagerDuty as the apps the hub assigns
+the factory, so there is nothing to choose here. The factory names each
+installation it uses by its installation name on the hub, such as
+`github-acme`; ask the user for these names when a step below needs one. Add
+`linear.operator: "<operator's Linear email>"` to `jigs.config.ts` so ticket
+runs' questions and notes mention the operator and the assignee rather than the ticket's
+creator.
 
-`jigs init` writes `jigs.config.ts`, the generated `jigs/steps.ts` and
-`jigs/routines.ts`, a `hello` workflow in `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example` and build
-settings. It preserves existing files. Its printed ports come from the factory
+`jigs init` writes `jigs.config.ts`, a `hello` workflow in
+`workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example`
+and build settings. It preserves existing files. Its printed ports come from the factory
 path; adjust them in `jigs.config.ts` if they are taken.
 
 ## 2. Install and `.env`
@@ -55,12 +53,16 @@ path; adjust them in `jigs.config.ts` if they are taken.
 ```sh
 pnpm install
 cp .env.example .env
+pnpm exec jigs hub connect <hub-url> <token>
 ```
 
-`hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` as written. Fill in the Linear and GitHub credentials
-before adding a workflow that declares those integrations; the configuration
-guide's `.env` table lists each variable.
+Every factory hears GitHub, Linear, Slack and PagerDuty through a hub. Ask the
+user for the hub URL and the factory token the hub showed when they added this
+factory (with no hub yet, they run one first: see the hub guide above). `hub connect` writes
+the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
+`jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
+`WORKFLOW_POSTGRES_URL` as written. GitHub, Linear, Slack and PagerDuty tokens come
+from the hub; the configuration guide's `.env` table lists every other variable.
 
 ## 3. `jigs up`
 
@@ -107,7 +109,7 @@ is up.
 
 `jigs up` is also the command after every change to the factory's code.
 `--restart-service` forces a restart; `--force` skips the question about
-in-flight runs.
+runs with a step executing.
 
 Then:
 
@@ -128,40 +130,36 @@ jigs recipe add linear-ticket-to-pr
 to add by hand. The copied code is the factory's to edit; `workflows/linear-ticket-to-pr/README.md` explains the linear-ticket-to-pr recipe.
 
 ```sh
-jigs bind git@github.com:owner/repo.git
+jigs bind git@github.com:owner/repo.git --installation <github-installation>
 jigs bindings
 jigs up
 ```
 
-`jigs bind` adds the binding to `jigs.config.ts`, creates the factory's
+`jigs bind` adds the binding, with the GitHub installation that reaches the
+repository as its `installationName`, to `jigs.config.ts`, creates the factory's
 `bindings/<name>/` folder with a README when it is missing, and, with the
-configured identity, creates the `jigs:approved` label and, when GitHub webhooks
-are on, the webhook. The service clones each binding into
+factory's GitHub App, creates the `jigs:approved` label. The service clones each binding into
 `~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`
 above is what makes a new binding usable. That data folder is jigs's own and is
 separate from the factory's `bindings/<name>/`, whose files `copy` lists for
 each new worktree. Worktree provisioning (`copy`, `postCreate`) is a hand edit
 described in the configuration guide.
 
-## 5. Webhooks are optional
+## 5. Events come through the hub
 
-A parked run wakes without webhooks: the service re-reads each waiting pull
-request and ticket every `service.pollIntervalSeconds.github` / `.linear`
-seconds (default 300), and `jigs poke <run-id>` wakes one sooner. Webhooks
-only make the wake immediate. They need a public tunnel URL, a
-`webhooks` section in `jigs.config.ts` and a secret per provider in `.env`; the
-configuration guide's webhooks section has the steps.
+GitHub, Linear, Slack and PagerDuty events all come through the hub, and wake
+a parked run at once. `jigs poke <run-id>` wakes one whose event was missed.
 
 ## Upgrading later
 
+Set the new `@jigs-ai/jigs` version in `package.json`, then:
+
 ```sh
-jigs upgrade
+pnpm install
+pnpm exec jigs up
+pnpm typecheck
 ```
 
-It bumps jigs, regenerates `jigs/`, runs `jigs up` and typechecks the
-factory. Review and commit the regenerated `jigs/steps.ts` and
-`jigs/routines.ts`. From a release that generated `jigs.ts`, it also deletes
-that file and replaces the older `package.json` imports entries with
-`#jigs/*`; move the factory's `#jigs` imports to `#jigs/steps` and
-`#jigs/routines` by hand. Library imports come from the root `@jigs-ai/jigs`;
-routines such as `claimTicket` or `agentSession` come from `#jigs/routines`.
+`jigs up` stops if a waiting run needs a step the new build lacks; go back to
+the previous version, let it finish or cancel it, then upgrade again. Library imports come from the root `@jigs-ai/jigs`;
+routines such as `acquireTicket` or `agentSession` come from `#jigs/routines`.

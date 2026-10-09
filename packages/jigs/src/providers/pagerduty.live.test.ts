@@ -1,58 +1,22 @@
 import { afterAll, describe, expect, test } from "vitest";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
-import { createPagerDutyClient, type PagerDutyIncident } from "./pagerduty.ts";
-import { createPagerDutyAuth } from "./pagerduty-auth.ts";
+import { livePagerDutyClient, waitForLiveIncident } from "./test-fixtures.ts";
 
-// The live half of the PagerDuty client tests: a real scoped OAuth app on a
-// real account. Runs only with PAGERDUTY_CLIENT_ID, PAGERDUTY_CLIENT_SECRET
-// and PAGERDUTY_FROM set; PAGERDUTY_EVENTS_ROUTING_KEY also opens and resolves
-// a test incident on the sandbox service to add a note to.
+// The live half of the PagerDuty client tests: a real PagerDuty app's token on
+// a real account. Runs only with JIGS_TEST_PAGERDUTY_TOKEN and PAGERDUTY_FROM
+// set; PAGERDUTY_EVENTS_ROUTING_KEY also opens and resolves a test incident on
+// the sandbox service to add a note to.
 const env = (name: string) => (process.env[name] === "" ? undefined : process.env[name]);
+const token = env("JIGS_TEST_PAGERDUTY_TOKEN");
 const from = env("PAGERDUTY_FROM");
-const configured =
-  env("PAGERDUTY_CLIENT_ID") !== undefined &&
-  env("PAGERDUTY_CLIENT_SECRET") !== undefined &&
-  from !== undefined;
+const configured = token !== undefined && from !== undefined;
 const routingKey = env("PAGERDUTY_EVENTS_ROUTING_KEY");
-const SERVICE = env("PAGERDUTY_SERVICE_ID") ?? "P48FPG2";
 
 describe.skipIf(!configured)("PagerDuty, live", () => {
-  const identity: PagerDutyIdentity = {
-    mode: "app",
-    subdomain: env("PAGERDUTY_SUBDOMAIN") ?? "junglescout",
-    region: env("PAGERDUTY_REGION") === "eu" ? "eu" : "us",
-    from: from ?? "",
-  };
-  const auth = createPagerDutyAuth(identity, { env });
-  const client = createPagerDutyClient(identity, { auth });
-
-  test("mints a token and reuses it", async () => {
-    const token = await auth.bearer();
-    expect(token).not.toBe("");
-    expect(await auth.bearer()).toBe(token);
-  });
-
-  test("lists the sandbox service's incidents", async () => {
-    const since = new Date(Date.now() - 7 * 24 * 3600_000).toISOString();
-    const incidents = await client.listIncidents({
-      service_ids: [SERVICE],
-      statuses: ["triggered", "acknowledged", "resolved"],
-      since,
-    });
-    for (const incident of incidents) expect(incident.service.id).toBe(SERVICE);
-  });
-
-  test("lists webhook subscriptions without their secrets", async () => {
-    const subscriptions = await client.listWebhookSubscriptions();
-    for (const subscription of subscriptions) {
-      expect(typeof subscription.delivery_method.url).toBe("string");
-      expect(JSON.stringify(subscription)).not.toMatch(/"secret"\s*:\s*"[^"]/);
-    }
-  });
+  const client = livePagerDutyClient(token ?? "", from ?? "");
 
   test("finds the from user", async () => {
-    const user = await client.findUserByEmail(identity.from);
-    expect(user?.email.toLowerCase()).toBe(identity.from.toLowerCase());
+    const user = await client.findUserByEmail(from ?? "");
+    expect(user?.email.toLowerCase()).toBe(from?.toLowerCase());
   });
 
   describe.skipIf(routingKey === undefined)("a note on a test incident", () => {
@@ -83,12 +47,7 @@ describe.skipIf(!configured)("PagerDuty, live", () => {
 
     test("is attributed to the from user", async () => {
       expect((await enqueue("trigger")).status).toBe(202);
-      let incident: PagerDutyIncident | undefined;
-      for (let attempt = 0; attempt < 30 && incident === undefined; attempt += 1) {
-        [incident] = await client.listIncidents({ incident_key: dedupKey });
-        if (incident === undefined) await new Promise((resolve) => setTimeout(resolve, 2_000));
-      }
-      if (incident === undefined) throw new Error("the test incident never appeared");
+      const incident = await waitForLiveIncident(token ?? "", dedupKey);
       expect((await client.getIncident(incident.id)).id).toBe(incident.id);
       const note = await client.createNote(incident.id, "jigs live test note");
       expect(note.content).toBe("jigs live test note");

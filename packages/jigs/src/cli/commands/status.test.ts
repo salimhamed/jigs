@@ -47,7 +47,7 @@ const result = (over: Partial<StatusResult> = {}): StatusResult => ({
 const respond = (body: unknown) =>
   fetchMock.mockResolvedValueOnce(new Response(JSON.stringify(body)));
 
-test("status says what the run waits for, where to act, and what was asked", async () => {
+test("status says what the run waits for", async () => {
   respond(
     result({
       status: "running",
@@ -55,11 +55,9 @@ test("status says what the run waits for, where to act, and what was asked", asy
       dashboard: DASHBOARD,
       suspensions: [
         {
-          token: "jigs:needs-human:issue-1:comment-1",
-          kind: "needs-human",
-          reason: "waiting for a human reply on AGE-317",
-          url: "https://linear.app/acme/issue/AGE-317#comment-comment-1",
-          question: "Which binding?\nA. api",
+          token: "linear:listening:acme:session-1",
+          kind: "linear-listening",
+          reason: "waiting for a reply in Linear agent session session-1",
         },
       ],
     }),
@@ -80,15 +78,12 @@ test("status says what the run waits for, where to act, and what was asked", asy
     `  dashboard      ${DASHBOARD}`,
     "",
     "Waiting",
-    "  waiting for a human reply on AGE-317 → https://linear.app/acme/issue/AGE-317#comment-comment-1",
-    "  asked:",
-    "    Which binding?",
-    "    A. api",
+    "  waiting for a reply in Linear agent session session-1",
   ]);
 });
 
 test("a run waiting on a Slack thread says which thread", async () => {
-  const suspension = describeSuspension(slackThreadToken("C0123ABCD", "1790723244.335019"));
+  const suspension = describeSuspension(slackThreadToken("acme", "C0123ABCD", "1790723244.335019"));
   respond(result({ suspensions: suspension === null ? [] : [suspension] }));
   respond({ steps: [], deadJobs: [] });
   await showRunStatus(RUN, deps(), { now: NOW });
@@ -167,7 +162,7 @@ test("status prints live pull-request gate state under its suspension", async ()
       status: "running",
       suspensions: [
         {
-          token: "github:pr:acme/api#41",
+          token: "github:pr:acme:acme/api#41",
           kind: "pull-request",
           reason: "waiting for an approving review and green CI on acme/api#41",
           headSha: "1234567",
@@ -203,13 +198,13 @@ test("status prints the last wake of a human and a Slack-thread wait", async () 
       status: "running",
       suspensions: [
         {
-          token: "jigs:needs-human:issue-1:comment-1",
-          kind: "needs-human",
-          reason: "waiting for a human to answer on AGE-1",
-          lastWake: { kind: "linear Comment", at: "2026-09-04T10:08:00.000Z" },
+          token: "linear:listening:acme:session-1",
+          kind: "linear-listening",
+          reason: "waiting for a reply in Linear agent session session-1",
+          lastWake: { kind: "linear AgentSessionEvent", at: "2026-09-04T10:08:00.000Z" },
         },
         {
-          token: "slack:thread:C0C5EUZ7P9Q:1790723478.961719",
+          token: "slack:thread:acme:C0C5EUZ7P9Q:1790723478.961719",
           kind: "slack-thread",
           reason: "waiting for a reply in a Slack thread",
           lastWake: { kind: "slack reply", at: "2026-09-04T10:08:00.000Z" },
@@ -222,8 +217,8 @@ test("status prints the last wake of a human and a Slack-thread wait", async () 
   expect(lines.slice(4)).toEqual([
     "",
     "Waiting",
-    "  waiting for a human to answer on AGE-1",
-    "    last wake  linear Comment, 2m ago (2026-09-04T10:08:00.000Z)",
+    "  waiting for a reply in Linear agent session session-1",
+    "    last wake  linear AgentSessionEvent, 2m ago (2026-09-04T10:08:00.000Z)",
     "  waiting for a reply in a Slack thread",
     "    last wake  slack reply, 2m ago (2026-09-04T10:08:00.000Z)",
   ]);
@@ -235,7 +230,7 @@ test("a pull request GitHub could not be asked about prints as it always did", a
       status: "running",
       suspensions: [
         {
-          token: "github:pr:acme/api#41",
+          token: "github:pr:acme:acme/api#41",
           kind: "pull-request",
           reason: "waiting for an approving review and green CI on acme/api#41",
         },

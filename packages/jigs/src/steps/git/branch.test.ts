@@ -25,6 +25,7 @@ beforeEach(() => {
   approved = git(checkout, "rev-parse", "HEAD");
   worktree = {
     binding: "app",
+    installationName: "github-acme",
     path: checkout,
     branch: "feature",
     defaultBranch: "main",

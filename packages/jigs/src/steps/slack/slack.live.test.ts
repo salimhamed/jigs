@@ -1,16 +1,22 @@
 import { tmpdir } from "node:os";
-import { afterAll, expect, test, vi } from "vitest";
-import { SlackApiError, slackHistory } from "../../providers/slack.ts";
+import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { SlackApiError, type SlackMessage, slackFor } from "../../providers/slack.ts";
+import { useLiveSlackToken } from "../../providers/test-fixtures.ts";
 import { waitForSlackReply } from "../../workflow/slack/wait-for-reply.ts";
 import { fetchSlackMessage } from "./fetch-message.ts";
 import { postSlackMessage } from "./post-message.ts";
 
-// Posts to the test channel, then deletes what it posted. Set SLACK_BOT_TOKEN
-// to a test app's that is in the channel.
-const configured = Boolean(process.env.SLACK_BOT_TOKEN);
-// The shell's token wins over any factory's .env, so any root serves.
+// Posts to the test channel, then deletes what it posted. Set JIGS_TEST_SLACK_BOT_TOKEN
+// in the shell to a test app's bot token; the app must be in the channel.
+const token = process.env.JIGS_TEST_SLACK_BOT_TOKEN;
+const configured = Boolean(token);
 vi.stubEnv("JIGS_FACTORY_ROOT", tmpdir());
+
+beforeAll(async () => {
+  if (token) await useLiveSlackToken(token);
+});
 const channel = "C0C5EUZ7P9Q";
+const installationName = "live";
 
 // A hook that never wakes: the wait either finds a reply on its first read or parks.
 const parked = vi.hoisted(() => ({ count: 0 }));
@@ -30,7 +36,7 @@ async function deleteMessage(ts: string) {
   const res = await fetch("https://slack.com/api/chat.delete", {
     method: "POST",
     headers: {
-      authorization: `Bearer ${process.env.SLACK_BOT_TOKEN}`,
+      authorization: `Bearer ${token}`,
       "content-type": "application/x-www-form-urlencoded",
     },
     body: new URLSearchParams({ channel, ts }),
@@ -44,16 +50,21 @@ afterAll(async () => {
 test.skipIf(!configured)(
   "a posted thread snapshots in order, and the bot's reply is its own",
   async () => {
-    const ts = await postSlackMessage({ channel, text: "jigs live test: snapshot parent" });
+    const ts = await postSlackMessage({
+      installationName,
+      channel,
+      text: "jigs live test: snapshot parent",
+    });
     posted.push(ts);
     const reply = await postSlackMessage({
+      installationName,
       channel,
       text: "jigs live test: bot reply",
       threadTs: ts,
     });
     posted.push(reply);
 
-    const snapshot = await fetchSlackMessage({ channel, ts });
+    const snapshot = await fetchSlackMessage({ installationName, channel, ts });
     if (snapshot.gone) throw new Error("the message just posted reads as gone");
     expect(snapshot).toMatchObject({
       ts,
@@ -64,35 +75,55 @@ test.skipIf(!configured)(
     expect(snapshot.permalink).toMatch(/^https:\/\/.+\/archives\/C0C5EUZ7P9Q\/p\d+/);
 
     // The bot's reply is no human's, so the wait parks rather than returning it.
-    void waitForSlackReply({ channel, threadTs: ts, lastRead: ts }, { fetchSlackMessage });
+    void waitForSlackReply(
+      { installationName, channel, threadTs: ts, lastRead: ts },
+      { fetchSlackMessage },
+    );
     await vi.waitFor(() => expect(parked.count).toBe(1), { timeout: 10_000 });
   },
 );
 
 test.skipIf(!configured)("a thread reply's ts fails, naming the top-level message", async () => {
-  const ts = await postSlackMessage({ channel, text: "jigs live test: reply parent" });
+  const ts = await postSlackMessage({
+    installationName,
+    channel,
+    text: "jigs live test: reply parent",
+  });
   posted.push(ts);
-  const reply = await postSlackMessage({ channel, text: "jigs live test: reply", threadTs: ts });
+  const reply = await postSlackMessage({
+    installationName,
+    channel,
+    text: "jigs live test: reply",
+    threadTs: ts,
+  });
   posted.push(reply);
-  await expect(fetchSlackMessage({ channel, ts: reply })).rejects.toThrow(
+  await expect(fetchSlackMessage({ installationName, channel, ts: reply })).rejects.toThrow(
     `is a thread reply; pass its thread's top-level message ts, ${ts}`,
   );
 });
 
 test.skipIf(!configured)("a deleted message snapshots as gone", async () => {
-  const ts = await postSlackMessage({ channel, text: "jigs live test: deleted" });
+  const ts = await postSlackMessage({ installationName, channel, text: "jigs live test: deleted" });
   expect((await deleteMessage(ts)).ok).toBe(true);
-  expect(await fetchSlackMessage({ channel, ts })).toEqual({ gone: true, channel, ts });
+  expect(await fetchSlackMessage({ installationName, channel, ts })).toEqual({
+    gone: true,
+    channel,
+    ts,
+  });
 });
 
 test.skipIf(!configured)("a human's message snapshots with their name and email", async (ctx) => {
   const since = (Date.now() / 1000 - 30 * 24 * 3600).toFixed(6);
-  const human = (await slackHistory(channel, { oldest: since })).find(
+  const history = await slackFor(installationName).slackCall<{
+    ok: true;
+    messages: SlackMessage[];
+  }>("conversations.history", { channel, oldest: since });
+  const human = history.body.messages.find(
     (message) => message.bot_id === undefined && message.subtype === undefined,
   );
   if (human === undefined) return ctx.skip("no human message in the test channel this month");
   try {
-    const snapshot = await fetchSlackMessage({ channel, ts: human.ts });
+    const snapshot = await fetchSlackMessage({ installationName, channel, ts: human.ts });
     expect(snapshot).toMatchObject({
       gone: false,
       author: { id: human.user, bot: false, isOwnBot: false, email: expect.stringContaining("@") },

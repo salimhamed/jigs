@@ -21,7 +21,6 @@ import { type FetchCall, fakeSleep } from "./test-support.ts";
 let github: FakeGithub;
 
 beforeEach(() => {
-  vi.stubEnv("GITHUB_TOKEN", "gh_test_token");
   github = fakeGithub();
 });
 afterEach(() => {
@@ -30,7 +29,7 @@ afterEach(() => {
 });
 inTestFactory();
 
-const pr = { owner: "acme", repo: "api", number: 41 };
+const pr = { installationName: "acme", owner: "acme", repo: "api", number: 41 };
 
 const json = (body: unknown) => new Response(JSON.stringify(body));
 
@@ -88,8 +87,11 @@ test("findOpenPullRequestsByHeadSha returns matching open PRs using their base r
   );
 
   await expect(
-    findOpenPullRequestsByHeadSha({ owner: "fork-owner", repo: "fork" }, "status-sha"),
-  ).resolves.toEqual([{ owner: "acme", repo: "api", number: 41 }]);
+    findOpenPullRequestsByHeadSha(
+      { installationName: "acme", owner: "fork-owner", repo: "fork" },
+      "status-sha",
+    ),
+  ).resolves.toEqual([{ installationName: "acme", owner: "acme", repo: "api", number: 41 }]);
   expect(urls()).toEqual([
     "https://api.github.com/repos/fork-owner/fork/commits/status-sha/pulls?per_page=100&page=1",
   ]);
@@ -122,8 +124,13 @@ test("findOpenPullRequestByBranch adopts the one open PR for the branch", async 
   github.reply(json([openPull({ number: 41 })]));
 
   await expect(
-    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+    findOpenPullRequestByBranch(
+      { installationName: "acme", owner: "acme", repo: "api" },
+      "jigs/change",
+      "main",
+    ),
   ).resolves.toEqual({
+    installationName: "acme",
     owner: "acme",
     repo: "api",
     number: 41,
@@ -149,7 +156,11 @@ test("findOpenPullRequestByBranch skips every PR that is not this branch on this
   );
 
   await expect(
-    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+    findOpenPullRequestByBranch(
+      { installationName: "acme", owner: "acme", repo: "api" },
+      "jigs/change",
+      "main",
+    ),
   ).resolves.toBeNull();
 });
 
@@ -157,7 +168,11 @@ test("findOpenPullRequestByBranch matches the repository whatever case GitHub re
   github.reply(json([openPull({ number: 41, headRepo: "Acme/API", baseRepo: "Acme/API" })]));
 
   await expect(
-    findOpenPullRequestByBranch({ owner: "acme", repo: "api" }, "jigs/change", "main"),
+    findOpenPullRequestByBranch(
+      { installationName: "acme", owner: "acme", repo: "api" },
+      "jigs/change",
+      "main",
+    ),
   ).resolves.toMatchObject({ number: 41 });
 });
 
@@ -165,7 +180,7 @@ test("findOpenPullRequestByBranch refuses to guess between several matches", asy
   github.reply(json([openPull({ number: 41 }), openPull({ number: 42 })]));
 
   const failure = await findOpenPullRequestByBranch(
-    { owner: "acme", repo: "api" },
+    { installationName: "acme", owner: "acme", repo: "api" },
     "jigs/change",
     "main",
   ).catch((err: unknown) => err);
@@ -219,7 +234,7 @@ test("fetchPrSnapshot shapes the PR, its reviews and the head sha", async () => 
     "https://api.github.com/repos/acme/api/commits/head-sha-1/status?per_page=100",
   ]);
   const call = github.calls[0] as FetchCall;
-  expect(call.headers.authorization).toBe("Bearer gh_test_token");
+  expect(call.headers.authorization).toBe("Bearer ghs_test");
 });
 
 test("review comments group into threads by in_reply_to_id", async () => {
@@ -469,12 +484,6 @@ test("a non-2xx response throws with the path named", async () => {
   await expect(fetchPrSnapshot(pr)).rejects.toThrow("/repos/acme/api/pulls/41");
 });
 
-test("a missing GITHUB_TOKEN throws before any request", async () => {
-  vi.stubEnv("GITHUB_TOKEN", "");
-  await expect(fetchPrSnapshot(pr)).rejects.toThrow("GITHUB_TOKEN");
-  expect(github.calls).toHaveLength(0);
-});
-
 test("a threaded reply posts to the thread root's replies endpoint", async () => {
   github.reply(json({ id: 950 }));
   await replyToReviewThread(pr, 900, "fixed in a2b3c4d");
@@ -546,6 +555,7 @@ test("a review with an empty comments array omits comments from the request", as
 test("createPr posts its fields and passes through GitHub's number and URL", async () => {
   github.reply(json({ number: 41, html_url: "https://github.example/acme/api/pull/41" }));
   const created = await createPr({
+    installationName: "acme",
     owner: "acme",
     repo: "api",
     head: "salimhamed/age-316",
@@ -572,6 +582,7 @@ test("createPr posts its fields and passes through GitHub's number and URL", asy
 test("createPr forwards draft when supplied", async () => {
   github.reply(json({ number: 42, html_url: "https://github.example/acme/api/pull/42" }));
   await createPr({
+    installationName: "acme",
     owner: "acme",
     repo: "api",
     head: "draft",

@@ -2,28 +2,31 @@
 // hidden marker. Nothing reads a note back: the factory posts it once and a
 // lost response means no note rather than two.
 
-import { pagerDutyClientFor } from "../../providers/pagerduty.ts";
+import { pagerDutyFor } from "../../providers/pagerduty.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
 
 function renderIncidentNote(content: string, metadata: RunMetadata): string {
-  return `${content.trimEnd()}\n\njigs run ${metadata.workflowRunId}`;
+  return `${content.trimEnd()}\n\nRun ${metadata.workflowRunId}`;
 }
 
 /**
  * Add a plain-text note to the incident, ending in a line that names the run.
  *
  * @remarks
- * The note is attributed to the factory's `pagerduty.identity.from` user.
+ * The note is attributed to the from user set on the PagerDuty installation in the hub.
  * PagerDuty shows markup as literal text, so write plain sentences.
  *
  * @group Create and update
  */
 export async function postIncidentNote(
-  incidentId: string,
-  content: string,
+  {
+    installationName,
+    incidentId,
+    content,
+  }: { installationName: string; incidentId: string; content: string },
   metadata: RunMetadata,
 ): Promise<{ noteId: string }> {
-  const note = await pagerDutyClientFor().createNote(
+  const note = await pagerDutyFor(installationName).createNote(
     incidentId,
     renderIncidentNote(content, metadata),
   );

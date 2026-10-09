@@ -4,12 +4,10 @@
  * @packageDocumentation
  */
 
-import { mkdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, rmSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { checkFactoryIntegration } from "../build/integration.ts";
+import { packageRoot } from "../build/templates.ts";
 import { GENERATED_DIR, GENERATED_ENTRY_FILE, GENERATED_PLUGIN_FILE } from "./generated-files.ts";
-
-export { generateFactoryIntegration } from "../build/integration.ts";
 
 // A real entry file, never a nitro alias: the workflow builder runs its own
 // discovery pass that does not honour nitro aliases, so an alias would build
@@ -35,7 +33,6 @@ export const factory = {
   workflows,
   schedules: definition.schedules,
   triggers: definition.triggers,
-  webhooks: definition.webhooks,
 } satisfies Factory;
 
 export default createApp(factory);
@@ -61,7 +58,6 @@ export default () => {
  * directory is rewritten in full, so running this twice is running it once.
  */
 export function prepare(factoryRoot: string): string {
-  checkFactoryIntegration(factoryRoot);
   const generated = path.join(factoryRoot, GENERATED_DIR);
   // Files an earlier release generated would otherwise linger for the
   // workflow builder's scan to trip over.
@@ -71,5 +67,23 @@ export function prepare(factoryRoot: string): string {
   const entry = path.join(generated, GENERATED_ENTRY_FILE);
   writeFileSync(entry, ENTRY_SOURCE);
   writeFileSync(path.join(generated, GENERATED_PLUGIN_FILE), PLUGIN_SOURCE);
+  // Copied into the factory so each step's durable ID is a factory path,
+  // which upgrading jigs cannot rename (ADR 0006).
+  for (const file of ["steps.ts", "routines.ts"]) {
+    copyFileSync(path.join(packageRoot(), "factory", file), path.join(generated, file));
+  }
   return entry;
+}
+
+/**
+ * A Vitest plugin that writes `.jigs/` before tests run, so a test that imports `#jigs/steps`
+ * or `#jigs/routines` finds the files the service build would write.
+ */
+export function prepareJigs() {
+  return {
+    name: "jigs:prepare",
+    config(config: { root?: string }) {
+      prepare(path.resolve(config.root ?? process.cwd()));
+    },
+  };
 }

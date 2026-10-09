@@ -3,37 +3,24 @@ import readline from "node:readline/promises";
 import { Command, Option } from "commander";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
-import type { LinearIdentity } from "../workflow/factory-schema.ts";
 import { bindRepo } from "./commands/bind.ts";
 import { listBindings } from "./commands/bindings.ts";
 import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { downFactory } from "./commands/down.ts";
-import { generateIntegration } from "./commands/generate.ts";
-import {
-  type AppIdentityOptions,
-  type IdentityMode,
-  initFactory,
-  resolveIdentityOptions,
-} from "./commands/init.ts";
+import { connectHub } from "./commands/hub.ts";
+import { initFactory } from "./commands/init.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
 import { showRuns } from "./commands/run-list.ts";
-import {
-  restartService,
-  serviceLogs,
-  serviceStatus,
-  startService,
-  stopService,
-} from "./commands/service.ts";
+import { serviceLogs, serviceStatus, stopService } from "./commands/service.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
 import { upFactory } from "./commands/up.ts";
-import { upgradeFactory } from "./commands/upgrade.ts";
 import { watchRuns } from "./commands/watch.ts";
 import { listWorkflows } from "./commands/workflows.ts";
 import { formatError } from "./output.ts";
@@ -73,8 +60,10 @@ const ROOT_HELP = `Usage: jigs <command> [options]
 
 Set up:
   init                      Scaffold a factory in the current directory
-  upgrade                   Move to a newer jigs, run up, then typecheck
   doctor                    Check config, connections and required tools
+  hub connect <url> <token>
+                            Point this factory at its hub; the token goes
+                            in .env
 
 Start and stop:
   up                        Start Postgres and the service, then run doctor
@@ -83,9 +72,7 @@ Start and stop:
   down                      Stop the service and Postgres; data is kept
 
 Service process:
-  service start             Start the service from the existing build
   service stop              Stop the service; Postgres keeps running
-  service restart           Stop and start the service
   service status            Report whether the service is running
   service logs              Show recent service output
 
@@ -111,9 +98,8 @@ Resources:
   resources prune           Preview what --apply would remove, policy-kept included
   resources prune --apply   Remove it after the Git safety checks
 
-Generated code:
+Build:
   build                     Compile workflows into the service bundle
-  generate                  Refresh the generated jigs/ directory
 
 A <run-id> is the run's full ID, which jigs status lists under RUN.
 In a factory, run every command as
@@ -135,55 +121,9 @@ program.helpInformation = () => ROOT_HELP;
 program
   .command("init")
   .description("scaffold a factory repo in the current directory")
-  .addOption(
-    new Option(
-      "--github-identity-mode <mode>",
-      "which GitHub credential this factory is written for",
-    )
-      .choices(["pat", "app"])
-      .default("pat"),
-  )
-  // Required together by --github-identity-mode app, and refused there as a set rather
-  // than defaulted: a scaffold with placeholder ids does not load.
-  .option("--github-app-id <id>", "GitHub App id (--github-identity-mode app)")
-  .option(
-    "--github-app-installation <account=installation-id>",
-    "App installation by account (repeatable)",
-    (value: string, previous: string[]) => [...previous, value],
-    [],
-  )
-  .option(
-    "--github-app-private-key-path <path>",
-    "the App's private key .pem (--github-identity-mode app)",
-  )
-  .option("--github-operator-login <login>", "your GitHub login (--github-identity-mode app)")
-  .option(
-    "--git-co-author <author>",
-    '"Name <email>" for merge commit trailers (--github-identity-mode app)',
-  )
-  .addOption(
-    new Option(
-      "--linear-identity-mode <mode>",
-      "which Linear credential this factory is written for",
-    )
-      .choices(["key", "app"])
-      .default("key"),
-  )
-  .action(
-    async (
-      options: {
-        githubIdentityMode: IdentityMode;
-        linearIdentityMode: LinearIdentity["mode"];
-      } & AppIdentityOptions,
-    ) => {
-      await initFactory({
-        cwd: process.cwd(),
-        out,
-        identity: resolveIdentityOptions(options.githubIdentityMode, options),
-        linearIdentity: { mode: options.linearIdentityMode },
-      });
-    },
-  );
+  .action(async () => {
+    await initFactory({ cwd: process.cwd(), out });
+  });
 
 const recipe = program.command("recipe").description("copy a shipped workflow into this factory");
 recipe
@@ -200,13 +140,6 @@ recipe
   });
 
 program
-  .command("generate")
-  .description("refresh the generated jigs/ directory from the factory's installed jigs")
-  .action(async () => {
-    await generateIntegration({ cwd: process.cwd(), out });
-  });
-
-program
   .command("build")
   .description("compile this factory's workflows into its service bundle")
   .action(async () => {
@@ -219,7 +152,7 @@ program
     "take this factory from any state to a running service (env, install, compose, bootstrap, build, start, doctor)",
   )
   .option("--restart-service", "restart the service even when the bundle is unchanged")
-  .option("--force", "restart over in-flight runs without asking")
+  .option("--force", "restart over executing steps without asking")
   .option("--no-doctor", "skip the doctor pass once the service is up")
   .action(async (options: { restartService?: boolean; force?: boolean; doctor: boolean }) => {
     // Every step has already printed its own FAIL line and repair, so the
@@ -240,20 +173,17 @@ program
     await downFactory({ cwd: process.cwd(), out });
   });
 
-program
-  .command("upgrade")
-  .description(
-    "move this factory to a newer jigs: bump the package, then up, then the factory's typecheck",
-  )
-  .option("--to-version <version>", "pin jigs to this version instead of the latest release")
-  .option("--force", "restart over in-flight runs without asking")
-  .option("--no-doctor", "skip the doctor pass once the service is up")
-  .action(async (options: { toVersion?: string; force?: boolean; doctor: boolean }) => {
-    const result = await upgradeFactory(
-      { cwd: process.cwd(), out },
-      { ...options, to: options.toVersion },
-    );
-    if (!result.ok) process.exitCode = 1;
+const hub = program
+  .command("hub")
+  .description("connect this factory to the hub it hears its providers through");
+
+hub
+  .command("connect")
+  .description("set the hub's URL in jigs.config.ts and the factory token in .env")
+  .argument("<url>", "the address the hub is reached at")
+  .argument("<token>", "the factory token the hub showed when this factory was added")
+  .action((url: string, token: string) => {
+    connectHub(url, token, { cwd: process.cwd(), out });
   });
 
 program
@@ -264,8 +194,19 @@ program
     "--binding-name <binding-name>",
     "binding name (default: an existing exact-remote match, else the repo name lowercased)",
   )
-  .action(async (remoteUrl: string, options: { bindingName?: string }) => {
-    await bindRepo(remoteUrl, { cwd: process.cwd(), out }, { name: options.bindingName });
+  .option(
+    "--installation <installation-name>",
+    "the GitHub App installation, as named on the hub, that reaches the repo (default: the binding's own)",
+  )
+  .action(async (remoteUrl: string, options: { bindingName?: string; installation?: string }) => {
+    await bindRepo(
+      remoteUrl,
+      { cwd: process.cwd(), out },
+      {
+        ...(options.bindingName === undefined ? {} : { name: options.bindingName }),
+        ...(options.installation === undefined ? {} : { installation: options.installation }),
+      },
+    );
   });
 
 program
@@ -416,24 +357,10 @@ const service = program
   .description("supervise this factory's service process; Postgres is left running");
 
 service
-  .command("start")
-  .description("start this factory's service process in the background")
-  .action(async () => {
-    await startService({ cwd: process.cwd(), out });
-  });
-
-service
   .command("stop")
   .description("stop this factory's service process and everything it started, dashboard included")
   .action(async () => {
     await stopService({ cwd: process.cwd(), out });
-  });
-
-service
-  .command("restart")
-  .description("stop then start this factory's service process")
-  .action(async () => {
-    await restartService({ cwd: process.cwd(), out });
   });
 
 service

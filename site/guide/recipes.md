@@ -28,32 +28,37 @@ Reads a Linear ticket, asks a builder agent to implement the change, then asks
 a reviewer agent to review it. It publishes a pull request and lets the builder
 continue responding to feedback and CI. Merging follows the policy in the copied
 workflow: by default, jigs merges an approved pull request once CI is green.
+The run talks to people in one Linear agent session on the ticket: it asks
+there when the ticket is unclear, leaves its notes there, and ends it with
+"Merged" and the pull request's link, or why it stopped.
 
 #### Requires
 
-- A [Linear identity](/guide/configuration#linear-identity).
-- A GitHub binding and a GitHub App [identity](/guide/configuration#github-identity).
+- A Linear app assigned to the factory in the [hub](/guide/configuration#linear-app),
+  with a named installation in the ticket's workspace.
+- A GitHub binding whose `installationName` names the factory's GitHub App
+  [installed on its owner](/guide/configuration#github-app).
 - The configured builder and reviewer harnesses, installed and authenticated.
 - The [GitHub CLI](https://cli.github.com), `gh`.
 
 The builder acts on GitHub as the factory's App, the same bot jigs posts as
-(`github: true`, see [GitHub access for agents](/guide/models-and-harnesses#github-access)).
+through the binding's installation, which the workflow adds to the builder's
+harness as `github: { installationName: worktree.installationName }` (see
+[GitHub access for agents](/guide/models-and-harnesses#github-access)).
 It reads discussions, posts replies and pushes fixes with `gh` and `git`, with
 no token of yours. Its replies show as the bot, which is how the recipe tells
-them apart from yours. With a personal access token, remove `github: true` from
-the builder and give it GitHub access yourself, for example a token named in
-[`agents.env`](/guide/configuration#agents-env); its replies then look like
-anyone else's, so each one wakes it once more. No Jev model is required.
+them apart from yours. No Jev model is required.
 
 #### Run
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
 ```
 
 | Input | Default | What it chooses |
 | --- | --- | --- |
 | `ticket` | | The Linear ticket, by identifier or ID. |
+| `linearInstallation` | | The [installation name](/guide/hub#installation-names) of the Linear workspace the ticket is in. |
 | `binding` | | The repository to change. |
 | `builder` | `builder` | The agent, by name, that builds the change. |
 | `reviewer` | `reviewer` | The agent, by name, that reviews the requirements and the change. |
@@ -78,7 +83,7 @@ stops the run. To allow any title, delete the check in the copied workflow. `app
 `"latest-commit"` by default, or `"any-commit"` to let an approval carry over
 later pushes. If GitHub blocks an approved, green pull request, the recipe
 leaves one note on it for each commit and keeps waiting. When the pull request
-needs a person, the recipe notes it on the ticket, leaves the ticket In Review
+needs a person, the recipe notes it in the ticket's session, leaves the ticket In Review
 and keeps watching; only closing the pull request unmerged stops the run.
 The instruction that the builder must not merge is a prompt rule, not a
 restriction on its token; see
@@ -100,4 +105,4 @@ the watcher the recipe uses.
    Check that `jigs.config.ts` imports the new copy.
 5. Run `pnpm exec jigs up`, then typecheck and test the factory.
 
-Moving workflow files can change their [durable identities](/guide/concepts#why-jigs-generates-code-in-your-factory).
+Moving workflow files can change their [durable identities](/guide/concepts#folders-the-build-creates).

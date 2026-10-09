@@ -1,0 +1,509 @@
+/**
+ * Durable steps your workflows import from `#jigs/steps`.
+ * Each wrapper carries its own "use step" directive and stable factory identity.
+ *
+ * @module factory/steps
+ * @packageDocumentation
+ */
+// Copied into the factory's .jigs/ by `jigs build`. Do not edit the copy.
+
+import type {
+  AgentRequest,
+  AskJevOptions,
+  Halt,
+  JevQuestions,
+  JevResult,
+  ModelRequest,
+  PullRequestReadOptions,
+  PullRequestRef,
+  ReleasePolicy,
+  RunResource,
+  TicketNote,
+  Worktree,
+} from "@jigs-ai/jigs";
+import * as agentsOperations from "@jigs-ai/jigs/steps/agents";
+import * as gitOperations from "@jigs-ai/jigs/steps/git";
+import type {
+  LinearAgentActivityContent,
+  LinearAgentTurnRequest,
+} from "@jigs-ai/jigs/steps/linear";
+import * as linearOperations from "@jigs-ai/jigs/steps/linear";
+import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
+import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
+import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
+import * as slackOperations from "@jigs-ai/jigs/steps/slack";
+import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
+import * as workspacesOperations from "@jigs-ai/jigs/steps/workspaces";
+import { getStepMetadata, getWorkflowMetadata } from "workflow";
+
+/**
+ * Prepare a worktree for this run, reusing it when the run resumes.
+ *
+ * @group Workspaces and resources
+ */
+export async function provisionWorktree(request: WorktreeRequest): Promise<Worktree> {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return workspacesOperations.provisionWorktree(request, metadata);
+}
+
+/**
+ * Release this run's resources now and return the report. The service already does this when
+ * the run ends; call it to release early, to read the report, or to pass this run's policy.
+ *
+ * @group Workspaces and resources
+ */
+export async function release(policy?: ReleasePolicy) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return runtimeOperations.releaseRunResources(metadata, policy);
+}
+
+/**
+ * Execute an agent in a working directory. Use runAgent() to pass an output schema and parse its answer.
+ *
+ * @group Agent execution
+ */
+export async function executeAgent(request: AgentRequest) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return agentsOperations.executeAgent(request, metadata);
+}
+
+/**
+ * Execute a model request without tools. Use askModel() to pass an output schema and parse its answer.
+ *
+ * @group Agent execution
+ */
+export async function executeModel(request: ModelRequest) {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return agentsOperations.executeModel(request, metadata);
+}
+
+/**
+ * Execute typed decision questions against one shared state.
+ *
+ * @group Agent execution
+ */
+export function executeJev<const QUESTIONS extends JevQuestions>(
+  request: AskJevOptions<QUESTIONS>,
+): Promise<JevResult<QUESTIONS>>;
+export async function executeJev(request: AskJevOptions<JevQuestions>) {
+  "use step";
+  return agentsOperations.executeJev(request, getWorkflowMetadata());
+}
+
+/**
+ * Ask in the ticket's Linear agent session for human input. Use haltForHuman() to also wait for a
+ * reply.
+ *
+ * @group Linear and human input
+ */
+export async function postTicketHumanInputRequest(request: {
+  installationName: string;
+  issueId: string;
+  sessionId: string;
+  halt: Halt;
+}) {
+  "use step";
+  return linearOperations.postTicketHumanInputRequest(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Post a note in the ticket's Linear agent session that asks for nothing and waits for nothing.
+ *
+ * @group Linear and human input
+ */
+export async function postTicketNote(request: {
+  installationName: string;
+  issueId: string;
+  sessionId: string;
+  note: TicketNote;
+}) {
+  "use step";
+  return linearOperations.postTicketNote(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Read a pull request's reviews, comments, CI results, approval, and merge state.
+ *
+ * @group Pull requests
+ */
+export async function fetchPullRequestState(
+  pullRequest: PullRequestRef,
+  options?: PullRequestReadOptions,
+) {
+  "use step";
+  return pullRequestsOperations.fetchPullRequestState(pullRequest, options);
+}
+
+/**
+ * Read the ticket's current details, comments, and related issues from Linear.
+ *
+ * @group Linear and human input
+ */
+export async function fetchTicketSnapshot(ticket: { installationName: string; issueId: string }) {
+  "use step";
+  return linearOperations.fetchTicketSnapshot(ticket);
+}
+
+/**
+ * Move a ticket to a named state when this workflow's policy says to.
+ *
+ * @group Linear and human input
+ */
+export async function setTicketStatus(request: {
+  installationName: string;
+  issueId: string;
+  stateName: string;
+}) {
+  "use step";
+  return linearOperations.setTicketStatus(request);
+}
+
+/**
+ * Resolve a Linear ticket identifier or issue ID before claiming it.
+ *
+ * @group Linear and human input
+ */
+export async function resolveLinearIssue(request: { installationName: string; reference: string }) {
+  "use step";
+  return linearOperations.resolveLinearIssue(request);
+}
+
+/**
+ * Open a Linear agent session on an issue as the factory's app, linked to this run.
+ *
+ * @group Linear agent sessions
+ */
+export async function openLinearAgentSession(request: {
+  installationName: string;
+  issueId: string;
+}) {
+  "use step";
+  return linearOperations.openLinearAgentSession(request, getWorkflowMetadata());
+}
+
+/**
+ * Post a thought, action, elicitation, response or error into a Linear agent session as the
+ * factory's app.
+ *
+ * @group Linear agent sessions
+ */
+export async function postLinearAgentActivity(request: {
+  installationName: string;
+  sessionId: string;
+  content: LinearAgentActivityContent;
+  ephemeral?: boolean;
+  once?: string;
+}) {
+  "use step";
+  return linearOperations.postLinearAgentActivity(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Replace the links a Linear agent session shows, after the run's dashboard.
+ *
+ * @group Linear agent sessions
+ */
+export async function setLinearAgentSessionUrls(request: {
+  installationName: string;
+  sessionId: string;
+  urls: Array<{ label: string; url: string }>;
+}) {
+  "use step";
+  return linearOperations.setLinearAgentSessionUrls(request, getWorkflowMetadata());
+}
+
+/**
+ * Run one turn of a conversation in a Linear agent session, posting its status and answers there.
+ * Use linearAgentConversation() to hold the whole conversation.
+ *
+ * @group Linear agent sessions
+ */
+export async function executeLinearAgentTurn(request: LinearAgentTurnRequest) {
+  "use step";
+  return linearOperations.executeLinearAgentTurn(request, {
+    ...getWorkflowMetadata(),
+    stepId: getStepMetadata().stepId,
+  });
+}
+
+/**
+ * Read every message people sent into a Linear agent session, oldest first.
+ *
+ * @group Linear agent sessions
+ */
+export async function listLinearAgentSessionPrompts(session: {
+  installationName: string;
+  sessionId: string;
+}) {
+  "use step";
+  return linearOperations.listLinearAgentSessionPrompts(session);
+}
+
+/**
+ * Read a snapshot of the PagerDuty incident.
+ *
+ * @group PagerDuty incidents
+ */
+export async function fetchIncidentSnapshot(incident: {
+  installationName: string;
+  incidentId: string;
+}) {
+  "use step";
+  return pagerDutyOperations.fetchIncidentSnapshot(incident);
+}
+
+/**
+ * Add a plain-text note to the PagerDuty incident, ending in a line that names this run.
+ *
+ * @group PagerDuty incidents
+ */
+export async function postIncidentNote(note: {
+  installationName: string;
+  incidentId: string;
+  content: string;
+}) {
+  "use step";
+  return pagerDutyOperations.postIncidentNote(note, getWorkflowMetadata());
+}
+
+// One attempt: a lost POST response may already have added the note, and
+// nothing on the incident tells a retry. A missed note beats a doubled one.
+postIncidentNote.maxRetries = 0;
+
+/**
+ * Read a Slack message and its thread replies, with each author's name and email.
+ *
+ * @group Slack messages
+ */
+export async function fetchSlackMessage(message: {
+  installationName: string;
+  channel: string;
+  ts: string;
+}) {
+  "use step";
+  return slackOperations.fetchSlackMessage(message);
+}
+
+/**
+ * Post plain mrkdwn text to a Slack channel, or reply in the thread under `threadTs`.
+ *
+ * @group Slack messages
+ */
+export async function postSlackMessage(message: {
+  installationName: string;
+  channel: string;
+  text: string;
+  threadTs?: string;
+}) {
+  "use step";
+  return slackOperations.postSlackMessage(message);
+}
+
+// One attempt, like the pull request comments: a retry cannot tell whether a
+// post whose response was lost reached Slack.
+postSlackMessage.maxRetries = 0;
+
+/**
+ * Prepare this run's scratch directory, preserving it when the run resumes.
+ *
+ * @group Workspaces and resources
+ */
+export async function createRunDirectory() {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return runtimeOperations.createRunDirectory(metadata);
+}
+
+/**
+ * Record a resource on this run independently of the workflow's return value.
+ *
+ * @group Workspaces and resources
+ *
+ * @remarks
+ * Register anything a person may need to find in `jigs status`. Kind and identity
+ * together name the record; registering again updates its URL. Create external
+ * resources in a separate step when creation is not safe to repeat, then register
+ * them here so registration retries cannot repeat creation. The record is observation
+ * only: jigs never deletes what it names. The kinds jigs records and releases itself
+ * (`worktree`, `branch`, `run-directory`, `codex-home`, `pi-home`, `claude-plugins`) are reserved.
+ */
+export async function registerResource(resource: RunResource) {
+  "use step";
+  return runtimeOperations.registerResource(resource);
+}
+
+/**
+ * Remove this run's scratch directory after its work is complete.
+ *
+ * @group Workspaces and resources
+ */
+export async function removeRunDirectory() {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return runtimeOperations.removeRunDirectory(metadata);
+}
+
+/**
+ * Check commits since the base, the branch's current commit, and uncommitted changes.
+ *
+ * @group Git changes
+ * @inlineType BranchState
+ */
+export async function readBranchState(worktree: Worktree, baseSha?: string) {
+  "use step";
+  return gitOperations.readBranchState(worktree, baseSha);
+}
+
+/**
+ * Push the worktree's branch to its remote, including any newly committed changes.
+ *
+ * @group Git changes
+ */
+export async function pushBranch(worktree: Worktree) {
+  "use step";
+  return gitOperations.pushBranch(worktree);
+}
+
+/**
+ * Recheck approval and push only the reviewed commit, including on retries.
+ *
+ * @group Git changes
+ */
+export async function pushApprovedChange(worktree: Worktree, approvedCommit: string) {
+  "use step";
+  return gitOperations.pushApprovedChange(worktree, approvedCommit);
+}
+
+/**
+ * Read committed changes, defaulting to the worktree's base commit. Large diffs are truncated.
+ *
+ * @group Git changes
+ */
+export async function readWorktreeDiff(worktree: Worktree, baseSha?: string) {
+  "use step";
+  return gitOperations.readWorktreeDiff(worktree, baseSha);
+}
+
+/**
+ * Read committed file changes and subjects up to HEAD, defaulting to the worktree's base.
+ *
+ * @group Git changes
+ */
+export async function readChange(worktree: Worktree, base?: string) {
+  "use step";
+  return gitOperations.readChange(worktree, base);
+}
+
+/**
+ * Read capped patches for literal named paths between the summary's commits.
+ *
+ * @group Git changes
+ */
+export async function readPatch(worktree: Worktree, base: string, head: string, paths: string[]) {
+  "use step";
+  return gitOperations.readPatch(worktree, base, head, paths);
+}
+
+/**
+ * Create a pull request for a branch that has already been pushed.
+ *
+ * @group Pull requests
+ */
+export async function createPullRequest(request: {
+  worktree: Worktree;
+  title: string;
+  body: string;
+  draft?: boolean;
+}) {
+  "use step";
+  return pullRequestsOperations.createPullRequest(request);
+}
+
+/**
+ * Reply to an existing code-review thread on a pull request.
+ *
+ * @group Pull requests
+ */
+export async function replyToPullRequestReviewThread(
+  pullRequest: PullRequestRef,
+  rootCommentId: number,
+  body: string,
+) {
+  "use step";
+  return pullRequestsOperations.replyToPullRequestReviewThread(pullRequest, rootCommentId, body);
+}
+
+// One attempt: a POST whose response is lost may already have posted, and a
+// retry cannot tell. The marker in the body is what the next wake reads.
+replyToPullRequestReviewThread.maxRetries = 0;
+
+/**
+ * Add a comment to the pull request's main conversation.
+ *
+ * @group Pull requests
+ */
+export async function commentOnPullRequest(pullRequest: PullRequestRef, body: string) {
+  "use step";
+  return pullRequestsOperations.commentOnPullRequest(pullRequest, body);
+}
+
+// One attempt, for the reason above.
+commentOnPullRequest.maxRetries = 0;
+
+/**
+ * Post a review on a pull request.
+ *
+ * @group Pull requests
+ */
+export async function reviewPullRequest(
+  pullRequest: PullRequestRef,
+  review: {
+    event: "comment" | "approve" | "request-changes";
+    body: string;
+    comments?: Array<{ path: string; line: number; body: string }>;
+  },
+) {
+  "use step";
+  return pullRequestsOperations.reviewPullRequest(pullRequest, review);
+}
+
+// One attempt: a lost POST response may already have posted the review.
+reviewPullRequest.maxRetries = 0;
+
+/**
+ * Mark a draft pull request ready for review and return its current state.
+ *
+ * @group Pull requests
+ */
+export async function markPullRequestReady(pullRequest: PullRequestRef) {
+  "use step";
+  return pullRequestsOperations.markPullRequestReady(pullRequest);
+}
+
+/**
+ * Merge the pull request with the first method its repository allows of squash, merge commit
+ * and rebase, pinned to the approved head.
+ *
+ * @group Pull requests
+ */
+export async function mergePullRequest(
+  pullRequest: PullRequestRef,
+  expectedHeadSha: string,
+  options?: PullRequestReadOptions,
+) {
+  "use step";
+  return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, options);
+}

@@ -12,8 +12,8 @@ import {
   pushCommit,
   resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor, githubUsesPat } from "../../providers/github-auth.ts";
-import { parseGithubRemote } from "../../providers/github-webhook.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { recordResource, registrySql } from "../runtime/registry.ts";
@@ -21,22 +21,18 @@ import { isWorktreeDirty } from "../workspaces/git-safety.ts";
 
 // A binding's remote is an SSH URL, which authenticates as whoever owns the
 // key on this machine — the operator. An installation token cannot travel that
-// way, so App mode pushes to the same repository over HTTPS and hands the token
+// way, so jigs pushes to the same repository over HTTPS and hands the token
 // to `PushTarget`, which keeps it out of the URL and out of argv. Only the push
 // is redirected: the binding's clone and every fetch still use its own remote,
-// as the operator.
-async function pushTarget(worktreePath: string): Promise<PushTarget> {
+// as the operator. A remote off GitHub has no installation token, so it is
+// pushed to as the operator too.
+async function pushTarget({ path: worktreePath, installationName }: Worktree): Promise<PushTarget> {
   const { url } = await resolveRemoteUrl(worktreePath);
   const ref = parseGithubRemote(url);
-  if (githubUsesPat()) return DEFAULT_PUSH_TARGET;
-  if (ref === null) {
-    throw new Error(
-      `${worktreePath} pushes to ${url}, which is not a github.com remote — a GitHub App installation token can only push to GitHub`,
-    );
-  }
+  if (ref === null) return DEFAULT_PUSH_TARGET;
   return {
     remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
-    token: await githubAuthFor(ref.owner).bearer(),
+    token: await githubAuthFor(installationName).bearer(),
   };
 }
 
@@ -91,7 +87,7 @@ export async function pushBranch(worktree: Worktree): Promise<{
 }> {
   const { path: worktreePath, branch } = worktree;
   await pushAndRecord(worktreePath, branch, async () =>
-    gitPushBranch(worktreePath, branch, await pushTarget(worktreePath)),
+    gitPushBranch(worktreePath, branch, await pushTarget(worktree)),
   );
   return { headSha: await headSha(worktreePath) };
 }
@@ -124,7 +120,7 @@ export async function pushApprovedChange(
     );
   }
   await pushAndRecord(worktreePath, branch, async () =>
-    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktreePath)),
+    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktree)),
   );
   return { headSha: approvedCommit };
 }

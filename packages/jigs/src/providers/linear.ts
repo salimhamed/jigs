@@ -3,6 +3,7 @@
 // "use step" function or from a route handler (the trigger's ticket lookup,
 // the run-ref resolver) — never from a workflow body, where both are forbidden.
 
+import { createHash } from "node:crypto";
 import {
   currentFactoryContext,
   type FactoryContext,
@@ -14,14 +15,23 @@ import {
   ProviderApiError,
   type ProviderApiErrorInit,
   rateLimitWaits,
-  reauthorize,
   retryAfterSeconds,
 } from "./http.ts";
-import { LINEAR_API_URL, type LinearAuth, linearAuthFor } from "./linear-auth.ts";
+import {
+  LINEAR_API_URL,
+  type LinearAppUser,
+  type LinearAuth,
+  linearAuthFor,
+} from "./linear-auth.ts";
 
 export interface LinearUser {
   id: string;
   name: string;
+}
+
+/** A Linear user with their profile link, which mentions them when written into Linear text. */
+export interface LinearProfile extends LinearUser {
+  url: string;
 }
 
 export interface LinearComment {
@@ -71,16 +81,13 @@ const operationName = (query: string): string =>
   /\b(?:query|mutation)\s+(\w+)/.exec(query)?.[1] ?? "graphql";
 
 export interface LinearClientDeps {
+  /** The Linear installation, as named on the hub, the client acts through. */
+  installationName: string;
   auth?: LinearAuth;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /** The factory it acts for. Defaults to the process's own, resolved on each call. */
   context?: FactoryContext;
-}
-
-export interface LinearWebhook {
-  url: string;
-  enabled: boolean;
 }
 
 export interface LinearIssueRef {
@@ -93,6 +100,11 @@ export interface LinearIssueState {
   name: string;
   type: string;
   position: number;
+}
+
+export interface LinearIssueFiling {
+  project: { id: string; slugId: string } | null;
+  labels: string[];
 }
 
 export interface LinearIssueStates {
@@ -164,10 +176,10 @@ export interface LinearIssueMatch {
   state: string;
 }
 
-export function createLinearClient(deps: LinearClientDeps = {}) {
+export function createLinearClient(deps: LinearClientDeps) {
   const ctx = () => deps.context ?? currentFactoryContext();
   async function linearGraphql<T>(query: string, variables: Record<string, unknown>): Promise<T> {
-    const auth = deps.auth ?? linearAuthFor(ctx());
+    const auth = deps.auth ?? linearAuthFor(deps.installationName, ctx());
     let reauthorized = false;
     const rateLimit = rateLimitWaits("linear", runSignal, deps.sleep);
     for (;;) {
@@ -175,14 +187,14 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       const res = await (deps.fetch ?? fetch)(LINEAR_API_URL, {
         method: "POST",
         headers: {
-          // A personal key goes bare; only an app token is a bearer.
-          authorization: auth.identity.mode === "key" ? credential : `Bearer ${credential}`,
+          authorization: `Bearer ${credential}`,
           "content-type": "application/json",
         },
         body: JSON.stringify({ query, variables }),
       });
       const text = await res.text();
-      if (rejectedCredential(res, text) && !reauthorized && reauthorize(auth, credential)) {
+      if (rejectedCredential(res, text) && !reauthorized) {
+        auth.invalidate(credential);
         reauthorized = true;
         continue;
       }
@@ -201,58 +213,32 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
           detail,
           ...extra,
         });
+      // The hub refreshes a token before handing it out, so Linear refusing a
+      // fresh one means the app has lost its access to the workspace.
+      if (rejectedCredential(res, text))
+        throw fail({
+          detail: `Linear refused the app's token${reauthorized ? " again after the hub issued a fresh one" : ""}; connect the Linear workspace again in the hub`,
+        });
       return decodeGraphql<T>(res, text, fail);
     }
   }
 
-  // The preflight probe for the Linear identity: the cheapest call that proves
-  // the credential is both present and accepted, and names who jigs is.
-  async function getViewer(): Promise<LinearUser> {
-    const data = await linearGraphql<{ viewer: LinearUser }>(
-      "query Viewer { viewer { id name } }",
-      {},
-    );
-    return data.viewer;
+  /** The factory's own app user in the workspace, as the hub names it. */
+  function appUser(): Promise<LinearAppUser> {
+    return (deps.auth ?? linearAuthFor(deps.installationName, ctx())).user();
   }
 
   /** The active Linear user with this email, or null when none has it. */
-  async function findUserByEmail(email: string): Promise<LinearUser | null> {
+  async function findUserByEmail(email: string): Promise<LinearProfile | null> {
     // Linear leaves deactivated users out unless includeDisabled is set, so one
     // who left the workspace reads as nobody.
-    const data = await linearGraphql<{ users: { nodes: LinearUser[] } }>(
+    const data = await linearGraphql<{ users: { nodes: LinearProfile[] } }>(
       `query UserByEmail($email: String!) {
-        users(filter: { email: { eqIgnoreCase: $email } }, first: 1) { nodes { id name } }
+        users(filter: { email: { eqIgnoreCase: $email } }, first: 1) { nodes { id name url } }
       }`,
       { email },
     );
     return data.users.nodes[0] ?? null;
-  }
-
-  async function listWebhooks(): Promise<LinearWebhook[]> {
-    const webhooks: LinearWebhook[] = [];
-    let after: string | null = null;
-    do {
-      const data: {
-        webhooks: {
-          nodes: LinearWebhook[];
-          pageInfo: { hasNextPage: boolean; endCursor: string | null };
-        };
-      } = await linearGraphql(
-        `query Webhooks($after: String) {
-          webhooks(after: $after) {
-            nodes { url enabled }
-            pageInfo { hasNextPage endCursor }
-          }
-        }`,
-        { after },
-      );
-      webhooks.push(...data.webhooks.nodes);
-      after = data.webhooks.pageInfo.hasNextPage ? data.webhooks.pageInfo.endCursor : null;
-      if (data.webhooks.pageInfo.hasNextPage && after === null) {
-        throw new JigsError("Linear webhooks page has no end cursor");
-      }
-    } while (after !== null);
-    return webhooks;
   }
 
   /** Read an issue's current state and the states its team accepts. */
@@ -293,14 +279,14 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
   }
 
   async function getIssueParticipants(issueId: string): Promise<{
-    creator: LinearUser | null;
-    assignee: LinearUser | null;
+    creator: LinearProfile | null;
+    assignee: LinearProfile | null;
   }> {
     const data = await linearGraphql<{
-      issue: { creator: LinearUser | null; assignee: LinearUser | null };
+      issue: { creator: LinearProfile | null; assignee: LinearProfile | null };
     }>(
       `query IssueParticipants($id: String!) {
-        issue(id: $id) { creator { id name } assignee { id name } }
+        issue(id: $id) { creator { id name url } assignee { id name url } }
       }`,
       { id: issueId },
     );
@@ -350,34 +336,6 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
       throw new JigsError(`Linear commentCreate failed for issue ${issueId}`);
     }
     return data.commentCreate.comment;
-  }
-
-  /**
-   * A comment by id, or null when none exists. Filters rather than fetching by id, so a missing
-   * comment is an empty answer and not an error.
-   *
-   * @group Resolve and read
-   */
-  async function findComment(id: string): Promise<{ id: string; createdAt: string } | null> {
-    const data = await linearGraphql<{
-      comments: { nodes: Array<{ id: string; createdAt: string }> };
-    }>(
-      `query FindComment($id: ID!) {
-        comments(filter: { id: { eq: $id } }, first: 1) { nodes { id createdAt } }
-      }`,
-      { id },
-    );
-    return data.comments.nodes[0] ?? null;
-  }
-
-  /** One comment by id: where a human replies to it, and what it says. Linear
-   *  mints the permalink, so nothing here guesses at an anchor. */
-  async function getComment(id: string): Promise<{ url: string; body: string }> {
-    const data = await linearGraphql<{
-      comment: { url: string; body: string } | null;
-    }>(`query Comment($id: String!) { comment(id: $id) { url body } }`, { id });
-    if (data.comment === null) throw new JigsError(`Linear comment not found: ${id}`);
-    return data.comment;
   }
 
   // A Linear project URL ends in its slugId, so accept that as well as the UUID.
@@ -470,98 +428,61 @@ export function createLinearClient(deps: LinearClientDeps = {}) {
     };
   }
 
-  async function listCommentsSince(issueId: string, sinceIso: string): Promise<LinearComment[]> {
+  /** The project and labels an issue is filed under. */
+  /** Null when the issue is gone or the app cannot see it. */
+  async function fetchIssueFiling(issueId: string): Promise<LinearIssueFiling | null> {
     const data = await linearGraphql<{
-      issue: { comments: { nodes: LinearComment[] } };
+      issue: {
+        project: { id: string; slugId: string } | null;
+        labels: { nodes: Array<{ name: string }> };
+      } | null;
     }>(
-      // Unpaginated `last: 50` is an accepted cap: wake re-checks only ever
-      // need the comments since the previous check.
-      `query IssueComments($id: String!) {
-        issue(id: $id) {
-          comments(last: 50) { nodes { id body createdAt user { id name } } }
-        }
+      `query IssueFiling($id: String!) {
+        issue(id: $id) { project { id slugId } labels(first: 250) { nodes { name } } }
       }`,
       { id: issueId },
     );
-    return data.issue.comments.nodes.filter((comment) => comment.createdAt > sinceIso);
+    if (data.issue === null) return null;
+    return {
+      project: data.issue.project,
+      labels: data.issue.labels.nodes.map((label) => label.name),
+    };
   }
 
   return {
-    getViewer,
+    graphql: linearGraphql,
+    appUser,
     findUserByEmail,
-    listWebhooks,
+    fetchIssueFiling,
     fetchIssueStates,
     updateIssueState,
     resolveIssueRef,
     getIssueParticipants,
     fetchIssueSnapshot,
     createComment,
-    findComment,
-    getComment,
     createIssueInProject,
     findIssueInProject,
-    listCommentsSince,
   };
 }
 
 export type LinearClient = ReturnType<typeof createLinearClient>;
 
-const processClient = createLinearClient();
-
-// The three that factory steps re-export are declared below, with their own docs.
-
-export const {
-  getViewer,
-  findUserByEmail,
-  listWebhooks,
-  fetchIssueStates,
-  updateIssueState,
-  resolveIssueRef,
-  getIssueParticipants,
-  fetchIssueSnapshot,
-  findComment,
-  getComment,
-  listCommentsSince,
-} = processClient;
+/** The factory's Linear client for one installation. */
+export const linearFor = (installationName: string, context?: FactoryContext): LinearClient =>
+  createLinearClient({ installationName, ...(context === undefined ? {} : { context }) });
 
 /**
- * Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
- * find it again after a lost response instead of posting twice.
- *
- * @group Create and update
+ * A UUID v4 derived from `parts`. Linear takes a caller's own id for a comment or an agent
+ * activity, so one derived from what the post is for names it the same way on every retry.
  */
-export function createComment(
-  issueId: string,
-  body: string,
-  id?: string,
-): Promise<{ id: string; createdAt: string }> {
-  return processClient.createComment(issueId, body, id);
-}
-
-/**
- * Create a ticket in the project’s first team.
- *
- * @group Create and update
- */
-export function createIssueInProject(
-  input: CreateIssueInProjectInput,
-): Promise<{ id: string; identifier: string; url: string }> {
-  return processClient.createIssueInProject(input);
-}
-
-/**
- * Find the newest ticket in a project whose title starts with the given text.
- *
- * @group Resolve and read
- */
-export function findIssueInProject(input: {
-  project: string;
-  titlePrefix: string;
-}): Promise<LinearIssueMatch | null> {
-  return processClient.findIssueInProject(input);
-}
-
-// Linear renders @-mentions in API-created comments as @[displayName](userId).
-export function mention(user: LinearUser): string {
-  return `@[${user.name}](${user.id})`;
+export function derivedUuid(parts: readonly string[]): string {
+  const hex = createHash("sha256")
+    .update(JSON.stringify(parts))
+    .digest("hex")
+    .slice(0, 32)
+    .split("");
+  hex[12] = "4";
+  hex[16] = "89ab"[Number.parseInt(hex[16] ?? "0", 16) % 4] ?? "8";
+  const id = hex.join("");
+  return `${id.slice(0, 8)}-${id.slice(8, 12)}-${id.slice(12, 16)}-${id.slice(16, 20)}-${id.slice(20)}`;
 }

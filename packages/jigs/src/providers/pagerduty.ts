@@ -1,5 +1,6 @@
 // A thin client for the PagerDuty REST API: only the calls jigs makes, with
-// PagerDuty's own field and parameter names. These read env and hit the
+// PagerDuty's own field and parameter names. It acts as the factory's
+// PagerDuty app, with a token the hub hands out. These reach the hub and the
 // network, so a caller reaches them from a step, a check or the service —
 // never from a workflow body.
 
@@ -9,19 +10,9 @@ import {
   runSignal,
 } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import type { PagerDutyIdentity } from "../workflow/factory-schema.ts";
-import { perContext } from "./credentials.ts";
-import {
-  MAX_RATE_LIMIT_WAIT_SECONDS,
-  ProviderApiError,
-  rateLimitWaits,
-  reauthorize,
-} from "./http.ts";
-import {
-  type PagerDutyAuth,
-  pagerDutyAuthFor,
-  resolvePagerDutyIdentity,
-} from "./pagerduty-auth.ts";
+import type { HubTokens } from "./credentials.ts";
+import { MAX_RATE_LIMIT_WAIT_SECONDS, ProviderApiError, rateLimitWaits } from "./http.ts";
+import { installationTokens } from "./installation-tokens.ts";
 
 export const PAGERDUTY_API_URL = "https://api.pagerduty.com";
 
@@ -58,63 +49,40 @@ export interface PagerDutyNote {
   user: PagerDutyReference;
 }
 
-export interface PagerDutyWebhookSubscription {
-  id: string;
-  active: boolean;
-  events: string[];
-  delivery_method: { type: string; url: string };
-  filter: { type: string; id?: string };
-}
-
 export interface PagerDutyUser {
   id: string;
   name: string;
   email: string;
 }
 
-type QueryValue = string | number | boolean | readonly string[];
-
-/**
- * Query parameters under PagerDuty's own names; an array is sent as `name[]` once per value.
- * Paging is the client's, so `limit` and `offset` are not accepted.
- */
-export type PagerDutyQuery = Record<string, QueryValue> & { limit?: never; offset?: never };
-
-/** What to keep from the full webhook subscription list. */
-export interface WebhookSubscriptionMatch {
-  url?: string;
-  filter?: { type?: string; id?: string };
-}
-
 export interface PagerDutyClient {
-  identity: PagerDutyIdentity;
   getIncident(id: string): Promise<PagerDutyIncident>;
-  listIncidents(query?: PagerDutyQuery): Promise<PagerDutyIncident[]>;
-  /** Add a note to an incident, attributed to the identity's `from` user. */
+  /** Add a note to an incident, attributed to the installation's from user. */
   createNote(incidentId: string, content: string): Promise<PagerDutyNote>;
-  /** Every subscription on the account, narrowed here: PagerDuty refuses its own filter parameters. */
-  listWebhookSubscriptions(
-    match?: WebhookSubscriptionMatch,
-  ): Promise<PagerDutyWebhookSubscription[]>;
   findUserByEmail(email: string): Promise<PagerDutyUser | null>;
   /** The cheapest read that proves the token works: one incident, if any. */
   verifyAccess(): Promise<void>;
 }
 
+/** The tokens of one of the factory's PagerDuty installations, as the hub hands them out. */
+export type PagerDutyTokens = Pick<
+  HubTokens<{ token: string; from: string }>,
+  "issued" | "invalidate"
+>;
+
 export interface PagerDutyClientDeps {
-  auth?: PagerDutyAuth;
+  /** The PagerDuty installation, as named on the hub, the client acts through. */
+  installationName: string;
+  tokens?: PagerDutyTokens;
   fetch?: typeof fetch;
   sleep?: (ms: number) => Promise<void>;
   /** The factory it acts for. Defaults to the process's own, resolved on each call. */
   context?: FactoryContext;
 }
 
-function queryString(query: Record<string, QueryValue>): string {
+function queryString(query: Record<string, string | number>): string {
   const params = new URLSearchParams();
-  for (const [name, value] of Object.entries(query)) {
-    if (Array.isArray(value)) for (const entry of value) params.append(`${name}[]`, entry);
-    else params.append(name, String(value));
-  }
+  for (const [name, value] of Object.entries(query)) params.append(name, String(value));
   const text = params.toString();
   return text === "" ? "" : `?${text}`;
 }
@@ -124,20 +92,16 @@ function rateLimitResetSeconds(res: Response): number {
   return Number.isFinite(reset) && reset > 0 ? Math.ceil(reset) : DEFAULT_RATE_LIMIT_WAIT_SECONDS;
 }
 
-export function createPagerDutyClient(
-  identity: PagerDutyIdentity,
-  deps: PagerDutyClientDeps = {},
-): PagerDutyClient {
+export function createPagerDutyClient(deps: PagerDutyClientDeps): PagerDutyClient {
   const ctx = () => deps.context ?? currentFactoryContext();
-  const auth = (): PagerDutyAuth => deps.auth ?? pagerDutyAuthFor(ctx());
 
   async function request<T>(method: string, apiPath: string, body?: unknown): Promise<T> {
     const url = `${PAGERDUTY_API_URL}${apiPath}`;
-    const callAuth = auth();
+    const tokens = deps.tokens ?? installationTokens("pagerduty", deps.installationName, ctx());
     let reauthorized = false;
     const rateLimit = rateLimitWaits("pagerduty", runSignal, deps.sleep);
     for (;;) {
-      const credential = await callAuth.bearer();
+      const { token: credential, from } = await tokens.issued();
       const res = await (deps.fetch ?? fetch)(url, {
         method,
         headers: {
@@ -145,12 +109,13 @@ export function createPagerDutyClient(
           ...(body === undefined ? {} : { "content-type": "application/json" }),
           accept: "application/vnd.pagerduty+json;version=2",
           // PagerDuty refuses a write that names no user (error 1027).
-          ...(method === "GET" ? {} : { from: identity.from }),
+          ...(method === "GET" ? {} : { from }),
         },
         body: body === undefined ? undefined : JSON.stringify(body),
       });
       const text = await res.text();
-      if (res.status === 401 && !reauthorized && reauthorize(callAuth, credential)) {
+      if (res.status === 401 && !reauthorized) {
+        tokens.invalidate(credential);
         reauthorized = true;
         continue;
       }
@@ -176,7 +141,7 @@ export function createPagerDutyClient(
   async function listAll<T>(
     apiPath: string,
     key: string,
-    query: PagerDutyQuery = {},
+    query: Record<string, string> = {},
   ): Promise<T[]> {
     const all: T[] = [];
     for (let page = 0; page < MAX_PAGES; page += 1) {
@@ -192,12 +157,11 @@ export function createPagerDutyClient(
     }
     throw new JigsError(
       `PagerDuty kept reporting more ${key} past ${MAX_PAGES * PAGE_LIMIT} records on ${apiPath}`,
-      "narrow the query, for example with a later since or fewer statuses, so it matches fewer records",
+      "narrow the query so it matches fewer records",
     );
   }
 
   return {
-    identity,
     async getIncident(id) {
       const reply = await request<{ incident: PagerDutyIncident }>(
         "GET",
@@ -205,7 +169,6 @@ export function createPagerDutyClient(
       );
       return reply.incident;
     },
-    listIncidents: (query = {}) => listAll<PagerDutyIncident>("/incidents", "incidents", query),
     async createNote(incidentId, content) {
       const reply = await request<{ note: PagerDutyNote }>(
         "POST",
@@ -213,18 +176,6 @@ export function createPagerDutyClient(
         { note: { content } },
       );
       return reply.note;
-    },
-    async listWebhookSubscriptions(match = {}) {
-      const all = await listAll<PagerDutyWebhookSubscription>(
-        "/webhook_subscriptions",
-        "webhook_subscriptions",
-      );
-      return all.filter(
-        (entry) =>
-          (match.url === undefined || entry.delivery_method.url === match.url) &&
-          (match.filter?.type === undefined || entry.filter.type === match.filter.type) &&
-          (match.filter?.id === undefined || entry.filter.id === match.filter.id),
-      );
     },
     async findUserByEmail(email) {
       // `query` also matches names and email prefixes, so the match is made here.
@@ -237,10 +188,6 @@ export function createPagerDutyClient(
   };
 }
 
-/** The factory's PagerDuty client, for its configured identity. */
-export const pagerDutyClientFor = perContext((ctx) =>
-  createPagerDutyClient(resolvePagerDutyIdentity(ctx), {
-    auth: pagerDutyAuthFor(ctx),
-    context: ctx,
-  }),
-);
+/** The factory's PagerDuty client for one installation. */
+export const pagerDutyFor = (installationName: string, context?: FactoryContext): PagerDutyClient =>
+  createPagerDutyClient({ installationName, ...(context === undefined ? {} : { context }) });

@@ -1,12 +1,39 @@
-import { createServer, type Server } from "node:http";
+import { toNodeHandler } from "better-auth/node";
+import express, { type Express, type Router } from "express";
+import type { HubAuth } from "./auth.ts";
+import type { Shutdown } from "./shutdown.ts";
+import type { WebApp } from "./web.ts";
 
-export function createHubServer(): Server {
-  return createServer((request, response) => {
-    if (request.method === "GET" && request.url === "/health") {
-      response.writeHead(200, { "content-type": "application/json" });
-      response.end(JSON.stringify({ status: "ok" }));
-      return;
-    }
-    response.writeHead(404).end();
+/** The hub's HTTP app. `/api/*` and `/webhooks/*` routes go here, ahead of the web app. */
+export function createHubApp(
+  auth: HubAuth,
+  routers: Router[],
+  web: WebApp,
+  shutdown: Shutdown,
+): Express {
+  const app = express();
+  app.disable("x-powered-by");
+  app.use(shutdown.gate);
+  app.get("/health", (_request, response) => {
+    response.json({ status: "ok" });
   });
+  app.use(authApp(auth));
+  for (const router of routers) app.use(router);
+  app.use(web.handlers);
+  return app;
+}
+
+// Better Auth rate-limits sign-in by the client IP it reads from X-Forwarded-For. Trust that header
+// only from a proxy on this machine or a private network, such as Tailscale Funnel or a load
+// balancer, so a client reaching the hub directly cannot pick its own bucket.
+function authApp(auth: HubAuth): Express {
+  const app = express();
+  app.disable("x-powered-by");
+  app.set("trust proxy", "loopback, uniquelocal");
+  const handler = toNodeHandler(auth);
+  app.all("/api/auth/*splat", (request, response) => {
+    if (request.ip) request.headers["x-forwarded-for"] = request.ip;
+    return handler(request, response);
+  });
+  return app;
 }

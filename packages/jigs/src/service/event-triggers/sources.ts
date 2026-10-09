@@ -1,51 +1,54 @@
 // The service-side half of an event trigger's source: how to read a kind's
-// occurrences from its provider. Config holds only the plain descriptor; this
-// registry, keyed by the descriptor's `kind`, is what the engine runs.
+// occurrences from its provider's pushed events. Config holds only the plain
+// descriptor; this registry, keyed by the descriptor's `kind`, is what the
+// engine runs.
 
 import type { z } from "zod";
+import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
-import { pagerDutyIncidents } from "../pagerduty-incidents.ts";
+import { LINEAR_AGENT_SESSIONS } from "../linear-agent-sessions.ts";
+import { PAGERDUTY_INCIDENTS } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
-/** One occurrence as a source reports it: the reference the run reads, and when it happened. */
+/** One occurrence as a source reports it: its key, the reference the run reads, and when it happened. */
 export interface SourceOccurrence {
+  /** Names the occurrence however often its event arrives, so it starts at most one run. */
+  key: string;
   inputs: Record<string, unknown>;
   at: Date;
 }
 
-/** What a poll found, and how far the source has now read. */
-export interface SourcePoll<C> {
-  occurrences: SourceOccurrence[];
-  cursor: C;
+/** A provider event the hub passed on, with the named installation it came through. */
+export interface PushedEvent {
+  installationName: string;
+  payload: unknown;
 }
 
-export interface Source<P = unknown, C = unknown> {
+export interface Source<P = unknown> {
   provider: Provider;
   /** Validates the descriptor's `params`. */
   params: z.ZodType<P>;
-  /** Validates the cursor an earlier poll returned, as the store hands it back. */
-  cursor: z.ZodType<C>;
   /** A representative of the inputs this source hands every run, which doctor checks the
    *  trigger's workflow accepts. */
   sampleInputs: Record<string, unknown>;
-  /** The occurrence key, read off the inputs so a polled and a pushed occurrence cannot disagree. */
-  occurrence(inputs: Record<string, unknown>): string;
   /**
-   * Occurrences since the cursor an earlier poll returned, or since `floor` when there is none.
-   * Never reads from before `floor`. Overlap with an earlier poll is harmless.
+   * The occurrence a pushed provider event is, or null when the event is not
+   * one, such as an event from another installation or of another type. It
+   * sees every event its provider sends, so it rejects those before any
+   * network call. Throws when it could not tell; the event is routed again
+   * unless the error is one a retry would only get again.
    */
-  poll(params: P, cursor: C | undefined, floor: Date): Promise<SourcePoll<C>>;
-  /** The same occurrence from a pushed provider event, or null when the event is not one. */
-  fromPush(params: P, event: unknown): Promise<SourceOccurrence | null>;
+  fromPush(params: P, event: PushedEvent): Promise<SourceOccurrence | null>;
   /** What a run this source started was started for, in an operator's words, read off its inputs. */
   describe(inputs: Record<string, unknown>): string;
 }
 
-// biome-ignore lint/suspicious/noExplicitAny: each kind has its own params and cursor
-export type SourceRegistry = Readonly<Record<string, Source<any, any>>>;
+// biome-ignore lint/suspicious/noExplicitAny: each kind has its own params
+export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
-  [PAGERDUTY_INCIDENTS_SOURCE]: pagerDutyIncidents(),
+  [PAGERDUTY_INCIDENTS_SOURCE]: PAGERDUTY_INCIDENTS,
+  [LINEAR_AGENT_SESSIONS_SOURCE]: LINEAR_AGENT_SESSIONS,
 };

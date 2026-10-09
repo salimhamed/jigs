@@ -124,10 +124,6 @@ function showSuspensions(
         ? []
         : [["last wake", `${wake.kind}, ${age(wake.at, now)} ago ${detail(wake.at)}`]];
     for (const line of columns([...gate, ...wakeRow])) deps.out(`    ${line}`);
-    if (suspension.question !== undefined) {
-      deps.out("  asked:");
-      for (const line of suspension.question.split("\n")) deps.out(`    ${line}`);
-    }
   }
 }
 

@@ -60,7 +60,7 @@ afterEach(() => {
 function writeBinding(provisioning: Record<string, unknown> = {}): void {
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, ...provisioning } }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme", ...provisioning } }, hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};`,
   );
 }
 
@@ -76,6 +76,7 @@ test("a run cuts its own branch from the default branch and registers it", async
 
   expect(facts).toEqual({
     binding: request.binding,
+    installationName: "github-acme",
     path: target,
     branch,
     defaultBranch: "main",
@@ -156,7 +157,7 @@ test("a binding with no clone is refused, naming the restart that makes one", as
     (err: unknown) => err,
   );
   expect(String(failure)).toContain(`binding api has no clone at ${repoDir}`);
-  expect((failure as { hint?: string }).hint).toContain("jigs service restart");
+  expect((failure as { hint?: string }).hint).toContain("jigs up --restart-service");
   expect(memoryRows).toEqual([]);
 });
 

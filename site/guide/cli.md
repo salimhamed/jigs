@@ -25,7 +25,7 @@ This bypasses that restriction for jigs. It does not force a `dlx` cache refresh
 | `jigs up` | Install, start Postgres, build, start the service, wait until ready, then run `jigs doctor`. |
 | `jigs down` | Stop the service, then Postgres (`docker compose down`). Postgres's data is kept. |
 | `jigs doctor` | Check configuration, credentials and tools against the running service. |
-| `jigs upgrade` | Move the factory to the latest jigs and bring it up. |
+| `jigs hub connect <url> <token>` | Point the factory at its [hub](/guide/configuration#hub): the URL into `jigs.config.ts`, the token into `.env`. |
 
 ## Runs
 
@@ -62,7 +62,7 @@ before any run is created.
 
 | Command | What it does |
 | --- | --- |
-| `jigs bind <remote-url>` | Add a binding for a repository, create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing, create the `jigs:approved` label, and create its webhook when configured. |
+| `jigs bind <remote-url> --installation <installation>` | Add a binding for a repository, acting through the GitHub [installation](/guide/hub#installation-names) with that name, create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing, and create the `jigs:approved` label. |
 | `jigs bindings` | List bindings, their clone paths and whether each clone exists. |
 | `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete, and so does the factory's `bindings/<name>/` folder. |
 
@@ -87,15 +87,13 @@ jigs keeps each binding's clone and worktrees under
 
 ## Service
 
-Use `jigs up` and `jigs down` for ordinary startup and shutdown. Direct service
-commands are useful for restarting after `.env` edits, inspecting logs or
-managing only the service.
+Use `jigs up` and `jigs down` to start and stop the factory, and
+`jigs up --restart-service` to restart after `.env` edits. The commands below
+inspect or stop only the service.
 
 | Command | What it does |
 | --- | --- |
-| `jigs service start` | Start the service from the current build and wait until it is ready. |
 | `jigs service stop` | Stop the service and everything it started, giving in-flight work up to 10 seconds to finish. Postgres keeps running. |
-| `jigs service restart` | Stop, then start. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |
 
@@ -105,12 +103,12 @@ The service hosts its own dashboard. Do not run the Workflow SDK's
 
 ### Stopping the service
 
-`jigs service stop`, `jigs service restart`, `jigs down` and a restart inside
-`jigs up` all stop the service the same way, on macOS and Linux. They stop the
-service and every process it started, such as running agents, their commands
-and anything those commands started. Each gets a termination signal and up to
-10 seconds to exit; whatever is still running after that is killed. An agent's
-step that was cut off runs again after the next start.
+`jigs service stop`, `jigs down` and a restart inside `jigs up` all stop the
+service the same way, on macOS and Linux. They stop the service and every
+process it started, such as running agents, their commands and anything those
+commands started. Each gets a termination signal and up to 10 seconds to exit;
+whatever is still running after that is killed. An agent's step that was cut
+off runs again after the next start.
 
 If a process survives, the command fails and lists its process ID and command
 so you can end it yourself.
@@ -206,7 +204,6 @@ unit also kills the service and its agents, so stop the factory with
 | Command | What it does |
 | --- | --- |
 | `jigs build` | Compile the workflows into the service bundle. `jigs up` runs it for you. |
-| `jigs generate` | Refresh the generated `jigs/steps.ts` and `jigs/routines.ts` from the installed jigs version. |
 
 ## `jigs up` on a running service
 
@@ -215,28 +212,29 @@ Use `jigs up` after changing workflow code or configuration:
 - Unchanged install, migration and build work is skipped.
 - The service restarts only when the built bundle or `jigs.config.ts` changes.
   `--restart-service` forces a restart.
-- Parked and active runs are listed before a restart and require confirmation.
-  A parked run resumes on the new bundle, and fails if the upgrade changed the
-  steps it replays. `--force` skips the question but still prints the list;
-  without a terminal, the command otherwise refuses.
-- A service running another jigs version cannot list its runs, so `up` warns
-  that its runs are unknown and restarts it.
+- Before starting the service, `up` stops if a waiting or running run needs a
+  workflow or step the new build no longer has, and names each run and what it
+  is missing; see [troubleshooting](/guide/troubleshooting). `--force` does not
+  skip this.
+- Runs with a step executing are listed before a restart and require
+  confirmation, because the restart cuts that step off and it runs again. Runs
+  parked on a hook, sleep or wake are not asked about: they lose nothing.
+  `--force` skips the question but still prints the list; without a terminal,
+  the command refuses, so retry when those steps finish.
 - A failed step prints `FAIL <step>` and a repair. Fix it, then run `up` again.
 
 ## Upgrading jigs
 
-`jigs upgrade` moves the factory's jigs pin to the latest release, or to
-`--to-version <version>`. Then, using the newly installed version, it
-regenerates `jigs/`, runs `jigs up` and runs the factory's typecheck. Review
-and commit the changes it makes. Your workflows and copied recipes are yours to
-update: a new release can change an API they use, and the typecheck tells you
-where.
+1. Set the new `@jigs-ai/jigs` version in `package.json`.
+2. Run `pnpm install`.
+3. Run `pnpm exec jigs up`.
+
+Your workflows and copied recipes are yours to update: a new release can change
+an API they use, and `pnpm typecheck` tells you where.
 
 The service keeps running the old jigs until `jigs up` restarts it. Until then,
 commands that talk to the service, such as `jigs status`, stop with an error
-naming both versions. `jigs up` and `jigs down` still work, but `jigs up`
-cannot list the old service's runs, so it warns and restarts. Check
-`jigs status` for parked or active runs before you upgrade.
+naming both versions. `jigs up` and `jigs down` still work.
 
 ## Cancelling
 

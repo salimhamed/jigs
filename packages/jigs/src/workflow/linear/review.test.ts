@@ -1,4 +1,4 @@
-import { expect, test } from "vitest";
+import { expect, test, vi } from "vitest";
 import type { TicketClaim } from "./claim.ts";
 import { noteOnTicket, ticketReviewVerdictSchema } from "./review.ts";
 
@@ -23,19 +23,15 @@ test("a malformed verdict object fails the schema", () => {
   ).toThrow();
 });
 
-test("a note is recorded on the claim, so a later halt does not read it as a reply", async () => {
-  const claim = { issueId: "i1", postedCommentIds: [] as string[] } as TicketClaim;
-  const posted: string[] = [];
-  await noteOnTicket(
-    claim,
-    { headline: "h", notes: [], closing: "c" },
-    {
-      postTicketNote: async (issueId) => {
-        posted.push(issueId);
-        return { commentId: "note-1" };
-      },
-    },
-  );
-  expect(posted).toEqual(["i1"]);
-  expect(claim.postedCommentIds).toEqual(["note-1"]);
+test("a note is posted in the claim's session", async () => {
+  const claim = { installationName: "linear-acme", issueId: "i1", sessionId: "s1" } as TicketClaim;
+  const postTicketNote = vi.fn(async () => {});
+  const note = { headline: "h", notes: [], closing: "c", run: "ended" as const };
+  await noteOnTicket(claim, note, { postTicketNote });
+  expect(postTicketNote).toHaveBeenCalledExactlyOnceWith({
+    installationName: "linear-acme",
+    issueId: "i1",
+    sessionId: "s1",
+    note,
+  });
 });

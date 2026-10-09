@@ -6,13 +6,11 @@ import { z } from "zod";
 import * as factoryContext from "../config/factory-context.ts";
 import * as github from "../providers/github.ts";
 import * as githubAuth from "../providers/github-auth.ts";
-import * as linear from "../providers/linear.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { slackThreadToken } from "../workflow/slack/thread-token.ts";
@@ -65,8 +63,8 @@ beforeEach(() => {
 });
 
 const prSnapshot = (
-  patch: Partial<Omit<github.PullRequestSnapshot, "approval">> = {},
-): Omit<github.PullRequestSnapshot, "approval"> => ({
+  patch: Partial<Omit<github.PullRequestSnapshot, "approval" | "appBot">> = {},
+): Omit<github.PullRequestSnapshot, "approval" | "appBot"> => ({
   state: "open",
   merged: false,
   draft: false,
@@ -98,22 +96,16 @@ function reviewApproval(): void {
     testFactoryContext({
       slug: "factory-test",
       config: {
-        github: {
-          identities: [
-            {
-              mode: "app",
-              appId: 1,
-              installations: { acme: 2 },
-              privateKeyPath: "k",
-              operator: "me",
-            },
-          ],
-          mergeApproval: "review",
-        },
+        github: { operator: "me", mergeApproval: "review" },
       },
     }),
   );
-  vi.spyOn(githubAuth, "appBotFor").mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
+  vi.spyOn(githubAuth, "githubAuthFor").mockReturnValue({
+    bearer: async () => "t",
+    invalidate: () => {},
+    bot: async () => ({ login: "jigs-dev[bot]", id: 1 }),
+    account: async () => "acme",
+  });
 }
 
 function parkedOnPr(): RunSuspension {
@@ -140,6 +132,7 @@ test.each([
     blocker,
   });
   expect(github.fetchPrSnapshot).toHaveBeenCalledExactlyOnceWith({
+    installationName: "acme",
     owner: "acme",
     repo: "api",
     number: 41,
@@ -152,28 +145,15 @@ test("a run reads the wake it was sent, and never another run's", async () => {
   recordWake(PARK_TOKEN, RUN_B, "github check_suite", new Date("2026-09-16T10:05:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toBeUndefined();
 
-  recordWake(PARK_TOKEN, RUN_A, "nudge sweep", new Date("2026-09-16T10:06:00Z"));
+  recordWake(PARK_TOKEN, RUN_A, "hub fell behind", new Date("2026-09-16T10:06:00Z"));
   expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
-    kind: "nudge sweep",
-    at: "2026-09-16T10:06:00.000Z",
-  });
-});
-
-test("a run parked on a human reads the wake its ticket claim was sent", async () => {
-  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear unavailable"));
-  const halted = describeSuspension(needsHumanToken("issue-1", "comment-1"));
-  recordWake(ticketToken("issue-1"), RUN_B, "linear Comment", new Date("2026-09-16T10:05:00Z"));
-  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toBeUndefined();
-
-  recordWake(ticketToken("issue-1"), RUN_A, "linear Comment", new Date("2026-09-16T10:06:00Z"));
-  expect((await enrichSuspensions([halted as RunSuspension], RUN_A))[0]?.lastWake).toEqual({
-    kind: "linear Comment",
+    kind: "hub fell behind",
     at: "2026-09-16T10:06:00.000Z",
   });
 });
 
 test("a run parked on a Slack thread reads the wake that thread was sent", async () => {
-  const token = slackThreadToken("C0C5EUZ7P9Q", "1790723478.961719");
+  const token = slackThreadToken("acme", "C0C5EUZ7P9Q", "1790723478.961719");
   recordWake(token, RUN_A, "slack reply", new Date("2026-09-16T10:06:00Z"));
   expect(
     (await enrichSuspensions([describeSuspension(token) as RunSuspension], RUN_A))[0]?.lastWake,
@@ -313,7 +293,12 @@ const worldRun = (over: Partial<StoredRun> = {}): StoredRun => ({
 // written down, and what the listing has to read it back out of.
 const storedArgs = (triggerId: string) => [[1], { triggerId: 2 }, triggerId];
 
-const PARK_TOKEN = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+const PARK_TOKEN = pullRequestToken({
+  installationName: "acme",
+  owner: "acme",
+  repo: "api",
+  number: 41,
+});
 
 test("the listing follows every SDK cursor", async () => {
   world({ runPages: [[worldRun({ runId: RUN_B })], [worldRun()]] });
@@ -382,7 +367,7 @@ test("describeRunState is the one thing status list and detail both read", async
 test("a run holding only its ticket claim is not parked", async () => {
   world({
     runs: [worldRun()],
-    hooks: [{ runId: RUN_A, token: ticketToken(crypto.randomUUID()) }],
+    hooks: [{ runId: RUN_A, token: ticketToken("acme", crypto.randomUUID()) }],
   });
   const rows = await listRuns(factory);
   expect(rows[0]?.status).toBe("running");

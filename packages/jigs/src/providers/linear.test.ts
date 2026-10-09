@@ -1,24 +1,30 @@
 import { beforeEach, expect, test } from "vitest";
+import { createHubTokens } from "./credentials.ts";
 import { ProviderApiError } from "./http.ts";
-import { createLinearClient, mention } from "./linear.ts";
+import { createLinearClient } from "./linear.ts";
 import { createLinearAuth, LINEAR_API_URL } from "./linear-auth.ts";
 import { type FetchCall, fakeFetch, jsonResponse } from "./test-support.ts";
 
 let replies: Response[];
-let env: Record<string, string>;
 let server: ReturnType<typeof fakeFetch>;
 let linear: ReturnType<typeof createLinearClient>;
 
 beforeEach(() => {
   replies = [];
-  env = { LINEAR_API_KEY: "lin_test_key" };
   server = fakeFetch(() => {
     const reply = replies.shift();
     if (reply === undefined) throw new Error("no reply queued");
     return reply;
   });
   linear = createLinearClient({
-    auth: createLinearAuth({ mode: "key" }, { env: (name) => env[name] }),
+    installationName: "acme",
+    auth: createLinearAuth(
+      createHubTokens(async () => ({
+        token: "lin_oauth",
+        expiresAt: "2999-01-01T00:00:00Z",
+        app: { name: "jigs", userId: "app-user" },
+      })),
+    ),
     fetch: server.fetch,
   });
 });
@@ -34,40 +40,12 @@ const lastRequest = () => {
   return { url: call.url.toString(), headers: call.headers, body: call.json as any };
 };
 
-test("requests carry the bare API key to Linear's GraphQL endpoint", async () => {
+test("requests carry the hub's token as a bearer to Linear's GraphQL endpoint", async () => {
   respond({ issue: { creator: { id: "u1", name: "salim" } } });
   await linear.getIssueParticipants("68bc9696-35d5-442d-ab56-214c8cfefbec");
   const { url, headers } = lastRequest();
   expect(url).toBe(LINEAR_API_URL);
-  expect(headers.authorization).toBe("lin_test_key");
-});
-
-test("listWebhooks traverses every page", async () => {
-  respond({
-    webhooks: {
-      nodes: [{ url: "https://first.test/hook", enabled: true }],
-      pageInfo: { hasNextPage: true, endCursor: "page-2" },
-    },
-  });
-  respond({
-    webhooks: {
-      nodes: [
-        { url: "https://old.test/ingress/linear", enabled: true },
-        { url: "https://factory.test/ingress/linear", enabled: false },
-      ],
-      pageInfo: { hasNextPage: false, endCursor: "page-2" },
-    },
-  });
-
-  await expect(linear.listWebhooks()).resolves.toEqual([
-    { url: "https://first.test/hook", enabled: true },
-    { url: "https://old.test/ingress/linear", enabled: true },
-    { url: "https://factory.test/ingress/linear", enabled: false },
-  ]);
-  expect(requestBodies().map((body) => body.variables)).toEqual([
-    { after: null },
-    { after: "page-2" },
-  ]);
+  expect(headers.authorization).toBe("Bearer lin_oauth");
 });
 
 test("fetchIssueSnapshot asks for the snapshot fields in one round trip", async () => {
@@ -135,13 +113,12 @@ test("createComment posts a commentCreate mutation with the body verbatim", asyn
       comment: { id: "c1", createdAt: "2026-08-26T12:00:00Z" },
     },
   });
-  const body = `${mention({ id: "u1", name: "salim" })} this run needs a human.`;
+  const body = "https://linear.app/acme/profiles/salim this run needs a human.";
   const comment = await linear.createComment("issue-uuid", body);
   expect(comment).toEqual({ id: "c1", createdAt: "2026-08-26T12:00:00Z" });
   const request = lastRequest().body;
   expect(request.query).toContain("commentCreate");
   expect(request.variables.input).toEqual({ issueId: "issue-uuid", body });
-  expect(request.variables.input.body).toContain("@[salim](u1)");
 });
 
 test("createComment names the comment when given an id", async () => {
@@ -152,14 +129,6 @@ test("createComment names the comment when given an id", async () => {
     body: "hi",
     id: "c-id",
   });
-});
-
-test("findComment returns the comment by id, or null when there is none", async () => {
-  respond({ comments: { nodes: [{ id: "c-id", createdAt: "t" }] } });
-  await expect(linear.findComment("c-id")).resolves.toEqual({ id: "c-id", createdAt: "t" });
-  expect(lastRequest().body.variables).toEqual({ id: "c-id" });
-  respond({ comments: { nodes: [] } });
-  await expect(linear.findComment("c-id")).resolves.toBeNull();
 });
 
 const projectQuery = {
@@ -344,32 +313,7 @@ test("findIssueInProject returns the first non-trashed node, which Linear orders
   expect(issue?.description).toBe("");
 });
 
-test("listCommentsSince filters strictly after the cursor", async () => {
-  respond({
-    issue: {
-      comments: {
-        nodes: [
-          {
-            id: "c1",
-            body: "old",
-            createdAt: "2026-08-26T10:00:00Z",
-            user: { id: "u1", name: "salim" },
-          },
-          {
-            id: "c2",
-            body: "new",
-            createdAt: "2026-08-26T12:00:01Z",
-            user: { id: "u1", name: "salim" },
-          },
-        ],
-      },
-    },
-  });
-  const comments = await linear.listCommentsSince("issue-uuid", "2026-08-26T12:00:00Z");
-  expect(comments.map((c) => c.id)).toEqual(["c2"]);
-});
-
-test("GraphQL errors and missing keys throw", async () => {
+test("GraphQL errors throw", async () => {
   replies.push(
     jsonResponse({ errors: [{ message: "boom", extensions: { code: "INVALID_INPUT" } }] }),
   );
@@ -377,9 +321,6 @@ test("GraphQL errors and missing keys throw", async () => {
   expect(error).toBeInstanceOf(ProviderApiError);
   expect(error).toMatchObject({ provider: "linear", status: 200, code: "INVALID_INPUT" });
   expect(String(error)).toContain("Linear API 200 on IssueParticipants: boom");
-
-  env.LINEAR_API_KEY = "";
-  await expect(linear.getIssueParticipants("x")).rejects.toThrow("LINEAR_API_KEY");
 });
 
 test("a reply that is not JSON, or carries no data, fails naming the call", async () => {

@@ -38,6 +38,7 @@ beforeEach(() => {
   }));
 });
 
+const installationName = "slack-acme";
 const channel = "C0C5EUZ7P9Q";
 const threadTs = "1790723478.961719";
 const lastRead = "1790723480.100200";
@@ -69,11 +70,20 @@ const flush = () => new Promise((resolve) => setTimeout(resolve, 0));
 test("returns the human replies after the last read, without parking", async () => {
   const answer = post("1790723501.000300", salim, "the payments team");
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot), answer));
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
-    replied(answer),
-  );
-  expect(createHook).toHaveBeenCalledWith({ token: `slack:thread:${channel}:${threadTs}` });
-  expect(fetchSlackMessage).toHaveBeenCalledExactlyOnceWith({ channel, ts: threadTs });
+  expect(
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead },
+      { fetchSlackMessage },
+    ),
+  ).toEqual(replied(answer));
+  expect(createHook).toHaveBeenCalledWith({
+    token: `slack:thread:${installationName}:${channel}:${threadTs}`,
+  });
+  expect(fetchSlackMessage).toHaveBeenCalledExactlyOnceWith({
+    installationName,
+    channel,
+    ts: threadTs,
+  });
   expect(hook.awaited).toBe(0);
   expect(hook.disposed).toBe(1);
 });
@@ -87,7 +97,10 @@ test("a bot's reply and a reply before the last read never count, however often 
     thread(earlier, post(lastRead, ownBot), answer),
   ];
   const fetchSlackMessage = vi.fn(async () => reads.shift() ?? thread());
-  const waiting = waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage });
+  const waiting = waitForSlackReply(
+    { installationName, channel, threadTs, lastRead },
+    { fetchSlackMessage },
+  );
   await flush();
   expect(hook.awaited).toBe(1);
   hook.wake?.();
@@ -104,9 +117,12 @@ test("replies within the same second are ordered by their microseconds", async (
   const fetchSlackMessage = vi.fn(async () =>
     thread(post("1790723480.100199", salim), post(lastRead, ownBot), answer),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
-    replied(answer),
-  );
+  expect(
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead },
+      { fetchSlackMessage },
+    ),
+  ).toEqual(replied(answer));
 });
 
 test("a reply posted between the last read and the workflow's question is returned", async () => {
@@ -114,9 +130,12 @@ test("a reply posted between the last read and the workflow's question is return
   const fetchSlackMessage = vi.fn(async () =>
     thread(post(lastRead, salim), between, post("1790723495.000001", ownBot, "which service?")),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
-    replied(between),
-  );
+  expect(
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead },
+      { fetchSlackMessage },
+    ),
+  ).toEqual(replied(between));
 });
 
 test("every human reply after the last read comes back, oldest first, without bots", async () => {
@@ -125,9 +144,12 @@ test("every human reply after the last read comes back, oldest first, without bo
   const fetchSlackMessage = vi.fn(async () =>
     thread(post(lastRead, salim), first, post("1790723501.500000", ownBot, "thanks"), second),
   );
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual(
-    replied(first, second),
-  );
+  expect(
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead },
+      { fetchSlackMessage },
+    ),
+  ).toEqual(replied(first, second));
   expect(hook.awaited).toBe(0);
 });
 
@@ -135,7 +157,12 @@ const gone = async (): Promise<SlackMessageSnapshot> => ({ gone: true, channel, 
 
 test("a message already deleted returns gone, without parking", async () => {
   const fetchSlackMessage = vi.fn(gone);
-  expect(await waitForSlackReply({ channel, threadTs, lastRead }, { fetchSlackMessage })).toEqual({
+  expect(
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead },
+      { fetchSlackMessage },
+    ),
+  ).toEqual({
     outcome: "gone",
   });
   expect(hook.awaited).toBe(0);
@@ -146,7 +173,7 @@ test("a message deleted while the run waits returns gone", async () => {
   const reads = [thread(post(lastRead, ownBot))];
   const fetchSlackMessage = vi.fn(async () => reads.shift() ?? gone());
   const waiting = waitForSlackReply(
-    { channel, threadTs, lastRead, until: future },
+    { installationName, channel, threadTs, lastRead, until: future },
     { fetchSlackMessage },
   );
   await flush();
@@ -166,7 +193,7 @@ test("a reply before the deadline is returned, with one timer for the whole wait
   const reads = [thread(post(lastRead, ownBot)), thread(post(lastRead, ownBot)), thread(answer)];
   const fetchSlackMessage = vi.fn(async () => reads.shift() ?? thread());
   const waiting = waitForSlackReply(
-    { channel, threadTs, lastRead, until: future },
+    { installationName, channel, threadTs, lastRead, until: future },
     { fetchSlackMessage },
   );
   await flush();
@@ -182,7 +209,10 @@ test("a reply before the deadline is returned, with one timer for the whole wait
 test("a deadline already passed times out after one read, without parking", async () => {
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot)));
   expect(
-    await waitForSlackReply({ channel, threadTs, lastRead, until: past }, { fetchSlackMessage }),
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead, until: past },
+      { fetchSlackMessage },
+    ),
   ).toEqual({ outcome: "timed-out" });
   expect(fetchSlackMessage).toHaveBeenCalledOnce();
   expect(sleep).not.toHaveBeenCalled();
@@ -194,14 +224,17 @@ test("a reply already in the thread wins over a deadline that has passed", async
   const answer = post("1790723501.000300", salim);
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot), answer));
   expect(
-    await waitForSlackReply({ channel, threadTs, lastRead, until: past }, { fetchSlackMessage }),
+    await waitForSlackReply(
+      { installationName, channel, threadTs, lastRead, until: past },
+      { fetchSlackMessage },
+    ),
   ).toEqual(replied(answer));
 });
 
 test("when the deadline wins, the wait times out and releases the thread's hook", async () => {
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot)));
   const waiting = waitForSlackReply(
-    { channel, threadTs, lastRead, until: future },
+    { installationName, channel, threadTs, lastRead, until: future },
     { fetchSlackMessage },
   );
   await flush();
@@ -218,7 +251,7 @@ test("a wake that reads the thread after the deadline times out without the time
   vi.setSystemTime(new Date("2026-10-02T12:00:00Z"));
   const fetchSlackMessage = vi.fn(async () => thread(post(lastRead, ownBot)));
   const waiting = waitForSlackReply(
-    { channel, threadTs, lastRead, until: "2026-10-02T12:00:05Z" },
+    { installationName, channel, threadTs, lastRead, until: "2026-10-02T12:00:05Z" },
     { fetchSlackMessage },
   );
   await flush();
@@ -236,7 +269,10 @@ test.each(["tomorrow", "Oct 3 2026", "2026"])(
   async (until) => {
     const fetchSlackMessage = vi.fn();
     await expect(
-      waitForSlackReply({ channel, threadTs, lastRead, until }, { fetchSlackMessage }),
+      waitForSlackReply(
+        { installationName, channel, threadTs, lastRead, until },
+        { fetchSlackMessage },
+      ),
     ).rejects.toThrow(`until must be an ISO 8601 timestamp, got ${JSON.stringify(until)}`);
     expect(createHook).not.toHaveBeenCalled();
   },

@@ -33,8 +33,7 @@ or step transport, run the long-step regression once with the real value:
 the **Long step regression** workflow in Actions with the revision to test. It
 takes over five minutes and never runs on pull requests.
 
-Biome formats at 100 columns. Keep `packages/jigs/templates/jigs/*.ts.tmpl` formatted the same
-way, or a formatted factory reports its `jigs/` files as stale.
+Biome formats at 100 columns.
 
 ## Tests
 
@@ -56,15 +55,19 @@ no container listening, `dbTest` skips; with a URL set, an unreachable server
 fails. Each `live` file names the login or credentials it needs. Both
 projects read `.env.e2e.local` and run their files one at a time.
 
+`packages/hub` has the same `unit` and `db` projects, with its own `dbTest` in
+`packages/hub/src/db/test-database.ts`. Its `test:db` builds the hub first,
+because its server test starts the built hub.
+
 ## Layout
 
-A pnpm workspace. Every package shares the version release-please cuts; only
-`@jigs-ai/jigs` publishes.
+A pnpm workspace. Every package shares the version release-please cuts;
+`@jigs-ai/jigs` and `@jigs-ai/hub` publish.
 
 ```
 packages/
   jigs/          @jigs-ai/jigs: the library, CLI and service (published)
-  hub/           @jigs-ai/hub: the hub server (private until it ships)
+  hub/           @jigs-ai/hub: the hub server (published)
   hub-protocol/  @jigs-ai/hub-protocol: hub messages, bundled into jigs (private)
 tools/api-docs/  TypeDoc and VitePress tooling for site/
 site/            the website
@@ -78,9 +81,10 @@ package's own `biome.json` and `tsconfig.json` extend. Each package has an
 `AGENTS.md` with the rules for working in it.
 
 In `packages/jigs`, `src/` is the library and CLI, `templates/` the bare
-factory `jigs init` writes, `recipes/` the workflows `jigs recipe add` copies
-into a factory, `migrations/` the jigs tables and `e2e/` the packed-install
-check. The npm README and LICENSE are the root copies, which `prepack` copies
+factory `jigs init` writes, `factory/` the step wrappers and bound routines the
+build copies into a factory's `.jigs/`, `recipes/` the workflows `jigs recipe
+add` copies into a factory, `migrations/` the jigs tables and `e2e/` the
+packed-install check. The npm README and LICENSE are the root copies, which `prepack` copies
 in.
 
 ```
@@ -90,13 +94,13 @@ src/
   steps/      code that runs in steps, called by factory "use step" wrappers
               (both split by topic: agents, git, human, linear,
                pagerduty, pull-requests, runtime, workspaces)
-  service/    the long-running process: routes, ingress, schedules, release
+  service/    the long-running process: routes, hub client, schedules, release
   cli/        commands
-  build/      the templates and the generated factory files, shared by the
-              CLI and the service build
+  build/      the scaffold templates and the files the build writes into a
+              factory's .jigs/, shared by the CLI and the service build
   checks/     preflight, doctor and just-in-time checks
   providers/  Git and provider clients (GitHub, Linear, Slack, PagerDuty)
-              with their identity and webhook checks
+              with their checks
   config/     factory config, root, env and paths
 ```
 
@@ -118,12 +122,12 @@ bundles it into a sandbox without Node built-ins. So anything a workflow
 imports (`workflow/`) must be side-effect free, and real work goes in steps. No
 file under `src/` carries `"use workflow"` or `"use step"`: a step's durable ID
 comes from its file path and function name, so the directives live in factory
-code and the generated `jigs/steps.ts`, and a jigs upgrade never renames a step.
+code and `factory/steps.ts`, and a jigs upgrade never renames a step.
 
-Factory code imports the library from the root `@jigs-ai/jigs`. The generated
-`jigs/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and the generated
-`jigs/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where the
-routines that take steps as arguments live. The other subpaths (`/nitro`,
+Factory code imports the library from the root `@jigs-ai/jigs`.
+`factory/steps.ts` imports `@jigs-ai/jigs/steps/<topic>`, and
+`factory/routines.ts` is the only importer of `@jigs-ai/jigs/routines`, where
+the routines that take steps as arguments live. The other subpaths (`/nitro`,
 `/build`, `/service`) belong to the service a factory builds. The Workflow SDK, its Postgres World, the
 dashboard and zod are peer dependencies the factory installs. All but zod are
 optional peers, so `pnpm dlx @jigs-ai/jigs init` installs none of them or the
@@ -136,9 +140,10 @@ updates a release-please PR; it auto-merges once its checks pass, then the tag,
 GitHub release and npm publish follow. release-please bumps the root
 `package.json` and, through `extra-files`, every `packages/*/package.json`, so
 all share one version and one `jigs-vX` tag. The publish job builds and
-publishes `packages/jigs`, generating the Markdown API reference in
-`packages/jigs/docs/api/` from the tag; it ships in the package and is never
-committed.
+publishes `packages/hub`, then `packages/jigs`, generating the Markdown API
+reference in `packages/jigs/docs/api/` from the tag; it ships in the package
+and is never committed. The hub goes first so a failed hub publish never
+leaves a jigs release without its matching hub; re-running finishes both.
 
 Repository settings the release depends on:
 
@@ -148,8 +153,11 @@ Repository settings the release depends on:
 - A `RELEASE_PLEASE_TOKEN` secret: a fine-grained PAT on this repo with
   Contents, Pull requests and Issues read and write. `GITHUB_TOKEN` would not
   trigger checks on the release PR.
-- An npm trusted publisher for `@jigs-ai/jigs`: repository `salimhamed/jigs`,
-  workflow `release.yml`, no environment. Publishing uses OIDC, no npm token.
+- An npm trusted publisher for each of `@jigs-ai/jigs` and `@jigs-ai/hub`:
+  repository `salimhamed/jigs`, workflow `release.yml`, no environment.
+  Publishing uses OIDC, no npm token. A new package's first publish is by hand
+  with an npm token, since a trusted publisher can only be added to a package
+  that exists.
 
 What is easy to break:
 
@@ -168,8 +176,9 @@ What is easy to break:
   like no release.
 - **Publish is idempotent.** It checks out the tag, refuses a version that does
   not match it, and skips a version npm already holds, so re-running the
-  workflow repairs a failed publish. `repository.url` in `packages/jigs/package.json` must
-  name this repository exactly, or trusted publishing refuses.
+  workflow repairs a failed publish. `repository.url` in each published
+  `package.json` must name this repository exactly, or trusted publishing
+  refuses.
 - Automatic releases are safe only because step ids are factory-local paths: a
   version bump never renames a factory's durable addresses.
 
@@ -187,7 +196,7 @@ TypeScript fences in the website, READMEs, skills, templates and source
 every variable's source; the checker supplies no missing declarations. Give
 cooperating files a first-line comment such as `// workflows/my-flow/steps.ts`.
 Relative imports can then resolve another displayed file on the same page.
-Examples can also import the actual generated `#jigs` modules and recipe files.
+Examples can also import the actual `#jigs` modules and recipe files.
 
 For configuration excerpts, label the fence `ts factory-options` and explain
 that its properties belong inside `defineFactory({ ... })` in `jigs.config.ts`.

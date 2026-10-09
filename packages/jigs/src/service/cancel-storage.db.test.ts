@@ -14,6 +14,7 @@ import { ensureRegistry, type RegistrySql, registrySql } from "../steps/runtime/
 import type { Factory } from "../workflow/factory.ts";
 import { createApp } from "./app.ts";
 import { listRunDeadJobs } from "./queue.ts";
+import { appClient } from "./test-fixtures.ts";
 
 const database = `jigs_cancel_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = databaseUrl(database);
@@ -45,7 +46,7 @@ const fixture = {
     cancelTest: { workflow: async () => undefined, inputs: z.object({}) },
   },
 } satisfies Factory;
-const app = createApp(fixture);
+const app = appClient(createApp(fixture));
 
 let world: ReturnType<typeof createWorld>;
 let registry: RegistrySql;
@@ -110,7 +111,7 @@ async function createRun(started = false): Promise<string> {
       deploymentId: "postgres",
       workflowName: "cancelTest",
       input: new Uint8Array(),
-      executionContext: { workflowCoreVersion: "5.0.0-beta.57", workflowVm: "node" },
+      executionContext: { workflowCoreVersion: "5.1.0", workflowVm: "node" },
     },
   });
   if (created.run === undefined) throw new Error("run_created returned no run");

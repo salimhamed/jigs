@@ -31,18 +31,17 @@ Read `jigs service logs`. The usual causes:
 Fix the cause and run `jigs up` again. Harness installation and authentication
 are covered in [Models and harnesses](/guide/models-and-harnesses).
 
-## A build says `jigs/` is out of date
+## `jigs up` says runs need workflows or steps that no longer exist
 
-Run `pnpm exec jigs generate`, review the change to `jigs/steps.ts` and
-`jigs/routines.ts`, then run `pnpm exec jigs up`. This is generated code committed
-to the factory to keep [step identities stable](/guide/concepts#why-jigs-generates-code-in-your-factory).
-Keep your own code outside `jigs/`, since regeneration replaces it.
+A run that is waiting or running replays its workflow and the steps it
+recorded, by [identity](/guide/concepts#folders-the-build-creates). When the
+new build no longer has one of them, because a workflow or step or its file was
+renamed or moved, `jigs up` stops before starting the service and lists each
+run with what it is missing. By then the build has already been replaced.
 
-A build also refuses a factory that still has a `jigs.ts` from an earlier
-release. Run `pnpm exec jigs upgrade`. It deletes `jigs.ts`, writes `jigs/`,
-and replaces the older entries in the `imports` map in `package.json` with
-`#jigs/*`. Then change your workflows to import from
-`#jigs/steps` and `#jigs/routines` instead of `#jigs`.
+Put back the previous jigs version and code, run `pnpm install` and
+`pnpm exec jigs up`, then let those runs finish or cancel each with
+`pnpm exec jigs cancel <run-id>`. Then make the change again.
 
 ## A library import does not resolve
 
@@ -54,7 +53,10 @@ import { runAgent } from "#jigs/routines";
 import { createRunDirectory } from "#jigs/steps";
 ```
 
-Run `pnpm exec jigs generate` if the generated imports are missing. Custom
+`#jigs/steps` and `#jigs/routines` resolve through the `imports` map in
+`package.json` that `jigs init` writes: types from the installed
+`@jigs-ai/jigs`, code from `.jigs/`, which `jigs build` writes and the
+scaffolded `vitest.config.ts` writes before tests. Custom
 `"use step"` implementations may also import `@jigs-ai/jigs/steps` and its
 `steps/*` modules. Those low-level implementations are not durable wrappers
 and must not be called directly from workflow code. See the [API import map](/api/).
@@ -81,8 +83,10 @@ export async function formatLocalTime(at: string, timeZone: string) {
 ## A run is waiting
 
 Run `pnpm exec jigs status <run>`. A waiting run is expected when it asked a
-question or is following a pull request; the status says what it needs and
-links to where you act. Starting another run does not answer the first one.
+question or is following a pull request; the status says what it needs. A
+question waits for a reply in the run's Linear agent session on the ticket,
+not in the ticket's comments. Starting another run does not answer the first
+one.
 
 Once you have answered, the run notices on its next
 [check](/guide/waiting-and-events). `pnpm exec jigs poke <run>` makes it
@@ -140,12 +144,6 @@ The stream is stored in the factory's Postgres database with the run and never
 expires. Tool output can include file contents, command output and secrets the
 agent read, so treat the database as sensitive. Use only the service's
 dashboard: `workflow web` run against the factory takes its queue jobs.
-
-## Doctor reports webhook deliveries rejected with 401
-
-GitHub's copy of the webhook secret does not match `GITHUB_WEBHOOK_SECRET` in
-`.env`. Run `pnpm exec jigs bind <remote>` for that repository to send GitHub
-the current secret.
 
 ## An old worktree or directory is still there
 

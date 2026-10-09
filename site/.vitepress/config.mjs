@@ -42,6 +42,17 @@ export default {
         ],
       },
       {
+        text: "Run a hub",
+        collapsed: false,
+        items: [
+          { text: "Run a hub", link: "/guide/hub" },
+          { text: "GitHub App", link: "/guide/hub-github" },
+          { text: "Linear app", link: "/guide/hub-linear" },
+          { text: "Slack app", link: "/guide/hub-slack" },
+          { text: "PagerDuty app", link: "/guide/hub-pagerduty" },
+        ],
+      },
+      {
         text: "Using jigs",
         collapsed: false,
         items: [
@@ -49,6 +60,7 @@ export default {
           { text: "Models and harnesses", link: "/guide/models-and-harnesses" },
           { text: "Waiting and external events", link: "/guide/waiting-and-events" },
           { text: "Slack", link: "/guide/slack" },
+          { text: "Linear conversations", link: "/guide/linear-conversations" },
           { text: "Recipes", link: "/guide/recipes" },
           { text: "Custom agent steps", link: "/guide/custom-agent-step" },
           { text: "Configuration", link: "/guide/configuration" },

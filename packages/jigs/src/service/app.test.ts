@@ -1,5 +1,4 @@
-import { createHmac } from "node:crypto";
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { SPEC_VERSION_CURRENT } from "@workflow/world";
@@ -8,22 +7,15 @@ import { resumeHook } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
-import * as linear from "../providers/linear.ts";
-import { useGithubClient } from "../providers/test-fixtures.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { testFactoryContext } from "../test-fixtures.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import { type Factory, ticketInputSchema } from "../workflow/factory.ts";
-import { needsHumanToken } from "../workflow/linear/halt-for-human.ts";
+import { linearListeningToken, linearSessionToken } from "../workflow/linear/agent-session.ts";
 import { ticketToken } from "../workflow/linear/ticket-token.ts";
-import { pagerduty } from "../workflow/pagerduty/source.ts";
 import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
-import * as triggers from "./event-triggers/runner.ts";
-import type { PreparedRun } from "./launch.ts";
-import { pagerDutyIncidents } from "./pagerduty-incidents.ts";
 import * as queue from "./queue.ts";
-import { eventTriggerId } from "./runs.ts";
-import { memoryTriggerStore } from "./test-fixtures.ts";
+import { appClient } from "./test-fixtures.ts";
 import { clearWakes, lastWake } from "./wake.ts";
 
 const ambientWorkflowEnv = vi.hoisted(() => {
@@ -40,8 +32,7 @@ const { createApp } = await import("./app.ts");
 // rather than the operator's database.
 const env: Record<string, string | undefined> = {};
 const context = testFactoryContext({ slug: "factory-test", env });
-const push = vi.fn(triggers.pushEvent);
-const deps = { context, registry: () => ({}) as never, triggers: { push } };
+const deps = { context, registry: () => ({}) as never };
 
 // The routes are exercised against workflows this file declares: what is under
 // test is the framework.
@@ -59,17 +50,11 @@ const fixture = {
       inputs: z.object({ when: z.date(), name: z.string() }),
     },
   },
-  webhooks: {
-    url: "https://factory.example.ts.net",
-    github: { enabled: true },
-    linear: { enabled: true },
-    pagerduty: { enabled: false },
-  },
 } satisfies Factory;
 
 const RUN = "wrun_01K3ANBZ4TQ8W9YV6H2E5C7DKM";
 
-// The ingress hands every accepted delivery to the SDK's own resumeHook, and
+// A wake hands every accepted event to the SDK's own resumeHook, and
 // what a delivery is worth is what that call answers — so the SDK is what a
 // test stands in for here, never a seam of the app's.
 vi.mock("workflow/api", async (importActual) => ({
@@ -80,7 +65,7 @@ const resumeHookMock = vi.mocked(resumeHook);
 // The wake is noted for the run the resumed hook names.
 const delivers = () => resumeHookMock.mockResolvedValueOnce({ runId: RUN } as never);
 
-const app = createApp(fixture, deps);
+const app = appClient(createApp(fixture, deps));
 
 // A second factory, because what the schedule routes answer is a property of
 // the config handed in. Nothing ticks here: the ticker is started by the
@@ -96,7 +81,7 @@ const scheduled = {
     "broken-cron": { workflow: "plain", cron: "always", inputs: {} },
   },
 } satisfies Factory;
-const scheduledApp = createApp(scheduled, deps);
+const scheduledApp = appClient(createApp(scheduled, deps));
 
 // The local world binds its data dir on first use, so one fresh dir serves
 // the whole file; it starts empty — nobody holds any token here.
@@ -118,13 +103,6 @@ beforeEach(() => {
   vi.stubEnv("WORKFLOW_LOCAL_DATA_DIR", dataDir);
   vi.stubEnv("XDG_DATA_HOME", path.join(dataDir, "resources"));
   vi.stubEnv("WORKFLOW_TARGET_WORLD", undefined);
-  Object.assign(env, {
-    GITHUB_WEBHOOK_SECRET: "gh-hook-secret",
-    GITHUB_TOKEN: "gh-service-token",
-    LINEAR_WEBHOOK_SECRET: "linear-hook-secret",
-    PAGERDUTY_WEBHOOK_SECRET: "pd-hook-secret",
-  });
-  push.mockReset().mockImplementation(triggers.pushEvent);
   resumeHookMock.mockReset().mockRejectedValue(new HookNotFoundError("unclaimed-test-token"));
 });
 afterEach(() => {
@@ -133,378 +111,6 @@ afterEach(() => {
   // Clears the cached world too, so the next getWorld() opens the local one
   // again from the data dir above.
   setWorld(undefined);
-});
-
-const sign = (body: string, secret: string) =>
-  createHmac("sha256", secret).update(body).digest("hex");
-
-const postGithub = (body: string, headers: Record<string, string>) =>
-  app.request("/ingress/github", { method: "POST", body, headers });
-
-const postLinear = (body: string, headers: Record<string, string>) =>
-  app.request("/ingress/linear", { method: "POST", body, headers });
-
-const reviewPayload = JSON.stringify({
-  action: "submitted",
-  review: { id: 7, state: "approved" },
-  pull_request: { number: 41 },
-  repository: { name: "api", owner: { login: "acme" } },
-});
-
-const commentPayload = () =>
-  JSON.stringify({
-    action: "create",
-    type: "Comment",
-    data: { id: "c1", body: "reply", issueId: crypto.randomUUID() },
-  });
-
-test.each([
-  ["no webhooks section", undefined],
-  [
-    "each provider switched off",
-    {
-      url: "https://factory.example.ts.net",
-      github: { enabled: false },
-      linear: { enabled: false },
-      pagerduty: { enabled: false },
-    },
-  ],
-])("with %s, neither ingress route exists", async (_name, webhooks) => {
-  const polling = createApp({ workflows: fixture.workflows, webhooks }, deps);
-  const body = commentPayload();
-  const github = await polling.request("/ingress/github", {
-    method: "POST",
-    body: reviewPayload,
-    headers: { "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}` },
-  });
-  const linearDelivery = await polling.request("/ingress/linear", {
-    method: "POST",
-    body,
-    headers: { "linear-signature": sign(body, "linear-hook-secret") },
-  });
-  expect([github.status, linearDelivery.status]).toEqual([404, 404]);
-  expect(resumeHookMock).not.toHaveBeenCalled();
-});
-
-test("one provider switched on mounts only its own route", async () => {
-  const githubOnly = createApp(
-    {
-      workflows: fixture.workflows,
-      webhooks: { url: "https://f.test", github: { enabled: true } },
-    },
-    deps,
-  );
-  const body = commentPayload();
-  expect(
-    (
-      await githubOnly.request("/ingress/linear", {
-        method: "POST",
-        body,
-        headers: { "linear-signature": sign(body, "linear-hook-secret") },
-      })
-    ).status,
-  ).toBe(404);
-  expect(
-    (
-      await githubOnly.request("/ingress/github", {
-        method: "POST",
-        body: reviewPayload,
-        headers: { "x-github-event": "pull_request_review" },
-      })
-    ).status,
-  ).toBe(401);
-});
-
-test("POST /ingress/github with a forged signature is a 401", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "wrong-secret")}`,
-    "x-github-event": "pull_request_review",
-  });
-  expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github rejected reason=signature event=pull_request_review",
-  );
-});
-
-test("POST /ingress/github without a signature header is a 401", async () => {
-  const res = await postGithub(reviewPayload, {
-    "x-github-event": "pull_request_review",
-  });
-  expect(res.status).toBe(401);
-});
-
-test("POST /ingress/github without a configured secret fails closed", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined);
-  env.GITHUB_WEBHOOK_SECRET = "";
-  const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "")}`,
-  });
-  expect(res.status).toBe(401);
-  expect(resumeHookMock).not.toHaveBeenCalled();
-});
-
-test("a validly signed PR review delivery nobody is listening to is acknowledged", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const send = () =>
-    postGithub(reviewPayload, {
-      "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
-      "x-github-event": "pull_request_review",
-    });
-  const res = await send();
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenLastCalledWith(
-    "[ingress] github dropped reason=no-matching-hook token=github:pr:acme/api#41 event=pull_request_review",
-  );
-  // Nothing accumulated: the identical delivery drops the same way again.
-  const again = await send();
-  expect(again.status).toBe(200);
-  expect(await again.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledTimes(2);
-});
-
-test("a GitHub delivery matching a hook logs acceptance with its token", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  delivers();
-  const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
-    "x-github-event": "pull_request_review",
-  });
-  expect(res.status).toBe(200);
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github accepted token=github:pr:acme/api#41 event=pull_request_review",
-  );
-});
-
-test("a delivery that lands is the wake the run's status reports", async () => {
-  clearWakes();
-  delivers();
-  await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
-    "x-github-event": "pull_request_review",
-  });
-  expect(lastWake("github:pr:acme/api#41", RUN)?.kind).toBe("github pull_request_review");
-});
-
-test("a delivery in GitHub's canonical casing resumes a hook claimed from a lowercase remote", async () => {
-  delivers();
-  const body = JSON.stringify({
-    action: "submitted",
-    review: { id: 7, state: "approved" },
-    pull_request: { number: 1 },
-    repository: { name: "Data-Lake-Airflow", owner: { login: "Junglescout" } },
-  });
-  const res = await postGithub(body, {
-    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
-    "x-github-event": "pull_request_review",
-  });
-  expect(await res.json()).toEqual({ delivered: true });
-  expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(
-    "github:pr:junglescout/data-lake-airflow#1",
-    undefined,
-  );
-});
-
-test("a GitHub delivery failure is not misreported as a missing hook", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
-  const res = await postGithub(reviewPayload, {
-    "x-hub-signature-256": `sha256=${sign(reviewPayload, "gh-hook-secret")}`,
-    "x-github-event": "pull_request_review",
-  });
-  expect(res.status).toBe(404);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github dropped reason=delivery-failed token=github:pr:acme/api#41 event=pull_request_review",
-  );
-});
-
-test("a signed check_suite delivery is routed to the PR it belongs to", async () => {
-  const body = JSON.stringify({
-    action: "completed",
-    check_suite: {
-      id: 9,
-      conclusion: "failure",
-      pull_requests: [{ number: 41 }],
-    },
-    repository: { name: "api", owner: { login: "acme" } },
-  });
-  const res = await postGithub(body, {
-    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
-    "x-github-event": "check_suite",
-  });
-  // Nobody is listening in this lane, so the delivery is acknowledged and
-  // dropped — what matters is that it was routed rather than ignored.
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-});
-
-const statusPayload = (state: string) =>
-  JSON.stringify({
-    sha: "status-sha",
-    state,
-    context: "AWS CodeBuild us-west-2",
-    repository: { name: "fork", full_name: "contributor/fork", owner: { login: "contributor" } },
-  });
-
-const postStatus = (body: string) =>
-  postGithub(body, {
-    "x-hub-signature-256": `sha256=${sign(body, "gh-hook-secret")}`,
-    "x-github-event": "status",
-  });
-
-test("a signed status delivery resolves every matching PR and routes by base repo", async () => {
-  const fetchMock = vi.fn().mockResolvedValue(
-    new Response(
-      JSON.stringify([
-        {
-          number: 41,
-          state: "open",
-          head: { sha: "status-sha" },
-          base: { repo: { name: "api", owner: { login: "acme" } } },
-        },
-        {
-          number: 7,
-          state: "open",
-          head: { sha: "status-sha" },
-          base: { repo: { name: "web", owner: { login: "acme" } } },
-        },
-      ]),
-    ),
-  );
-  useGithubClient({ fetch: fetchMock });
-  resumeHookMock
-    .mockResolvedValueOnce({} as never)
-    .mockRejectedValueOnce(new HookNotFoundError("unclaimed"));
-
-  const res = await postStatus(statusPayload("failure"));
-
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: true });
-  expect(resumeHookMock.mock.calls.map(([token]) => token).sort()).toEqual(
-    [
-      pullRequestToken({ owner: "acme", repo: "api", number: 41 }),
-      pullRequestToken({ owner: "acme", repo: "web", number: 7 }),
-    ].sort(),
-  );
-  expect(fetchMock).toHaveBeenCalledTimes(1);
-});
-
-test("pending status is ignored without a sha lookup", async () => {
-  const fetchMock = vi.fn();
-  useGithubClient({ fetch: fetchMock });
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-
-  const res = await postStatus(statusPayload("pending"));
-
-  expect(res.status).toBe(200);
-  expect(fetchMock).not.toHaveBeenCalled();
-  expect(resumeHookMock).not.toHaveBeenCalled();
-  expect(log).toHaveBeenCalledWith("[ingress] github ignored reason=pending-status event=status");
-});
-
-test("status with no open PR is dropped without waking a gate", async () => {
-  useGithubClient({ fetch: vi.fn().mockResolvedValue(new Response("[]")) });
-  const res = await postStatus(statusPayload("success"));
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(resumeHookMock).not.toHaveBeenCalled();
-});
-
-test("a status lookup failure is acknowledged as unroutable rather than a 500", async () => {
-  useGithubClient({ fetch: vi.fn().mockRejectedValue(new Error("network down")) });
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const res = await postStatus(statusPayload("failure"));
-  expect(res.status).toBe(404);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledWith(
-    "[ingress] github dropped reason=status-lookup-failed event=status",
-  );
-});
-
-test("an unroutable github event is acknowledged and ignored", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const ping = JSON.stringify({
-    zen: "Keep it logically awesome.",
-    hook_id: 1,
-    repository: { name: "api", owner: { login: "acme" } },
-  });
-  const res = await postGithub(ping, {
-    "x-hub-signature-256": `sha256=${sign(ping, "gh-hook-secret")}`,
-    "x-github-event": "ping",
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] github ignored reason=unrecognized-event event=ping",
-  );
-});
-
-test("POST /ingress/linear with a forged signature is a 401", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = commentPayload();
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "wrong-secret"),
-  });
-  expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear rejected reason=signature");
-});
-
-test("a validly signed Comment delivery for an unclaimed issue is acknowledged", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = commentPayload();
-  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data.issueId;
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[ingress] linear dropped reason=no-matching-hook token=linear:ticket:${issueId} event=Comment`,
-  );
-});
-
-test("a Linear delivery matching a hook logs acceptance with its token", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  delivers();
-  const body = commentPayload();
-  const issueId = (JSON.parse(body) as { data: { issueId: string } }).data.issueId;
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    `[ingress] linear accepted token=linear:ticket:${issueId} event=Comment`,
-  );
-});
-
-test("a validly signed non-JSON linear body is acknowledged and ignored", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = "not json";
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] linear ignored reason=unrecognized-shape");
-});
-
-test("an unroutable linear resource type is acknowledged and ignored", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = JSON.stringify({
-    action: "update",
-    type: "Issue",
-    data: { id: "issue-1" },
-  });
-  const res = await postLinear(body, {
-    "linear-signature": sign(body, "linear-hook-secret"),
-  });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] linear ignored reason=unrecognized-event event=Issue",
-  );
 });
 
 test("poke of an unknown run is a 404", async () => {
@@ -602,16 +208,35 @@ test("every response names the jigs the service runs, misses included", async ()
   }
 });
 
+test("a miss and a crash answer plain text, never a stack", async () => {
+  const miss = await app.request("/api/nope");
+  expect(miss.status).toBe(404);
+  expect(await miss.text()).toBe("404 Not Found");
+  vi.spyOn(console, "error").mockImplementation(() => {});
+  const crash = await appClient(
+    createApp(fixture, {
+      ...deps,
+      registry: () => {
+        throw new Error("registry down");
+      },
+    }),
+  ).request("/api/runs");
+  expect(crash.status).toBe(500);
+  expect(await crash.text()).toBe("Internal Server Error");
+});
+
 test("health names the factory and the process that answer here, and the injected workflows", async () => {
-  const res = await createApp(fixture, {
-    ...deps,
-    context: testFactoryContext({ root: "/factories/acme" }),
-  }).request("/health");
+  const res = await appClient(
+    createApp(fixture, {
+      ...deps,
+      context: testFactoryContext({ root: "/factories/acme" }),
+    }),
+  ).request("/health");
   expect(res.status).toBe(200);
   expect(await res.json()).toMatchObject({
     ok: true,
     // No startService has run here, so the boot has not begun: live,
-    // but not what `jigs service start` waits for.
+    // but not what `jigs up` waits for.
     ready: false,
     phase: "starting",
     factoryRoot: "/factories/acme",
@@ -624,7 +249,7 @@ test("health outside a factory reports a null root rather than failing liveness"
   vi.stubEnv("JIGS_FACTORY_ROOT", "");
   const cwd = vi.spyOn(process, "cwd").mockReturnValue(dataDir);
   try {
-    const res = await createApp(fixture).request("/health");
+    const res = await appClient(createApp(fixture)).request("/health");
     expect(res.status).toBe(200);
     expect(await res.json()).toMatchObject({ ok: true, factoryRoot: null });
   } finally {
@@ -640,12 +265,14 @@ test("GET /api/runs answers with empty runs when nothing has launched", async ()
 
 test("GET /api/runs still answers with runs when the triggers cannot be read", async () => {
   // The registry the triggers live in is unusable here.
-  const triggered = createApp(
-    {
-      ...fixture,
-      triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
-    },
-    deps,
+  const triggered = appClient(
+    createApp(
+      {
+        ...fixture,
+        triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+      },
+      deps,
+    ),
   );
   const res = await triggered.request("/api/runs");
   expect(res.status).toBe(200);
@@ -768,7 +395,7 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
     updatedAt: new Date("2026-09-04T10:00:00.000Z"),
   };
   const listed = vi.spyOn(sql, "listResources").mockResolvedValue([row]);
-  const claim = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
+  const claim = ticketToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
   setWorld({
     specVersion: SPEC_VERSION_CURRENT,
     runs: {
@@ -802,9 +429,10 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
   ]);
 });
 
-const CLAIM = ticketToken("68bc9696-35d5-442d-ab56-214c8cfefbec");
-const MARKER = needsHumanToken("68bc9696-35d5-442d-ab56-214c8cfefbec", "c1");
-const PR = pullRequestToken({ owner: "acme", repo: "api", number: 41 });
+const CLAIM = ticketToken("acme", "68bc9696-35d5-442d-ab56-214c8cfefbec");
+const SESSION = linearSessionToken("acme", "session-1");
+const LISTENING = linearListeningToken("acme", "session-1");
+const PR = pullRequestToken({ installationName: "acme", owner: "acme", repo: "api", number: 41 });
 
 // A running run holding exactly these hooks. The routes below read no other
 // world surface, so anything they touch beyond `hooks.list` rejects and is
@@ -828,28 +456,20 @@ const runHolding = (...tokens: string[]) =>
   })();
 
 test("GET /api/runs/:runId says what each park is waiting for, and where to act", async () => {
-  runHolding(CLAIM, MARKER, PR);
-  // The halt's comment is read back from Linear; a Linear nobody can ask
-  // leaves the suspension as the token alone describes it.
-  vi.spyOn(linear, "getComment").mockResolvedValue({
-    url: "https://linear.app/acme/issue/AGE-317#comment-c1",
-    body: "Which binding?",
-  });
+  runHolding(CLAIM, SESSION, LISTENING, PR);
 
   const res = await app.request(`/api/runs/${RUN}`);
 
   expect(res.status).toBe(200);
-  // The claim is held for the run's whole life, so it is no suspension and
-  // never appears; the other two explain themselves without a metadata read.
+  // The claim and the session's ownership hook are held for the run's whole
+  // life, so neither is a suspension; the other two explain themselves.
   expect(await res.json()).toMatchObject({
     status: "running",
     suspensions: [
       {
-        token: MARKER,
-        kind: "needs-human",
-        reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
-        url: "https://linear.app/acme/issue/AGE-317#comment-c1",
-        question: "Which binding?",
+        token: LISTENING,
+        kind: "linear-listening",
+        reason: "waiting for a reply in Linear agent session session-1",
       },
       {
         token: PR,
@@ -859,23 +479,6 @@ test("GET /api/runs/:runId says what each park is waiting for, and where to act"
       },
     ],
   });
-});
-
-test("a halt whose comment Linear will not hand back keeps the park it can state", async () => {
-  runHolding(CLAIM, MARKER);
-  vi.spyOn(linear, "getComment").mockRejectedValue(new Error("Linear API key is not set"));
-
-  const res = await app.request(`/api/runs/${RUN}`);
-
-  expect(res.status).toBe(200);
-  const body = (await res.json()) as { suspensions: Array<Record<string, unknown>> };
-  expect(body.suspensions).toEqual([
-    {
-      token: MARKER,
-      kind: "needs-human",
-      reason: "waiting for a human reply on 68bc9696-35d5-442d-ab56-214c8cfefbec",
-    },
-  ]);
 });
 
 test("a run holding only its ticket claim is not parked", async () => {
@@ -890,49 +493,55 @@ test("a run holding only its ticket claim is not parked", async () => {
   });
 });
 
-test("poke wakes the hooks that name a resource, never the needs-human marker", async () => {
-  runHolding(CLAIM, MARKER);
+test("poke wakes what the run waits on, never a lock it holds", async () => {
+  runHolding(CLAIM, SESSION, LISTENING);
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
   expect(res.status).toBe(200);
-  // The reply that ends a needs-human halt lands on the ticket claim, so the
-  // marker names no channel and resuming it would wake nothing.
-  expect(await res.json()).toMatchObject({ poked: [{ token: CLAIM }] });
+  expect(await res.json()).toMatchObject({ poked: [{ token: LISTENING }] });
+});
+
+test("a run holding only its ticket claim has nothing to poke", async () => {
+  runHolding(CLAIM);
+
+  const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
+
+  expect(res.status).toBe(409);
 });
 
 test("a poke that landed is the wake the run's status reports", async () => {
   clearWakes();
-  runHolding(CLAIM);
+  runHolding(PR);
   delivers();
 
   await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
-  expect(lastWake(CLAIM, RUN)?.kind).toBe("poke");
+  expect(lastWake(PR, RUN)?.kind).toBe("poke");
 });
 
 test("a poke the World cannot deliver says so instead of calling the wait gone", async () => {
-  runHolding(CLAIM);
+  runHolding(PR);
   resumeHookMock.mockRejectedValueOnce(new Error("database unavailable"));
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
   expect(await res.json()).toEqual({
     runId: RUN,
-    poked: [{ token: CLAIM, outcome: "failed", error: "Error: database unavailable" }],
+    poked: [{ token: PR, outcome: "failed", error: "Error: database unavailable" }],
   });
 });
 
 test("a poke whose hook is gone reports it gone", async () => {
-  runHolding(CLAIM);
+  runHolding(PR);
 
   const res = await app.request(`/api/runs/${RUN}/poke`, { method: "POST" });
 
-  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: CLAIM, outcome: "gone" }] });
+  expect(await res.json()).toEqual({ runId: RUN, poked: [{ token: PR, outcome: "gone" }] });
 });
 
 test("cancel reports observed hook release, retained worktrees, and no queue-deletion count", async () => {
-  runHolding(CLAIM, MARKER);
+  runHolding(CLAIM, LISTENING);
 
   const res = await app.request(`/api/runs/${RUN}/cancel`, { method: "POST" });
 
@@ -940,7 +549,7 @@ test("cancel reports observed hook release, retained worktrees, and no queue-del
   expect(await res.json()).toEqual({
     runId: RUN,
     cancelled: true,
-    releasedTokens: [CLAIM],
+    releasedTokens: [CLAIM, LISTENING],
     retainedTokens: [],
     worktrees: [],
   });
@@ -986,149 +595,4 @@ test("a factory with no schedules answers an empty listing", async () => {
   const res = await app.request("/api/schedules");
   expect(res.status).toBe(200);
   expect(await res.json()).toEqual([]);
-});
-
-// Each run starts from an incident on the one service the trigger watches.
-const paged = {
-  workflows: {
-    respond: { workflow: async () => undefined, inputs: z.object({ incident: z.string() }) },
-  },
-  triggers: {
-    pages: { workflow: "respond", source: pagerduty.incidents({ service_ids: ["PSVC001"] }) },
-  },
-  webhooks: {
-    url: "https://factory.example.ts.net",
-    github: { enabled: false },
-    linear: { enabled: false },
-    pagerduty: { enabled: true },
-  },
-} satisfies Factory;
-const pagedApp = createApp(paged, deps);
-
-const incidentTriggered = () =>
-  readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8");
-const postPagerDuty = (body: string, headers: Record<string, string> = {}) =>
-  pagedApp.request("/ingress/pagerduty", { method: "POST", body, headers });
-const signPagerDuty = (body: string, secret = "pd-hook-secret") => `v1=${sign(body, secret)}`;
-
-test("PagerDuty's route exists only when its webhook is switched on", async () => {
-  const body = incidentTriggered();
-  const headers = { "x-pagerduty-signature": signPagerDuty(body) };
-  expect((await app.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
-    404,
-  );
-  const off = createApp(
-    {
-      ...paged,
-      webhooks: { ...paged.webhooks, pagerduty: { enabled: false } },
-    },
-    deps,
-  );
-  expect((await off.request("/ingress/pagerduty", { method: "POST", body, headers })).status).toBe(
-    404,
-  );
-});
-
-test.each([
-  ["a forged signature", { "x-pagerduty-signature": "v1=00" }],
-  ["no signature", {}],
-])("POST /ingress/pagerduty with %s is a 401 that logs no signature", async (_name, headers) => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const res = await postPagerDuty(incidentTriggered(), headers);
-  expect(res.status).toBe(401);
-  expect(log).toHaveBeenCalledExactlyOnceWith("[ingress] pagerduty rejected reason=signature");
-  expect(push).not.toHaveBeenCalled();
-});
-
-test("POST /ingress/pagerduty without a configured secret fails closed", async () => {
-  vi.spyOn(console, "log").mockImplementation(() => undefined);
-  env.PAGERDUTY_WEBHOOK_SECRET = "";
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body, "") });
-  expect(res.status).toBe(401);
-});
-
-test("a signed PagerDuty event no trigger takes is acknowledged and logged as ignored", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const body = incidentTriggered().replace("incident.triggered", "incident.acknowledged");
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ ignored: true });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable event=incident.acknowledged",
-  );
-});
-
-test("a push that fails is still acknowledged, so PagerDuty keeps the subscription on", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  push.mockRejectedValueOnce(new Error("registry unreachable"));
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ delivered: false });
-  expect(log).toHaveBeenCalledExactlyOnceWith(
-    "[ingress] pagerduty dropped reason=push-failed event=incident.triggered: Error: registry unreachable",
-  );
-});
-
-test("a signed incident.triggered is recorded at once, and its run starts", async () => {
-  const log = vi.spyOn(console, "log").mockImplementation(() => undefined);
-  const T0 = new Date("2026-09-29T12:00:00.000Z");
-  const memory = memoryTriggerStore(() => T0, T0);
-  const starts: Array<{ inputs: unknown; triggerId: string }> = [];
-  const timers: number[] = [];
-  let release = () => {};
-  const started = new Promise<void>((resolve) => {
-    release = resolve;
-  });
-  triggers.startTriggers(paged, {
-    store: memory.store,
-    sources: {
-      "pagerduty.incidents": pagerDutyIncidents({
-        client: () => ({ listIncidents: async () => [] }) as never,
-        now: () => T0,
-      }),
-    },
-    now: () => T0,
-    log: () => {},
-    factorySlug: () => "factory-test",
-    runStatuses: async () => new Map(),
-    findRunsByAttribute: async () => [],
-    liveRunsByAttribute: async () => new Map(),
-    cancelRun: async () => {},
-    prepareRun: async (_factory, _workflow, inputs): Promise<PreparedRun> => ({
-      kind: "ready",
-      launch: async (triggerId) => {
-        // Held open: the webhook's answer must not wait on the start.
-        await started;
-        starts.push({ inputs, triggerId });
-        return "wrun_1";
-      },
-    }),
-    ready: async () => {},
-    intervalSeconds: async () => ({ github: 300, linear: 300, slack: 300, pagerduty: 300 }),
-    random: () => 0,
-    setTimer: (_fire, ms) => {
-      timers.push(ms);
-      return () => {};
-    },
-  });
-  await vi.waitFor(() => expect(timers).toHaveLength(2));
-
-  const body = incidentTriggered();
-  const res = await postPagerDuty(body, { "x-pagerduty-signature": signPagerDuty(body) });
-
-  expect(res.status).toBe(200);
-  expect(await res.json()).toEqual({ triggers: ["pages"] });
-  expect(log).toHaveBeenCalledWith(
-    "[ingress] pagerduty accepted triggers=pages event=incident.triggered",
-  );
-  expect(memory.state("pages", "Q1")).toMatchObject({ state: "pending" });
-  expect(starts).toEqual([]);
-  release();
-  await vi.waitFor(() =>
-    expect(starts).toEqual([
-      { inputs: { incident: "Q1" }, triggerId: eventTriggerId("pages", "Q1") },
-    ]),
-  );
 });

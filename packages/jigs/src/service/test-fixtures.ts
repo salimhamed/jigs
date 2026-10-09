@@ -1,7 +1,31 @@
+import { once } from "node:events";
+import { createServer, type RequestListener } from "node:http";
+import type { AddressInfo } from "node:net";
+import type { Occurrence, TriggerMarker, TriggerStore } from "./event-triggers/store.ts";
+
+// Taken before any test stubs the global, so the app is always reached.
+const { fetch } = globalThis;
+
+/** Sends each request to the app over a socket of its own, and buffers the answer. */
+export function appClient(app: RequestListener) {
+  return {
+    async request(pathname: string, init?: RequestInit): Promise<Response> {
+      const server = createServer(app).listen(0, "127.0.0.1");
+      await once(server, "listening");
+      try {
+        const { port } = server.address() as AddressInfo;
+        const response = await fetch(`http://127.0.0.1:${port}${pathname}`, init);
+        return new Response(await response.arrayBuffer(), response);
+      } finally {
+        server.closeAllConnections();
+        server.close();
+      }
+    },
+  };
+}
+
 // An in-memory trigger store for engine tests: the Postgres store's contract,
 // checked against the real one by event-triggers/store.db.test.ts.
-
-import type { Occurrence, TriggerMarker, TriggerStore } from "./event-triggers/store.ts";
 
 export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
   const rows = new Map<string, Occurrence>();
@@ -17,13 +41,8 @@ export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
   const failures = { attempt: 0, started: 0 };
   const store: TriggerStore = {
     enable: async (trigger, now) => {
-      if (!marks.has(trigger)) marks.set(trigger, { enabledAt: now, cursor: null });
+      if (!marks.has(trigger)) marks.set(trigger, { enabledAt: now });
       return marks.get(trigger) as TriggerMarker;
-    },
-    // Through JSON, as the jsonb column would.
-    advance: async (trigger, cursor) => {
-      const mark = marks.get(trigger);
-      if (mark) marks.set(trigger, { ...mark, cursor: JSON.parse(JSON.stringify(cursor)) });
     },
     record: async (row) => {
       if (rows.has(key(row.trigger, row.occurrence))) return false;
@@ -61,6 +80,12 @@ export function memoryTriggerStore(now: () => Date, updatedAt: Date = now()) {
     },
     failed: async (trigger, occurrence, report) =>
       settle(trigger, occurrence, { state: "failed", report }),
+    withdraw: async (trigger, occurrence) => {
+      const row = rows.get(key(trigger, occurrence));
+      if (row?.state !== "pending" || row.attemptedAt !== null) return false;
+      patch(trigger, occurrence, { state: "skipped" });
+      return true;
+    },
     adoptLate: async (trigger, occurrence, runId, at) => {
       const row = rows.get(key(trigger, occurrence));
       if (row?.state === "failed" && row.attemptedAt !== null)

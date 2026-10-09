@@ -1,7 +1,7 @@
 # Author a workflow
 
-Work in the factory repo. Read its `jigs.config.ts`, the generated
-`jigs/steps.ts` and `jigs/routines.ts`, and `workflows/` before editing. The
+Work in the factory repo. Read its `jigs.config.ts`, `workflows/`, and the
+steps and routines in `node_modules/@jigs-ai/jigs/factory/` before editing. The
 installed `node_modules/@jigs-ai/jigs/templates/` is the bare scaffold for that
 version; its only workflow is `hello`.
 
@@ -14,7 +14,7 @@ The guides, in the order you need them:
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
 preserves existing files and reports created/kept paths. Recipes
-become editable factory source; upgrades only regenerate `jigs/`.
+become editable factory source; upgrades never overwrite them.
 
 ## Code responsibilities
 
@@ -31,11 +31,10 @@ become editable factory source; upgrades only regenerate `jigs/`.
 - Step arguments and results cross the database as JSON. Pass data only: a
   function or a provider object fails with `SerializationError: Failed to
   serialize step arguments`.
-- `jigs/` is generated and committed. `jigs/steps.ts` holds every built-in step
-  and is the only generated file with `"use step"`; `jigs/routines.ts` holds the
-  routines bound to them. Import them as `#jigs/steps` and `#jigs/routines`.
-  Never edit either. `jigs generate` refreshes them; builds check for drift and
-  upgrades regenerate them automatically.
+- `#jigs/steps` holds every built-in step and `#jigs/routines` the routines
+  bound to them. The build copies both into the gitignored `.jigs/`, so their
+  step names are factory paths that upgrading jigs never renames. Never edit
+  `.jigs/`; the next build replaces it.
 - Each workflow lives in its own directory, `workflows/<name>/<name>.ts`, with
   its own files beside it, imported with `./` paths. The deferred workflow
   loaders in `jigs.config.ts` stay relative.
@@ -53,9 +52,9 @@ completion or cancellation with the operator.
 A workflow imports from two places. `@jigs-ai/jigs` is the library:
 `defineWorkflow`, `harnesses`, `models`, `JigsError`, every descriptor and
 result type, `yesNo`, `choice` and `score`, and pure renderers such as
-`renderTicketSnapshot`. `#jigs/steps` and `#jigs/routines` are generated for the
-factory. Implementations under `@jigs-ai/jigs/steps/<topic>` belong inside
-durable wrapper bodies. The generated wrappers preserve their names when
+`renderTicketSnapshot`. `#jigs/steps` and `#jigs/routines` are copied into the
+factory by the build. Implementations under `@jigs-ai/jigs/steps/<topic>` belong
+inside durable wrapper bodies. The copied wrappers preserve their names when
 library implementation paths move.
 
 Read the installed API reference at `node_modules/@jigs-ai/jigs/docs/api/`;
@@ -105,18 +104,40 @@ declaration next to its input schema.
 Resolve the ticket, then claim it, then do everything else. The claim is the
 one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
 before claiming can collide with the run that already holds the ticket. Use
-`acquireTicket` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
-starting protected work.
+`acquireTicket({ installationName, reference, session? })` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
+starting protected work. The claim also opens the run's Linear agent session on
+the ticket, or takes `session` when a `linear.agentSessions` trigger started
+the run. The claim carries the session, so `noteOnTicket` and `haltForHuman`
+take only the claim.
 
-Post ticket notes through the claim with `noteOnTicket(claim, note)` rather
-than the `postTicketNote` step. The claim records every comment the run posts,
-and `haltForHuman` skips them all when it looks for a human's reply.
+A ticket run talks to people only in that session; jigs posts and reads no
+ordinary ticket comments. Post notes through the claim with
+`noteOnTicket(claim, note)` rather than the `postTicketNote` step: the claim
+already carries the installation, issue and session the step needs. Give every way out of
+the workflow a note with `run: "ended"`, for success and failure alike; without
+one, Linear shows the run working after it ended. Never end a ticket run's
+session as an error: Linear offers Retry on it, which an ended run can't take. Linear marks a session stale
+after about 30 quiet minutes and hides Stop, so before a long wait on people,
+such as a pull request in review, post a note with `run: "waiting"`: the
+session shows awaiting input and never goes stale, though Linear shows no Stop
+while it waits. The run does not read replies to it, and the service answers
+them by saying so, so the note says where to act, including how to stop the
+run. Link a pull request with the `setLinearAgentSessionUrls` step. A message sent while the run
+works waits, unread, for its next `haltForHuman`. Stop cancels the run.
 
-Every jigs comment on a ticket mentions the operator (or, without one, the
+Every question and note mentions the operator (or, without one, the
 ticket's creator) and the assignee. The operator is the factory's
 `linear.operator` in `jigs.config.ts`, and a change takes effect after `jigs up`
 rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note.
-Unknown emails are skipped with a warning; the comment still posts.
+Unknown emails are skipped with a warning; the message still posts.
+
+To let Claude Code answer in Linear's agent panel, trigger the workflow with
+`linear.agentSessions`, provision a worktree, then call
+`linearAgentConversation(input, { harness, cwd })` from `#jigs/routines`. It
+needs a Claude harness. Its `outcome` is `idle` when no one replied for
+`idleFor` (4h by default), `stopped` when someone pressed stop, or `failed`
+when a turn failed. A second run for the same session throws
+`ClaimConflictError`.
 
 ## Validation ownership
 
@@ -152,7 +173,7 @@ workflow; never send a prompt or callback through a durable step argument.
 ### Record a custom resource
 
 After a workflow creates something an operator may need to find, call the
-generated `registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
+`registerResource({ kind, identity, url })` step from `#jigs/steps`. Kind
 plus identity is stable: retrying the same URL is idempotent, while a later URL
 updates that identity. `jigs status <run-id>` reads these records independently of the
 workflow's result. jigs records its own worktrees, run directories, agent homes,
@@ -218,7 +239,7 @@ feedback nor your completed work.
 
 ## Configuration and schedules
 
-`jigs.config.ts` declares ports, poll intervals, optional webhooks, bindings,
+`jigs.config.ts` declares its hub, ports, bindings,
 deferred workflow imports and schedules. Declare used credential providers in `requires.integrations`. Secrets remain in `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in `.env.example` with an empty value. A schedule names a `workflow`, cron
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
@@ -226,14 +247,22 @@ schema. An active prior run causes a tick to be skipped; downtime isn't replayed
 Agent harnesses don't inherit `.env`: each gets a small base set (`PATH`, `HOME`,
 locale, proxies and similar) plus its driver's own variables. Give agents any
 other variable by listing its name in `agents: { env: [...] }`; names only.
-For GitHub, give a harness `github: true` instead of a token: with a GitHub App
-identity the agent then acts as the App's bot through `gh` and HTTPS pushes,
-and `githubMcp()` adds GitHub's MCP server for it. Likewise `linear: true` and
-`pagerduty: true` hand the agent the factory's Linear and PagerDuty tokens, and
+For GitHub, give a harness `github: { installationName }` instead of a token: the agent then acts as the App's bot through `gh` and HTTPS pushes,
+and `githubMcp()` adds GitHub's MCP server for it. An agent in a worktree takes
+`github: { installationName: worktree.installationName }`, spread onto its harness once the worktree exists. Likewise
+`linear: { installationName }` and `pagerduty: { installationName }` hand the agent that installation's Linear and PagerDuty tokens, and
 `linearMcp()` and `pagerdutyMcp()` add those services' hosted MCP servers.
 
+### Installation names
+
+Every provider call names the installation it acts through, by its installation name on the hub; jigs never picks one.
+Linear, Slack and PagerDuty steps take one options object with `installationName`, such as
+`postSlackMessage({ installationName, channel, text })`; `callGitHub` and `callSlack` take it in their last argument.
+A binding declares its GitHub `installationName`, and `Worktree` and `PullRequestRef` carry it into the pull request steps and routines.
+Each trigger source takes one, and passes it to the run as the `installationName` input; thread it from there into every call the run makes.
+
 Use `jigs bind` and `jigs unbind` for literal binding declarations. Unsupported
-computed expressions fail with guidance before any file or webhook changes.
+computed expressions fail with guidance before any file or label changes.
 Do not replace such expressions automatically to make an edit work.
 
 ## Verify

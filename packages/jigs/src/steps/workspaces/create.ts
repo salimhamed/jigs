@@ -39,7 +39,7 @@ interface CutOptions {
   branch: string;
 }
 
-type WorktreeFacts = Omit<Worktree, "binding">;
+type WorktreeFacts = Omit<Worktree, "binding" | "installationName">;
 
 async function facts(options: CutOptions): Promise<WorktreeFacts> {
   const defaultBranch = await fetchOriginDefault(options.repoDir);

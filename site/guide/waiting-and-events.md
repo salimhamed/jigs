@@ -9,31 +9,47 @@ The factory service must be running to receive events and continue work.
 
 ## Wait for a person
 
-`haltForHuman` currently uses Linear. It asks a question on a ticket, marks the
-run as waiting, then continues the same run when a person replies there. It
-requires [Linear credentials](/guide/configuration#linear-identity) and a claimed
-ticket. Claiming prevents multiple runs from independently owning the same ticket.
+`haltForHuman` asks a question in Linear and continues the same run when a
+person replies. It requires the factory's [Linear app](/guide/configuration#linear-app)
+and a claimed ticket. Claiming prevents two runs from owning the same ticket,
+and it opens a Linear agent session on the ticket, or takes the one the run
+was started from with `acquireTicket`'s `session` argument. A ticket run talks
+to people only in that session. Linear shows it working, with a Stop button,
+while the run works; once the run waits on people, such as a pull request
+review, the session asks for input instead and the run's message says how to
+stop it. When the service has a dashboard, an Open button
+links to the run's page; the dashboard listens on `localhost`, so the link
+opens only on the factory's machine.
 
-This complete workflow resolves its `ticket` input, claims the ticket, then
+This complete workflow resolves its `ticket` input in the Linear installation
+its `linearInstallation` input names, such as `linear-acme`, claims the ticket, then
 returns the person's answer. Save it as `workflows/ask-scope/ask-scope.ts` and
 [register `ask-scope` in the factory](/guide/build-a-workflow#_3-register-the-workflow).
 Rebuild with `pnpm exec jigs up`, then run
-`pnpm exec jigs run ask-scope --input ticket=ENG-123`, replacing
-`ENG-123` with your ticket identifier.
+`pnpm exec jigs run ask-scope --input linearInstallation=linear-acme --input ticket=ENG-123`,
+replacing `linear-acme` with your installation name and `ENG-123` with your
+ticket identifier.
 
 ```ts
 // workflows/ask-scope/ask-scope.ts
-import { defineWorkflow, ticketInputSchema, type WorkflowInputs } from "@jigs-ai/jigs";
+import {
+  defineWorkflow,
+  installationNameSchema,
+  ticketInputSchema,
+  type WorkflowInputs,
+} from "@jigs-ai/jigs";
 import { z } from "zod";
-import { claimTicket, haltForHuman } from "#jigs/routines";
-import { resolveLinearIssue } from "#jigs/steps";
+import { acquireTicket, haltForHuman, noteOnTicket } from "#jigs/routines";
 
-const inputs = z.object({ ticket: ticketInputSchema });
+const inputs = z.object({
+  linearInstallation: installationNameSchema,
+  ticket: ticketInputSchema,
+});
 
 export async function askScope(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const issue = await resolveLinearIssue(input.ticket);
-  const claim = await claimTicket(issue.id, issue.identifier);
+  const installationName = input.linearInstallation;
+  const { claim } = await acquireTicket({ installationName, reference: input.ticket });
   const reply = await haltForHuman(claim, {
     headline: "A decision is needed before work continues.",
     where: "scope",
@@ -42,6 +58,12 @@ export async function askScope(input: WorkflowInputs<typeof inputs>) {
       options: [{ label: "Active drafts only" }, { label: "Include archived drafts" }],
     }],
     onReply: "continue",
+  });
+  await noteOnTicket(claim, {
+    headline: "Thanks, noted.",
+    notes: [reply.body],
+    closing: "",
+    run: "ended",
   });
   return reply.body;
 }
@@ -53,21 +75,58 @@ export default defineWorkflow({
 });
 ```
 
-The comment mentions the ticket's creator and assignee, or your
-[`linear.operator`](/guide/configuration#linear-operator) and the assignee. Pass
-`mention: ["dana@example.com"]` in the halt to mention more people.
+The question mentions your [`linear.operator`](/guide/configuration#linear-operator),
+or the ticket's creator without one, and the assignee. Pass
+`mention: ["dana@example.com"]` in the halt to mention more people. Anyone who
+replies in the session answers it. Messages sent there before the question
+count too: `reply.body` joins them, each prefixed with its author's name.
 
-Answer the existing question on Linear. Starting a second run does not answer
-it. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
+`noteOnTicket` posts a note in the session and notifies the people it
+mentions. Its `run` says what the run does next. A note with `run: "ended"`
+is the run's last message, whether the run succeeded or not, and Linear shows
+the session as finished; end every way out of a ticket run with one, or Linear
+keeps showing the run as working. A ticket run never ends its session as an
+error, because Linear offers Retry on one, and a run that has ended can't take it.
+
+Linear marks a session stale after about 30 minutes with no new activity, and
+a stale session hides its Stop button. Before a long quiet wait on people,
+such as a pull request waiting for review, post a note with
+`run: "waiting"`. It shows the session as awaiting input, which never goes
+stale. Linear shows no Stop button while a session awaits input, and the run
+does not read replies to the note, so say in it where people act, for example
+"comment on the pull request, or close it to stop the run". To show the pull
+request in the session, call the `setLinearAgentSessionUrls` step with
+`[{ label: "Pull request", url }]`; the run's dashboard link stays first.
+
+- **A message sent while the run works** gets the reply "I'm working and
+  can't take instructions mid-run; I'll ask here if I need you. Use Stop to end
+  the run." The run reads it at its next question. If the run never asks
+  again, it never reads the message.
+- **A message sent while the run waits on people**, after a waiting note,
+  gets the reply "I can't take instructions here while I wait; my earlier
+  message says where to act." The reply asks again, so the session stays
+  awaiting input. The run does not read the message.
+- **A message sent after the run ended**, in a session the run opened itself,
+  gets the reply "This conversation has ended. Assign the issue to @app or
+  mention @app to start a new run.", with your Linear app's name. A run
+  started from a person's session (`acquireTicket({ session })`) gets the
+  [conversation's ended reply](/guide/linear-conversations) instead.
+- **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
+  and posts "Stopped." The ticket's status stays as it is.
+- **Ordinary comments** on the ticket answer nothing. jigs never posts or
+  reads them, though an agent with Linear's MCP tools may still comment.
+
+Starting a second run does not answer a question. The [routine reference](/api/factory/routines#haltforhuman) covers the options.
 
 ## Watch a pull request
 
 **`watchPullRequest` reports facts. It does not decide what the facts mean or
 what the workflow should do next.** This complete workflow watches an existing
-pull request identified by its owner, repository and number. It requires
-[GitHub credentials](/guide/configuration#github-identity). Save it as
+pull request identified by the GitHub installation that reaches it, its owner,
+repository and number. It requires
+[GitHub credentials](/guide/configuration#github-app). Save it as
 `workflows/watch-pr/watch-pr.ts` and register `watch-pr` in the factory. Rebuild
-with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input owner=acme --input repo=app --input number=42`
+with `pnpm exec jigs up`, then run `pnpm exec jigs run watch-pr --input installationName=github-acme --input owner=acme --input repo=app --input number=42`
 with your pull request's details.
 
 ```ts
@@ -77,6 +136,7 @@ import { z } from "zod";
 import { watchPullRequest } from "#jigs/routines";
 
 const inputs = z.object({
+  installationName: z.string().min(1),
   owner: z.string().min(1),
   repo: z.string().min(1),
   number: z.coerce.number().int().positive(),
@@ -84,7 +144,12 @@ const inputs = z.object({
 
 export async function watchPr(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
-  const pr: PullRequestRef = { owner: input.owner, repo: input.repo, number: input.number };
+  const pr: PullRequestRef = {
+    installationName: input.installationName,
+    owner: input.owner,
+    repo: input.repo,
+    number: input.number,
+  };
   for await (const snapshot of watchPullRequest(pr)) {
     if (snapshot.state === "closed") {
       return { merged: snapshot.merged };
@@ -109,8 +174,8 @@ See the [watcher reference](/api/factory/routines#watchpullrequest) and
 ## Post commit updates
 
 After reading a snapshot, your workflow can use `postPullRequestNote` from
-`#jigs/routines` to explain the status of a commit; the generated routines
-supply the durable steps. Add this helper at file scope in the watcher module,
+`#jigs/routines` to explain the status of a commit; `#jigs/routines` supplies
+the durable steps. Add this helper at file scope in the watcher module,
 then call `await reportFailingCi(pr, snapshot)` inside the loop after the
 closed-state check. Both arguments come from that loop; the helper posts only when CI is red.
 
@@ -140,14 +205,13 @@ routines write comments; they do not decide whether to retry, fix code or merge.
 `watchPullRequest` still reports all current facts, including your own comments.
 Your workflow decides which feedback needs a reply and what to do next.
 
-## Polling and webhooks
+## Hub events
 
-The built-in GitHub, Linear and Slack waits always have polling as a fallback.
-Webhooks, and Slack's Socket Mode, make them react sooner, but are not required
-for correctness. A poll or push wakes the run so it can read the current facts
-again. Custom SDK
-hooks need their own event delivery; jigs does not automatically poll them.
-See [Configuration](/guide/configuration#webhooks) for webhook setup and intervals.
+GitHub, Linear and Slack waits wake on the events the factory's
+[hub](/guide/configuration#hub) passes on; the hub keeps them while the service
+is down. An event wakes only the runs waiting through the installation it
+came from, and one from an installation with no name on the hub wakes none.
+An event or a poke wakes the run so it can read the current facts again. Custom SDK hooks need their own event delivery.
 
 ## Check now with `jigs poke`
 

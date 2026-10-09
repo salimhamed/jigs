@@ -7,23 +7,26 @@ configuration file.
 | You changed | Run |
 | --- | --- |
 | Workflow code or `jigs.config.ts` | `pnpm exec jigs up` |
-| `.env` | `pnpm exec jigs service restart` |
+| `.env` | `pnpm exec jigs up --restart-service` |
 
 The service reads `.env` when it starts. Here is a complete `jigs.config.ts`
 for a factory with the generated `hello` workflow and an `app` binding. Replace
-the repository URL with your own:
+the repository URL with your own, and `github-acme` with the
+[installation name](/guide/hub#installation-names) of your GitHub App's
+installation on its owner:
 
 ```ts
 // jigs.config.ts
 import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
   bindings: {
-    app: { remote: "git@github.com:owner/app.git" },
+    app: { remote: "git@github.com:owner/app.git", installationName: "github-acme" },
   },
-  github: { identities: [{ mode: "pat" }], mergeApproval: "label" },
-  linear: { identity: { mode: "key" } },
+  github: { operator: "your-github-login" },
+  linear: { operator: "you@example.com" },
   workflows: {
     hello: () => import("./workflows/hello/hello.ts"),
   },
@@ -33,6 +36,36 @@ export default defineFactory({
 The sections below show properties to add or replace **inside the existing
 `defineFactory({ ... })` object** in `jigs.config.ts`. Keep the other properties
 from your configuration. These smaller blocks are configuration excerpts.
+
+## `hub` {#hub}
+
+Every factory works through a [hub](/guide/hub). The hub receives the
+factory's GitHub, Linear, Slack and PagerDuty events and keeps them until the
+service collects them, so nothing is lost while the service is down. It also
+hands the factory every token it uses on those providers, for the
+[apps assigned](/guide/hub#apps) to it. The factory needs no public URL and
+holds no provider secret.
+
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+hub: { url: "https://hub.example.com" },
+```
+
+| Key | Default | Meaning |
+| --- | --- | --- |
+| `url` | required | The address the hub is reached at. |
+
+The hub shows a factory token once, when you
+[add the factory](/guide/hub#factories) to it. Set both with:
+
+```sh
+pnpm exec jigs hub connect https://hub.example.com <token>
+```
+
+It writes `url` here and the token to `.env` as `JIGS_HUB_TOKEN`. Then run
+`pnpm exec jigs up`. Without the token, `jigs up` stops and the service
+refuses to start. `jigs doctor` checks that the hub answers and takes the
+token.
 
 ## `workflows`
 
@@ -64,6 +97,7 @@ factory's own `bindings/<name>/` folder described below.
 bindings: {
   app: {
     remote: "git@github.com:owner/app.git",
+    installationName: "github-acme",
     copy: [".env"],
     postCreate: ["pnpm install"],
     hookTimeoutMinutes: 20,
@@ -74,6 +108,7 @@ bindings: {
 | Key | Default | Meaning |
 | --- | --- | --- |
 | `remote` | required | The GitHub repository's Git remote URL. |
+| `installationName` | required | The [installation name](/guide/hub#installation-names) of the GitHub App installation that reaches the repository. jigs acts on the repository through it. |
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
 | `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
@@ -85,7 +120,8 @@ scaffold's `.gitignore` already ignores every `.env`. An entry that matches noth
 `jigs doctor`, and stops a run of a workflow that needs the binding before it
 starts, with a message naming the missing path.
 
-`jigs bind <remote>` adds a binding with its `remote` and creates
+`jigs bind <remote> --installation <installation>` adds a binding with its `remote`
+and `installationName`, and creates
 `bindings/<name>/` with a short `README.md` when the folder is missing. It
 never touches a folder that already exists, and it does not add `copy`; list
 the files you put there yourself. `jigs unbind <name>` removes the binding and
@@ -98,10 +134,6 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 | --- | --- | --- |
 | `port` | `8990` | Where the service listens. The CLI talks to it here. |
 | `dashboardPort` | required | Where the service hosts the run dashboard. |
-| `pollIntervalSeconds.github` | `300` | How often waiting runs re-read their pull requests. Minimum 30. |
-| `pollIntervalSeconds.linear` | `300` | How often runs waiting on a ticket reply re-read it. Minimum 30. |
-| `pollIntervalSeconds.slack` | `300` | How often the service reads Slack channels, and runs waiting on a thread reply re-read it. Minimum 30. |
-| `pollIntervalSeconds.pagerduty` | `300` | How often [event triggers](#triggers) on PagerDuty look for new incidents. Minimum 30. |
 
 `jigs init` picks ports for each factory so that two factories on one machine
 rarely clash.
@@ -151,7 +183,7 @@ import { defineWorkflow } from "@jigs-ai/jigs";
 import { z } from "zod";
 
 export default defineWorkflow({
-  inputs: z.object({ incident: z.string(), team: z.string() }),
+  inputs: z.object({ installationName: z.string(), incident: z.string(), team: z.string() }),
   requires: { integrations: ["pagerduty"] },
   workflow: async ({ incident, team }) => `${team} takes ${incident}`,
 });
@@ -164,17 +196,19 @@ This trigger starts `respond` for every high-urgency incident on one service:
 import { defineFactory, pagerduty } from "@jigs-ai/jigs";
 
 export default defineFactory({
+  hub: { url: "https://hub.example.com" },
   service: { port: 8990, dashboardPort: 9090 },
-  pagerduty: {
-    identity: { mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com" },
-  },
   workflows: {
     respond: () => import("./workflows/respond/respond.ts"),
   },
   triggers: {
     "checkout-pages": {
       workflow: "respond",
-      source: pagerduty.incidents({ service_ids: ["PABC123"], urgencies: ["high"] }),
+      source: pagerduty.incidents({
+        installationName: "pagerduty-acme",
+        services: ["PABC123"],
+        urgencies: ["high"],
+      }),
       inputs: { team: "payments" },
       maxActive: 2,
     },
@@ -182,15 +216,23 @@ export default defineFactory({
 });
 ```
 
-- `source` takes the provider's own query parameters under the provider's own
+- `source` takes the [installation name](/guide/hub#installation-names) it
+  listens to, and the provider's own query parameters under the provider's own
   names. jigs adds no filter syntax; any finer judgement belongs in the run.
-- Each run's inputs are the source's reference, such as `{ incident: "Q1ABC" }`,
-  merged over the fixed `inputs`. The run reads the rest itself.
+- A source takes only events from its own installation. Another installation
+  assigned to the factory, even a second app in the same workspace that sees
+  the same message, never starts or wakes its runs.
+- Each run's inputs are the source's reference, such as
+  `{ installationName: "pagerduty-acme", incident: "Q1ABC" }`, merged over the
+  fixed `inputs`. The run reads the rest itself, through that installation.
 - An occurrence starts at most one run, ever, even if the run decides to do
   nothing or ends while the incident is still open.
-- The service polls each source on its provider's
-  [`pollIntervalSeconds`](#service). A PagerDuty [webhook](#webhooks) starts
-  runs sooner; the poll still finds anything a delivery missed.
+- Occurrences arrive as provider events through the [hub](#hub). The hub
+  keeps the events that arrive while the service is down and hands them over
+  when it is back.
+- An event from an installation with no name reaches no trigger, and wakes no
+  run. Name the installation on the hub: events it received before then, but
+  has not yet handed over, carry the name once it is set.
 - A new trigger starts from the moment the service first runs it, with no
   backfill. After the service was down, it catches up on occurrences within
   `lookbackMinutes` (default 60) and records older ones as skipped.
@@ -203,14 +245,74 @@ export default defineFactory({
 
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
-| `pagerduty.incidents` | A new incident, whatever its status | `{ incident }` | `service_ids`, `team_ids`, `urgencies` |
+| `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
+| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
+| `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
+
+`installationName` is required on every source.
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents`. `jigs doctor` checks that provider for every trigger
-that uses it. `jigs status` lists each trigger with its waiting, active and
+for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`
+and [Slack](/guide/slack) for `slack.messages` and `slack.mentions`.
+`jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
 `slack C0123ABCD 1790723244.335019` or `pagerduty Q1ABCDEF`.
+
+### Linear mentions and assignments {#linear-agent-sessions}
+
+`linear.agentSessions` starts a run each time someone mentions the Linear app
+on an issue or assigns an issue to it, in the workspace its `installationName`
+names. Linear calls each of these an
+agent session. The hub posts the session's first reply at once, so Linear shows
+the app at work while the run starts. Each run gets:
+
+- `session`: the agent session's id, which is also the occurrence, so a
+  session starts at most one run even if Linear sends it twice.
+- `installationName`: the trigger's Linear installation. Pass it to the Linear
+  steps and routines the run calls.
+- `issue`: the issue's `id`, `identifier`, `title` and `url`.
+- `comment`: the body of the comment the session started from, or `null` for
+  an assignment.
+- `promptContext`: Linear's formatted context for the session, with the issue,
+  its description and the comments around the request, or `null` if Linear
+  sent none.
+- `creator`: the `id`, `name` and `email` of who started it.
+
+`teams` takes team keys such as `ENG` or team ids, `projects` takes project
+ids or the id at the end of a project's URL, and `labels` takes label names.
+Sessions not on an issue start no run, and neither do sessions no person
+started, such as the ones ticket runs open.
+
+```ts
+import { linear } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "fix-on-mention": {
+    workflow: "fix",
+    source: linear.agentSessions({
+      installationName: "linear-acme",
+      teams: ["ENG"],
+      labels: ["agent"],
+    }),
+  },
+};
+```
+
+To have Claude Code answer in the session and keep answering replies, call
+`linearAgentConversation` in the run; see
+[Linear conversations](/guide/linear-conversations).
+
+Every factory assigned the app hears every mention of it, and each trigger on
+this source in each of those factories starts its own run. jigs does not pick
+one for you: give each purpose its own Linear app, or split the issues between
+triggers with `teams`, `projects` and `labels`.
+
+The hub replies "Received — working on it." to every session before any
+factory reads it, so that reply appears even when this factory's filters skip
+the session and no run starts. Make the filters match what the app is for, so
+that a mention the app answers is one a run takes.
 
 ## `release` {#release}
 
@@ -257,64 +359,29 @@ user and can read any file you can.
 
 ## GitHub
 
-### Identity {#github-identity}
+### The factory's App {#github-app}
 
-`github.identities` says who jigs is on GitHub. Choose the mode when you create
-the factory, with `jigs init --github-identity-mode pat` (the default) or `app`.
+jigs acts on GitHub as a [GitHub App](/guide/hub-github) that your hub holds
+and assigns to the factory. Each binding's `installationName` names the App
+installation that reaches its repository, and the factory asks the hub for that
+installation's tokens. Pull requests come from `<app-slug>[bot]`, and you review
+them like anyone else's. Agents can act as the same bot: see
+[GitHub access for agents](/guide/models-and-harnesses#github-access).
 
-#### PAT: jigs acts as you
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-github: { identities: [{ mode: "pat" }] },
-```
-
-Put a personal access token in `.env` as `GITHUB_TOKEN`. Pull requests jigs
-opens are authored by you, so GitHub will not let you approve them: jigs uses
-[label approval](#merging). You can still send work back with review comments or a comment on the
-pull request. A classic token needs `repo` (or `public_repo`), plus
-`admin:repo_hook` if you turn on GitHub webhooks.
-
-#### App: jigs acts as a bot
+`jigs doctor` checks that each binding's installation is named and assigned to
+the factory in the hub, and that it reaches the binding's repository.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
 github: {
-  identities: [{
-    mode: "app",
-    appId: 123456,
-    installations: { owner: 7654321 },
-    privateKeyPath: "github-app.private-key.pem",
-    operator: "your-github-login",
-    coAuthor: "Your Name <you@example.com>",
-  }],
+  operator: "your-github-login",
+  coAuthor: "Your Name <you@example.com>",
 },
 ```
 
-Pull requests come from `<app-slug>[bot]`, and you review them like anyone
-else's, so jigs uses [review approval](#merging) unless you choose the label.
-Agents can act as the same bot: see
-[GitHub access for agents](/guide/models-and-harnesses#github-access).
-`jigs init --github-identity-mode app` takes all of these values as flags. To
-set one up:
-
-1. **Register a GitHub App** under Settings → Developer settings → GitHub Apps.
-   Leave OAuth and device flow off, and turn its webhook off.
-2. **Grant repository permissions**: Contents, Pull requests and Issues read
-   and write; Metadata, Checks and Commit statuses read. Add Repository
-   webhooks read and write if you turn on GitHub webhooks. `jigs doctor` names any that are missing.
-3. **`appId`** is the App ID on its settings page.
-4. **`privateKeyPath`** is the key GitHub generates under Private keys. Save it
-   in the factory (`.gitignore` already excludes `*.private-key.pem`) and run
-   `chmod 600` on it; `jigs doctor` fails on a looser mode.
-5. **`installations`**: install the App on the repositories you bind. The
-   installation's URL ends in its ID; add it under the account name.
-6. **`operator`** is your GitHub login. jigs assigns pull requests to you.
-   **`coAuthor`** is optional and adds a `Co-authored-by` line to merge commits.
-
-Every GitHub binding needs an installation for its owner. To use different Apps
-for different organizations, add more entries to `identities`; no two may claim
-the same account. A PAT must be the only entry.
+**`operator`** is optional: your GitHub login. jigs assigns its pull requests
+to you and names you in them. **`coAuthor`** is optional and adds a
+`Co-authored-by` line to merge commits.
 
 ### Merging {#merging}
 
@@ -330,10 +397,7 @@ These are three independent decisions:
 - **`github.mergeApproval`**: what counts as your consent. `"review"` is an
   approving review of the current commit; a new push withdraws it. `"label"`
   is the `jigs:approved` label on the pull request; it survives later pushes,
-  so it means "merge whenever ready". The default follows the
-  [identity](#github-identity): `"label"` with a PAT, `"review"` with an App.
-  A PAT cannot use `"review"`: jigs opens pull requests as you, and GitHub does
-  not let you approve your own.
+  so it means "merge whenever ready". The default is `"review"`.
 - **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
   `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
   repository can differ. `"latest-commit"`, the default, counts a review only
@@ -368,7 +432,7 @@ reviews, so label approval only works on repositories without that rule. jigs
 never changes branch protection.
 
 A protected branch that restricts who can push also restricts who can merge.
-If the account jigs merges as is not on that list (the App, or you with a PAT),
+If the factory's App is not on that list,
 GitHub reports an approved, green pull request as `blocked` and refuses the
 merge without saying why. jigs cannot read branch rules without admin access,
 so it does not check them ahead of time. It says so in `jigs status`, and the
@@ -378,15 +442,14 @@ recipe's `mergedBy: "human"` and merge those pull requests yourself.
 
 ### Call other GitHub endpoints {#call-github}
 
-`callGitHub(method, path, options)` calls any
+`callGitHub(method, path, { installationName, body })` calls any
 [GitHub REST endpoint](https://docs.github.com/en/rest) as the factory's
-[identity](#github-identity) and returns GitHub's parsed JSON, or `undefined`
+[App](#github-app), through the installation `installationName` names, and returns GitHub's parsed JSON, or `undefined`
 when GitHub answers with no content. Use it for anything jigs has no step for,
 such as requesting reviewers or finding a commit's author. Call it from your
 own `"use step"` function.
 
-A path under `/repos/{owner}/{repo}` uses that owner's installation. For any
-other path, such as `/orgs/acme/teams`, pass `account` to name the owner.
+A worktree carries its binding's installation as `worktree.installationName`.
 `body` is sent as JSON, and the query string goes in the path.
 
 When GitHub answers with an error, `callGitHub` throws a `GitHubApiError` with
@@ -399,11 +462,17 @@ import { callGitHub, GitHubApiError } from "@jigs-ai/jigs/steps/pull-requests";
 
 // GitHub refuses the whole request if any one login cannot review, so ask for
 // each login on its own and skip the ones GitHub refuses with a 422.
-export async function requestReviewers(repo: string, pr: number, logins: string[]) {
+export async function requestReviewers(
+  installationName: string,
+  repo: string,
+  pr: number,
+  logins: string[],
+) {
   "use step";
   for (const login of logins) {
     try {
       await callGitHub("POST", `/repos/${repo}/pulls/${pr}/requested_reviewers`, {
+        installationName,
         body: { reviewers: [login] },
       });
     } catch (error) {
@@ -413,11 +482,12 @@ export async function requestReviewers(repo: string, pr: number, logins: string[
   }
 }
 
-export async function commitAuthorLogin(repo: string, email: string) {
+export async function commitAuthorLogin(installationName: string, repo: string, email: string) {
   "use step";
   const commits = await callGitHub<{ author: { login: string } | null }[]>(
     "GET",
     `/repos/${repo}/commits?author=${encodeURIComponent(email)}&per_page=1`,
+    { installationName },
   );
   return commits[0]?.author?.login ?? null;
 }
@@ -429,154 +499,84 @@ teams.
 
 ## Linear
 
-### Identity {#linear-identity}
+### The factory's Linear app {#linear-app}
 
-`linear.identity` says who jigs is on Linear. Choose it with
-`jigs init --linear-identity-mode key` (the default) or `app`.
+jigs acts on Linear as a [Linear app](/guide/hub-linear) the hub assigns the
+factory, so its messages and mentions reach you like anyone else's. Connect
+the app to your Linear workspace in the hub, name that installation, such as
+`linear-acme`, and assign the app to the factory; the hub hands the factory its
+tokens and refreshes them. Every Linear step, routine, trigger and agent takes
+the `installationName` it acts through. Nothing about the app goes in
+`jigs.config.ts` or `.env`. `jigs doctor` checks each Linear installation the
+factory names, and says when a workspace must be connected again in the hub.
 
-- **`key`: jigs acts as you.** Put a Linear personal API key in `.env` as
-  `LINEAR_API_KEY`. Linear does not notify you of your own comments, so when a
-  run asks you a question on a ticket, the mention may never reach your inbox.
-  A key for a separate Linear user, or the `app` identity, avoids this.
-- **`app`: jigs acts as an app.** Its comments and mentions reach you like
-  anyone else's. In Linear, go to Settings → API → OAuth applications and create
-  one with **Client credentials** on, Public off and Webhooks off (any redirect
-  URL will do). Put its ID and secret in `.env` as `LINEAR_CLIENT_ID` and
-  `LINEAR_CLIENT_SECRET`.
+Use one Linear app per purpose: two factories assigned the same app both answer
+a mention of it; see [Linear mentions and assignments](#linear-agent-sessions).
 
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-linear: { identity: { mode: "app" } },
-```
+### Who a ticket run mentions {#linear-operator}
 
-### Who comments mention {#linear-operator}
+A ticket run talks to people in its Linear agent session, and every question
+and note it posts there starts by mentioning people, so Linear notifies them.
+That covers the questions a paused run asks and the notes it leaves, such as
+the assumptions a ticket review made.
 
-Every comment jigs posts on a Linear ticket starts by mentioning people, so
-Linear notifies them. That covers the questions a paused run asks and the notes
-it leaves, such as the assumptions a ticket review made.
-
-- **Without `linear.operator`**, a comment mentions the ticket's creator and
+- **Without `linear.operator`**, a message mentions the ticket's creator and
   its assignee.
-- **With `linear.operator`**, set to the email of your Linear user, a comment
+- **With `linear.operator`**, set to the email of your Linear user, a message
   mentions you and the ticket's assignee instead. Set it when colleagues create
   tickets for the factory, so its questions reach you rather than them.
 
 ```ts factory-options
 // Inside defineFactory({ ... }) in jigs.config.ts
-linear: { identity: { mode: "app" }, operator: "you@example.com" },
+linear: { operator: "you@example.com" },
 ```
 
 Each person is mentioned once, even when the operator is also the assignee.
-Anyone's reply wakes a paused run; the mention only decides who is notified.
+Anyone's reply in the session answers a paused run; the mention only decides
+who is notified.
 The operator is one setting for the whole factory. Like the rest of
 `jigs.config.ts`, a change takes effect after a rebuild, which `jigs up` does.
 
-A step or routine that posts a comment, such as `haltForHuman` or
+A step or routine that posts in the session, such as `haltForHuman` or
 `noteOnTicket`, also takes a `mention` list of extra emails to mention
 alongside these people.
 
-`jigs doctor`, and `jigs up`, look the operator email up in Linear and fail
-when no active Linear user has it. With the `key` identity, jigs posts as the
-key's owner, so if that is also the operator, doctor warns that the mentions
-will not notify you and suggests the `app` identity.
+`jigs doctor`, and `jigs up`, look the operator email up in each Linear
+installation the factory uses and fail when no active Linear user there has it.
 
 When a run posts, jigs looks the emails up again. If Linear cannot find one,
 for example because the user was deactivated since, jigs leaves that person
-out, logs a warning and posts the comment anyway. A mention never stops a run.
+out, logs a warning and posts the message anyway. A mention never stops a run.
 
-## PagerDuty
+## PagerDuty {#pagerduty}
 
-The `pagerduty` section says which PagerDuty account jigs works on and which
-user its notes are attributed to. See [PagerDuty](/guide/pagerduty) for setup.
+jigs acts on PagerDuty as a [PagerDuty app](/guide/hub-pagerduty) its hub
+assigns the factory. Every PagerDuty step, trigger and agent takes the
+`installationName` of the account it acts in. Notes are attributed to the from
+user set on that installation in the hub. Nothing about the app goes in
+`jigs.config.ts`. See [PagerDuty](/guide/pagerduty) for setup.
 
 ## Slack {#slack}
 
-`slack` connects the factory's own Slack app. Set it up by following
-[Slack](/guide/slack), which has the manifest to paste.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-slack: { socketMode: true },
-```
-
-| Key | Default | Meaning |
-| --- | --- | --- |
-| `socketMode` | required | Receive messages over Socket Mode as they are posted, on top of polling. Needs `SLACK_APP_TOKEN`; without it the service refuses to start. Each factory needs its own Slack app; two factories on one app split its events between them. |
-| `scopes` | `[]` | Bot scopes your own Slack calls need on top of the ones jigs uses, such as `reactions:write`. `jigs doctor` checks the bot holds them. See [Call other Slack methods](/guide/slack#call-other-slack-methods). |
-
-The service polls the channels its Slack triggers watch every
-[`service.pollIntervalSeconds.slack`](#service) seconds, with Socket Mode on or
-off.
-
-To start runs from Slack messages, see
-[Start runs from messages](/guide/slack#start-runs-from-messages).
-
-## Webhooks {#webhooks}
-
-Webhooks improve latency, not correctness. Without them, the built-in GitHub
-and Linear waits, and [event triggers](#triggers) on PagerDuty, continue to
-poll at [`pollIntervalSeconds`](#service). A lost webhook delivery only delays
-the next check. See
-[Waiting and external events](/guide/waiting-and-events) for how runs wait.
-
-```ts factory-options
-// Inside defineFactory({ ... }) in jigs.config.ts
-webhooks: {
-  url: "https://my-machine.my-tailnet.ts.net",
-  github: { enabled: true },
-},
-```
-
-Name each provider that sends webhooks with `enabled: true`. A provider you
-leave out (here `linear` and `pagerduty`) is off and keeps polling.
-
-1. **Expose the service port** with a tunnel, for example
-   `tailscale funnel --bg <servicePort>` or
-   `cloudflared tunnel --url http://localhost:<servicePort>`. The public URL is
-   `webhooks.url`.
-2. **GitHub**: create a secret with `openssl rand -hex 32`, put it in `.env` as
-   `GITHUB_WEBHOOK_SECRET`, set `github: { enabled: true }`, run
-   `jigs up`, then run `jigs bind` again for each repository.
-   `bind` creates or repairs the repository's webhook. It needs hook permissions: `admin:repo_hook` for a PAT, or
-   Repository webhooks read and write for an App.
-3. **Linear**: create the webhook yourself in Linear under Settings → API →
-   Webhooks, pointing at `<webhooks.url>/ingress/linear`, for `Comment` events
-   only. Put its signing secret in `.env` as `LINEAR_WEBHOOK_SECRET`, set
-   `linear: { enabled: true }` and run `jigs up`.
-4. **PagerDuty**: in PagerDuty, go to **Integrations → Generic Webhooks (v3)**
-   and add a subscription on the service or team your triggers watch, for the
-   `incident.triggered` event only, delivering to
-   `<webhooks.url>/ingress/pagerduty`. Put the signing secret PagerDuty shows
-   in `.env` as `PAGERDUTY_WEBHOOK_SECRET`, set `pagerduty: { enabled: true }`
-   and run `jigs up`. A new incident then starts its run within
-   seconds instead of at the next poll, and never starts a second one.
-
-A provider that is enabled without its secret stops the service from starting.
-`jigs doctor` checks the secrets, whether recent GitHub deliveries were
-rejected, and whether the PagerDuty subscription exists and is active. PagerDuty
-switches a subscription off after repeated failed deliveries; enable it again
-on its page under **Integrations → Generic Webhooks (v3)**.
+jigs talks to Slack as a [Slack app](/guide/hub-slack) its hub assigns the
+factory. Every Slack step, routine and trigger takes the `installationName` of
+the workspace it acts in. Nothing about the app goes in `jigs.config.ts`. See
+[Slack](/guide/slack) for what workflows do with it, and
+[Start runs from messages](/guide/slack#start-runs-from-messages) to start runs
+from Slack.
 
 ## `.env` {#env}
 
 `jigs init` writes `.env.example`. Copy it to `.env`; `jigs up` stops if `.env`
-is missing, and lists the credentials still empty.
+is missing.
 
 | Variable | When you need it |
 | --- | --- |
-| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. A new factory needs nothing else. |
-| `GITHUB_TOKEN` | GitHub [PAT mode](#github-identity), once you bind a GitHub repository or a workflow requires `github`. |
-| `LINEAR_API_KEY` | Linear [`key` mode](#linear-identity). |
-| `LINEAR_CLIENT_ID`, `LINEAR_CLIENT_SECRET` | Linear [`app` mode](#linear-identity). |
-| `PAGERDUTY_CLIENT_ID`, `PAGERDUTY_CLIENT_SECRET` | A [`pagerduty`](/guide/pagerduty) section in `jigs.config.ts`. |
-| `SLACK_BOT_TOKEN` | A [`slack`](#slack) section, or a workflow that requires `slack`. |
-| `SLACK_APP_TOKEN` | [`slack.socketMode`](#slack) on. |
+| `WORKFLOW_TARGET_WORLD`, `WORKFLOW_POSTGRES_URL` | Always. Filled in by `jigs init`; leave them. |
+| `JIGS_HUB_TOKEN` | Always. The factory token the [hub](#hub) showed; `jigs hub connect` sets it. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
 | `OPENROUTER_API_KEY` | Workflows that use `models.openrouter()`. |
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
-| `GITHUB_WEBHOOK_SECRET` | GitHub [webhooks](#webhooks) enabled. |
-| `LINEAR_WEBHOOK_SECRET` | Linear [webhooks](#webhooks) enabled. |
-| `PAGERDUTY_WEBHOOK_SECRET` | PagerDuty [webhooks](#webhooks) enabled. |
 
 Also set any variable your `jigs.config.ts` names, such as an MCP server's
 `bearerTokenEnv`. An empty value counts as unset, so a value exported in your

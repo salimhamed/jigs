@@ -22,11 +22,12 @@ function factory(source: string) {
 }
 const source = `// Factory config.
 export default {
-  service: { port: 8990, dashboardPort: 9090 },
+  hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 },
   bindings: {
     // Main API.
     "acme-api": {
       remote: "git@github.com:acme/api.git", // GitHub
+      installationName: "gh",
       postCreate: ["npm ci"],
     },
   },
@@ -38,6 +39,7 @@ test("binding defaults and declared provisioning are validated", () => {
   const config = readFactoryConfig(factory(source));
   expect(config.bindings["acme-api"]).toEqual({
     remote: "git@github.com:acme/api.git",
+    installationName: "gh",
     copy: [],
     postCreate: ["npm ci"],
     hookTimeoutMinutes: 10,
@@ -53,6 +55,7 @@ test("an unknown top-level section is rejected by name", () => {
 test("defineFactory rejects an unknown top-level section at compile time and when loaded", () => {
   expect(() =>
     defineFactory({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       workflows: {},
       // @ts-expect-error lienar is not a factory section
@@ -63,109 +66,110 @@ test("defineFactory rejects an unknown top-level section at compile time and whe
 
 test.each([
   [{ service: {} }, "dashboardPort"],
-  [{ service: { dashboardPort: 0 } }, "dashboardPort"],
-  [{ service: { dashboardPort: 9090, port: 70000 } }, "port"],
-  [{ service: { dashboardPort: 9090 }, bindings: { api: {} } }, "remote"],
+  [{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 0 } }, "dashboardPort"],
+  [
+    { hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090, port: 70000 } },
+    "port",
+  ],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      bindings: { api: { remote: "url", hookTimeoutMinutes: 0 } },
+      bindings: { api: {} },
+    },
+    "remote",
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      bindings: { api: { remote: "url", installationName: "gh", hookTimeoutMinutes: 0 } },
     },
     "hookTimeoutMinutes",
   ],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      bindings: { api: { remote: "url", typo: true } },
+      bindings: { api: { remote: "url", installationName: "gh", typo: true } },
     },
     "typo",
   ],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { github: 29 } } }, "github"],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { linear: 1.5 } } }, "linear"],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { slack: 10 } } }, "slack"],
-  [{ service: { dashboardPort: 9090 }, slack: {} }, "socketMode"],
-  [{ service: { dashboardPort: 9090 }, slack: { socketMode: true, mode: "app" } }, '"mode"'],
-  [{ service: { dashboardPort: 9090, pollIntervalSeconds: { pagerduty: 10 } } }, "pagerduty"],
-  [{ service: { dashboardPort: 9090 }, webhooks: { github: { enabled: true } } }, "url"],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      webhooks: {
-        url: "https://f.test",
-        github: {},
-        linear: { enabled: false },
-        pagerduty: { enabled: false },
-      },
+      bindings: { api: { remote: "url" } },
     },
-    "enabled",
+    "bindings.api.installationName",
   ],
   [
     {
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
-      webhooks: {
-        url: "not a url",
-        github: { enabled: true },
-        linear: { enabled: false },
-        pagerduty: { enabled: false },
-      },
+      bindings: { api: { remote: "url", installationName: "Acme_GitHub" } },
     },
-    "url",
+    "must be an installation name from the hub",
+  ],
+  [{ service: { dashboardPort: 9090 } }, "hub"],
+  [{ hub: { url: "hub.example.test" }, service: { dashboardPort: 9090 } }, "url"],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      slack: { scopes: [] },
+    },
+    'Unrecognized key: "slack"',
+  ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 9090 },
+      pagerduty: { from: "oncall@example.com" },
+    },
+    'Unrecognized key: "pagerduty"',
   ],
 ])("invalid configuration names its field", (value, field) => {
   expect(() => parseFactoryConfig(value)).toThrow(field);
 });
 
 test("service port defaults while dashboard port is explicit", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).service).toEqual({
-    port: 8990,
-    dashboardPort: 3456,
-    pollIntervalSeconds: { github: 300, linear: 300, slack: 300, pagerduty: 300 },
-  });
-});
-
-test("each provider's poll interval defaults on its own and may sit at the floor", () => {
-  expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456, pollIntervalSeconds: { linear: 30 } } })
-      .service.pollIntervalSeconds,
-  ).toEqual({ github: 300, linear: 30, slack: 300, pagerduty: 300 });
-});
-
-test("without a slack section the factory has no Slack app", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).slack).toBeUndefined();
-  expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, slack: { socketMode: true } }).slack,
-  ).toEqual({ socketMode: true, scopes: [] });
-});
-
-test("without a webhooks section no provider sends webhooks", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).webhooks).toBeUndefined();
-});
-
-test("a webhook provider left out of the webhooks section is disabled", () => {
   expect(
     parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 3456 },
-      webhooks: { url: "https://f.test", github: { enabled: true } },
-    }).webhooks,
-  ).toEqual({
-    url: "https://f.test",
-    github: { enabled: true },
-    linear: { enabled: false },
-    pagerduty: { enabled: false },
-  });
+    }).service,
+  ).toEqual({ port: 8990, dashboardPort: 3456 });
 });
 
 test("agent environment names default to none and must be names, not values", () => {
-  expect(parseFactoryConfig({ service: { dashboardPort: 3456 } }).agents).toEqual({ env: [] });
   expect(
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["MISE_DATA_DIR"] } })
-      .agents.env,
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+    }).agents,
+  ).toEqual({ env: [] });
+  expect(
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["MISE_DATA_DIR"] },
+    }).agents.env,
   ).toEqual(["MISE_DATA_DIR"]);
   expect(() =>
-    parseFactoryConfig({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] } }),
+    parseFactoryConfig({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["A=b"] },
+    }),
   ).toThrow("agents.env.0");
   expect(() =>
-    defineFactory({ service: { dashboardPort: 3456 }, agents: { env: ["A=b"] }, workflows: {} }),
+    defineFactory({
+      hub: { url: "https://hub.example.test" },
+      service: { dashboardPort: 3456 },
+      agents: { env: ["A=b"] },
+      workflows: {},
+    }),
   ).toThrow("agents.env.0");
 });
 
@@ -178,23 +182,65 @@ test.each([
   "PI_CODING_AGENT_DIR",
   "CLAUDE_CONFIG_DIR",
 ])("agents.env rejects %s, which jigs sets or which selects a model credential", (name) => {
-  const definition = { service: { dashboardPort: 3456 }, agents: { env: [name] }, workflows: {} };
+  const definition = {
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 3456 },
+    agents: { env: [name] },
+    workflows: {},
+  };
   expect(() => parseFactoryConfig(definition)).toThrow("model source");
   expect(() => defineFactory(definition)).toThrow("model source");
 });
 
 test("identical re-bind preserves every byte", () => {
-  expect(upsertBinding(source, "acme-api", "git@github.com:acme/api.git")).toBe(source);
+  expect(
+    upsertBinding(source, "acme-api", {
+      remote: "git@github.com:acme/api.git",
+      installationName: "gh",
+    }),
+  ).toBe(source);
+});
+
+test("updating an installation name preserves all surrounding text and comments", () => {
+  expect(
+    upsertBinding(source, "acme-api", {
+      remote: "git@github.com:acme/api.git",
+      installationName: "other",
+    }),
+  ).toBe(source.replace('installationName: "gh"', 'installationName: "other"'));
+});
+
+test("a binding without an installation name gains one beside its remote", () => {
+  const input = `export default {
+  hub: { url: "https://hub.example.test" },
+  service: { dashboardPort: 9090 },
+  bindings: {
+    // Main API.
+    api: {
+      remote: "a",
+    },
+  },
+};
+`;
+  const edited = upsertBinding(input, "api", { remote: "a", installationName: "gh" });
+  expect(edited).toContain("// Main API.");
+  expect(readFactoryConfig(factory(edited)).bindings.api).toMatchObject({
+    remote: "a",
+    installationName: "gh",
+  });
 });
 
 test("updating a remote preserves all surrounding text and comments", () => {
-  expect(upsertBinding(source, "acme-api", "new-remote")).toBe(
+  expect(upsertBinding(source, "acme-api", { remote: "new-remote", installationName: "gh" })).toBe(
     source.replace("git@github.com:acme/api.git", "new-remote"),
   );
 });
 
 test("adding and removing bindings preserves sibling comments and provisioning", () => {
-  const added = upsertBinding(source, "other.repo", "git@github.com:acme/other.git");
+  const added = upsertBinding(source, "other.repo", {
+    remote: "git@github.com:acme/other.git",
+    installationName: "gh",
+  });
   expect(readFactoryConfig(factory(added)).bindings["other.repo"]?.remote).toBe(
     "git@github.com:acme/other.git",
   );
@@ -214,13 +260,16 @@ export default defineFactory({
 });
 `;
   expect(
-    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+    upsertBinding(input, "playground", {
+      remote: "git@github.com:acme/pg.git",
+      installationName: "gh",
+    }),
   ).toBe(`import { defineFactory } from "@jigs-ai/jigs";
 
 export default defineFactory({
   bindings: {
     api: { remote: "git@github.com:acme/api.git" },
-    playground: { remote: "git@github.com:acme/pg.git" },
+    playground: { remote: "git@github.com:acme/pg.git", installationName: "gh" },
   },
 });
 `);
@@ -232,10 +281,13 @@ test("adding the first binding expands an empty bindings object", () => {
 });
 `;
   expect(
-    upsertBinding(input, "playground", "git@github.com:acme/pg.git"),
+    upsertBinding(input, "playground", {
+      remote: "git@github.com:acme/pg.git",
+      installationName: "gh",
+    }),
   ).toBe(`export default defineFactory({
   bindings: {
-    playground: { remote: "git@github.com:acme/pg.git" },
+    playground: { remote: "git@github.com:acme/pg.git", installationName: "gh" },
   },
 });
 `);
@@ -249,11 +301,14 @@ test("adding a non-identifier binding keeps its key quoted", () => {
 });
 `;
   expect(
-    upsertBinding(input, "other.repo", "git@github.com:acme/other.git"),
+    upsertBinding(input, "other.repo", {
+      remote: "git@github.com:acme/other.git",
+      installationName: "gh",
+    }),
   ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "git@github.com:acme/api.git" },
-    "other.repo": { remote: "git@github.com:acme/other.git" },
+    "other.repo": { remote: "git@github.com:acme/other.git", installationName: "gh" },
   },
 });
 `);
@@ -264,10 +319,15 @@ test("adding a reserved-word binding keeps its key quoted", () => {
   bindings: {},
 });
 `;
-  expect(upsertBinding(input, "import", "git@github.com:acme/import.git")).toBe(
+  expect(
+    upsertBinding(input, "import", {
+      remote: "git@github.com:acme/import.git",
+      installationName: "gh",
+    }),
+  ).toBe(
     `export default defineFactory({
   bindings: {
-    "import": { remote: "git@github.com:acme/import.git" },
+    "import": { remote: "git@github.com:acme/import.git", installationName: "gh" },
   },
 });
 `,
@@ -276,8 +336,8 @@ test("adding a reserved-word binding keeps its key quoted", () => {
 
 test("adding a binding to a one-line object does not duplicate the config", () => {
   const input = `export default { bindings: { api: { remote: "a" } } };`;
-  expect(upsertBinding(input, "web", "b")).toBe(
-    `export default { bindings: { api: { remote: "a" }, web: { remote: "b" }, } };`,
+  expect(upsertBinding(input, "web", { remote: "b", installationName: "gh" })).toBe(
+    `export default { bindings: { api: { remote: "a" }, web: { remote: "b", installationName: "gh" }, } };`,
   );
 });
 
@@ -289,11 +349,13 @@ test("adding a binding ignores commas in a trailing comment", () => {
   },
 });
 `;
-  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  expect(
+    upsertBinding(input, "web", { remote: "r2", installationName: "gh" }),
+  ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "r1" },
     // api, the main repo
-    web: { remote: "r2" },
+    web: { remote: "r2", installationName: "gh" },
   },
 });
 `);
@@ -307,11 +369,13 @@ test("adding a binding preserves a trailing comma before a comment", () => {
   },
 });
 `;
-  expect(upsertBinding(input, "web", "r2")).toBe(`export default defineFactory({
+  expect(
+    upsertBinding(input, "web", { remote: "r2", installationName: "gh" }),
+  ).toBe(`export default defineFactory({
   bindings: {
     api: { remote: "r1" },
     // note, with comma
-    web: { remote: "r2" },
+    web: { remote: "r2", installationName: "gh" },
   },
 });
 `);
@@ -319,16 +383,16 @@ test("adding a binding preserves a trailing comma before a comment", () => {
 
 test("adding a binding to a one-line object ignores commas in comments", () => {
   const input = `export default { bindings: { api: { remote: "a" } /* one, two */ } };`;
-  expect(upsertBinding(input, "web", "b")).toBe(
-    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b" }, } };`,
+  expect(upsertBinding(input, "web", { remote: "b", installationName: "gh" })).toBe(
+    `export default { bindings: { api: { remote: "a" }, /* one, two */ web: { remote: "b", installationName: "gh" }, } };`,
   );
 });
 
 test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
-    "export default { service: { dashboardPort: 9090 } };",
+    "export default { hub: { url: 'https://hub.example.test' }, service: { dashboardPort: 9090 } };",
     "api",
-    "url",
+    { remote: "url", installationName: "gh" },
   );
   expect(readFactoryConfig(factory(edited)).bindings.api?.remote).toBe("url");
 });
@@ -345,7 +409,9 @@ test.each([
   "export default config;",
   "export default defineFactory({ bindings: { api: { remote: url } } });",
 ])("unsupported automatic edits fail clearly", (text) => {
-  expect(() => upsertBinding(text, "api", "url")).toThrow("Cannot edit bindings in jigs.config.ts");
+  expect(() => upsertBinding(text, "api", { remote: "url", installationName: "gh" })).toThrow(
+    "Cannot edit bindings in jigs.config.ts",
+  );
 });
 
 test.each([
@@ -370,7 +436,7 @@ test("an already registered workflow leaves the config alone", () => {
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
   const root = factory(
-    `const service = { dashboardPort: 9090 }; export default { service, bindings: { api: { remote: "url" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
+    `const service = { dashboardPort: 9090 }; export default { hub: { url: "https://hub.example.test" }, service, bindings: { api: { remote: "url", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
   const ctx = resolveFactoryContext(root);
   expect(resolveService(ctx).dashboardPort).toBe(9090);
@@ -378,7 +444,9 @@ test("config loading supports computed settings without invoking workflow loader
 });
 
 test("native TypeScript config is one snapshot per process and a new process sees edits", () => {
-  const root = factory(`import service from "./settings.ts"; export default { service };`);
+  const root = factory(
+    `import service from "./settings.ts"; export default { hub: { url: "https://hub.example.test" }, service };`,
+  );
   const settings = path.join(root, "settings.ts");
   writeFileSync(
     settings,
@@ -405,179 +473,35 @@ test("native TypeScript config is one snapshot per process and a new process see
 });
 
 const withSettings = (extra: Record<string, unknown>) =>
-  parseFactoryConfig({ service: { dashboardPort: 9090 }, ...extra });
+  parseFactoryConfig({
+    hub: { url: "https://hub.example.test" },
+    service: { dashboardPort: 9090 },
+    ...extra,
+  });
 
-test("a factory that states no identity gets a PAT, approved by label", () => {
-  const config = withSettings({});
-  expect(config.github).toEqual({ identities: [{ mode: "pat" }], mergeApproval: "label" });
+test("a factory that states no GitHub settings names no operator and approves by review", () => {
+  expect(withSettings({}).github).toEqual({ mergeApproval: "review" });
 });
 
-test("an app identity needs every fact a token cannot be minted without", () => {
-  const app = {
-    mode: "app",
-    appId: 4958325,
-    installations: { salimhamed: 162033982 },
-    privateKeyPath: "key.pem",
+test("the GitHub section holds the operator, co-author and approval", () => {
+  const github = {
     operator: "salimhamed",
+    coAuthor: "Salim <s@example.com>",
+    mergeApproval: "label",
   };
-  expect(withSettings({ github: { identities: [app] } }).github.identities[0]).toEqual(app);
-  for (const missing of ["appId", "installations", "privateKeyPath", "operator"]) {
-    const { [missing as keyof typeof app]: _dropped, ...rest } = app;
-    expect(() => withSettings({ github: { identities: [rest] } })).toThrow(missing);
-  }
-  // A pat identity carries none of them, so a stray one is a mode that did
-  // not change with the fields under it.
-  expect(() => withSettings({ github: { identities: [{ mode: "pat", appId: 1 }] } })).toThrow(
-    "appId",
-  );
-});
-
-test("a factory that states no Linear identity acts with a personal key", () => {
-  expect(withSettings({}).linear).toEqual({ identity: { mode: "key" } });
-  expect(withSettings({ linear: {} }).linear).toEqual({ identity: { mode: "key" } });
-});
-
-test("a Linear identity is key or app and carries nothing else", () => {
-  for (const mode of ["key", "app"]) {
-    expect(withSettings({ linear: { identity: { mode } } }).linear.identity).toEqual({ mode });
-  }
-  expect(() => withSettings({ linear: { identity: { mode: "pat" } } })).toThrow("linear.identity");
-  // Secrets live in .env, so a client id in config is refused, not ignored.
-  expect(() => withSettings({ linear: { identity: { mode: "app", clientId: "abc" } } })).toThrow(
-    "clientId",
-  );
-  expect(() => withSettings({ linear: { identities: [{ mode: "key" }] } })).toThrow("identities");
+  expect(withSettings({ github }).github).toEqual(github);
+  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
 });
 
 test("a Linear operator is optional and must be an email", () => {
   expect(withSettings({ linear: { operator: "salim@example.com" } }).linear).toEqual({
-    identity: { mode: "key" },
     operator: "salim@example.com",
   });
+  expect(withSettings({}).linear).toEqual({});
+  expect(() => withSettings({ linear: { identity: { mode: "key" } } })).toThrow("identity");
   expect(withSettings({ linear: {} }).linear.operator).toBeUndefined();
   expect(() => withSettings({ linear: { operator: "salim" } })).toThrow("linear.operator");
   expect(() => withSettings({ linear: { operator: "" } })).toThrow("linear.operator");
-});
-
-const PAGERDUTY_IDENTITY = {
-  mode: "app",
-  subdomain: "acme",
-  region: "us",
-  from: "oncall@example.com",
-};
-
-test("a factory without a pagerduty section has no PagerDuty identity", () => {
-  expect(withSettings({}).pagerduty).toBeUndefined();
-});
-
-test("a PagerDuty identity is an app with a subdomain, a region and a from email", () => {
-  expect(withSettings({ pagerduty: { identity: PAGERDUTY_IDENTITY } }).pagerduty).toEqual({
-    identity: PAGERDUTY_IDENTITY,
-  });
-  expect(
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "eu" } } }).pagerduty
-      ?.identity.region,
-  ).toBe("eu");
-  for (const missing of ["subdomain", "region", "from"]) {
-    const { [missing as keyof typeof PAGERDUTY_IDENTITY]: _dropped, ...rest } = PAGERDUTY_IDENTITY;
-    expect(() => withSettings({ pagerduty: { identity: rest } })).toThrow(
-      `pagerduty.identity.${missing}`,
-    );
-  }
-  expect(() => withSettings({ pagerduty: {} })).toThrow("pagerduty.identity");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, mode: "key" } } }),
-  ).toThrow("pagerduty.identity.mode");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, region: "ap" } } }),
-  ).toThrow("pagerduty.identity.region");
-  expect(() =>
-    withSettings({
-      pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "acme.pagerduty.com" } },
-    }),
-  ).toThrow("pagerduty.identity.subdomain");
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, subdomain: "Acme" } } }),
-  ).toThrow("pagerduty.identity.subdomain");
-  // Secrets live in .env, so a client id in config is refused, not ignored.
-  expect(() =>
-    withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, clientId: "abc" } } }),
-  ).toThrow("clientId");
-});
-
-test("a PagerDuty from must be an email", () => {
-  for (const from of ["oncall", ""]) {
-    expect(() =>
-      withSettings({ pagerduty: { identity: { ...PAGERDUTY_IDENTITY, from } } }),
-    ).toThrow("pagerduty.identity.from");
-  }
-});
-
-const APP_IDENTITY = {
-  mode: "app",
-  appId: 1,
-  installations: { owner: 2 },
-  privateKeyPath: "k.pem",
-  operator: "salimhamed",
-};
-
-test("merge approval defaults to review for an App, and an App may choose the label", () => {
-  expect(withSettings({ github: { identities: [APP_IDENTITY] } }).github.mergeApproval).toBe(
-    "review",
-  );
-  expect(
-    withSettings({ github: { identities: [APP_IDENTITY], mergeApproval: "label" } }).github
-      .mergeApproval,
-  ).toBe("label");
-  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
-});
-
-test("a PAT cannot approve by review, because GitHub refuses an author's own approval", () => {
-  expect(withSettings({ github: { mergeApproval: "label" } }).github.mergeApproval).toBe("label");
-  expect(() => withSettings({ github: { mergeApproval: "review" } })).toThrow(
-    "GitHub does not let the author of a pull request approve it",
-  );
-});
-
-test("App maps and lists normalize and reject ambiguous account ownership", async () => {
-  const { installationFor } = await import("../workflow/factory-schema.ts");
-  const app = {
-    mode: "app",
-    appId: 1,
-    privateKeyPath: "key.pem",
-    operator: "human",
-    installations: { Junglescout: 10 },
-  };
-  const config = withSettings({ github: { identities: [app] } });
-  expect(installationFor(config.github.identities, "junglescout")).toMatchObject({
-    appId: 1,
-    installationId: 10,
-  });
-  expect(installationFor(config.github.identities, "junglescout")).not.toHaveProperty(
-    "installations",
-  );
-  const identities = [app, { ...app, appId: 2, installations: { Other: 20 } }];
-  expect(withSettings({ github: { identities } }).github.identities).toEqual(identities);
-  expect(() =>
-    withSettings({ github: { identities: [app, { ...app, installations: { JUNGLESCOUT: 30 } }] } }),
-  ).toThrow("claimed more than once");
-  expect(() => withSettings({ github: { identities: [{ ...app, installations: {} }] } })).toThrow(
-    "must not be empty",
-  );
-  expect(() => withSettings({ github: { identities: [{ ...app, installationId: 20 }] } })).toThrow(
-    "installationId",
-  );
-  expect(() => withSettings({ github: { identity: app } })).toThrow("identity");
-  expect(withSettings({ github: { identities: [{ mode: "pat" }] } }).github.identities).toEqual([
-    { mode: "pat" },
-  ]);
-  expect(() => withSettings({ github: { identities: [{ mode: "pat" }, app] } })).toThrow(
-    "PAT must be the only identity",
-  );
-  expect(() =>
-    withSettings({ github: { identities: [{ mode: "pat" }, { mode: "pat" }] } }),
-  ).toThrow("PAT must be the only identity");
-  expect(() => withSettings({ github: { identities: [] } })).toThrow("github.identities");
 });
 
 const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };
@@ -649,6 +573,7 @@ test("workflows, schedules and triggers are checked for shape when the config lo
 test("defineFactory refuses a schedule naming a workflow it does not declare", () => {
   expect(() =>
     defineFactory({
+      hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       workflows: sweep,
       schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } },

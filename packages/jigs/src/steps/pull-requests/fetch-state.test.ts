@@ -1,21 +1,19 @@
 import { expect, test, vi } from "vitest";
 import { fetchPrSnapshot } from "../../providers/github.ts";
-import { appBotFor } from "../../providers/github-auth.ts";
 import { readPullRequestSnapshot } from "./fetch-state.ts";
 
 vi.mock("../../providers/github.ts", () => ({ fetchPrSnapshot: vi.fn() }));
 vi.mock("../../providers/github-auth.ts", () => ({
-  appBotFor: vi.fn(),
-  githubAuthFor: () => ({
-    identity: { mode: "app", appId: 7, installationId: 2, privateKeyPath: "k", operator: "me" },
+  githubAuthFor: (installationName: string) => ({
     bearer: async () => "token",
+    bot: async () => ({ login: `${installationName}-app[bot]`, id: 1 }),
   }),
 }));
 vi.mock("../../config/factory-context.ts", () => ({
   currentFactoryContext: () => ({ config: { github: { mergeApproval: "review" } } }),
 }));
 
-const pr = { owner: "acme", repo: "api", number: 1 };
+const pr = { installationName: "github-acme", owner: "acme", repo: "api", number: 1 };
 const facts = {
   state: "open" as const,
   merged: false,
@@ -31,16 +29,7 @@ const facts = {
   failingChecks: [],
 };
 
-test("an App snapshot names the App's bot", async () => {
+test("a snapshot names the bot of the App the hub issued the installation's token for", async () => {
   vi.mocked(fetchPrSnapshot).mockResolvedValue(facts);
-  vi.mocked(appBotFor).mockResolvedValue({ login: "jigs-dev[bot]", id: 1 });
-  expect((await readPullRequestSnapshot(pr)).appBot).toBe("jigs-dev[bot]");
-});
-
-test("a failed bot lookup says it was the App's bot lookup", async () => {
-  vi.mocked(fetchPrSnapshot).mockResolvedValue(facts);
-  vi.mocked(appBotFor).mockRejectedValue(new Error("GitHub API 401 on /app"));
-  await expect(readPullRequestSnapshot(pr)).rejects.toThrow(
-    "could not look up the bot account of GitHub App 7: GitHub API 401 on /app",
-  );
+  expect((await readPullRequestSnapshot(pr)).appBot).toBe("github-acme-app[bot]");
 });

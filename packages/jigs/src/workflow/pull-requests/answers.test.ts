@@ -12,7 +12,7 @@ const SCOPE = "ship/AGE-403";
 
 const failing: CheckRun[] = [{ name: "test", conclusion: "failure", url: "http://ci.test/1" }];
 
-const pr = { owner: "acme", repo: "api", number: 41 };
+const pr = { installationName: "github-acme", owner: "acme", repo: "api", number: 41 };
 
 function recorder(failOn: (body: string) => boolean = () => false) {
   const comments: string[] = [];
@@ -28,6 +28,7 @@ function recorder(failOn: (body: string) => boolean = () => false) {
 
 // A pull request carrying no notes yet, so every note is new.
 const unannotated = async (): Promise<PullRequestSnapshot> => ({
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,

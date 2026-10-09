@@ -5,15 +5,15 @@ Status: accepted
 jigs workflows are ordinary TypeScript calling durable steps through routines.
 The library ships the bottom two of three layers and no delivery process:
 
-1. **Steps and their wrappers.** The generated `jigs/steps.ts` is the
+1. **Steps and their wrappers.** The factory step file `#jigs/steps` is the
    durable-address anchor, not an extension point
    ([0006](./0006-factory-owned-steps.md)). A factory adds steps as
    `"use step"` functions beside the workflow that owns them.
 2. **Routines.** Reusable code in the workflow bundle that calls wrappers and
    other routines and carries no process policy: no round budgets, no "merged
    means done", no ticket-status choices, no note wording. Workflow code
-   imports the library from the root `@jigs-ai/jigs` and routines from the
-   generated `jigs/routines.ts`.
+   imports the library from the root `@jigs-ai/jigs` and routines from
+   `#jigs/routines`.
 3. **Recipes.** Complete workflows shipped as source in `recipes/`, tested by
    `pnpm e2e`, and copied into a factory with `jigs recipe add`. Once copied a
    recipe is factory code. `jigs init` scaffolds a bare factory with one
@@ -68,6 +68,6 @@ worktree of the run is released.
 - `jigs resources prune` is the operator's explicit override of the release
   policy: it releases kept resources too, but never overrides a kind's safety
   checks. Dirty or unmerged work has no bypass.
-- Rejected: a workflow DSL, scaffolding recipes with `jigs init`, an editable
-  generated integration, and resource records on Workflow SDK run attributes
+- Rejected: a workflow DSL, scaffolding recipes with `jigs init`, editable factory
+  step files, and resource records on Workflow SDK run attributes
   (per-key limits, no transactions with provisioning, a second store).

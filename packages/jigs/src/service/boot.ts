@@ -3,7 +3,6 @@
 import type { World } from "@workflow/world";
 import { WorkflowRunNotFoundError } from "workflow/errors";
 import type { FactoryContext } from "../config/factory-context.ts";
-import type { SlackAppHold } from "../config/slack-apps.ts";
 import { plainHint } from "../errors.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
@@ -12,8 +11,6 @@ import type { RegistrySql } from "../steps/runtime/registry.ts";
 import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { WorkflowDefinition } from "../workflow/factory.ts";
-import type { SlackConfig, WebhooksConfig } from "../workflow/factory-schema.ts";
-import { PROVIDERS, WEBHOOK_PROVIDERS } from "../workflow/providers.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
 import { installShutdown, onShutdown } from "./shutdown.ts";
 
@@ -92,89 +89,28 @@ export async function gateOnHarnessRuntimes(deps: HarnessRuntimeGateDeps = {}): 
   return true;
 }
 
-/** Injectable configuration and output used by the webhook startup gate. */
-export interface WebhookSecretGateDeps {
-  webhooks?: () => Promise<WebhooksConfig | undefined>;
-  env?: () => Promise<FactoryContext["env"]>;
+/** Injectable configuration and output used by the hub startup gate. */
+export interface HubTokenGateDeps {
+  context?: () => Promise<FactoryContext>;
   exit?: (code: number) => void;
   error?: (line: string) => void;
 }
 
-async function configuredWebhooks(): Promise<WebhooksConfig | undefined> {
-  return (await serviceContext()).config.webhooks;
-}
-
-async function serviceEnv(): Promise<FactoryContext["env"]> {
-  return (await serviceContext()).env;
-}
-
-// A provider switched on without its secret would answer every delivery with
-// an error while its runs quietly fall back to polling; refusing the boot puts
-// the missing variable in front of the operator instead.
-/** Refuse service startup when an enabled webhook provider has no signing secret. */
-export async function gateOnWebhookSecrets(deps: WebhookSecretGateDeps = {}): Promise<boolean> {
-  const error = deps.error ?? ((line: string) => console.error(line));
-  const exit = deps.exit ?? process.exit;
-  let webhooks: WebhooksConfig | undefined;
-  let env: FactoryContext["env"];
+// Without its token the factory hears nothing from its providers, and every run
+// that waits on one waits forever.
+/** Refuse service startup when the factory is not connected to its hub. */
+export async function gateOnHubToken(deps: HubTokenGateDeps = {}): Promise<boolean> {
   try {
-    webhooks = await (deps.webhooks ?? configuredWebhooks)();
-    env = await (deps.env ?? serviceEnv)();
+    const { hubConnection } = await import("../providers/hub.ts");
+    hubConnection(await (deps.context ?? serviceContext)());
+    return true;
   } catch (err) {
-    error(`[service] could not read the webhook configuration: ${describe(err)}`);
-    exit(1);
-    return false;
-  }
-  const { webhookSecret, webhookSecretVariable } = await import("../config/webhook-secret.ts");
-  const missing = WEBHOOK_PROVIDERS.filter(
-    (provider) => webhooks?.[provider].enabled && webhookSecret(provider, { env }) === undefined,
-  ).map(webhookSecretVariable);
-  if (missing.length > 0) {
-    error(
-      `[service] webhooks are enabled but ${missing.join(" and ")} ${missing.length === 1 ? "is" : "are"} not set. Set ${missing.length === 1 ? "it" : "them"} in the factory's .env, or turn that provider off in the webhooks section of jigs.config.ts, then restart the service`,
+    (deps.error ?? ((line: string) => console.error(line)))(
+      `[service] ${describe(err)}, then restart the service`,
     );
-    exit(1);
+    (deps.exit ?? process.exit)(1);
     return false;
   }
-  return true;
-}
-
-/** Injectable configuration and output used by the Slack startup gate. */
-export interface SlackAppTokenGateDeps {
-  slack?: () => Promise<SlackConfig | undefined>;
-  env?: () => Promise<FactoryContext["env"]>;
-  exit?: (code: number) => void;
-  error?: (line: string) => void;
-}
-
-async function configuredSlack(): Promise<SlackConfig | undefined> {
-  return (await serviceContext()).config.slack;
-}
-
-// The webhook rule, for the same reason: Socket Mode switched on without its
-// token would leave the factory silently polling.
-/** Refuse service startup when Slack Socket Mode is on without `SLACK_APP_TOKEN`. */
-export async function gateOnSlackAppToken(deps: SlackAppTokenGateDeps = {}): Promise<boolean> {
-  const error = deps.error ?? ((line: string) => console.error(line));
-  const exit = deps.exit ?? process.exit;
-  let slack: SlackConfig | undefined;
-  let env: FactoryContext["env"];
-  try {
-    slack = await (deps.slack ?? configuredSlack)();
-    env = await (deps.env ?? serviceEnv)();
-  } catch (err) {
-    error(`[service] could not read the slack configuration: ${describe(err)}`);
-    exit(1);
-    return false;
-  }
-  if (slack?.socketMode && env("SLACK_APP_TOKEN") === undefined) {
-    error(
-      "[service] slack.socketMode is on but SLACK_APP_TOKEN is not set. Set it in the factory's .env to an app-level token with connections:write, or turn socketMode off in jigs.config.ts, then restart the service",
-    );
-    exit(1);
-    return false;
-  }
-  return true;
 }
 
 /** Injectable database operations and output used by the registry startup gate. */
@@ -341,7 +277,7 @@ export interface WorldStartGateDeps {
 // Like the other gates: a World that cannot start — a WORKFLOW_TARGET_WORLD
 // that does not resolve, a migration missing, a database gone since the
 // registry gate — would otherwise be a console.error from nitro and a process
-// that stays up with `ready` never true, so `jigs service start` waits out its
+// that stays up with `ready` never true, so `jigs up` waits out its
 // whole budget on it.
 /** Start and take ownership of the Workflow World, exiting cleanly on failure. */
 export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolean> {
@@ -359,74 +295,7 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
   return true;
 }
 
-/** Injectable record keeping and output used when the service takes its Slack app. */
-export interface SlackAppHoldDeps {
-  hold: () => SlackAppHold;
-  log?: (line: string) => void;
-}
-
-// Not a gate: another factory on the same app splits events rather than
-// stopping them, and the poll still finds what this socket misses.
-/** Record this service as a Socket Mode holder of its Slack app, warning when it is shared. */
-export function announceSlackApp(deps: SlackAppHoldDeps): SlackAppHold | undefined {
-  const log = deps.log ?? ((line: string) => console.warn(line));
-  let hold: SlackAppHold;
-  try {
-    hold = deps.hold();
-  } catch (err) {
-    log(`[slack] could not record which Slack app this service uses: ${describe(err)}`);
-    return undefined;
-  }
-  const others = hold.others.map((holder) => holder.slug);
-  if (others.length > 0) {
-    log(
-      `[slack] ${others.length === 1 ? "the service" : "the services"} ${others.join(" and ")} on this machine ${others.length === 1 ? "uses" : "use"} the same Slack app for Socket Mode; Slack splits its events between them, so each factory misses some until its poll catches up. Give each factory its own Slack app`,
-    );
-  }
-  return hold;
-}
-
-async function holdFactorySlackApp(ctx: FactoryContext): Promise<SlackAppHold | undefined> {
-  const slackApps = await import("../config/slack-apps.ts");
-  const token = ctx.env("SLACK_APP_TOKEN");
-  if (token === undefined) return undefined;
-  return announceSlackApp({ hold: () => slackApps.holdSlackApp(token, ctx.slug) });
-}
-
-// One connection for the whole service: every Slack listener reads the same
-// message stream.
-async function startSlackSocketMode(ctx: FactoryContext): Promise<void> {
-  const [{ startSlackSocket }, { pushEvent }, { wakeSlackThread }] = await Promise.all([
-    import("./slack-socket.ts"),
-    import("./event-triggers/runner.ts"),
-    import("./slack-thread-wake.ts"),
-  ]);
-  const hold = await holdFactorySlackApp(ctx);
-  const socket = startSlackSocket({
-    onMessage: async (event) => {
-      const [pushed] = await Promise.allSettled([
-        pushEvent("slack", event),
-        wakeSlackThread(event),
-      ]);
-      if (pushed.status === "rejected")
-        console.log(
-          `[slack] could not start runs for ${event.channel}:${event.ts}: ${String(pushed.reason)}`,
-        );
-    },
-  });
-  onShutdown(
-    () => {
-      try {
-        socket.stop();
-      } finally {
-        hold?.forget();
-      }
-    },
-    { phase: "quiesce" },
-  );
-}
-
-/** Run the ordered service startup gates, then enable readiness and reconciliation. */
+/** Run the ordered service startup gates, then enable readiness and start the hub client. */
 export async function startWorld() {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
   // stop` during a first clone or against a hanging Postgres has to end in an
@@ -445,9 +314,8 @@ export async function startWorld() {
   setBootPhase("harnesses");
   if (!(await gateOnHarnessRuntimes())) return;
 
-  setBootPhase("webhooks");
-  if (!(await gateOnWebhookSecrets())) return;
-  if (!(await gateOnSlackAppToken())) return;
+  setBootPhase("hub");
+  if (!(await gateOnHubToken())) return;
 
   // Also before the World starts: a run that asks for a worktree against an
   // unusable registry has already burned an agent.
@@ -480,19 +348,21 @@ export async function startWorld() {
 
   setBootPhase(READY_PHASE);
 
-  // Startup reconciliation, then the poll: every parked run is re-read now, in
-  // case something happened while the service was down, and again on each
-  // provider's interval. After readiness, not before: a slow nudge pass must
-  // not hold `jigs service start` on a service that is already answering.
-  const [{ nudgeProvider, startNudges }, ctx] = await Promise.all([
-    import("./nudge.ts"),
-    serviceContext(),
+  await startHub(await serviceContext());
+}
+
+// The hub keeps what it holds until it is confirmed, so whatever arrived while
+// the service was down comes first. startService started the triggers before
+// this boot reached readiness, and a push waits for them to be enabled.
+async function startHub(ctx: FactoryContext): Promise<void> {
+  const [{ startHubClient }, { pushEvent }, { hubConnection }] = await Promise.all([
+    import("./hub-client.ts"),
+    import("./event-triggers/runner.ts"),
+    import("../providers/hub.ts"),
   ]);
-  const { config } = ctx;
-  const nudge = startNudges(config.service.pollIntervalSeconds);
-  onShutdown(() => {
-    nudge.stop();
+  const client = startHubClient({
+    ...hubConnection(ctx),
+    route: { context: ctx, push: pushEvent },
   });
-  if (config.slack?.socketMode) await startSlackSocketMode(ctx);
-  await Promise.all(PROVIDERS.map((provider) => nudgeProvider(provider)));
+  onShutdown(() => client.stop(), { phase: "quiesce" });
 }

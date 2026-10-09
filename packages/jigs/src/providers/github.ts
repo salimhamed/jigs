@@ -4,16 +4,20 @@
 // factory configured.
 
 import type { FactoryContext } from "../config/factory-context.ts";
+import type { PullRequestRef, RepositoryRef } from "../workflow/pull-requests/pull-request.ts";
 import type {
   CheckRun,
   PullRequestSnapshot,
   ReviewComment,
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
-
 import { githubGet, githubGetAll, githubRequest } from "./github-api.ts";
 import { GitHubApiError } from "./github-http.ts";
 
+export type {
+  PullRequestRef,
+  RepositoryRef,
+} from "../workflow/pull-requests/pull-request.ts";
 export type {
   CheckRun,
   PullRequestComment,
@@ -23,21 +27,9 @@ export type {
   ReviewThread,
 } from "../workflow/pull-requests/snapshot.ts";
 
-export type PullRequestRef = {
-  owner: string;
-  repo: string;
-  number: number;
-};
-
-// The preflight probe for a personal access token. It does not answer for an
-// installation token, which is why the App identity names its operator.
-export async function getAuthenticatedUser(): Promise<{ login: string }> {
-  return githubGet<{ login: string }>("/user");
-}
-
 /** Resolve a commit-status delivery to every open PR currently headed by that commit. */
 export async function findOpenPullRequestsByHeadSha(
-  repository: Pick<PullRequestRef, "owner" | "repo">,
+  repository: RepositoryRef,
   sha: string,
   context?: FactoryContext,
 ): Promise<PullRequestRef[]> {
@@ -46,10 +38,15 @@ export async function findOpenPullRequestsByHeadSha(
     state: string;
     head: { sha: string };
     base: { repo: { name: string; owner: { login: string } } };
-  }>(`/repos/${repository.owner}/${repository.repo}/commits/${sha}/pulls`, context);
+  }>(
+    repository.installationName,
+    `/repos/${repository.owner}/${repository.repo}/commits/${sha}/pulls`,
+    context,
+  );
   return pulls
     .filter((pull) => pull.state === "open" && pull.head.sha === sha)
     .map((pull) => ({
+      installationName: repository.installationName,
       owner: pull.base.repo.owner.login,
       repo: pull.base.repo.name,
       number: pull.number,
@@ -66,7 +63,7 @@ export async function findOpenPullRequestsByHeadSha(
  * owner can come back and has to be rejected here.
  */
 export async function findOpenPullRequestByBranch(
-  repository: Pick<PullRequestRef, "owner" | "repo">,
+  repository: RepositoryRef,
   head: string,
   base: string,
 ): Promise<(PullRequestRef & { url: string }) | null> {
@@ -81,7 +78,10 @@ export async function findOpenPullRequestByBranch(
     html_url: string;
     head: { ref: string; repo: { full_name: string } | null };
     base: { ref: string; repo: { full_name: string } };
-  }>(`/repos/${repository.owner}/${repository.repo}/pulls?${query.toString()}`);
+  }>(
+    repository.installationName,
+    `/repos/${repository.owner}/${repository.repo}/pulls?${query.toString()}`,
+  );
   // Owner logins and repository names are case-insensitive on GitHub; branch
   // names are not.
   const fullName = `${repository.owner}/${repository.repo}`.toLowerCase();
@@ -106,6 +106,7 @@ export async function findOpenPullRequestByBranch(
   const [match] = matches;
   if (match === undefined) return null;
   return {
+    installationName: repository.installationName,
     owner: repository.owner,
     repo: repository.repo,
     number: match.number,
@@ -192,7 +193,7 @@ function groupThreads(
 // Approval is left to the caller: reading it needs the factory's configured signal.
 export async function fetchPrSnapshot(
   pr: PullRequestRef,
-): Promise<Omit<PullRequestSnapshot, "approval">> {
+): Promise<Omit<PullRequestSnapshot, "approval" | "appBot">> {
   const repoPath = `/repos/${pr.owner}/${pr.repo}`;
   const prPath = `${repoPath}/pulls/${pr.number}`;
   const pull = await githubGet<{
@@ -203,7 +204,7 @@ export async function fetchPrSnapshot(
     merge_commit_sha?: string | null;
     labels?: Array<{ name: string }>;
     head: { sha: string };
-  }>(prPath);
+  }>(pr.installationName, prPath);
   const reviews = await githubGetAll<{
     id: number;
     state: string;
@@ -211,7 +212,7 @@ export async function fetchPrSnapshot(
     user: { login: string } | null;
     submitted_at: string;
     commit_id?: string;
-  }>(`${prPath}/reviews`);
+  }>(pr.installationName, `${prPath}/reviews`);
   const comments = await githubGetAll<{
     id: number;
     in_reply_to_id?: number | null;
@@ -221,7 +222,7 @@ export async function fetchPrSnapshot(
     line?: number | null;
     created_at: string;
     updated_at: string;
-  }>(`${prPath}/comments`);
+  }>(pr.installationName, `${prPath}/comments`);
   // The conversation, where a review the operator cannot formally submit —
   // GitHub refuses approve and request-changes on one's own pull request —
   // lands instead. Issues and pull requests share this collection.
@@ -231,21 +232,21 @@ export async function fetchPrSnapshot(
     user: { login: string; type?: string } | null;
     created_at: string;
     updated_at: string;
-  }>(`${repoPath}/issues/${pr.number}/comments`);
+  }>(pr.installationName, `${repoPath}/issues/${pr.number}/comments`);
   const checks = await githubGet<{
     check_runs: Array<{
       name: string;
       conclusion: string | null;
       html_url: string | null;
     }>;
-  }>(`${repoPath}/commits/${pull.head.sha}/check-runs?per_page=100`); // unpaginated cap, accepted for v0
+  }>(pr.installationName, `${repoPath}/commits/${pull.head.sha}/check-runs?per_page=100`); // unpaginated cap, accepted for v0
   const combined = await githubGet<{
     statuses: Array<{
       context: string;
       state: string;
       target_url: string | null;
     }>;
-  }>(`${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
+  }>(pr.installationName, `${repoPath}/commits/${pull.head.sha}/status?per_page=100`); // unpaginated cap, accepted for v0
 
   const runs: CheckRun[] = checks.check_runs.map((run) => ({
     name: run.name,
@@ -311,6 +312,7 @@ export async function replyToReviewThread(
   body: string,
 ): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
+    pr.installationName,
     "POST",
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/comments/${rootId}/replies`,
     { body },
@@ -321,6 +323,7 @@ export async function replyToReviewThread(
 // escalation both land on.
 export async function postPrComment(pr: PullRequestRef, body: string): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
+    pr.installationName,
     "POST",
     `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/comments`,
     { body },
@@ -344,6 +347,7 @@ export async function postPullRequestReview(
   review: PullRequestReviewRequest,
 ): Promise<{ id: number }> {
   return githubRequest<{ id: number }>(
+    pr.installationName,
     "POST",
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/reviews`,
     {
@@ -364,6 +368,7 @@ export async function postPullRequestReview(
 }
 
 export interface CreatePullRequest {
+  installationName: string;
   owner: string;
   repo: string;
   head: string;
@@ -378,9 +383,11 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
   // The ready-for-review mutation requires a node id, so resolve it through
   // the existing REST pull-request endpoint before calling GraphQL.
   const { node_id: pullRequestId } = await githubGet<{ node_id: string }>(
+    pr.installationName,
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
   );
   const result = await githubRequest<{ errors?: Array<{ message: string }> }>(
+    pr.installationName,
     "POST",
     "/graphql",
     {
@@ -391,7 +398,6 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
     }`,
       variables: { pullRequestId },
     },
-    { account: pr.owner },
   );
   if (result.errors !== undefined && result.errors.length > 0) {
     throw new GitHubApiError(
@@ -405,8 +411,9 @@ export async function markPrReady(pr: PullRequestRef): Promise<void> {
 export async function createPr(
   request: CreatePullRequest,
 ): Promise<{ number: number; html_url: string }> {
-  const { owner, repo, ...rest } = request;
+  const { installationName, owner, repo, ...rest } = request;
   return githubRequest<{ number: number; html_url: string }>(
+    installationName,
     "POST",
     `/repos/${owner}/${repo}/pulls`,
     rest,
@@ -416,6 +423,7 @@ export async function createPr(
 /** The commit messages on the branch, in the order GitHub lists them. */
 export async function fetchPrCommitMessages(pr: PullRequestRef): Promise<string[]> {
   const commits = await githubGetAll<{ commit: { message: string } }>(
+    pr.installationName,
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/commits`,
   );
   return commits.map((entry) => entry.commit.message);
@@ -423,6 +431,7 @@ export async function fetchPrCommitMessages(pr: PullRequestRef): Promise<string[
 
 export async function fetchPrTitle(pr: PullRequestRef): Promise<string> {
   const pull = await githubGet<{ title: string }>(
+    pr.installationName,
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`,
   );
   return pull.title;
@@ -434,13 +443,13 @@ export type MergeMethod = "squash" | "merge" | "rebase";
 // GitHub omits the `allow_*` fields for a token without push access, which
 // reads here as no method allowed.
 export async function fetchAllowedMergeMethods(
-  repository: Pick<PullRequestRef, "owner" | "repo">,
+  repository: RepositoryRef,
 ): Promise<Set<MergeMethod>> {
   const settings = await githubGet<{
     allow_squash_merge?: boolean;
     allow_merge_commit?: boolean;
     allow_rebase_merge?: boolean;
-  }>(`/repos/${repository.owner}/${repository.repo}`);
+  }>(repository.installationName, `/repos/${repository.owner}/${repository.repo}`);
   const allowed = new Set<MergeMethod>();
   if (settings.allow_squash_merge === true) allowed.add("squash");
   if (settings.allow_merge_commit === true) allowed.add("merge");
@@ -464,6 +473,7 @@ export async function mergePr(
   request: MergeRequest,
 ): Promise<{ merged: boolean; sha: string }> {
   return githubRequest<{ merged: boolean; sha: string }>(
+    pr.installationName,
     "PUT",
     `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}/merge`,
     {
@@ -481,7 +491,12 @@ export async function mergePr(
 
 /** Put the operator's name on a pull request the App opened for them. */
 export async function assignPullRequest(pr: PullRequestRef, logins: string[]): Promise<void> {
-  await githubRequest("POST", `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/assignees`, {
-    assignees: logins,
-  });
+  await githubRequest(
+    pr.installationName,
+    "POST",
+    `/repos/${pr.owner}/${pr.repo}/issues/${pr.number}/assignees`,
+    {
+      assignees: logins,
+    },
+  );
 }

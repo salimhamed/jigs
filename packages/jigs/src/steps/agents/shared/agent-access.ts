@@ -1,45 +1,39 @@
-import { linearAuthFor } from "../../../providers/linear-auth.ts";
-import { pagerDutyAuthFor } from "../../../providers/pagerduty-auth.ts";
+import { AGENT_TOKEN_MIN_LIFETIME_MS } from "../../../providers/credentials.ts";
+import { installationTokens } from "../../../providers/installation-tokens.ts";
 import { AGENT_TOKEN_ENV, assertAgentAccess } from "../../../workflow/agents/agent-access.ts";
 import type { Harness } from "../../../workflow/agents/harness-config.ts";
 import { agentGithubEnv } from "./github-access.ts";
 
-// A PagerDuty token lasts a day and is not refreshed during an agent's turn,
-// which can last hours. Linear's lasts 30 days.
-const PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS = 5 * 60 * 60 * 1000;
-
 export interface AgentAccessDeps {
-  github(
-    target: { harness: Harness; cwd: string },
-    env: Record<string, string>,
-  ): Promise<Record<string, string>>;
-  linearToken(): Promise<string>;
-  pagerdutyToken(): Promise<string>;
+  github(harness: Harness, env: Record<string, string>): Promise<Record<string, string>>;
+  token(provider: "linear" | "pagerduty", installationName: string): Promise<string>;
 }
 
 const defaultDeps: AgentAccessDeps = {
-  github: (target, env) => agentGithubEnv(target, env),
-  linearToken: () => linearAuthFor().bearer(),
-  pagerdutyToken: () => pagerDutyAuthFor().bearer(PAGERDUTY_AGENT_TOKEN_MIN_LIFETIME_MS),
+  github: (harness, env) => agentGithubEnv(harness, env),
+  token: (provider, installationName) =>
+    installationTokens(provider, installationName).bearer(AGENT_TOKEN_MIN_LIFETIME_MS[provider]),
 };
 
 /**
  * What the providers a harness opts in to add to its agent's environment `env`: GitHub's token
- * and git settings, and the factory's Linear and PagerDuty tokens. Nothing for a harness that
- * opts in to none.
+ * and git settings, and Linear and PagerDuty tokens, each from the installation the harness
+ * names. Nothing for a harness that opts in to none.
  */
 export async function agentAccessEnv(
-  target: { harness: Harness; cwd: string },
+  harness: Harness,
   env: Record<string, string> = {},
   deps: AgentAccessDeps = defaultDeps,
 ): Promise<Record<string, string>> {
-  const { harness } = target;
   assertAgentAccess(harness);
+  const { linear, pagerduty } = harness;
   return {
-    ...(await deps.github(target, env)),
-    ...(harness.linear === undefined ? {} : { [AGENT_TOKEN_ENV.linear]: await deps.linearToken() }),
-    ...(harness.pagerduty === undefined
+    ...(await deps.github(harness, env)),
+    ...(linear === undefined
       ? {}
-      : { [AGENT_TOKEN_ENV.pagerduty]: await deps.pagerdutyToken() }),
+      : { [AGENT_TOKEN_ENV.linear]: await deps.token("linear", linear.installationName) }),
+    ...(pagerduty === undefined
+      ? {}
+      : { [AGENT_TOKEN_ENV.pagerduty]: await deps.token("pagerduty", pagerduty.installationName) }),
   };
 }

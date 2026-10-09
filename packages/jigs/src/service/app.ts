@@ -1,7 +1,9 @@
-// Create the HTTP application that serves a factory's workflow and webhook endpoints.
+// Create the HTTP application that serves a factory's workflow endpoints.
 
+import type { RequestListener } from "node:http";
+import { json as readJson } from "node:stream/consumers";
 import type { World } from "@workflow/world";
-import { type Context, Hono } from "hono";
+import express, { type ErrorRequestHandler } from "express";
 import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
@@ -11,28 +13,16 @@ import {
   type FactoryContext,
   processEnv,
 } from "../config/factory-context.ts";
-import { webhookSecret } from "../config/webhook-secret.ts";
-import { findOpenPullRequestsByHeadSha } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import { listResources, type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import { readRunState } from "../steps/runtime/run-state.ts";
 import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { parseHookToken } from "../workflow/hook-tokens.ts";
-import { tokenFromLinearPayload } from "../workflow/linear/claim.ts";
-import type { Provider } from "../workflow/providers.ts";
-import { tokenFromGitHubPayload } from "../workflow/pull-requests/pull-request.ts";
+import { isOwnershipKind, parseHookToken } from "../workflow/hook-tokens.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
-import { pushEvent } from "./event-triggers/runner.ts";
 import { triggerStore } from "./event-triggers/store.ts";
-import { listTriggers, triggerChecks, triggerProviders } from "./event-triggers/view.ts";
-import {
-  verifyGithubSignature,
-  verifyLinearSignature,
-  verifyPagerDutySignature,
-} from "./ingress.ts";
+import { listTriggers, triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
 import { startRun } from "./launch.ts";
-import { pagerDutyEventType } from "./pagerduty-incidents.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
@@ -54,37 +44,32 @@ export interface AppDeps {
   world: () => Promise<{ hooks: Pick<World["hooks"], "list"> }>;
   /** The jigs registry. */
   registry: () => RegistrySql;
-  /** Where a PagerDuty delivery is handed to the event triggers. */
-  triggers: { push: typeof pushEvent };
 }
 
 // The app is library code: a factory repo installs this package and hands in
 // its own workflows, so nothing here may import a workflow module.
-/** Build the service HTTP application for one factory's workflows and webhooks. */
-export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
-  const app = new Hono();
+/** Build the service HTTP application for one factory's workflows. */
+export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): RequestListener {
+  const app = express();
+  app.disable("x-powered-by");
   const context = () => deps.context ?? currentFactoryContext();
   const registry = deps.registry ?? registrySql;
   const runRegistry = (): RunRegistry => ({ sql: registry(), factory: context().slug });
   const triggers = () => triggerStore(registry(), context().slug);
-  const routes: IngressDeps = {
-    context,
-    world: deps.world ?? getWorld,
-    push: deps.triggers?.push ?? pushEvent,
-  };
+  const world = deps.world ?? getWorld;
 
-  app.use(async (c, next) => {
-    await next();
-    c.header(VERSION_HEADER, JIGS_VERSION);
+  app.use((_request, response, next) => {
+    response.set(VERSION_HEADER, JIGS_VERSION);
+    next();
   });
 
   // Liveness, plus how far the boot has got; dependency verification is
   // preflight's job. Nitro serves this route before the plugins have run, so
-  // `ready` — not the 200 — is what `jigs service start` waits on. With a
+  // `ready` — not the 200 — is what `jigs up` waits on. With a
   // service per factory repo, `factoryRoot` is the only thing that says which
   // factory answers here, and `pid` which process.
-  app.get("/health", (c) =>
-    c.json({
+  app.get("/health", (_request, response) =>
+    response.json({
       ok: true,
       ready: isReady(),
       phase: bootPhase(),
@@ -102,11 +87,14 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   // `unrepresentable: "any"` keeps a schema holding a z.date()/z.bigint()/
   // z.custom() from throwing the whole route to a 500 — the member renders as
   // `{}` and entry.inputs.safeParse at the trigger stays its real authority.
-  app.get("/api/workflows/:name/inputs", (c) => {
-    const name = c.req.param("name");
+  app.get("/api/workflows/:name/inputs", (request, response) => {
+    const name = request.params.name;
     const entry = factory.workflows[name];
-    if (!entry) return c.json(unknownWorkflow(name), 404);
-    return c.json({
+    if (!entry) {
+      response.status(404).json(unknownWorkflow(name));
+      return;
+    }
+    response.json({
       name,
       inputs: z.toJSONSchema(entry.inputs, {
         io: "input",
@@ -117,8 +105,8 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // The launch registry itself is the authority for what this built service
   // can run. Expose its existing input schemas for read-only CLI discovery.
-  app.get("/api/workflows", (c) =>
-    c.json({
+  app.get("/api/workflows", (_request, response) =>
+    response.json({
       workflows: Object.entries(factory.workflows).map(([name, entry]) => ({
         name,
         inputs: z.toJSONSchema(entry.inputs, {
@@ -131,75 +119,79 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // The manual half of the trigger path; the schedule ticker fires the same
   // function, so preflight cannot differ between them.
-  app.post("/api/workflows/:name/runs", async (c) => {
-    const name = c.req.param("name");
-    const body = await c.req.json<{ inputs?: unknown }>().catch(() => ({}) as { inputs?: unknown });
+  app.post("/api/workflows/:name/runs", async (request, response) => {
+    const name = request.params.name;
+    // Not express.json(): any content type is read, and a malformed body is no inputs.
+    const body = (await readJson(request).catch(() => ({}))) as { inputs?: unknown };
     const result = await startRun(factory, name, body.inputs, crypto.randomUUID(), context());
     switch (result.kind) {
       case "unknown-workflow":
-        return c.json(unknownWorkflow(name), 404);
+        response.status(404).json(unknownWorkflow(name));
+        return;
       case "invalid-inputs":
-        return c.json({ error: "invalid inputs", issues: result.issues }, 400);
+        response.status(400).json({ error: "invalid inputs", issues: result.issues });
+        return;
       case "preflight-failed":
-        return c.json({ error: "preflight failed", failures: failedChecks(result.report) }, 424);
+        response
+          .status(424)
+          .json({ error: "preflight failed", failures: failedChecks(result.report) });
+        return;
       case "started":
-        return c.json(
-          {
-            runId: result.runId,
-            workflow: name,
-            dashboard: dashboardPointer(context(), result.runId),
-          },
-          201,
-        );
+        response.status(201).json({
+          runId: result.runId,
+          workflow: name,
+          dashboard: dashboardPointer(context(), result.runId),
+        });
+        return;
     }
   });
 
   // What this factory fires on its own, with the next occurrence of each and
   // the run it is already waiting on.
-  app.get("/api/schedules", async (c) =>
-    c.json(await listSchedules(factory, { listRuns: () => listRuns(factory, runRegistry()) })),
+  app.get("/api/schedules", async (_request, response) =>
+    response.json(
+      await listSchedules(factory, { listRuns: () => listRuns(factory, runRegistry()) }),
+    ),
   );
 
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
-  app.get("/api/doctor", async (c) =>
-    c.json(
+  app.get("/api/doctor", async (_request, response) =>
+    response.json(
       await runDoctorChecks([
-        ...doctorChecks(factory.workflows, triggerProviders(factory), context()),
+        ...doctorChecks(factory.workflows, triggerInstallations(factory), context()),
         ...scheduleChecks(factory),
         ...triggerChecks(factory, undefined, { store: triggers }),
       ]),
     ),
   );
 
-  // The ingress is stateless: verify, reconstruct the token, resume. A
-  // delivery nobody is listening to is acknowledged and dropped — no mapping
-  // tables or persisted deliveries. Wakes are hints; consumers re-check the
-  // provider. A provider whose webhooks are off has no route at all, so a
-  // stray delivery is a 404 rather than work.
-  if (factory.webhooks?.github?.enabled) mountGithubIngress(app, routes);
-  if (factory.webhooks?.linear?.enabled) mountLinearIngress(app, routes);
-  if (factory.webhooks?.pagerduty?.enabled) mountPagerDutyIngress(app, routes);
-
-  // Manual wake on the same code path as the ingress: resume every token the
-  // run's suspensions are satisfied by. The fallback when a delivery was missed.
-  app.post("/api/runs/:runId/poke", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  // Manual wake on the same code path as a provider event: resume every token
+  // the run's suspensions are satisfied by. The fallback when an event was missed.
+  app.post("/api/runs/:runId/poke", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const run = getRun(runId);
-    const tokens = await runResourceTokens(routes, run.runId);
+    // A token jigs did not mint is poked too: a factory's own workflow may park on it.
+    const tokens = (await heldTokens(world, run.runId)).filter(
+      (token) => !isOwnershipKind(parseHookToken(token)?.kind),
+    );
     if (tokens.length === 0) {
-      return c.json({ error: "run has no suspensions to poke" }, 409);
+      response.status(409).json({ error: "run has no suspensions to poke" });
+      return;
     }
     const poked = await Promise.all(
       tokens.map(async (token) => ({ token, ...(await wake(token, "poke")) })),
     );
-    return c.json({ runId: run.runId, poked });
+    response.json({ runId: run.runId, poked });
   });
 
   // Everything `jigs status` renders: each run's state, described as the
   // single-run route describes it, with the resources it recorded.
-  app.get("/api/runs", async (c) => {
+  app.get("/api/runs", async (_request, response) => {
     const runs = await listRuns(factory, runRegistry());
     // The schedules ride along on the same run listing the table above
     // renders, so status stays one round trip and the two tables can never
@@ -214,21 +206,25 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         (views) => ({ triggers: views }),
         (error: unknown) => ({ triggers: [], triggersError: String(error) }),
       );
-    return c.json({ runs, schedules, ...listed });
+    response.json({ runs, schedules, ...listed });
   });
 
   // The escape hatch for a zombie claim owner. Jigs' hooks request no minimum
   // retention, so the World removes them on run_cancelled. Capture their names
   // before the public cancellation call so the response can say what changed.
-  app.post("/api/runs/:runId/cancel", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.post("/api/runs/:runId/cancel", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const run = getRun(runId);
     const status = await run.status;
     if (TERMINAL_RUN_STATUSES.has(status) && status !== "cancelled") {
-      return c.json({ error: `run ${runId} is already ${status}`, status }, 409);
+      response.status(409).json({ error: `run ${runId} is already ${status}`, status });
+      return;
     }
-    const claimedTokens = await runResourceTokens(routes, runId);
+    const claimedTokens = await heldTokens(world, runId);
     if (status !== "cancelled") {
       try {
         await run.cancel();
@@ -238,15 +234,15 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         // branch above instead of turning a healthy race into a 500.
         const settledStatus = await run.status;
         if (TERMINAL_RUN_STATUSES.has(settledStatus) && settledStatus !== "cancelled") {
-          return c.json(
-            { error: `run ${runId} is already ${settledStatus}`, status: settledStatus },
-            409,
-          );
+          response
+            .status(409)
+            .json({ error: `run ${runId} is already ${settledStatus}`, status: settledStatus });
+          return;
         }
         throw error;
       }
     }
-    const retainedTokens = await runResourceTokens(routes, runId);
+    const retainedTokens = await heldTokens(world, runId);
     const retained = new Set(retainedTokens);
     const releasedTokens = claimedTokens.filter((token) => !retained.has(token));
     // Cancel leaves the worktree behind: name what stays so the operator knows
@@ -263,7 +259,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
     // cancel included — leaves the tree on disk for the operator's offline
     // resource prune. A cancelled run's dirty tree is diagnosis evidence that
     // prune surfaces but will not delete.
-    return c.json({
+    response.json({
       runId,
       cancelled: true,
       releasedTokens,
@@ -274,22 +270,28 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
 
   // What the run's own status cannot say: which steps ran, and whether a queue
   // job died holding its resume. `jigs status <run-id>` renders both.
-  app.get("/api/runs/:runId/steps", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.get("/api/runs/:runId/steps", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const [steps, deadJobs] = await Promise.all([
       listRunSteps(runId),
       listRunDeadJobs(registry(), runId),
     ]);
-    return c.json({ steps, deadJobs });
+    response.json({ steps, deadJobs });
   });
 
   // The run's state from the one reader release and prune also use. One run is
   // worth what the listing will not spend on every run: its steps, terminal or
   // not, and a round trip per halt to read the comment back from Linear.
-  app.get("/api/runs/:runId", async (c) => {
-    const runId = c.req.param("runId");
-    if (!(await runExists(runId))) return c.json({ error: "not found" }, 404);
+  app.get("/api/runs/:runId", async (request, response) => {
+    const runId = request.params.runId;
+    if (!(await runExists(runId))) {
+      response.status(404).json({ error: "not found" });
+      return;
+    }
     const state = await readRunState(registry(), context().slug, runId, (id) =>
       worldRunFacts(id, factory, runRegistry()),
     );
@@ -309,8 +311,18 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
         (err: unknown) => String(err),
       );
     }
-    return c.json(body);
+    response.json(body);
   });
+
+  // Plain text rather than Express's HTML pages: the CLI prints a failed
+  // answer's body as it is.
+  app.use((_request, response) => {
+    response.status(404).type("text").send("404 Not Found");
+  });
+  app.use(((error, _request, response, _next) => {
+    console.error(error);
+    response.status(500).type("text").send("Internal Server Error");
+  }) satisfies ErrorRequestHandler);
 
   function unknownWorkflow(name: string) {
     return {
@@ -320,127 +332,6 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Hono {
   }
 
   return app;
-}
-
-interface IngressDeps {
-  context: () => FactoryContext;
-  world: AppDeps["world"];
-  push: typeof pushEvent;
-}
-
-function mountGithubIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/github", async (c) => {
-    const event = sanitizeForLog(c.req.header("x-github-event") ?? "unknown");
-    // The boot gate refuses a service without the secret; a missing one here
-    // still fails closed.
-    const secret = webhookSecret("github", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("x-hub-signature-256");
-    if (secret === undefined || !verifyGithubSignature(rawBody, signature, secret)) {
-      console.log(`[ingress] github rejected reason=signature event=${event}`);
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    if (event === "status") {
-      const status = githubStatus(payload);
-      if (status === null) {
-        console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-        return c.json({ ignored: true });
-      }
-      if (status.state === "pending") {
-        console.log(`[ingress] github ignored reason=pending-status event=${event}`);
-        return c.json({ ignored: true });
-      }
-      let prs: Awaited<ReturnType<typeof findOpenPullRequestsByHeadSha>>;
-      try {
-        prs = await findOpenPullRequestsByHeadSha(status.repository, status.sha, deps.context());
-      } catch (error) {
-        const reason =
-          error instanceof Error && error.message.includes("GITHUB_TOKEN is not set")
-            ? "missing-github-credential"
-            : "status-lookup-failed";
-        console.log(`[ingress] github dropped reason=${reason} event=${event}`);
-        return c.json({ delivered: false }, 404);
-      }
-      if (prs.length === 0) {
-        console.log(`[ingress] github dropped reason=no-open-pull-request event=${event}`);
-        return c.json({ delivered: false });
-      }
-      const tokens = prs
-        .map((pr) =>
-          tokenFromGitHubPayload({
-            pull_request: { number: pr.number },
-            repository: { name: pr.repo, owner: { login: pr.owner } },
-          }),
-        )
-        .filter((token): token is string => token !== null);
-      return wakeAndLog(c, "github", tokens, event);
-    }
-    const token = tokenFromGitHubPayload(payload);
-    if (token === null) {
-      console.log(`[ingress] github ignored reason=unrecognized-event event=${event}`);
-      return c.json({ ignored: true });
-    }
-    return wakeAndLog(c, "github", [token], event);
-  });
-}
-
-function mountLinearIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/linear", async (c) => {
-    const secret = webhookSecret("linear", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("linear-signature");
-    if (secret === undefined || !verifyLinearSignature(rawBody, signature, secret)) {
-      console.log("[ingress] linear rejected reason=signature");
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    if (payload === null) {
-      console.log("[ingress] linear ignored reason=unrecognized-shape");
-      return c.json({ ignored: true });
-    }
-    const event = linearEvent(payload);
-    const token = tokenFromLinearPayload(payload);
-    if (token === null) {
-      console.log(
-        `[ingress] linear ignored reason=unrecognized-event${event === null ? "" : ` event=${event}`}`,
-      );
-      return c.json({ ignored: true });
-    }
-    return wakeAndLog(c, "linear", [token], event);
-  });
-}
-
-// PagerDuty events start runs rather than wake them. The answer waits only
-// for the occurrence's row, never the start, so it lands well inside
-// PagerDuty's timeout; an event no trigger takes, of any type, is acknowledged.
-function mountPagerDutyIngress(app: Hono, deps: IngressDeps): void {
-  app.post("/ingress/pagerduty", async (c) => {
-    const secret = webhookSecret("pagerduty", deps.context());
-    const rawBody = await c.req.text();
-    const signature = c.req.header("x-pagerduty-signature");
-    if (secret === undefined || !verifyPagerDutySignature(rawBody, signature, secret)) {
-      console.log("[ingress] pagerduty rejected reason=signature");
-      return c.json({ error: "invalid signature" }, 401);
-    }
-    const payload = parseJson(rawBody);
-    const event = `event=${sanitizeForLog(pagerDutyEventType(payload) ?? "unknown")}`;
-    let triggers: string[];
-    try {
-      triggers = await deps.push("pagerduty", payload);
-    } catch (error) {
-      // Still a 2xx: PagerDuty switches a subscription off after repeated
-      // failures, and the poll finds the incident anyway.
-      console.log(`[ingress] pagerduty dropped reason=push-failed ${event}: ${String(error)}`);
-      return c.json({ delivered: false });
-    }
-    if (triggers.length === 0) {
-      console.log(`[ingress] pagerduty ignored reason=no-new-occurrence-or-unreadable ${event}`);
-      return c.json({ ignored: true });
-    }
-    console.log(`[ingress] pagerduty accepted triggers=${triggers.join(",")} ${event}`);
-    return c.json({ triggers });
-  });
 }
 
 // Liveness must answer from anywhere, including a service started outside a
@@ -464,71 +355,8 @@ function dashboardPointer(ctx: FactoryContext, runId: string): string {
     : `http://localhost:${port}/run/${runId}`;
 }
 
-// A signed but unparseable body is unroutable, like an unknown event type.
-function parseJson(rawBody: string): unknown {
-  try {
-    return JSON.parse(rawBody);
-  } catch {
-    return null;
-  }
-}
-
-function sanitizeForLog(value: string): string {
-  return value.replace(/[\r\n\t]/g, " ");
-}
-
-function linearEvent(payload: unknown): string | null {
-  const type = (payload as { type?: unknown }).type;
-  return typeof type === "string" ? sanitizeForLog(type) : null;
-}
-
-function githubStatus(payload: unknown): {
-  sha: string;
-  state: string;
-  repository: { owner: string; repo: string };
-} | null {
-  if (typeof payload !== "object" || payload === null) return null;
-  const candidate = payload as {
-    sha?: unknown;
-    state?: unknown;
-    repository?: { name?: unknown; owner?: { login?: unknown } };
-  };
-  const { sha, state } = candidate;
-  const owner = candidate.repository?.owner?.login;
-  const repo = candidate.repository?.name;
-  return typeof sha === "string" &&
-    typeof state === "string" &&
-    typeof owner === "string" &&
-    typeof repo === "string"
-    ? { sha, state, repository: { owner, repo } }
-    : null;
-}
-
-// A wake carries no payload: the suspension primitives re-check provider
-// state on every wake, so nothing downstream reads one.
-async function wakeAndLog(c: Context, provider: Provider, tokens: string[], event: string | null) {
-  const outcomes = await Promise.all(
-    tokens.map(async (token) => {
-      const correlation = `token=${sanitizeForLog(token)}${event === null ? "" : ` event=${event}`}`;
-      const { outcome } = await wake(token, event === null ? provider : `${provider} ${event}`);
-      if (outcome === "woken") console.log(`[ingress] ${provider} accepted ${correlation}`);
-      else {
-        const reason = outcome === "gone" ? "no-matching-hook" : "delivery-failed";
-        console.log(`[ingress] ${provider} dropped reason=${reason} ${correlation}`);
-      }
-      return outcome;
-    }),
-  );
-  if (outcomes.includes("woken")) return c.json({ delivered: true });
-  return c.json({ delivered: false }, outcomes.includes("failed") ? 404 : 200);
-}
-
-// The hooks that name an external resource: what another run can be blocked
-// on, and what a poke can wake. The needs-human marker is neither — the reply
-// that ends that halt lands on the ticket claim beside it.
-async function runResourceTokens(deps: IngressDeps, runId: string): Promise<string[]> {
-  const hooks = await (await deps.world()).hooks.list({ runId });
-  return hooks.data
-    .map((hook) => hook.token)
-    .filter((token) => parseHookToken(token)?.kind !== "needs-human");
+// Every hook the run holds, the locks among them.
+async function heldTokens(world: AppDeps["world"], runId: string): Promise<string[]> {
+  const hooks = await (await world()).hooks.list({ runId });
+  return hooks.data.map((hook) => hook.token);
 }

@@ -1,4 +1,3 @@
-import type { Server } from "node:http";
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
@@ -19,24 +18,17 @@ export async function startDashboard() {
   const { getWorld } = await import("workflow/runtime");
   await getWorld();
   const { startServer } = await import(dashboardEntry());
-  const server: Server = await startServer(port);
-  onShutdown(() => closeServer(server));
+  const server: DashboardServer = await startServer(port);
+  // A dashboard tab left open holds a keep-alive socket, so drop every
+  // connection rather than wait on the browser.
+  onShutdown(() => server.close(true));
   console.log(`[service] dashboard: http://localhost:${port}`);
 }
 
-// `close()` alone waits out keep-alive sockets, and a dashboard tab left open
-// holds one — so drop every connection rather than wait on the browser.
-function closeServer(server: Server): Promise<void> {
-  return new Promise((resolve, reject) => {
-    server.close((err) => {
-      if (err === undefined || (err as NodeJS.ErrnoException).code === "ERR_SERVER_NOT_RUNNING") {
-        resolve();
-      } else {
-        reject(err);
-      }
-    });
-    server.closeAllConnections();
-  });
+// The srvx server @workflow/web starts. The entry is loaded by path, so its
+// types do not reach here.
+interface DashboardServer {
+  close(closeActiveConnections: boolean): Promise<void>;
 }
 
 // Resolved at run time, never imported by name: @workflow/web loads its UI

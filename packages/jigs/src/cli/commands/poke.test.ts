@@ -27,8 +27,8 @@ test("poke posts to the run's poke route and prints the resumed tokens", async (
       JSON.stringify({
         runId: "wr_abc",
         poked: [
-          { token: "github:pr:acme/api#41", outcome: "woken" },
-          { token: "linear:ticket:uuid-1", outcome: "gone" },
+          { token: "github:pr:acme:acme/api#41", outcome: "woken" },
+          { token: "linear:ticket:acme:uuid-1", outcome: "gone" },
         ],
       }),
     ),
@@ -50,9 +50,9 @@ test("a wake the service could not deliver fails the poke instead of reading as 
       JSON.stringify({
         runId: "wr_abc",
         poked: [
-          { token: "github:pr:acme/api#41", outcome: "woken" },
+          { token: "github:pr:acme:acme/api#41", outcome: "woken" },
           {
-            token: "linear:ticket:uuid-1",
+            token: "linear:ticket:acme:uuid-1",
             outcome: "failed",
             error: "Error: database unavailable",
           },

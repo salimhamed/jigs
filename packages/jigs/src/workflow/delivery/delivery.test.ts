@@ -73,6 +73,7 @@ const prompts: DeliveryPrompts<Work> = {
 
 const worktree = {
   binding: "app",
+  installationName: "github-acme",
   path: "/tmp/wt",
   branch: "acme/abc-1",
   defaultBranch: "main",
@@ -80,7 +81,13 @@ const worktree = {
 };
 const builderHarness = harnesses.codex({ model: "gpt-5.6-sol" });
 const reviewerHarness = harnesses.claude({ model: "opus" });
-const pr = { owner: "acme", repo: "app", number: 7, url: "https://github.com/acme/app/pull/7" };
+const pr = {
+  installationName: "github-acme",
+  owner: "acme",
+  repo: "app",
+  number: 7,
+  url: "https://github.com/acme/app/pull/7",
+};
 const latestCommit = { approvalCovers: "latest-commit" };
 
 const deliveryOf = (key: string, tree = worktree): Delivery<Work> => ({
@@ -405,6 +412,7 @@ test("a description the schema rejects throws from describePullRequest", async (
 });
 
 const snapshot: PullRequestSnapshot = {
+  appBot: "jigs[bot]",
   state: "open",
   merged: false,
   draft: false,
@@ -647,7 +655,7 @@ test("an approved green PR GitHub blocks needs a person once per head; a marked 
     ["h1", "h2"].map((headSha) => ({
       reason: "merge-blocked",
       headSha,
-      detail: expect.stringMatching(/approved and CI is green.*keeps watching/s),
+      detail: expect.stringMatching(/approved and CI is green.*still being watched/s),
     })),
   );
   expect(posted.flatMap(parseMarkers)).toEqual(

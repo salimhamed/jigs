@@ -6,8 +6,9 @@ import { JIGS_VERSION, VERSION_HEADER } from "../../version.ts";
 import type { ExecFile, ExecOptions } from "../exec.ts";
 import { SERVICE_ENTRY, type ServiceProcesses, type SpawnSpec } from "./service-process.ts";
 import { writeServiceRecord } from "./service-record.ts";
+import { BUILD_MANIFEST } from "./up.ts";
 
-// The machine as `up` and `upgrade` see it: a scaffolded factory on disk, the
+// The machine as `up` sees it: a scaffolded factory on disk, the
 // child processes they exec, the service process they supervise, and the HTTP
 // service they poll. Every piece is a fake a test controls.
 
@@ -24,9 +25,6 @@ export interface FactoryShape {
   env?: string;
   compose?: boolean;
   config?: boolean;
-  linearIdentity?: "key" | "app";
-  githubIdentity?: "pat" | "app";
-  pagerduty?: boolean;
   bins?: string[];
 }
 
@@ -36,7 +34,7 @@ export function factory(tmp: string, shape: FactoryShape): string {
   if (shape.example !== false) {
     writeFileSync(
       path.join(root, ".env.example"),
-      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nLINEAR_API_KEY=\nLINEAR_CLIENT_ID=\nLINEAR_CLIENT_SECRET=\nGITHUB_TOKEN=\n",
+      "WORKFLOW_TARGET_WORLD=@workflow/world-postgres\nWORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\nJIGS_HUB_TOKEN=test-hub-token\n",
     );
   }
   if (shape.env !== undefined) writeFileSync(path.join(root, ".env"), shape.env);
@@ -47,16 +45,9 @@ export function factory(tmp: string, shape: FactoryShape): string {
     );
   }
   if (shape.config !== false) {
-    const github =
-      shape.githubIdentity === "app"
-        ? `github: {identities: [{mode: "app", appId: 1, installations: {acme: 2}, privateKeyPath: "app.pem", operator: "octocat"}]}, `
-        : "";
-    const pagerduty = shape.pagerduty
-      ? `pagerduty: {identity: {mode: "app", subdomain: "acme", region: "us", from: "oncall@example.com"}}, `
-      : "";
     writeFileSync(
       path.join(root, "jigs.config.ts"),
-      `export default {service: {port: ${shape.port}, dashboardPort: 9200}, linear: {identity: {mode: "${shape.linearIdentity ?? "key"}"}}, ${github}${pagerduty}workflows: {}};\n`,
+      `export default {hub: {url: "https://hub.example.test"}, service: {port: ${shape.port}, dashboardPort: 9200}, workflows: {}};\n`,
     );
   }
   const bin = path.join(root, "node_modules", ".bin");
@@ -91,6 +82,9 @@ export function fakeExec(fail?: (call: Call) => Error | undefined) {
       const entry = path.join(options.cwd, SERVICE_ENTRY);
       mkdirSync(path.dirname(entry), { recursive: true });
       writeFileSync(entry, state.bundle);
+      const manifest = path.join(options.cwd, BUILD_MANIFEST);
+      mkdirSync(path.dirname(manifest), { recursive: true });
+      writeFileSync(manifest, JSON.stringify({ steps: {}, workflows: {} }));
     }
     if (file === "docker" && args[1] === "ps") {
       return {
@@ -182,13 +176,12 @@ export function fakeProcesses(): FakeProcesses {
 
 export interface ServiceRoutes {
   health?: number;
-  runs?: Array<{ runId: string; workflow: string; status: string }>;
   doctor?: { ok: boolean; checks: unknown[] };
   /** The jigs the service reports; null for one that predates the header. */
   version?: string | null;
 }
 
-// The running service the fake processes started, as far as `up` can tell: /health, /api/runs and
+// The running service the fake processes started, as far as `up` can tell: /health and
 // /api/doctor answer whatever the test declares.
 export async function fakeService(
   procs: FakeProcesses,
@@ -201,26 +194,6 @@ export async function fakeService(
     if (req.url === "/health") {
       res.statusCode = routes.health ?? 200;
       res.end(JSON.stringify({ ok: true, ready: true, phase: "ready", pid: procs.lastPid }));
-    } else if (req.url === "/api/runs") {
-      const at = new Date().toISOString();
-      res.end(
-        JSON.stringify({
-          runs: (routes.runs ?? []).map((run) => ({
-            trigger: "manual",
-            source: null,
-            ticket: null,
-            createdAt: at,
-            lastActivityAt: at,
-            steps: 0,
-            lastStep: null,
-            suspensions: [],
-            resources: [],
-            ...run,
-          })),
-          schedules: [],
-          triggers: [],
-        }),
-      );
     } else if (req.url === "/api/doctor") {
       res.end(
         JSON.stringify(

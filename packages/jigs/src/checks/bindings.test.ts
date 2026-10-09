@@ -2,6 +2,9 @@ import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveFactoryContext } from "../config/factory-context.ts";
+import * as git from "../providers/git.ts";
+import * as githubApi from "../providers/github-api.ts";
+import { GitHubApiError } from "../providers/github-http.ts";
 import { ensureBindingClone } from "../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 import {
@@ -25,7 +28,7 @@ afterEach(() => {
 });
 
 const yml = (name: string, remote: string) => ({
-  bindings: { [name]: { remote } },
+  bindings: { [name]: { remote, installationName: "acme" } },
 });
 
 // Stands in for the clone the service makes at start, for the cases whose
@@ -65,7 +68,7 @@ test("a declared binding with no clone yet names the restart that makes one", as
     ok: false,
     reason: "binding api has no clone yet",
     repair:
-      "the service clones every binding when it starts, so restart it: `pnpm exec jigs service restart`",
+      "the service clones every binding when it starts, so restart it: `pnpm exec jigs up --restart-service`",
   });
 });
 
@@ -94,9 +97,48 @@ test("a declared, cloned binding whose remote answers passes", async () => {
   });
 });
 
+function githubBinding(reach: () => Promise<unknown>) {
+  const factory = makeFactoryRepo(tmp, yml("api", "git@github.com:acme/api.git"));
+  markClone(factory, "api");
+  vi.spyOn(git, "probeRemoteAuth").mockResolvedValue(null);
+  const asked: string[] = [];
+  vi.spyOn(githubApi, "githubGet").mockImplementation(async (installationName, apiPath) => {
+    asked.push(`${installationName} ${apiPath}`);
+    return reach();
+  });
+  return { factory, asked };
+}
+
+test("a GitHub binding's installation that reaches its repository passes", async () => {
+  const { factory, asked } = githubBinding(async () => ({}));
+  expect(await check(factory, "api")).toEqual({
+    id: "binding.api",
+    label: "binding api",
+    ok: true,
+  });
+  expect(asked).toEqual(["acme /repos/acme/api"]);
+});
+
+test("a GitHub binding's installation that cannot see its repository names the setting", async () => {
+  const { factory } = githubBinding(async () => {
+    throw new GitHubApiError(404, "/repos/acme/api", '{"message":"Not Found"}');
+  });
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason: "GitHub installation acme cannot reach acme/api",
+    repair: expect.stringContaining("set bindings.api.installationName in jigs.config.ts"),
+  });
+});
+
 test("a copy entry with no file under the binding's folder fails before the clone checks, naming the path", async () => {
   const factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: path.join(tmp, "nonexistent.git"), copy: [".env", "certs/*.pem"] } },
+    bindings: {
+      api: {
+        remote: path.join(tmp, "nonexistent.git"),
+        installationName: "acme",
+        copy: [".env", "certs/*.pem"],
+      },
+    },
   });
   mkdirSync(path.join(factory, "bindings/api/certs"), { recursive: true });
   writeFileSync(path.join(factory, "bindings/api/certs/ca.pem"), "pem\n");
@@ -111,7 +153,13 @@ test("a copy entry with no file under the binding's folder fails before the clon
 
 test("a copy entry pointing outside the binding's folder fails the check", async () => {
   const factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: path.join(tmp, "nonexistent.git"), copy: ["../elsewhere/.env"] } },
+    bindings: {
+      api: {
+        remote: path.join(tmp, "nonexistent.git"),
+        installationName: "acme",
+        copy: ["../elsewhere/.env"],
+      },
+    },
   });
   mkdirSync(path.join(factory, "bindings/elsewhere"), { recursive: true });
   writeFileSync(path.join(factory, "bindings/elsewhere/.env"), "A=1\n");
@@ -126,7 +174,7 @@ test("a copy entry pointing outside the binding's folder fails the check", async
 test("a cloned binding whose copy entries all match passes", async () => {
   const { remoteDir } = makeRemoteBackedRepo(tmp);
   const factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: remoteDir, copy: [".env"] } },
+    bindings: { api: { remote: remoteDir, installationName: "acme", copy: [".env"] } },
   });
   mkdirSync(path.join(factory, "bindings/api"), { recursive: true });
   writeFileSync(path.join(factory, "bindings/api/.env"), "A=1\n");
@@ -169,26 +217,4 @@ test("a workflow requiring no bindings needs no factory config at all", () => {
       names: [],
     }),
   ).toEqual([]);
-});
-
-test("an uncovered GitHub binding fails before clone checks with an installations repair", async () => {
-  const factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: "ssh://git@github.com/Uncovered/api.git" } },
-    github: {
-      identities: [
-        {
-          mode: "app",
-          appId: 1,
-          privateKeyPath: "key.pem",
-          operator: "human",
-          installations: { Covered: 10 },
-        },
-      ],
-    },
-  });
-  expect(await check(factory, "api")).toMatchObject({
-    ok: false,
-    reason: "no GitHub App installation configured for account Uncovered",
-    repair: expect.stringContaining('"Uncovered": <installation-id>'),
-  });
 });

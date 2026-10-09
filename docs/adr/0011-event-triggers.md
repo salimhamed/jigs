@@ -1,6 +1,6 @@
 # Event triggers start runs; wakes stay separate
 
-Status: accepted
+Status: accepted; delivery kinds, the poll and Slack's Socket Mode superseded by [0015](./0015-hub.md), where every occurrence arrives as a provider event through the hub
 
 A run used to start only from `jigs run` or a schedule, and provider events
 could only wake a run that already existed ([0003](./0003-webhook-ingress-resource-scoped-tokens.md)).
@@ -55,7 +55,13 @@ starts a second run for an occurrence.
   Mode needs no public URL, and polling covers what Slack drops after about
   6 minutes.
 - Wakes on resources a triggered run holds (`pagerduty:incident:<id>`,
-  `slack:thread:<channel>:<ts>`) use the ordinary hook path, not this one.
+  `slack:thread:<channel>:<ts>`, `linear:session:<installation>:<session>`)
+  use the ordinary hook path, not this one. A Linear agent session's replies
+  and stop go to the run its trigger started; the service reads the trigger's
+  rows only to tell a session whose runs have ended, to withdraw a start no
+  one has claimed when someone presses stop, and to find the runs to cancel
+  when no run answers a stop
+  ([0016](./0016-linear-agent-conversations.md)).
 - Rejected: one event router that both starts and wakes (it would put the exact
   start path and the forgiving wake path in one place); a jigs filter syntax or
   a factory `match()` function (a new kind of service-side factory code before

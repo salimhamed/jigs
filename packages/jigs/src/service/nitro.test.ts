@@ -1,8 +1,11 @@
 import { expect, test } from "vitest";
 import { defineJigsService } from "./nitro.ts";
 
-test("the route serves the entry `prepare()` generates", () => {
-  expect(defineJigsService().routes?.["/**"]).toBe("./.jigs/server.ts");
+test("the route serves the Node handler `prepare()` generates", () => {
+  expect(defineJigsService().routes?.["/**"]).toEqual({
+    handler: "./.jigs/server.ts",
+    format: "node",
+  });
 });
 
 test("the one plugin is the factory's own generated service plugin", () => {

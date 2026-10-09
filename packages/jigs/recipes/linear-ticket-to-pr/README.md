@@ -1,9 +1,21 @@
 # linear-ticket-to-pr
 
 This workflow takes a Linear ticket to a merged pull request. It claims the
-ticket, asks on it when the requirements are unclear, has one agent build the
-change and another review it, opens the pull request, and follows its review
-comments and CI with the same builder session until it merges.
+ticket, asks in the ticket's Linear agent session when the requirements are
+unclear, has one agent build the change and another review it, opens the pull
+request, and follows its review comments and CI with the same builder session
+until it merges.
+
+The run opens one Linear agent session on the ticket when it starts, and says
+everything there: its questions, its notes, and its last word, "Merged" with
+the pull request, or why it stopped. Answer a question by replying in the
+session. A message sent while the run is working waits for its next question.
+Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
+as it is. Once the pull request opens, the session links to it and a note
+says it is open and waits on people. That keeps the session awaiting input,
+so Linear never marks it stale however long review takes. To change the work,
+comment on the pull request; to stop the run, close it. Every note mentions the
+operator (or the ticket's creator) and the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and
@@ -13,32 +25,34 @@ following the pull request, runs in four jigs routines the workflow calls.
 | --- | --- |
 | `linear-ticket-to-pr.ts` | The workflow: its agents, inputs, the ticket status it sets between phases, and every note it posts. |
 | `prompts.ts` | Every prompt the agents are sent. |
-| `review-ticket.ts` | The ticket review before any code: the reviewer restates the ticket as a brief, or asks on the ticket until it can. |
+| `review-ticket.ts` | The ticket review before any code: the reviewer restates the ticket as a brief, or asks in the ticket's session until it can. |
 
 ## What it needs
 
-- **Linear and GitHub credentials**, with a GitHub App as the GitHub identity. See
-  [GitHub identity](https://salimhamed.github.io/jigs/guide/configuration#github-identity)
-  and [Linear identity](https://salimhamed.github.io/jigs/guide/configuration#linear-identity).
+- **A Linear app assigned to the factory, and the factory's GitHub App
+  installed on the repository's owner**, each installation named on the hub. See
+  [The factory's App](https://salimhamed.github.io/jigs/guide/configuration#github-app)
+  and [The factory's Linear app](https://salimhamed.github.io/jigs/guide/configuration#linear-app).
 - **Linear states named `Todo`, `In Progress`, `In Review` and `Done`** on the
   ticket's team. The workflow moves the ticket through them and fails on a
   missing one.
 - **Claude Code and Codex**, installed and logged in. Both are declared in
   `requires.agents` and checked when the service starts.
-- **The GitHub CLI, `gh`.** The builder sets `github: true`, so it acts on
-  GitHub as the factory's App, the same bot jigs posts as: `gh` and its pushes
+- **The GitHub CLI, `gh`.** Once the worktree exists, the workflow gives the
+  builder `github: { installationName: worktree.installationName }`, so it acts
+  on GitHub as the factory's App through the binding's installation, the same
+  bot jigs posts as: `gh` and its pushes
   use a token jigs gives it, and its commits are authored by the bot. See
   [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access).
-  With a personal access token instead of an App, remove `github: true` and give
-  the builder GitHub access yourself; its replies then look like anyone else's,
-  so each one wakes it once more. Missing access makes maintenance ask for help.
-- **A binding** for the repository to change: `pnpm exec jigs bind <remote>`, then
-  `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
+  Missing access makes maintenance ask for help.
+- **A binding** for the repository to change, naming the GitHub installation
+  that reaches it: `pnpm exec jigs bind <remote> --installation <installation>`,
+  then `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
 - **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
   `"jigs"`, so jigs merges once the pull request is approved and CI is green.
   Set it to `"human"` to have the run wait for you to merge. jigs never merges
-  in a repository with no CI: add CI, or set `"human"` and merge yourself. The workflow passes it to jigs as
-  `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
+  in a repository with no CI: add CI, or set `"human"` and merge yourself.
+  The workflow passes it to jigs as `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
   merging only with a label, check the snapshot `mergeWhen` receives instead.
   `approvalCovers`, next to it, is `"latest-commit"`,
   so a push needs a new approving review; `"any-commit"` lets a person's
@@ -47,8 +61,8 @@ following the pull request, runs in four jigs routines the workflow calls.
   The merge method is the first one the repository allows on GitHub: squash,
   then merge commit, then rebase.
 
-[Webhooks](https://salimhamed.github.io/jigs/guide/configuration#webhooks) are
-optional.
+GitHub and Linear events reach the run through the factory's
+[hub](https://salimhamed.github.io/jigs/guide/configuration#hub).
 
 ## Pull request titles
 
@@ -58,7 +72,8 @@ Every pull request title is a
 as one squashed commit named after the title, and release tooling and
 title-lint checks read that commit. The writer is told the rule in `prompts.ts`;
 a title that breaks it is sent back once with the problem, and a second bad
-title stops the run before anything is pushed, with a note on the ticket.
+title stops the run before anything is pushed, with a note in the ticket's
+session.
 
 To allow any title, delete the `check` passed to `describePullRequest` in
 `linear-ticket-to-pr.ts`, along with `titleProblems` and the title rule in the
@@ -67,16 +82,19 @@ To allow any title, delete the `check` passed to `describePullRequest` in
 ## Launch a run
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
 pnpm exec jigs watch
 ```
+
+`linearInstallation` is the installation name of the Linear workspace the
+ticket is in.
 
 A run picks its builder and reviewer by name. By default the `builder` agent
 builds and the `reviewer` agent reviews both the ticket's requirements and the
 change. To have Claude Code build too:
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input builder=reviewer
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input builder=reviewer
 ```
 
 A run cannot type a model name. To change a model, edit its line in `agents`.
@@ -89,23 +107,36 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 | `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3 |
 
 ```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input binding=app --input 'budget={"reviewRounds":5}'
+pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input 'budget={"reviewRounds":5}'
 ```
 
 Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
 
-A stop before the pull request opens, or the pull request closing unmerged,
-posts a ticket note saying what remains, sets `Todo`, and fails the run. To keep
+Every ending sets the ticket's status before its note, so the note is the
+run's last word. When the delivery stops before the pull request opens, the run
+sets `Todo`, ends the ticket's session with a note saying what remains, and
+fails. When
+the pull request closes unmerged, the note says so and names the branch the
+work is on, the run pushes that branch, sets `Todo`, and completes with
+`{ outcome: "closed" }`. Completing loses nothing: the work is on the pushed
+branch, and the release policy keeps a worktree with uncommitted changes or
+unmerged local commits. A
+merge sets `Done`, ends the session with "Merged" and the pull request's link,
+and completes with `{ outcome: "merged" }`. Any other error ends the session with
+"The run failed", which points to the run's page for the error, leaves the
+ticket's status alone, and fails the run. To keep
 the work, take over the branch, the retained worktree and any pull request by
 hand; another run starts over on a new branch. Notes name the branch but never
 the local worktree path; `jigs status` shows the path.
 
 A pull request that needs a person, because the builder asked, its attempts ran
 out, or the merge was refused, does not stop the run. The workflow posts a
-ticket note saying what a person needs to do, leaves the ticket In Review, and
-keeps watching: the next change to the pull request picks the work back up.
+note in the ticket's session saying what a person needs to do, which also
+waits on people, leaves the
+ticket In Review, and keeps watching: the next change to the pull request picks
+the work back up.
 
 ## The agents
 
@@ -165,7 +196,7 @@ import {
   noteOnTicket,
   publishPullRequest,
 } from "#jigs/routines";
-import { setTicketStatus } from "#jigs/steps";
+import { pushBranch, setTicketStatus } from "#jigs/steps";
 import type { Ticket } from "./prompts.ts";
 
 export async function deliverTicket(
@@ -173,19 +204,27 @@ export async function deliverTicket(
   claim: TicketClaim,
   snapshot: TicketSnapshot,
 ) {
+  const { installationName } = claim;
   const built = await buildAndReview(delivery, { rounds: 3 });
   if (built.outcome === "stopped") {
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
     await noteOnTicket(claim, {
-      headline: `jigs stopped work on ${delivery.key} (${built.reason}).`,
+      headline: `Work on ${delivery.key} stopped (${built.reason}).`,
       notes: built.findings,
       closing: "Take the branch over by hand to keep this work.",
+      run: "ended",
     });
-    await setTicketStatus(snapshot.id, "Todo");
     throw new JigsError(`delivery stopped: ${built.reason}`);
   }
   const { title, body } = await describePullRequest(delivery);
   const pr = await publishPullRequest(delivery, { commit: built.reviewedCommit, title, body });
-  await setTicketStatus(snapshot.id, "In Review");
+  await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "In Review" });
+  await noteOnTicket(claim, {
+    headline: `Pull request ${pr.url} is open.`,
+    notes: [],
+    closing: "Comment on the pull request to change anything, or close it to stop the run.",
+    run: "waiting",
+  });
   const followed = await followPullRequestToOutcome(delivery, pr, {
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
@@ -195,12 +234,30 @@ export async function deliverTicket(
       noteOnTicket(claim, {
         headline: `${pr.url} needs a person (${facts.reason}).`,
         notes: [facts.detail],
-        closing: "jigs keeps watching the pull request.",
+        closing:
+          "Comment on the pull request or push to it, or close it to stop the run; replies here aren't read.",
+        run: "waiting",
       }),
   });
-  if (followed.outcome === "closed") throw new JigsError(`${pr.url} was closed unmerged`);
-  await setTicketStatus(snapshot.id, "Done");
-  return { pr: pr.url };
+  if (followed.outcome === "closed") {
+    await pushBranch(delivery.worktree).catch(() => {});
+    await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Todo" });
+    await noteOnTicket(claim, {
+      headline: "Stopped: the pull request was closed, so it won't be merged.",
+      notes: [],
+      closing: `The work is still on branch \`${delivery.worktree.branch}\` if you want it back.`,
+      run: "ended",
+    });
+    return { outcome: "closed" as const, pr: pr.url };
+  }
+  await setTicketStatus({ installationName, issueId: snapshot.id, stateName: "Done" });
+  await noteOnTicket(claim, {
+    headline: `Merged ${pr.url}.`,
+    notes: [],
+    closing: "",
+    run: "ended",
+  });
+  return { outcome: "merged" as const, pr: pr.url };
 }
 ```
 
@@ -253,8 +310,8 @@ export async function deliverTicket(
   closed without merging; local work is never pushed on the way out.
 
 The routines word nothing a person reads. Stops are return values, and
-needs-human, a blocked merge included, is a callback with facts; the workflow writes
-every note and decides where it goes. Facts never contain the local worktree
+needs-human, a blocked merge included, is a callback with facts; the workflow
+writes every note and decides where it goes. Facts never contain the local worktree
 path.
 
 ## Edit the prompts

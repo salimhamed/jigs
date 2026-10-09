@@ -55,8 +55,6 @@ export interface PullRequestComment {
   id: number;
   body: string;
   user: string;
-  // GitHub's account kind does not establish who initiated a message: an agent
-  // using a personal token posts as that user.
   userType: string;
   createdAt: string;
   updatedAt: string;
@@ -104,9 +102,9 @@ export interface PullRequestSnapshot {
   approval: PullRequestApproval;
   /**
    * The login of the factory's GitHub App, `<slug>[bot]`: the account jigs posts as, and so do
-   * agents whose harness sets `github`. Absent with a personal access token.
+   * agents whose harness sets `github`.
    */
-  appBot?: string;
+  appBot: string;
 }
 
 /**

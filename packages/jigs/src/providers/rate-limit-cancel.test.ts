@@ -37,22 +37,14 @@ const rateLimited = async () =>
 test("a step's GitHub call stops waiting out a rate limit once its run is cancelled", async () => {
   const github = createGithubClient({ fetch: rateLimited });
   const started = Date.now();
-  const call = github.send({ auth: { bearer: async () => "t" }, apiPath: "/repos/o/r/pulls/1" });
+  const call = github.send({
+    auth: { bearer: async () => "t", invalidate: () => {} },
+    apiPath: "/repos/o/r/pulls/1",
+  });
   setTimeout(() => {
     world.status = "cancelled";
   }, 50);
   await expect(call).rejects.toBeInstanceOf(RunCancelledError);
   await expect(call).rejects.toThrow("so jigs stopped waiting out GitHub's rate limit");
   expect(Date.now() - started).toBeLessThan(5_000);
-});
-
-test("a shared mint's wait is not tied to the calling run", async () => {
-  const sleep = vi.fn(async () => {});
-  const github = createGithubClient({ fetch: rateLimited, sleep });
-  world.status = "cancelled";
-  await expect(
-    github.send({ auth: { bearer: async () => "t" }, apiPath: "/app", outlivesRun: true }),
-  ).rejects.toThrow("GitHub API 429");
-  expect(sleep).toHaveBeenCalledTimes(3);
-  expect(world.reads).toBe(0);
 });

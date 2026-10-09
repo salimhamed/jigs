@@ -17,7 +17,7 @@
 export { JitCheckError, unwrapAgentStep } from "./workflow/agents/agent.ts";
 export { type GithubMcpOptions, githubMcp } from "./workflow/agents/github-mcp.ts";
 export {
-  type AgentGithub,
+  type AgentInstallation,
   type AskableHarness,
   type AskableModelSource,
   type ClaudeHarness,
@@ -131,16 +131,14 @@ export {
   type FactoryDefinition,
   type GitHubDefinition,
   type LinearDefinition,
-  type PagerDutyDefinition,
   type Schedule,
-  type SlackDefinition,
   type SourceDescriptor,
   type TicketWorkflowInputs,
   ticketInputSchema,
-  type WebhooksDefinition,
   type WorkflowDefinition,
   type WorkflowInputs,
 } from "./workflow/factory.ts";
+export { installationNameSchema } from "./workflow/factory-schema.ts";
 export {
   type ChangePatch,
   type ChangeStatus,
@@ -156,6 +154,10 @@ export {
   type JsonValue,
 } from "./workflow/human/questions.ts";
 export { interpolate } from "./workflow/interpolate.ts";
+export type {
+  LinearAgentConversationOptions,
+  LinearAgentConversationResult,
+} from "./workflow/linear/agent-conversation.ts";
 export { ClaimConflictError, type TicketClaim } from "./workflow/linear/claim.ts";
 export type { Halt, HumanReply } from "./workflow/linear/halt-for-human.ts";
 export { type TicketNote, ticketReviewVerdictSchema } from "./workflow/linear/review.ts";
@@ -166,6 +168,11 @@ export {
   type TicketRef,
   type TicketSnapshot,
 } from "./workflow/linear/snapshot.ts";
+export {
+  type LinearAgentSessionInputs,
+  type LinearAgentSessionsParams,
+  linear,
+} from "./workflow/linear/source.ts";
 export {
   type TicketReviewPrompt,
   type TicketReviewPromptInput,
@@ -185,6 +192,7 @@ export type { ApprovalCoverage } from "./workflow/pull-requests/policy.ts";
 export type {
   PullRequestReadOptions,
   PullRequestRef,
+  RepositoryRef,
 } from "./workflow/pull-requests/pull-request.ts";
 export {
   type ApprovalState,

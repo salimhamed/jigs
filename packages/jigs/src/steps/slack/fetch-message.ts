@@ -1,12 +1,11 @@
 import {
   SlackApiError,
-  type SlackAuth,
+  type SlackBot,
+  type SlackClient,
   type SlackMessage,
   type SlackUser,
   slackBot,
-  slackPermalink,
-  slackReplies,
-  slackUser,
+  slackFor,
 } from "../../providers/slack.ts";
 import { JigsError } from "../../workflow/errors.ts";
 import type {
@@ -30,8 +29,9 @@ class SlackThreadReplyError extends JigsError {
 }
 
 async function authorOf(
+  slack: SlackClient,
   message: SlackMessage,
-  bot: SlackAuth,
+  bot: SlackBot,
   users: Map<string, Promise<SlackUser>>,
 ): Promise<SlackAuthor> {
   // A bot's post names the bot itself, so it needs no users.info lookup.
@@ -41,12 +41,12 @@ async function authorOf(
       id,
       name: message.bot_profile?.name ?? id,
       bot: true,
-      isOwnBot: message.bot_id === bot.botId || message.user === bot.userId,
+      isOwnBot: message.user === bot.userId || message.app_id === bot.appId,
     };
   }
   let user = users.get(message.user);
   if (user === undefined) {
-    user = slackUser(message.user);
+    user = slack.slackUser(message.user);
     users.set(message.user, user);
   }
   const { id, name, email, bot: isBot } = await user;
@@ -55,7 +55,7 @@ async function authorOf(
 
 /**
  * Read a Slack message, its permalink and its thread's replies, with each
- * author's name and email.
+ * author's name and email, through the Slack installation `installationName` names.
  *
  * @remarks
  * `ts` must be a top-level message. A reply's ts fails the step without a
@@ -64,16 +64,19 @@ async function authorOf(
  * @group Read
  */
 export async function fetchSlackMessage({
+  installationName,
   channel,
   ts,
 }: {
+  installationName: string;
   channel: string;
   ts: string;
 }): Promise<SlackMessageSnapshot> {
+  const slack = slackFor(installationName);
   const gone = { gone: true, channel, ts } as const;
   let thread: SlackMessage[];
   try {
-    thread = await slackReplies(channel, ts);
+    thread = await slack.slackReplies(channel, ts);
   } catch (error) {
     if (error instanceof SlackApiError && GONE_CODES.has(error.code)) return gone;
     throw error;
@@ -88,15 +91,15 @@ export async function fetchSlackMessage({
     console.log(`[slack] snapshot ${channel} ${ts}: gone`);
     return gone;
   }
-  const bot = await slackBot();
+  const bot = await slackBot(installationName);
   const users = new Map<string, Promise<SlackUser>>();
   const post = async (m: SlackMessage): Promise<SlackPost> => ({
     ts: m.ts,
     text: m.text ?? "",
-    author: await authorOf(m, bot, users),
+    author: await authorOf(slack, m, bot, users),
   });
   const [permalink, first, rest] = await Promise.all([
-    slackPermalink(channel, ts),
+    slack.slackPermalink(channel, ts),
     post(message),
     Promise.all(replies.map(post)),
   ]);
