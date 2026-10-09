@@ -18,6 +18,7 @@ const CRON_MODE = "5-part";
 /** Operator-facing state for one declared recurring schedule. */
 export interface ScheduleView {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   cron: string;
   next: string | null;
@@ -40,6 +41,10 @@ export function startSchedules(factory: Factory, deps: ScheduleDeps = {}): Cron[
   const log = deps.log ?? console.log;
   const jobs: Cron[] = [];
   for (const [name, schedule] of Object.entries(factory.schedules ?? {})) {
+    if (!schedule.active) {
+      log(`[schedule] ${name} inactive`);
+      continue;
+    }
     const problem = scheduleProblem(factory, name, schedule);
     if (problem !== null) {
       log(`[schedule] ${name} not scheduled: ${problem.reason}`);
@@ -110,6 +115,7 @@ export async function listSchedules(
   const rows = await (deps.listRuns ?? listRuns)(factory);
   return declared.map(([name, schedule]) => ({
     name,
+    state: schedule.active ? "active" : "inactive",
     workflow: schedule.workflow,
     cron: schedule.cron,
     next: nextOccurrence(schedule.cron),
@@ -118,15 +124,16 @@ export async function listSchedules(
 }
 
 /** Doctor's half: the same cron and inputs validations the ticker refuses on,
- *  one check per schedule. */
+ *  one check per active schedule. */
 export function scheduleChecks(factory: Factory): Check[] {
-  return Object.entries(factory.schedules ?? {}).map(([name, schedule]) => {
+  return Object.entries(factory.schedules ?? {}).flatMap(([name, schedule]): Check[] => {
+    if (!schedule.active) return [];
     const id = `schedule.${name}`;
     const label = `schedule ${name}`;
     const problem = scheduleProblem(factory, name, schedule);
     return problem === null
-      ? { id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) }
-      : failedCheck(id, label, problem.reason, problem.repair);
+      ? [{ id, label, run: async (): Promise<{ ok: true }> => ({ ok: true }) }]
+      : [failedCheck(id, label, problem.reason, problem.repair)];
   });
 }
 

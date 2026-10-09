@@ -157,6 +157,7 @@ every Monday. Register `triage` in `workflows` as shown above and use its
 // Inside defineFactory({ ... }) in jigs.config.ts
 schedules: {
   "monday-triage": {
+    active: process.env.MONDAY_TRIAGE_ACTIVE === "true",
     workflow: "triage",
     cron: "0 9 * * 1",
     inputs: { binding: "app", report: "Saving a draft twice loses its title." },
@@ -203,6 +204,7 @@ export default defineFactory({
   },
   triggers: {
     "checkout-pages": {
+      active: process.env.CHECKOUT_PAGES_ACTIVE === "true",
       workflow: "respond",
       source: pagerduty.incidents({
         installationName: "pagerduty-acme",

@@ -26,4 +26,14 @@ export default defineFactory({
   workflows: {
     hello: () => import("./workflows/hello/hello.ts"),
   },
+  // Schedules and triggers start runs only while active; set HELLO_NIGHTLY_ACTIVE=true in the
+  // environment of the copy that should fire this one.
+  // schedules: {
+  //   "hello-nightly": {
+  //     active: process.env.HELLO_NIGHTLY_ACTIVE === "true",
+  //     workflow: "hello",
+  //     cron: "0 3 * * *",
+  //     inputs: {},
+  //   },
+  // },
 });

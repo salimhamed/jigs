@@ -17,7 +17,9 @@ test("once the triggers shut down, a lookup rejects rather than read as no occur
   startTriggers(
     {
       workflows: { respond: { workflow: async () => undefined, inputs: z.object({}) } },
-      triggers: { pages: { workflow: "respond", source: { kind: "fake.pages", params: {} } } },
+      triggers: {
+        pages: { active: true, workflow: "respond", source: { kind: "fake.pages", params: {} } },
+      },
     },
     {
       store: memory.store,

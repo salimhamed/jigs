@@ -55,6 +55,7 @@ export default defineFactory({
   workflows: { answer: () => import("./workflows/answer/answer.ts") },
   triggers: {
     "answer-questions": {
+      active: process.env.ANSWER_QUESTIONS_ACTIVE === "true",
       workflow: "answer",
       source: slack.mentions({ installationName: "slack-acme", channels: ["C0123ABCD"] }),
     },

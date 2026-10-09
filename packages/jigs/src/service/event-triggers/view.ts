@@ -27,6 +27,7 @@ export interface TriggerFailure {
 /** Operator-facing state for one declared event trigger. */
 export interface TriggerView {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   source: string;
   lastOccurrence: string | null;
@@ -68,6 +69,7 @@ export async function listTriggers(
       ]);
       return {
         name,
+        state: trigger.active ? "active" : "inactive",
         workflow: trigger.workflow,
         source: trigger.source.kind,
         lastOccurrence: summary.lastOccurrence?.toISOString() ?? null,
@@ -85,8 +87,8 @@ export async function listTriggers(
 }
 
 /**
- * Doctor's half: the same validations the engine refuses a trigger on, and for a valid trigger its
- * recent failed occurrences with their repairs.
+ * Doctor's half: for each active trigger, the same validations the engine refuses a trigger on,
+ * and for a valid trigger its recent failed occurrences with their repairs.
  */
 export function triggerChecks(
   factory: Factory,
@@ -94,6 +96,7 @@ export function triggerChecks(
   deps: { store?: () => TriggerStore } = {},
 ): Check[] {
   return Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]): Check[] => {
+    if (!trigger.active) return [];
     const id = `trigger.${name}`;
     const label = `trigger ${name}`;
     const resolved = resolveTrigger(factory, name, trigger, sources);
@@ -129,7 +132,7 @@ export function triggerChecks(
 }
 
 /**
- * Each declared trigger whose source this jigs version provides, with the
+ * Each active trigger whose source this jigs version provides, with the
  * provider it reads and the installation it names.
  */
 export function triggerInstallations(
@@ -139,7 +142,7 @@ export function triggerInstallations(
   return Object.fromEntries(
     Object.entries(factory.triggers ?? {}).flatMap(([name, trigger]) => {
       const source = sources[trigger.source.kind];
-      if (source === undefined) return [];
+      if (!trigger.active || source === undefined) return [];
       const { installationName } = trigger.source.params;
       return [
         [

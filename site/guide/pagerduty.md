@@ -58,6 +58,7 @@ export default defineFactory({
   },
   triggers: {
     "checkout-pages": {
+      active: process.env.CHECKOUT_PAGES_ACTIVE === "true",
       workflow: "respond",
       source: pagerduty.incidents({
         installationName: "pagerduty-acme",

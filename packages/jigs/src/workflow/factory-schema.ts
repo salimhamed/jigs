@@ -111,12 +111,14 @@ export type WorkflowImport = () => Promise<{ default: WorkflowDefinition<any> }>
 const inputsSchema = z.record(z.string(), z.unknown());
 
 const scheduleSchema: z.ZodType<Schedule, Schedule> = z.strictObject({
+  active: z.boolean(),
   workflow: z.string(),
   cron: z.string(),
   inputs: inputsSchema,
 });
 
 const eventTriggerSchema: z.ZodType<EventTrigger, EventTrigger> = z.strictObject({
+  active: z.boolean(),
   workflow: z.string(),
   source: z.strictObject({ kind: z.string(), params: inputsSchema }),
   inputs: inputsSchema.optional(),

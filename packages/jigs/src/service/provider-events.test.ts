@@ -359,6 +359,7 @@ const paged = {
   },
   triggers: {
     pages: {
+      active: true,
       workflow: "respond",
       source: pagerduty.incidents({ installationName: "acme", services: ["PSVC001"] }),
     },

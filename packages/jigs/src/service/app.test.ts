@@ -74,11 +74,12 @@ const scheduled = {
   workflows: fixture.workflows,
   schedules: {
     "nightly-plain": {
+      active: true,
       workflow: "plain",
       cron: "0 3 * * *",
       inputs: { ticket: "AGE-317" },
     },
-    "broken-cron": { workflow: "plain", cron: "always", inputs: {} },
+    "broken-cron": { active: true, workflow: "plain", cron: "always", inputs: {} },
   },
 } satisfies Factory;
 const scheduledApp = appClient(createApp(scheduled, deps));
@@ -268,7 +269,9 @@ test("GET /api/runs still answers with runs when the triggers cannot be read", a
     createApp(
       {
         ...fixture,
-        triggers: { pages: { workflow: "run", source: { kind: "fake.pages", params: {} } } },
+        triggers: {
+          pages: { active: true, workflow: "run", source: { kind: "fake.pages", params: {} } },
+        },
       },
       deps,
     ),

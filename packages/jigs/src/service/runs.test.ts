@@ -275,8 +275,12 @@ const factory: Factory = {
     },
   },
   triggers: {
-    answers: { workflow: "stamped", source: { kind: "slack.messages", params: {} } },
-    pages: { workflow: "stamped", source: { kind: "pagerduty.incidents", params: {} } },
+    answers: { active: true, workflow: "stamped", source: { kind: "slack.messages", params: {} } },
+    pages: {
+      active: true,
+      workflow: "stamped",
+      source: { kind: "pagerduty.incidents", params: {} },
+    },
   },
 };
 

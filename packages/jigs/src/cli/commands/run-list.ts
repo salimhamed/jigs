@@ -27,6 +27,7 @@ export interface RunListRun {
 
 export interface RunListSchedule {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   cron: string;
   next: string | null;
@@ -35,6 +36,7 @@ export interface RunListSchedule {
 
 export interface RunListTrigger {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   source: string;
   lastOccurrence: string | null;
@@ -122,9 +124,10 @@ export async function showRuns(
   if (result.schedules.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["SCHEDULE", "WORKFLOW", "CRON", "NEXT", "ACTIVE"],
+      ["SCHEDULE", "STATE", "WORKFLOW", "CRON", "NEXT", "ACTIVE"],
       result.schedules.map((schedule) => [
         schedule.name,
+        schedule.state,
         schedule.workflow,
         schedule.cron,
         schedule.next ?? "-",
@@ -141,9 +144,10 @@ export async function showRuns(
   if (result.triggers.length > 0) {
     deps.out("");
     for (const line of formatTable(
-      ["TRIGGER", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
+      ["TRIGGER", "STATE", "WORKFLOW", "SOURCE", "LAST OCCURRENCE", "PENDING", "ACTIVE", "FAILED"],
       result.triggers.map((trigger) => [
         trigger.name,
+        trigger.state,
         trigger.workflow,
         trigger.source,
         trigger.lastOccurrence ?? "-",

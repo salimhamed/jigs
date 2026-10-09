@@ -76,8 +76,10 @@ const scheduledApp = appClient(
     workflows: {
       bound: { workflow: async () => undefined, inputs: z.object({}) },
     },
-    schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
-    triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
+    schedules: { nightly: { active: true, workflow: "bound", cron: "always", inputs: {} } },
+    triggers: {
+      pages: { active: true, workflow: "bound", source: { kind: "nope.pages", params: {} } },
+    },
   }),
 );
 
