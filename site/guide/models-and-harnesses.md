@@ -179,7 +179,7 @@ from the factory root, since there is no worktree yet.
 
 Credentials never go in workflow code. An `env` entry, a header and
 `bearerTokenEnv` each name a variable in the factory's
-[`.env`](/guide/configuration#env), and the step reads its value when it starts
+[environment](/guide/configuration#env), and the step reads its value when it starts
 the agent:
 
 ```ts
@@ -276,7 +276,7 @@ global or project MCP configuration.
 ## OpenRouter
 
 `models.openrouter(model)` is a model source for `askModel`, `askJev` or Pi.
-Set `OPENROUTER_API_KEY` in the factory's [`.env`](/guide/configuration#env).
+Set `OPENROUTER_API_KEY` in the factory's [environment](/guide/configuration#env).
 Direct structured requests require a model with structured-output support.
 `askJev` specifically needs a compatible decision model.
 
@@ -297,7 +297,7 @@ const local = models.openaiCompatible({
 
 Use it with `askModel` or Pi. Use the server's API base URL (often ending in `/v1`); the model must appear
 in the server's `/models` response. jigs checks that endpoint and model before
-the run. If the server requires a key, set `apiKeyEnv` to its `.env` variable name.
+the run. If the server requires a key, set `apiKeyEnv` to the name of the variable that holds it.
 
 ## Jev decisions
 
@@ -308,7 +308,7 @@ decides what confidence is enough to act:
 The following helper belongs in a workflow module. Call
 `await classifyReport(input.report)` inside a `"use workflow"` function whose
 input schema has a `report` string, and include the exported `decisionModel`
-in that workflow's `requires.models`. Set `OPENROUTER_API_KEY` in `.env`.
+in that workflow's `requires.models`. Set `OPENROUTER_API_KEY` in the factory's environment.
 
 ```ts
 import { models, yesNo } from "@jigs-ai/jigs";

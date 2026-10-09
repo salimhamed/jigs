@@ -45,24 +45,30 @@ creator.
 
 `jigs init` writes `jigs.config.ts`, a `hello` workflow in
 `workflows/hello/hello.ts`, the package manifest, Docker Compose, `.env.example`
-and build settings. It preserves existing files. Its printed ports come from the factory
-path; adjust them in `jigs.config.ts` if they are taken.
+and build settings. It preserves existing files. The ports in `.env.example` come
+from the factory path; pick others if they are taken.
 
-## 2. Install and `.env`
+## 2. Install and the environment
 
 ```sh
 pnpm install
-cp .env.example .env
-pnpm exec jigs hub connect <hub-url> <token>
+cp .env.example .env && cp .env.local.example .env.local
 ```
 
-Every factory hears GitHub, Linear, Slack and PagerDuty through a hub. Ask the
-user for the hub URL and the factory token the hub showed when they added this
-factory (with no hub yet, they run one first: see the hub guide above). `hub connect` writes
-the URL into `jigs.config.ts` and the token into `.env` as `JIGS_HUB_TOKEN`.
-`jigs up` stops at `env` without it. Beyond that, `hello` needs no credentials. Leave `WORKFLOW_TARGET_WORLD` and
-`WORKFLOW_POSTGRES_URL` as written. GitHub, Linear, Slack and PagerDuty tokens come
-from the hub; the configuration guide's `.env` table lists every other variable.
+The scaffolded `jigs.config.ts` loads both; jigs itself reads only the process
+environment. `.env` holds values every copy shares (API keys, secrets, channel
+IDs); `.env.local` holds this copy's own (ports, `COMPOSE_PROJECT_NAME`,
+`WORKFLOW_POSTGRES_URL`, `JIGS_HUB_TOKEN`, `*_ACTIVE` flags). `hello` needs
+nothing else, and no hub.
+
+A factory hears GitHub, Linear, Slack and PagerDuty only through a hub, and needs
+one once a workflow, binding or trigger uses one of them. Then ask the user for
+the two lines the hub showed when they added the factory (with no hub yet, they
+run one first: see the hub guide above): `hub: { url: "<origin>" }` goes in
+`jigs.config.ts`, and `JIGS_HUB_TOKEN=<token>` in `.env.local`. GitHub, Linear,
+Slack and PagerDuty tokens come from the hub; the configuration guide's
+environment tables list every other variable. A copy in a git worktree follows
+`https://salimhamed.github.io/jigs/guide/worktrees`.
 
 ## 3. `jigs up`
 
@@ -70,9 +76,7 @@ from the hub; the configuration guide's `.env` table lists every other variable.
 pnpm exec jigs up
 ```
 
-`jigs up` prints one line per step: `locate`, `env` (fails with
-`cp .env.example .env` as its repair when there is no `.env`, and names empty
-credential slots), `install`, `compose` (Postgres, its output streamed),
+`jigs up` prints one line per step: `locate`, `install`, `compose` (Postgres, its output streamed),
 `bootstrap` (migrations), `build`, `service` (start, or restart only when the
 built bundle or `jigs.config.ts` changed), `ready` (waits until every binding
 is cloned and the World is up) and `doctor`. Doctor checks only what the
@@ -108,7 +112,8 @@ running, so run `jigs service status` before repairing anything. `jigs doctor` r
 is up.
 
 `jigs up` is also the command after every change to the factory's code.
-`--restart-service` forces a restart; `--force` skips the question about
+`--restart-service` forces a restart, which a change to the environment
+(`.env`, `.env.local`) needs; `--force` skips the question about
 runs with a step executing.
 
 Then:
@@ -149,6 +154,11 @@ described in the configuration guide.
 
 GitHub, Linear, Slack and PagerDuty events all come through the hub, and wake
 a parked run at once. `jigs poke <run-id>` wakes one whose event was missed.
+Each running copy needs its own factory on the hub: two copies with one token
+split its events. Triggers and schedules run only in a copy whose environment
+turns them on (`active`, usually `<NAME>_ACTIVE=true` in `.env.local`), and the
+service refuses to start when an active one needs a provider and the copy has
+no hub connection.
 
 ## Upgrading later
 

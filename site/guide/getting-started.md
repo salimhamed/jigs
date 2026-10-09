@@ -1,7 +1,7 @@
 # Install and run a workflow
 
-This guide creates a factory, connects it to its hub, starts its service and
-runs `hello`, the workflow every new factory includes.
+This guide creates a factory, starts its service and runs `hello`, the
+workflow every new factory includes.
 
 ## Set up with a coding agent
 
@@ -25,13 +25,11 @@ The rest of this page shows the same process manually.
 - **Node.js 24 or newer**
 - **pnpm**
 - **Docker**, with Docker running
-- **A jigs hub**. Every factory hears GitHub, Linear, Slack and PagerDuty
-  through a hub, and gets its tokens for them there. If your team has one, ask
-  an admin to add your factory. Otherwise [run a hub](/guide/hub) first; one
-  person on one machine runs a hub too.
 
-`hello` doesn't use a model or coding agent, so you don't need any model
-credentials or agent CLIs yet.
+`hello` doesn't use a model, a coding agent or any provider, so you don't need
+model credentials, agent CLIs or a [hub](/guide/hub) yet. A factory reaches
+GitHub, Linear, Slack and PagerDuty through a hub, which you connect once a
+workflow uses one: see [`hub`](/guide/configuration#hub).
 
 ## 2. Create a factory
 
@@ -57,21 +55,17 @@ The exception applies only to jigs. It does not refresh pnpm's `dlx` cache.
 `workflows/hello/hello.ts` contains your first workflow, and `jigs.config.ts`
 registers it under the name `hello`.
 
-## 3. Connect the factory to its hub
-
-In the hub, under **Factories**, add a factory named after this one. The hub
-shows a `jigs hub connect` command with the factory's token, once. Run it
-here, through `pnpm exec`:
+## 3. Set up the environment
 
 ```sh
 pnpm install
 cp .env.example .env
-pnpm exec jigs hub connect <hub-url> <token>
+cp .env.local.example .env.local
 ```
 
-`hub connect` writes the hub's URL to `jigs.config.ts` and the token to `.env`.
-`hello` needs no apps, so you can assign them later: see
-[Add apps and assign them](/guide/hub#apps).
+`.env` holds values every copy of the factory shares, such as API keys.
+`.env.local` holds this copy's own, such as the ports `jigs init` suggested.
+`hello` needs nothing else. See [The environment](/guide/configuration#env).
 
 ## 4. Start the service
 
@@ -79,8 +73,7 @@ pnpm exec jigs hub connect <hub-url> <token>
 pnpm exec jigs up
 ```
 
-Beyond the hub token, `hello` needs nothing filled in `.env`. `jigs up` starts everything your factory
-needs and checks that it is ready. When it finishes, the service and dashboard
+`jigs up` starts everything your factory needs and checks that it is ready. When it finishes, the service and dashboard
 are available. Open the dashboard URL it prints to inspect workflow runs and
 individual steps.
 

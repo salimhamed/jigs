@@ -94,7 +94,7 @@ the schema, function and requirements, and checks their types together.
 The investigator is a named, harness-backed agent that works in the repository
 worktree. The summarizer makes a direct model call with no tools. Its `output`
 schema checks the answer's shape, not whether it is right. Before running,
-log in to Claude Code and set `OPENROUTER_API_KEY` in the factory's `.env`; see
+log in to Claude Code and set `OPENROUTER_API_KEY` in the factory's environment; see
 [Models and harnesses](/guide/models-and-harnesses). To give an agent
 reference material, such as how to query your warehouse, declare
 [skills](/guide/models-and-harnesses#skills) on its harness.
@@ -117,7 +117,8 @@ produce a useful repair before expensive work begins.
 ### Secrets {#secrets}
 
 A credential the workflow's steps use, such as a warehouse token, goes in the
-factory's `.env` and is named in `requires.secrets`:
+factory's [environment](/guide/configuration#env) and is named in
+`requires.secrets`:
 
 ```ts
 // workflows/sync/sync.ts
@@ -150,9 +151,7 @@ List names only, never values. Add each name to `.env.example` with an empty
 value (`SNOWFLAKE_TOKEN=`), then set it in `.env`. Preflight fails a run whose
 secret is unset or empty, and `jigs doctor` names every workflow that needs it.
 The variables an agent's MCP servers name are checked the same way without
-being listed. A value exported in the shell that started the service but
-missing from `.env` still works, and doctor notes that it is not set in `.env`
-so you can move it there before another machine runs without it.
+being listed.
 Listing a secret does not pass it to agents; use
 [`agents.env`](/guide/configuration#agents-env) for that.
 

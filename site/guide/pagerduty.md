@@ -4,7 +4,7 @@ A factory talks to PagerDuty through a PagerDuty app that its
 [hub](/guide/hub) holds and assigns to it. jigs reads incidents
 and adds notes to them as the app, never with a person's API key. The hub
 receives the app's incident events and hands the factory its tokens, so the
-factory's `.env` holds no PagerDuty secret.
+factory's environment holds no PagerDuty secret.
 
 ## 1. Set up the app in the hub
 

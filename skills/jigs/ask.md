@@ -21,7 +21,8 @@ add that, set this up — go back to `SKILL.md` and take the route it belongs to
    | Writing a workflow | `build-a-workflow` |
    | Harnesses and model sources | `models-and-harnesses` |
    | Recipes such as linear-ticket-to-pr | `recipes` |
-   | `jigs.config.ts` and `.env` | `configuration` |
+   | `jigs.config.ts`, the environment, active triggers | `configuration` |
+   | Running a copy in a git worktree | `worktrees` |
    | What a command does | `cli` |
    | Something failing | `troubleshooting` |
 

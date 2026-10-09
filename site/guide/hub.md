@@ -7,8 +7,9 @@ and for short-lived tokens, and the hub answers only for the apps you assigned
 to it.
 
 One hub serves an **Organization**: its members, its apps on each provider and
-its factories. Even a single person running one factory on a laptop runs a
-hub, usually on the same machine.
+its factories. A factory needs a hub once it uses any of these providers, and
+not before. A single person running one factory on a laptop runs a hub too,
+usually on the same machine.
 
 ```text
 GitHub, Linear, Slack, PagerDuty ──▶ hub (public URL) ◀── factories ask for events and tokens
@@ -222,26 +223,33 @@ total for each provider.
 ## Add a factory {#factories}
 
 Under **Factories**, any member chooses **Add factory** and names it. The hub
-shows a command with the factory's token, once:
+shows two lines to copy, the second with the factory's token, once:
 
-```sh
-pnpm exec jigs hub connect https://hub.example.com <token>
+```ts factory-options
+// Inside defineFactory({ ... }) in jigs.config.ts
+hub: { url: "https://hub.example.com" },
 ```
 
-Run it in the factory's directory, after creating its `.env`:
-
 ```sh
-cp .env.example .env
-pnpm exec jigs hub connect https://hub.example.com <token>
+# .env.local
+JIGS_HUB_TOKEN=<token>
 ```
 
-It writes the hub's URL to `jigs.config.ts` and the token to `.env` as
-`JIGS_HUB_TOKEN`. Then run `pnpm exec jigs up`. The page checks every few
-seconds and says once the factory has connected.
+Add the first to the factory's `jigs.config.ts`, and set the second in the
+environment of the copy that will use the token, usually its `.env.local`; see
+[the environment](/guide/configuration#env). Then run
+`pnpm exec jigs up`. The page checks every few seconds and says once the
+factory has connected.
 
-If the token is lost, **Re-issue token** makes a new one, shows its command
-the same way and stops the old one at once. **Remove** deletes the factory
+If the token is lost, **Re-issue token** makes a new one, shows it the same
+way and stops the old one at once. **Remove** deletes the factory
 and every event waiting for it.
+
+Each running copy that connects needs its own factory on the hub, with its own
+token. Two copies with one token split its events between them, so each misses
+some. See [Developing in worktrees](/guide/worktrees). A copy with no active
+trigger, whose workflows and bindings use none of these providers, needs no
+token.
 
 **Factories** opens on **My factories**, the ones you added; **All factories**
 lists every factory in the Organization. Both show when each factory last
@@ -315,6 +323,7 @@ import { slack } from "@jigs-ai/jigs";
 // In defineFactory's `triggers`.
 const triggers = {
   "answer-questions": {
+    active: process.env.ANSWER_QUESTIONS_ACTIVE === "true",
     workflow: "answer",
     source: slack.mentions({ installationName: "slack-alice", channels: ["C0123ABCD"] }),
   },
@@ -337,7 +346,8 @@ one run, in Alice's factory.
 
 ### Check the factory {#doctor}
 
-`pnpm exec jigs doctor`, in the factory, checks that it reaches the hub, then:
+`pnpm exec jigs doctor`, for each provider something in the factory uses,
+checks that the copy reaches the hub, then:
 
 - that each installation name the factory uses, in its bindings, triggers and
   agents, is named and assigned to it;
@@ -347,7 +357,8 @@ one run, in Alice's factory.
   one has your [`linear.operator`](/guide/configuration#linear-operator) as a
   user.
 
-It names what to fix in the hub when one fails.
+It names what to fix in the hub when one fails. A copy with no hub connection
+runs none of these checks.
 
 Before a run starts, preflight checks only the installations the workflow's
 agents name. One that a step names, or that comes from the run's inputs, is

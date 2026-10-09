@@ -72,8 +72,12 @@ poll.
 
 `jigs status` is the snapshot: `RUN WORKFLOW TICKET STATUS TRIGGER AGE
 ACTIVITY WAITING`, then every resource release has not removed (with its state,
-run and reason), then the schedules if
-the factory declares any. `TICKET` is the ticket the run was launched with, as
+run and reason), then the schedules and triggers if
+the factory declares any. Their `STATE` is `active` or `inactive`. An inactive
+one never fires in this copy because the copy's environment leaves it off
+(usually no `<NAME>_ACTIVE=true` in `.env.local`); that is a choice, not a fault. `RUNNING` is a
+schedule's run in progress or a trigger's count of them (`active` in `--json`;
+the flag is `state`). `TICKET` is the ticket the run was launched with, as
 the operator typed it. `TRIGGER` says how the run started; a
 scheduled fire reads `schedule:<name>`. `AGE` counts from launch, `ACTIVITY`
 from the last time the run moved: `running` with a 20-minute `ACTIVITY` is
@@ -89,7 +93,7 @@ below it, and the step timeline. Released resources stay listed as history.
 `resources none` is an explicit empty set; `jigs status <run-id> --json` carries the same
 records in `resources`, and the ticket claim in `claim`, independently of `returnValue`.
 
-Prefer `--json` to the tables: `jigs status --json` is `{runs, schedules}`, each
+Prefer `--json` to the tables: `jigs status --json` is `{runs, schedules, triggers}`, each
 run carrying every resource it recorded (released ones included) in `resources`;
 `jigs status <run-id> --json` is the run's fields plus its timeline, and
 `jigs watch --json` is one JSON event per line. Read fields rather than parsing
