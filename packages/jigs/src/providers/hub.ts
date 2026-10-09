@@ -19,13 +19,14 @@ import type { CheckResult } from "../checks/check.ts";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
+import { FACTORY_ENVIRONMENT } from "./credentials.ts";
 
 const HUB_TIMEOUT_MS = 30_000;
 
 /** Why a copy with no hub connection cannot reach a provider, and its repair. */
 export const NO_HUB_CONNECTION = {
   reason: "this copy has no hub connection",
-  repair: "set hub.url in jigs.config.ts and JIGS_HUB_TOKEN in this copy's environment",
+  repair: `set hub.url in jigs.config.ts and JIGS_HUB_TOKEN in ${FACTORY_ENVIRONMENT}`,
 };
 
 /** The hub answered with an error status. */

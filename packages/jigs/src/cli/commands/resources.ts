@@ -1,5 +1,6 @@
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
+import { FACTORY_ENVIRONMENT } from "../../providers/credentials.ts";
 import type { RegistrySql } from "../../steps/runtime/registry.ts";
 import type { RunFacts } from "../../steps/runtime/run-state.ts";
 import {
@@ -379,7 +380,7 @@ async function withDatabase<T>(
   if (url === undefined) {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set for this factory",
-      "set it in the factory's environment\nresource commands read the database directly, without the service",
+      `set it in ${FACTORY_ENVIRONMENT}\nresource commands read the database directly, without the service`,
     );
   }
   const { connectRegistry } = await modules();

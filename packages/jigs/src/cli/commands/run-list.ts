@@ -31,7 +31,7 @@ export interface RunListSchedule {
   workflow: string;
   cron: string;
   next: string | null;
-  active: string | null;
+  running: string | null;
 }
 
 export interface RunListTrigger {
@@ -41,7 +41,7 @@ export interface RunListTrigger {
   source: string;
   lastOccurrence: string | null;
   pending: number;
-  active: number;
+  running: number;
   failed: number;
   failures: Array<{
     occurrence: string;
@@ -131,7 +131,7 @@ export async function showRuns(
         schedule.workflow,
         schedule.cron,
         schedule.next ?? "-",
-        schedule.active ?? "-",
+        schedule.running ?? "-",
       ]),
     )) {
       deps.out(line);
@@ -152,7 +152,7 @@ export async function showRuns(
         trigger.source,
         trigger.lastOccurrence ?? "-",
         String(trigger.pending),
-        String(trigger.active),
+        String(trigger.running),
         String(trigger.failed),
       ]),
     )) {

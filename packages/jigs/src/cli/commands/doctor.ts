@@ -13,6 +13,7 @@ export async function runDoctor(deps: ServiceDeps): Promise<CheckReport> {
     throw new JigsError(`doctor failed: HTTP ${res.status} ${await res.text()}`);
   }
   const report = (await res.json()) as CheckReport;
+  if (report.checks.length === 0) deps.out("nothing to check");
   for (const line of report.checks.flatMap(checkLines)) deps.out(line);
   const failures = report.checks.filter((check) => !check.ok).length;
   if (failures > 0) {

@@ -251,7 +251,7 @@ const pendingRow = (store: TriggerStore, occurrence: string, occurredAt: Date, t
     occurredAt,
   });
 
-const activeOf = async (h: ReturnType<typeof harness>) =>
+const runningOf = async (h: ReturnType<typeof harness>) =>
   (
     await listTriggers(factory({ pages: pagesTrigger }), {
       store: h.memory.store,
@@ -259,7 +259,7 @@ const activeOf = async (h: ReturnType<typeof harness>) =>
       runStatuses: h.deps.runStatuses,
       now: h.deps.now,
     })
-  )[0]?.active;
+  )[0]?.running;
 
 const occurrenceAt = (page: string, at: Date): SourceOccurrence => ({
   key: page,
@@ -717,7 +717,7 @@ test("a resilient start's run counts, on the cap and in status, until the World 
   h.at(minutes(2));
   await h.engine.drain();
   expect(h.starts).toHaveLength(1);
-  expect(await activeOf(h)).toBe(1);
+  expect(await runningOf(h)).toBe(1);
   h.at(minutes(61));
   await h.engine.drain();
   expect(h.starts).toHaveLength(2);
@@ -831,7 +831,7 @@ test("N3: a row that throws every drain holds its slot and holds up nothing else
   expect(h.lines).toContain("[trigger] pages BAD could not start: Error: lookup exploded");
   expect(h.memory.state("pages", "GOOD")?.state).toBe("started");
   expect(h.memory.state("pages", "BAD")?.state).toBe("pending");
-  expect(await activeOf(h)).toBe(2);
+  expect(await runningOf(h)).toBe(2);
 });
 
 test("F: two engines on one store racing for one pending row launch it once", async () => {

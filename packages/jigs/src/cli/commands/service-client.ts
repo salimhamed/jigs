@@ -18,10 +18,6 @@ export function usesFactoryService(explicit?: string): explicit is undefined | "
   return explicit === undefined || explicit === "";
 }
 
-// An explicit --service-url / JIGS_SERVICE_URL wins; otherwise the factory the
-// user is standing in names its own service. Call this from inside a command
-// action, never from a commander `.default()` — the filesystem walk here
-// would then run on `jigs --help`, outside any factory repo.
 export function resolveServiceUrl(explicit?: string): string {
   if (!usesFactoryService(explicit)) return explicit;
   return resolveService(currentFactoryContext()).serviceUrl;

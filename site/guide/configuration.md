@@ -25,7 +25,12 @@ installation on its owner:
 
 ```ts
 // jigs.config.ts
+import { existsSync } from "node:fs";
 import { defineFactory } from "@jigs-ai/jigs";
+
+for (const file of [".env.local", ".env"]) {
+  if (existsSync(file)) process.loadEnvFile(file);
+}
 
 export default defineFactory({
   hub: { url: "https://hub.example.com" },

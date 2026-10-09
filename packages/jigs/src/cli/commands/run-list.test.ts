@@ -128,7 +128,7 @@ test("a scheduled run names the schedule that fired it", async () => {
         workflow: "deliver-feature",
         cron: "0 3 * * *",
         next: "2026-08-27T03:00:00.000Z",
-        active: RUN,
+        running: RUN,
       },
     ],
     triggers: [],
@@ -155,7 +155,7 @@ test("an inactive schedule that has never fired says so, with dashes, not blanks
         workflow: "audit",
         cron: "nonsense",
         next: null,
-        active: null,
+        running: null,
       },
     ],
     triggers: [],
@@ -177,7 +177,7 @@ test("each trigger shows its counts, and each failed occurrence its repair", asy
         source: "pagerduty.incidents",
         lastOccurrence: "2026-08-26T11:00:00.000Z",
         pending: 2,
-        active: 3,
+        running: 3,
         failed: 1,
         failures: [
           {

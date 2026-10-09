@@ -537,7 +537,7 @@ test("OpenRouter names the missing descriptor credential and its repair", async 
   ).catch((caught: unknown) => caught);
   expect(error).toBeInstanceOf(Error);
   expect(String(error)).toMatch(
-    /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in the factory's environment/s,
+    /TEAM_OPENROUTER_KEY credential: TEAM_OPENROUTER_KEY is not set.*set TEAM_OPENROUTER_KEY in this copy's environment/s,
   );
   expect(String(error)).not.toContain("unrelated-secret");
 });

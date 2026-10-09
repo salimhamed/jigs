@@ -22,7 +22,7 @@ Read `jigs service logs`. The usual causes:
 - **A harness CLI is missing from the service's `PATH`.** The service checks
   the CLI of every harness your workflows require, and the log names the
   workflows that need it. Start `jigs up` from a shell where that CLI runs, or
-  for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in the factory's environment.
+  for Claude Code set `JIGS_CLAUDE_EXECUTABLE` in this copy's environment.
 - **This copy has no hub connection**, and an active trigger, or an active
   schedule whose workflow uses a provider, needs one. The log names them. Set
   `hub` in `jigs.config.ts` and `JIGS_HUB_TOKEN` in this copy's environment,

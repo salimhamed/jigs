@@ -116,7 +116,7 @@ export async function gateOnHubUse(live: Factory, deps: HubGateDeps = {}): Promi
   ];
   if (offenders.length === 0) return true;
   (deps.error ?? ((line: string) => console.error(line)))(
-    `[service] this copy has no hub connection, which ${offenders.join(", ")} need`,
+    `[service] this copy has no hub connection, which ${offenders.join(", ")} need${offenders.length === 1 ? "s" : ""}`,
   );
   (deps.exit ?? process.exit)(1);
   return false;

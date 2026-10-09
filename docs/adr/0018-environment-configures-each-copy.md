@@ -56,6 +56,10 @@ values. A copy is one checkout running its own service.
     never need the hub.
 12. **`jigs hub connect` is deleted.** The hub's factory page shows the config
     line and the environment line to copy.
+13. **In a copy with no hub connection, doctor runs no hub-dependent checks.**
+    Startup already refuses active triggers and schedules that need the hub,
+    and running a workflow that needs a provider fails its preflight plainly;
+    a quiet copy's doctor stays clean.
 
 ## Consequences
 

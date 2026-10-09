@@ -6,7 +6,7 @@ import { JigsError } from "../errors.ts";
 
 // The service inherits the environment of the CLI that starts it, so a
 // changed value takes a restart.
-export const FACTORY_ENVIRONMENT = "the factory's environment";
+export const FACTORY_ENVIRONMENT = "this copy's environment";
 export const RESTART_SERVICE = "pnpm exec jigs up --restart-service";
 
 export type EnvLookup = (name: string) => string | undefined;

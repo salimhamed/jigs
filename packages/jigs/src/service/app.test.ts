@@ -579,14 +579,14 @@ test("GET /api/schedules answers with what the factory declared, and what is nex
     workflow: string;
     cron: string;
     next: string | null;
-    active: string | null;
+    running: string | null;
   }>;
   expect(body.map((s) => s.name)).toEqual(["nightly-plain", "broken-cron"]);
   expect(body[0]).toMatchObject({
     name: "nightly-plain",
     workflow: "plain",
     cron: "0 3 * * *",
-    active: null,
+    running: null,
   });
   expect(new Date(body[0]?.next ?? "").getTime()).toBeGreaterThan(Date.now());
   // Declared but unschedulable: it is still reported, with nothing to come.
