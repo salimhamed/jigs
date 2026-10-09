@@ -7,10 +7,11 @@
 import { seedFactoryContext } from "../config/factory-context.ts";
 import type { Factory, FactoryDefinition } from "../workflow/factory.ts";
 import { parseFactoryConfig } from "../workflow/factory-schema.ts";
+import { activeFactory } from "./active.ts";
 import { startAutomaticRelease } from "./automatic-release.ts";
 import { startWorld } from "./boot.ts";
 import { startDashboard } from "./dashboard.ts";
-import { startTriggers } from "./event-triggers/runner.ts";
+import { startTriggers, withdrawInactive } from "./event-triggers/runner.ts";
 import { startSchedules } from "./schedules.ts";
 
 export { type AppDeps, createApp } from "./app.ts";
@@ -28,7 +29,15 @@ export function startService(factory: Factory, config: FactoryDefinition): void 
   // plugins: each later part waits on the World's readiness itself.
   void startWorld();
   void startDashboard();
-  startSchedules(factory);
-  startTriggers(factory);
+  const live = activeFactory(factory);
+  for (const name of Object.keys(factory.schedules ?? {}))
+    if (live.schedules?.[name] === undefined) console.log(`[schedule] ${name} inactive`);
+  const inactive = Object.keys(factory.triggers ?? {}).filter(
+    (name) => live.triggers?.[name] === undefined,
+  );
+  for (const name of inactive) console.log(`[trigger] ${name} inactive`);
+  startSchedules(live);
+  startTriggers(live);
+  void withdrawInactive(inactive);
   startAutomaticRelease(factory);
 }

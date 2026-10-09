@@ -116,6 +116,8 @@ type AnyWorkflowDefinition = WorkflowDefinition<any>;
  * @group Factory and workflows
  */
 export interface Schedule {
+  /** An inactive schedule never fires. */
+  active: boolean;
   workflow: string;
   /** Five fields, evaluated in the service host's local time zone. */
   cron: string;
@@ -147,6 +149,8 @@ export interface SourceDescriptor {
  * @group Factory and workflows
  */
 export interface EventTrigger {
+  /** An inactive trigger is not armed: its source's occurrences start no runs. */
+  active: boolean;
   workflow: string;
   source: SourceDescriptor;
   inputs?: Record<string, unknown>;

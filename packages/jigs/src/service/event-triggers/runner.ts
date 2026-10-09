@@ -1,12 +1,14 @@
 // The service's one running trigger engine, and the timer that drains it.
 
+import { currentFactoryContext } from "../../config/factory-context.ts";
+import { registrySql } from "../../steps/runtime/registry.ts";
 import type { Factory } from "../../workflow/factory.ts";
 import type { Provider } from "../../workflow/providers.ts";
 import { whenReady } from "../readiness.ts";
 import { onShutdown } from "../shutdown.ts";
 import { createTriggerEngine, type TriggerDeps, type TriggerEngine } from "./engine.ts";
 import type { PushedEvent } from "./sources.ts";
-import type { Occurrence } from "./store.ts";
+import { type Occurrence, type TriggerStore, triggerStore } from "./store.ts";
 
 // How soon an occurrence waiting on the cap notices a run finishing. While
 // nothing waits, each check is one read of the pending rows.
@@ -79,6 +81,27 @@ export function startTriggers(factory: Factory, deps: StartTriggersDeps = {}): T
     }
   })();
   return engine;
+}
+
+/**
+ * Skip every occurrence the inactive triggers recorded and never started, so re-activating one
+ * later does not start runs for events from before it went quiet.
+ */
+export async function withdrawInactive(
+  triggers: readonly string[],
+  deps: { ready?: () => Promise<void>; store?: TriggerStore } = {},
+): Promise<void> {
+  if (triggers.length === 0) return;
+  try {
+    await (deps.ready ?? whenReady)();
+    const store = deps.store ?? triggerStore(registrySql(), currentFactoryContext().slug);
+    for (const trigger of triggers)
+      for (const row of await store.pending(trigger)) await store.withdraw(trigger, row.occurrence);
+  } catch (error) {
+    console.log(
+      `[trigger] could not skip the inactive triggers' waiting occurrences: ${String(error)}`,
+    );
+  }
 }
 
 /**

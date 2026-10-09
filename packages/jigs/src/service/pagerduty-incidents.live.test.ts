@@ -106,6 +106,7 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     },
     triggers: {
       pages: {
+        active: true,
         workflow: "respond",
         source: pagerduty.incidents({ installationName: "live", services: [SERVICE] }),
         inputs: { team: "live" },

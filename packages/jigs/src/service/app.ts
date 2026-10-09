@@ -20,6 +20,7 @@ import { JIGS_VERSION, VERSION_HEADER } from "../version.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { isOwnershipKind, parseHookToken } from "../workflow/hook-tokens.ts";
 import { UNRELEASED_STATES } from "../workflow/runtime/resources.ts";
+import { activeFactory } from "./active.ts";
 import { triggerStore } from "./event-triggers/store.ts";
 import { listTriggers, triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
 import { startRun } from "./launch.ts";
@@ -156,15 +157,16 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
 
   // The same catalog engine as preflight, without a workflow or a launch. A
   // red report is still a report, so it answers 200.
-  app.get("/api/doctor", async (_request, response) =>
+  app.get("/api/doctor", async (_request, response) => {
+    const live = activeFactory(factory);
     response.json(
       await runDoctorChecks([
-        ...doctorChecks(factory.workflows, triggerInstallations(factory), context()),
-        ...scheduleChecks(factory),
-        ...triggerChecks(factory, undefined, { store: triggers }),
+        ...doctorChecks(live.workflows, triggerInstallations(live), context()),
+        ...scheduleChecks(live),
+        ...triggerChecks(live, undefined, { store: triggers }),
       ]),
-    ),
-  );
+    );
+  });
 
   // Manual wake on the same code path as a provider event: resume every token
   // the run's suspensions are satisfied by. The fallback when an event was missed.

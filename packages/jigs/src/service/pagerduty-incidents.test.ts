@@ -99,6 +99,7 @@ const respond: Factory = {
   },
   triggers: {
     pages: {
+      active: true,
       workflow: "respond",
       source: pagerduty.incidents({ installationName: "acme", services: ["PSVC001"] }),
       inputs: { team: "infra" },
@@ -239,6 +240,7 @@ test("the source is shipped, and its trigger names its PagerDuty installation fo
     ...respond,
     triggers: {
       pages: {
+        active: true,
         workflow: "respond",
         source: {
           kind: "pagerduty.incidents",

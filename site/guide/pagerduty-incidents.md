@@ -136,6 +136,7 @@ export default defineFactory({
   },
   triggers: {
     "triage-checkout": {
+      active: process.env.TRIAGE_CHECKOUT_ACTIVE === "true",
       workflow: "incident-triage",
       source: pagerduty.incidents({ installationName: "pagerduty-acme", services: ["PABC123"] }),
     },

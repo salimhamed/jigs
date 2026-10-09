@@ -18,6 +18,7 @@ const CRON_MODE = "5-part";
 /** Operator-facing state for one declared recurring schedule. */
 export interface ScheduleView {
   name: string;
+  state: "active" | "inactive";
   workflow: string;
   cron: string;
   next: string | null;
@@ -110,9 +111,10 @@ export async function listSchedules(
   const rows = await (deps.listRuns ?? listRuns)(factory);
   return declared.map(([name, schedule]) => ({
     name,
+    state: schedule.active ? "active" : "inactive",
     workflow: schedule.workflow,
     cron: schedule.cron,
-    next: nextOccurrence(schedule.cron),
+    next: schedule.active ? nextOccurrence(schedule.cron) : null,
     active: activeRunId(rows, name),
   }));
 }

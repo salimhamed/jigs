@@ -76,8 +76,14 @@ const scheduledApp = appClient(
     workflows: {
       bound: { workflow: async () => undefined, inputs: z.object({}) },
     },
-    schedules: { nightly: { workflow: "bound", cron: "always", inputs: {} } },
-    triggers: { pages: { workflow: "bound", source: { kind: "nope.pages", params: {} } } },
+    schedules: {
+      nightly: { active: true, workflow: "bound", cron: "always", inputs: {} },
+      quiet: { active: false, workflow: "bound", cron: "always", inputs: {} },
+    },
+    triggers: {
+      pages: { active: true, workflow: "bound", source: { kind: "nope.pages", params: {} } },
+      off: { active: false, workflow: "bound", source: { kind: "nope.pages", params: {} } },
+    },
   }),
 );
 
@@ -306,6 +312,10 @@ test("doctor reports a malformed schedule and trigger beside the catalog's own c
   const trigger = body.checks.find((check) => check.id === "trigger.pages");
   expect(trigger?.reason).toBe('source "nope.pages" is not a source this jigs version provides');
   expect(body.checks.some((check) => check.id.startsWith("harness."))).toBe(false);
+  // Inactive ones are never checked, however broken.
+  expect(
+    body.checks.filter((check) => ["schedule.quiet", "trigger.off"].includes(check.id)),
+  ).toEqual([]);
 });
 
 test("doctor names an unreadable factory config instead of staying silent", async () => {

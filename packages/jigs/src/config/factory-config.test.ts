@@ -506,6 +506,7 @@ test("a Linear operator is optional and must be an email", () => {
 
 const sweep = { sweep: () => Promise.reject(new Error("never loaded")) };
 const pages = {
+  active: true,
   workflow: "sweep",
   source: { kind: "pagerduty.incidents", params: {} },
 };
@@ -520,7 +521,9 @@ const configError = (extra: Record<string, unknown>): string => {
 
 test("a schedule naming a workflow this factory does not have fails to load", () => {
   expect(
-    configError({ schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } } }),
+    configError({
+      schedules: { nightly: { active: true, workflow: "swep", cron: "0 3 * * *", inputs: {} } },
+    }),
   ).toContain(
     'schedules.nightly.workflow: workflow "swep" is not one of this factory\'s workflows\n' +
       "    set schedules.nightly.workflow in jigs.config.ts to one of: sweep",
@@ -530,7 +533,9 @@ test("a schedule naming a workflow this factory does not have fails to load", ()
 test("a schedule or trigger name carrying a colon fails to load — it would answer for another", () => {
   expect(
     configError({
-      schedules: { "nightly:sweep": { workflow: "sweep", cron: "0 3 * * *", inputs: {} } },
+      schedules: {
+        "nightly:sweep": { active: true, workflow: "sweep", cron: "0 3 * * *", inputs: {} },
+      },
     }),
   ).toContain(
     'schedules.nightly:sweep: schedule name "nightly:sweep" contains ":"\n' +
@@ -563,8 +568,11 @@ test("workflows, schedules and triggers are checked for shape when the config lo
     "workflows.sweep: must be a deferred import",
   );
   expect(
-    configError({ schedules: { nightly: { workflow: "sweep", cron: "0 3 * * *" } } }),
+    configError({ schedules: { nightly: { active: true, workflow: "sweep", cron: "0 3 * * *" } } }),
   ).toContain("schedules.nightly.inputs");
+  expect(configError({ triggers: { pages: { ...pages, active: undefined } } })).toContain(
+    "triggers.pages.active",
+  );
   expect(configError({ triggers: { pages: { ...pages, maxActiv: 3 } } })).toContain(
     'Unrecognized key: "maxActiv"',
   );
@@ -576,7 +584,7 @@ test("defineFactory refuses a schedule naming a workflow it does not declare", (
       hub: { url: "https://hub.example.test" },
       service: { dashboardPort: 9090 },
       workflows: sweep,
-      schedules: { nightly: { workflow: "swep", cron: "0 3 * * *", inputs: {} } },
+      schedules: { nightly: { active: true, workflow: "swep", cron: "0 3 * * *", inputs: {} } },
     }),
   ).toThrow('workflow "swep" is not one of this factory\'s workflows');
 });
@@ -584,7 +592,9 @@ test("defineFactory refuses a schedule naming a workflow it does not declare", (
 test("valid schedules and triggers load as declared", () => {
   const config = withSettings({
     workflows: sweep,
-    schedules: { nightly: { workflow: "sweep", cron: "0 3 * * *", inputs: { target: "a" } } },
+    schedules: {
+      nightly: { active: true, workflow: "sweep", cron: "0 3 * * *", inputs: { target: "a" } },
+    },
     triggers: { pages: { ...pages, maxActive: 3 } },
   });
   expect(config.triggers).toEqual({ pages: { ...pages, maxActive: 3 } });

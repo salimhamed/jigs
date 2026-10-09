@@ -63,6 +63,7 @@ const factory = (triggers: Record<string, EventTrigger>): Factory => ({
 });
 
 const pagesTrigger: EventTrigger = {
+  active: true,
   workflow: "respond",
   source: { kind: "fake.pages", params: { service: "api" } },
   inputs: { team: "infra" },
