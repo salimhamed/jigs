@@ -1,6 +1,6 @@
 {
   "name": "@jigs-ai/hub",
-  "version": "0.104.0",
+  "version": "0.104.1",
   "description": "Receives provider events and holds credentials for jigs factories",
   "type": "module",
   "license": "BUSL-1.1",

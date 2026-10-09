@@ -1,6 +1,6 @@
 {
   "name": "@jigs-ai/hub-protocol",
-  "version": "0.104.0",
+  "version": "0.104.1",
   "private": true,
   "description": "Messages the jigs hub and a factory exchange",
   "type": "module",

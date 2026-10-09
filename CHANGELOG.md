@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.1](https://github.com/salimhamed/jigs/compare/jigs-v0.104.0...jigs-v0.104.1) (2026-10-09)
+
+
+### Bug Fixes
+
+* **hub:** name .env.local in factory setup guidance ([8228931](https://github.com/salimhamed/jigs/commit/8228931157148aa09b31be76d807238d353df894))
+
 ## [0.104.0](https://github.com/salimhamed/jigs/compare/jigs-v0.103.0...jigs-v0.104.0) (2026-10-09)
 
 
