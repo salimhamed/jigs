@@ -380,7 +380,7 @@ async function withDatabase<T>(
   if (url === undefined) {
     throw new JigsError(
       "WORKFLOW_POSTGRES_URL is not set for this factory",
-      "set it in the factory's .env\nresource commands read the database directly, without the service",
+      "set it in the factory's environment\nresource commands read the database directly, without the service",
     );
   }
   const { connectRegistry } = await modules();

@@ -1,4 +1,3 @@
-import { copyFileSync, existsSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
@@ -22,6 +21,8 @@ beforeEach(() => {
   tmp = makeTmpDir();
   lines = [];
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://jigs:jigs@localhost:5555/jigs");
+  vi.stubEnv("JIGS_HUB_TOKEN", "test-hub-token");
 });
 afterEach(() => {
   vi.unstubAllEnvs();
@@ -29,14 +30,7 @@ afterEach(() => {
   removeTmpDir(tmp);
 });
 
-// With the .env an operator makes from .env.example, which up never copies.
-const factory = (shape: Parameters<typeof scaffold>[1]) => {
-  const root = scaffold(tmp, shape);
-  if (shape.env === undefined && shape.example !== false) {
-    copyFileSync(path.join(root, ".env.example"), path.join(root, ".env"));
-  }
-  return root;
-};
+const factory = (shape: Parameters<typeof scaffold>[1]) => scaffold(tmp, shape);
 
 function up(
   root: string,
@@ -126,7 +120,7 @@ test("a container compose cannot name is left out of the summary, not guessed", 
   expect(lines).toContain("  postgres   localhost:5555");
 });
 
-test("bootstrap is handed the World URL from .env explicitly", async () => {
+test("bootstrap is handed the World URL from the environment", async () => {
   const io = { exec: fakeExec(), procs: fakeProcesses() };
   const port = await fakeService(io.procs);
   const root = factory({ port });
@@ -330,7 +324,6 @@ test("without jigs.config.ts, up stops before touching the machine", async () =>
   expect(statuses(result)).toEqual(["locate:failed"]);
   expect(result.steps[0]?.repair).toContain("jigs init");
   expect(io.exec.calls).toHaveLength(0);
-  expect(existsSync(path.join(root, ".env"))).toBe(false);
 });
 
 test("outside a factory repo, locate fails with the existing error", async () => {
@@ -340,43 +333,15 @@ test("outside a factory repo, locate fails with the existing error", async () =>
   expect(result.steps[0]?.detail).toContain("not inside a factory repo");
 });
 
-test("no .env and no .env.example points back at jigs init", async () => {
-  const root = factory({ port: 1, example: false });
+test("without the hub token up stops at env, naming the variable", async () => {
+  vi.stubEnv("JIGS_HUB_TOKEN", "");
+  const root = factory({ port: 1 });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);
 
   expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.repair).toContain("jigs init");
-  expect(io.exec.calls).toHaveLength(0);
-});
-
-test("a .env without the hub token stops at env, naming hub connect", async () => {
-  const root = factory({
-    port: 1,
-    env: "WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5555/jigs\n",
-  });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.repair).toContain("pnpm exec jigs hub connect <url> <token>");
-  expect(io.exec.calls).toHaveLength(0);
-});
-
-test("a missing .env fails env with the copy as its repair, and copies nothing", async () => {
-  const root = scaffold(tmp, { port: 1 });
-  const io = { exec: fakeExec(), procs: fakeProcesses() };
-
-  const result = await up(root, io);
-
-  expect(statuses(result)).toEqual(["locate:ok", "env:failed"]);
-  expect(result.steps[1]?.detail).toContain("no .env in");
-  expect(result.steps[1]?.repair).toBe(
-    "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
-  );
-  expect(existsSync(path.join(root, ".env"))).toBe(false);
+  expect(result.steps[1]?.repair).toContain("set JIGS_HUB_TOKEN in the factory's environment");
   expect(io.exec.calls).toHaveLength(0);
 });
 
@@ -453,8 +418,9 @@ test("no docker-compose.yml fails compose before docker runs", async () => {
   expect(io.exec.calls.map((call) => call.file)).toEqual(["pnpm"]);
 });
 
-test("bootstrap refuses to run without a World URL in .env", async () => {
-  const root = factory({ port: 1, env: "JIGS_HUB_TOKEN=hub\n" });
+test("bootstrap refuses to run without a World URL", async () => {
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "");
+  const root = factory({ port: 1 });
   const io = { exec: fakeExec(), procs: fakeProcesses() };
 
   const result = await up(root, io);

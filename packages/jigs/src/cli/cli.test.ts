@@ -1,15 +1,24 @@
 import { spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { expect, test } from "vitest";
+import { afterAll, beforeAll, expect, test } from "vitest";
 import { readFactoryConfig } from "../config/factory-config.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { JIGS_VERSION } from "../version.ts";
 
 const cli = fileURLToPath(new URL("./cli.ts", import.meta.url));
 const run = (cwd: string, ...args: string[]) =>
   spawnSync(process.execPath, [cli, ...args], { cwd, encoding: "utf8" });
+
+let factoryParent: string;
+let factoryRoot: string;
+beforeAll(() => {
+  factoryParent = makeTmpDir();
+  factoryRoot = makeFactoryRepo(factoryParent);
+});
+afterAll(() => removeTmpDir(factoryParent));
 
 test("init scaffolds through the CLI parser, and bind records its binding", () => {
   const cwd = mkdtempSync(path.join(tmpdir(), "jigs-cli-"));
@@ -49,11 +58,37 @@ test("init scaffolds through the CLI parser, and bind records its binding", () =
 });
 
 test("renamed value flags reach validation instead of falling back to defaults", () => {
-  const cwd = tmpdir();
+  const cwd = factoryRoot;
   expect(run(cwd, "watch", "--poll-interval-seconds", "0").stderr).toContain(
     "--poll-interval-seconds must be a positive number",
   );
   expect(run(cwd, "status", "--service-url", "not-a-url").stderr).toContain("not-a-url");
+});
+
+test("a command loads the factory's config from its root before reading the environment", () => {
+  const parent = makeTmpDir();
+  try {
+    const root = makeFactoryRepo(
+      parent,
+      `process.env.JIGS_SERVICE_URL = "set-by-config";\nexport default ${JSON.stringify({ hub: { url: "https://hub.example.test" }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} })};\n`,
+    );
+    const nested = path.join(root, "workflows");
+    mkdirSync(nested);
+    expect(run(nested, "status").stderr).toContain("set-by-config");
+  } finally {
+    removeTmpDir(parent);
+  }
+});
+
+test("a command outside a factory stops before it runs", () => {
+  const cwd = mkdtempSync(path.join(tmpdir(), "jigs-outside-"));
+  try {
+    const result = run(cwd, "status", "--service-url", "http://localhost:1");
+    expect(result.status).not.toBe(0);
+    expect(result.stderr).toContain("not inside a factory repo");
+  } finally {
+    rmSync(cwd, { recursive: true, force: true });
+  }
 });
 
 test("root and no-argument help are side-effect-free, grouped and exact", () => {
@@ -106,7 +141,7 @@ test("--version prints the installed jigs version", () => {
 });
 
 test("workflow and run command help uses explicit placeholders", () => {
-  const cwd = tmpdir();
+  const cwd = factoryRoot;
   expect(run(cwd, "run", "--help").stdout).toContain("<workflow-name>");
   const status = run(cwd, "status", "--help").stdout;
   expect(status).toContain("[run-id]");
@@ -117,7 +152,7 @@ test("workflow and run command help uses explicit placeholders", () => {
 });
 
 test("repository and recipe command help uses explicit placeholders", () => {
-  const cwd = tmpdir();
+  const cwd = factoryRoot;
   const bind = run(cwd, "bind", "--help").stdout;
   expect(bind).toContain("<remote-url>");
   expect(bind).toContain("<binding-name>");
@@ -127,13 +162,13 @@ test("repository and recipe command help uses explicit placeholders", () => {
 });
 
 test("service command help uses explicit placeholders", () => {
-  const cwd = tmpdir();
+  const cwd = factoryRoot;
   expect(run(cwd, "service", "logs", "--help").stdout).toContain("<line-count>");
 });
 
 test("removed commands are not registered", () => {
-  const cwd = tmpdir();
-  for (const command of ["ps", "logs", "sweep"]) {
+  const cwd = factoryRoot;
+  for (const command of ["ps", "logs", "sweep", "hub"]) {
     const result = run(cwd, command);
     expect(result.status).not.toBe(0);
     expect(result.stderr).toContain(`unknown command '${command}'`);
@@ -141,7 +176,7 @@ test("removed commands are not registered", () => {
 });
 
 test("resource maintenance help exposes preview, apply, run, JSON and kept-resource controls", () => {
-  const cwd = tmpdir();
+  const cwd = factoryRoot;
   const root = run(cwd, "resources", "--help");
   expect(root.status).toBe(0);
   expect(root.stdout).toContain("list");

@@ -8,7 +8,6 @@ import path from "node:path";
 import type { RunCancellation } from "../run-cancellation.ts";
 import type { FactoryConfig } from "../workflow/factory-schema.ts";
 import { readFactoryConfig } from "./factory-config.ts";
-import { readFactoryEnv } from "./factory-env.ts";
 import { locateFactoryRoot } from "./factory-root.ts";
 import { factorySlug } from "./paths.ts";
 
@@ -18,7 +17,7 @@ export interface FactoryContext {
   readonly slug: string;
   /** Read on first use, so a verb that never needs it is not stopped by a config that fails. */
   readonly config: FactoryConfig;
-  /** The shell's value, else the factory's `.env`, read afresh on each call. Empty is unset. */
+  /** The process environment's value. Empty is unset. */
   env(name: string): string | undefined;
 }
 
@@ -37,14 +36,9 @@ function contextAt(root: string, config: () => FactoryConfig): FactoryContext {
     get config() {
       return config();
     },
-    // The shell wins: exporting a value for a single command is how an operator
-    // overrides the factory's own. The scaffolded `.env` declares every slot it
-    // knows about and leaves it empty, so empty is unset on either side.
     env: (name) => {
-      const exported = process.env[name];
-      if (exported !== undefined && exported !== "") return exported;
-      const declared = readFactoryEnv(root)[name];
-      return declared === undefined || declared === "" ? undefined : declared;
+      const value = process.env[name];
+      return value === "" ? undefined : value;
     },
   };
 }

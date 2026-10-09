@@ -297,7 +297,9 @@ test("the label leg without a hub token fails with the hub's repair, after recor
 
   expect(jigsConfig()).toContain(`remote: "${API}"`);
   expect(String(failure)).toContain("jigs:approved label could not be ensured");
-  expect((failure as { hint?: string }).hint).toContain("pnpm exec jigs hub connect");
+  expect((failure as { hint?: string }).hint).toContain(
+    "set JIGS_HUB_TOKEN in the factory's environment",
+  );
   expect((failure as { hint?: string }).hint).toContain(`re-run: \`pnpm exec jigs bind ${API}`);
 });
 

@@ -1,8 +1,9 @@
 import { existsSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
-import { readFactoryEnv } from "../../config/factory-env.ts";
+import type { FactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
+import { HUB_CONNECT } from "../../providers/hub.ts";
 import { stringEnv } from "../../steps/agents/shared/env.ts";
 import { type ExecFile, execOrExplain, execOutput, nodeExecFile } from "../exec.ts";
 import { factoryContextAt } from "../factory-context.ts";
@@ -74,11 +75,12 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   const result: UpResult = { ok: false, steps: runner.steps };
 
   try {
-    const { factoryRoot, service } = await runner.run("locate", (note) => {
-      const located = locate(deps.cwd);
-      note(located.factoryRoot);
-      return located;
+    const { ctx, service } = await runner.run("locate", (note) => {
+      const located = factoryContextAt(deps.cwd);
+      note(located.root);
+      return { ctx: located, service: resolveService(located) };
     });
+    const factoryRoot = ctx.root;
     result.factoryRoot = factoryRoot;
     result.serviceUrl = service.serviceUrl;
     result.dashboardUrl = service.dashboardUrl;
@@ -89,7 +91,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
       startTimeoutMs: deps.readyTimeoutMs,
     };
 
-    const env = await runner.run("env", () => ensureEnv(factoryRoot));
+    await runner.run("env", () => requireHubToken(ctx));
 
     await runner.run("install", () =>
       execOrExplain(execFile, "pnpm", ["install"], { cwd: factoryRoot }, deps.out, {
@@ -104,7 +106,7 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
     );
 
     const worldUrl = await runner.run("bootstrap", async () => {
-      const url = await bootstrapWorld(execFile, factoryRoot, env, deps.out);
+      const url = await bootstrapWorld(execFile, ctx, deps.out);
       const migrate =
         deps.migrate ?? (await import("../../steps/runtime/registry.ts")).migrateRegistry;
       await migrate(url);
@@ -162,51 +164,26 @@ export async function upFactory(deps: UpDeps, options: UpOptions = {}): Promise<
   }
 }
 
-function locate(cwd: string): { factoryRoot: string; service: ResolvedService } {
-  const ctx = factoryContextAt(cwd);
-  return { factoryRoot: ctx.root, service: resolveService(ctx) };
+// The service refuses to start without it, so nothing after this step could work.
+function requireHubToken(ctx: FactoryContext): void {
+  if (ctx.env("JIGS_HUB_TOKEN") === undefined) {
+    throw new JigsError("JIGS_HUB_TOKEN is not set", HUB_CONNECT);
+  }
 }
 
-// Never copied for the operator: a .env is where they decide which
-// credentials this factory holds.
-function ensureEnv(factoryRoot: string): Record<string, string> {
-  if (!existsSync(path.join(factoryRoot, ".env"))) {
-    if (!existsSync(path.join(factoryRoot, ".env.example"))) {
-      throw new JigsError(
-        `no .env or .env.example in ${factoryRoot}`,
-        "scaffold one: `pnpm exec jigs init`",
-      );
-    }
-    throw new JigsError(
-      `no .env in ${factoryRoot}`,
-      "copy .env.example, then fill in what your workflows need: `cp .env.example .env`",
-    );
-  }
-  const env = readFactoryEnv(factoryRoot);
-  // The service refuses to start without it, so nothing after this step could work.
-  if ((env.JIGS_HUB_TOKEN ?? "") === "") {
-    throw new JigsError(
-      "JIGS_HUB_TOKEN is not set in .env",
-      "connect the factory with the token the hub showed when you added it: `pnpm exec jigs hub connect <url> <token>`",
-    );
-  }
-  return env;
-}
-
-// The World URL travels in the child's environment explicitly, never left to
-// bootstrap's own .env lookup: unset, it silently migrates
+// Checked here, never left to bootstrap's default: unset, it silently migrates
 // postgres://localhost:5432/world, which is nobody's factory.
 async function bootstrapWorld(
   execFile: ExecFile,
-  factoryRoot: string,
-  env: Record<string, string>,
+  ctx: FactoryContext,
   out: (line: string) => void,
 ): Promise<string> {
-  const url = env.WORKFLOW_POSTGRES_URL;
-  if (url === undefined || url === "") {
+  const factoryRoot = ctx.root;
+  const url = ctx.env("WORKFLOW_POSTGRES_URL");
+  if (url === undefined) {
     throw new JigsError(
-      "WORKFLOW_POSTGRES_URL is not set in .env",
-      "set it to this factory's World, in the shape .env.example shows",
+      "WORKFLOW_POSTGRES_URL is not set",
+      "set it to this factory's World in the factory's environment",
     );
   }
   const bin = path.join(factoryRoot, "node_modules", ".bin", "bootstrap");
@@ -222,7 +199,7 @@ async function bootstrapWorld(
     [],
     {
       cwd: factoryRoot,
-      env: { ...stringEnv(), ...env, WORKFLOW_POSTGRES_URL: url },
+      env: stringEnv(),
     },
     out,
     {

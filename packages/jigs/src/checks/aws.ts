@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { processEnv } from "../config/factory-context.ts";
-import { type EnvLookup, RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { type EnvLookup, FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
 import { stringEnv } from "../steps/agents/shared/env.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import type { Check, CheckResult } from "./check.ts";
@@ -110,7 +110,7 @@ export function awsCredentialsCheck(deps: AwsCredentialsDeps): Check {
         return {
           ok: false,
           reason: "AWS_PROFILE is not set in the service's environment",
-          repair: `set AWS_PROFILE in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+          repair: `set AWS_PROFILE in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
         };
       }
 

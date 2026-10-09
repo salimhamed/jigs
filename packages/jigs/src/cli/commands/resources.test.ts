@@ -37,7 +37,7 @@ beforeEach(() => {
     path.join(root, "jigs.config.ts"),
     "export default { hub: { url: 'https://hub.example.test' }, service: { port: 8990, dashboardPort: 9090 }, workflows: {} };\n",
   );
-  writeFileSync(path.join(root, ".env"), "WORKFLOW_POSTGRES_URL=postgres://unused/test\n");
+  vi.stubEnv("WORKFLOW_POSTGRES_URL", "postgres://unused/test");
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
   memoryRows.length = 0;
   memoryLock.taken = undefined;

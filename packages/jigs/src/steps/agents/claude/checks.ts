@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { PROBE_TIMEOUT_MS } from "../../../checks/catalog.ts";
 import type { Check, CheckResult } from "../../../checks/check.ts";
 import { processEnv } from "../../../config/factory-context.ts";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../../../providers/credentials.ts";
+import { FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../../../providers/credentials.ts";
 import { factoryAgentEnv, harnessEnv } from "../shared/env.ts";
 import { resolveClaudeExecutable } from "../shared/executables.ts";
 import { CLAUDE_ENV } from "./process.ts";
@@ -43,7 +43,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: err instanceof Error ? err.message : String(err),
-          repair: `install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+          repair: `install the Claude Code CLI, or set JIGS_CLAUDE_EXECUTABLE in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
         };
       }
 
@@ -88,7 +88,7 @@ export function claudeAuthCheck(deps: ClaudeAuthDeps = {}): Check {
         return {
           ok: false,
           reason: `the Claude Code CLI is using an API key from ${String(status.apiKeySource)} instead of the subscription login`,
-          repair: `remove ${String(status.apiKeySource)} from ${SERVICE_ENV_FILE} (and from the shell you start the service from), then: \`${RESTART_SERVICE}\``,
+          repair: `remove ${String(status.apiKeySource)} from ${FACTORY_ENVIRONMENT} (and from the shell you start the service from), then: \`${RESTART_SERVICE}\``,
         };
       }
       if (status.authMethod !== "claude.ai") {

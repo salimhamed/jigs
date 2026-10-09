@@ -345,13 +345,13 @@ test("doctor checks no provider credential for a factory whose workflows require
   });
 });
 
-test("doctor fails a factory without its hub token, naming hub connect", async () => {
+test("doctor fails a factory without its hub token, naming the variable", async () => {
   factoryWith('{ hub: { url: "https://hub.example.test" }, service: { dashboardPort: 9090 } }');
   vi.stubEnv("JIGS_HUB_TOKEN", "");
   const report = await runChecks(doctorChecks({ hello: {} }));
   expect(report.checks.find((c) => c.id === "hub.connection")).toMatchObject({
     ok: false,
-    repair: expect.stringContaining("pnpm exec jigs hub connect <url> <token>"),
+    repair: expect.stringContaining("set JIGS_HUB_TOKEN in the factory's environment"),
   });
 });
 
@@ -552,7 +552,7 @@ test("preflight probes the PagerDuty installations a workflow's agents name", as
   expect(report.checks.find((c) => c.id === "pagerduty.installations")).toMatchObject({
     ok: false,
     reason: "acme: the hub gave no PagerDuty token: JIGS_HUB_TOKEN is not set",
-    repair: expect.stringContaining("jigs hub connect"),
+    repair: expect.stringContaining("set JIGS_HUB_TOKEN"),
   });
 });
 

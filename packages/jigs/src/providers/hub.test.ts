@@ -62,7 +62,7 @@ test("a rejected factory token says how to connect again", async () => {
   await expect(fetchFactoryStatus(ctx())).rejects.toMatchObject({
     status: 401,
     message: "the hub at https://hub.example.test rejected JIGS_HUB_TOKEN",
-    hint: expect.stringContaining("jigs hub connect"),
+    hint: expect.stringContaining("set JIGS_HUB_TOKEN"),
   });
 });
 

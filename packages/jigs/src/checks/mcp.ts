@@ -3,7 +3,7 @@ import { Client } from "@modelcontextprotocol/sdk/client/index.js";
 import { StdioClientTransport } from "@modelcontextprotocol/sdk/client/stdio.js";
 import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/streamableHttp.js";
 import type { Transport } from "@modelcontextprotocol/sdk/shared/transport.js";
-import { RESTART_SERVICE, SERVICE_ENV_FILE } from "../providers/credentials.ts";
+import { FACTORY_ENVIRONMENT, RESTART_SERVICE } from "../providers/credentials.ts";
 import { scrubCredentials } from "../providers/git.ts";
 import { checkWorktreeCodexMcpConfig } from "../steps/agents/codex/config-guard.ts";
 import {
@@ -125,8 +125,8 @@ function credentialFailure(
     reason,
     repair:
       missing === undefined
-        ? `fix the '${name}' server's credential names; each names a variable in ${SERVICE_ENV_FILE}\n${DECLARED_PER_STEP}`
-        : `set ${missing} in ${SERVICE_ENV_FILE}, then: \`${RESTART_SERVICE}\``,
+        ? `fix the '${name}' server's credential names; each names a variable in ${FACTORY_ENVIRONMENT}\n${DECLARED_PER_STEP}`
+        : `set ${missing} in ${FACTORY_ENVIRONMENT}, then: \`${RESTART_SERVICE}\``,
   };
 }
 

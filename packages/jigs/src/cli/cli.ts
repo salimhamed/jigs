@@ -1,6 +1,8 @@
 #!/usr/bin/env node
 import readline from "node:readline/promises";
 import { Command, Option } from "commander";
+import { readFactoryConfig } from "../config/factory-config.ts";
+import { locateFactoryRoot } from "../config/factory-root.ts";
 import { JigsError } from "../errors.ts";
 import { JIGS_VERSION } from "../version.ts";
 import { bindRepo } from "./commands/bind.ts";
@@ -9,7 +11,6 @@ import { buildFactoryService } from "./commands/build.ts";
 import { cancelRun } from "./commands/cancel.ts";
 import { runDoctor } from "./commands/doctor.ts";
 import { downFactory } from "./commands/down.ts";
-import { connectHub } from "./commands/hub.ts";
 import { initFactory } from "./commands/init.ts";
 import { pokeRun } from "./commands/poke.ts";
 import { addRecipe, recipeNames } from "./commands/recipe.ts";
@@ -61,9 +62,6 @@ const ROOT_HELP = `Usage: jigs <command> [options]
 Set up:
   init                      Scaffold a factory in the current directory
   doctor                    Check config, connections and required tools
-  hub connect <url> <token>
-                            Point this factory at its hub; the token goes
-                            in .env
 
 Start and stop:
   up                        Start Postgres and the service, then run doctor
@@ -118,6 +116,16 @@ const program = new Command("jigs")
 // Overriding only this command leaves every command's generated help intact.
 program.helpInformation = () => ROOT_HELP;
 
+// Every command but init runs from the factory root with its config loaded,
+// so whatever the config puts in the environment is there before anything,
+// commander's own option defaults included, reads it.
+program.hook("preSubcommand", (_program, command) => {
+  if (command.name() === "init") return;
+  const root = locateFactoryRoot(process.cwd());
+  process.chdir(root);
+  readFactoryConfig(root);
+});
+
 program
   .command("init")
   .description("scaffold a factory repo in the current directory")
@@ -171,19 +179,6 @@ program
   )
   .action(async () => {
     await downFactory({ cwd: process.cwd(), out });
-  });
-
-const hub = program
-  .command("hub")
-  .description("connect this factory to the hub it hears its providers through");
-
-hub
-  .command("connect")
-  .description("set the hub's URL in jigs.config.ts and the factory token in .env")
-  .argument("<url>", "the address the hub is reached at")
-  .argument("<token>", "the factory token the hub showed when this factory was added")
-  .action((url: string, token: string) => {
-    connectHub(url, token, { cwd: process.cwd(), out });
   });
 
 program

@@ -11,7 +11,6 @@ import {
 } from "node:fs";
 import path from "node:path";
 import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
-import { readFactoryEnv } from "../../config/factory-env.ts";
 import { JigsError } from "../../errors.ts";
 import {
   type ProcessControl,
@@ -153,22 +152,17 @@ export function serviceBehindSources(deps: BundleDeps): string | undefined {
   return undefined;
 }
 
-// The factory's own `.env` is the service's environment file, World URL and
-// credentials included. What jigs.config.ts declares wins over it: the two addresses
-// the child listens on, and the base URL derived from the first of them.
+// The child inherits this process's environment. What jigs.config.ts declares
+// wins over it: the two addresses the child listens on, and the base URL
+// derived from the first of them.
 //
 // `WORKFLOW_LOCAL_BASE_URL` pins every queue worker in the child — the
 // dashboard's included — to the service's own workflow routes. Left unset the
 // World guesses a port the process happens to listen on, and a queue job
 // delivered to a port with no workflow route dies after three 404s.
-//
-// An empty `.env` slot is unset, as doctor reads it, so it never hides a value
-// the shell exported.
-function childEnv(factoryRoot: string, service: ResolvedService): Record<string, string> {
-  const declared = Object.entries(readFactoryEnv(factoryRoot)).filter(([, value]) => value !== "");
+function childEnv(service: ResolvedService): Record<string, string> {
   return {
     ...stringEnv(),
-    ...Object.fromEntries(declared),
     PORT: String(service.port),
     JIGS_DASHBOARD_PORT: String(service.dashboardPort),
     WORKFLOW_LOCAL_BASE_URL: service.serviceUrl,
@@ -204,7 +198,7 @@ export function spawnService(
     command: process.execPath,
     args: [SERVICE_ENTRY],
     cwd: factoryRoot,
-    env: childEnv(factoryRoot, service),
+    env: childEnv(service),
     logPath: logFile,
   });
   if (pid === undefined) {
