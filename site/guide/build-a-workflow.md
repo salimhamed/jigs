@@ -147,11 +147,11 @@ export default defineWorkflow({
 });
 ```
 
-List names only, never values. Add each name to the shared section of
-`.env.example` with an empty value (`SNOWFLAKE_TOKEN=`), then set it in `.env`.
-Preflight fails a run whose secret is unset or empty, and `jigs doctor` names
-every workflow that needs it. The variables an agent's MCP servers name are
-checked the same way without being listed.
+List names only, never values. Add each name to `.env.example` with an empty
+value (`SNOWFLAKE_TOKEN=`), then set it in `.env`. Preflight fails a run whose
+secret is unset or empty, and `jigs doctor` names every workflow that needs it.
+The variables an agent's MCP servers name are checked the same way without
+being listed.
 Listing a secret does not pass it to agents; use
 [`agents.env`](/guide/configuration#agents-env) for that.
 

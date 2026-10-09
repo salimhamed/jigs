@@ -42,8 +42,10 @@ values. A copy is one checkout running its own service.
    provider fails preflight.
 8. **Shared and per-copy files, by convention.** `.env` holds values every
    copy shares and is what a worktree copies; `.env.local` holds this copy's
-   and is never copied. Template slots for per-copy values are commented out,
-   because an empty `X=` would hide the value from a file loaded after it.
+   and is never copied. `jigs init` writes `.env.example` and
+   `.env.local.example`, the second filled with its suggested ports. A slot
+   with no value is commented out, because an empty `X=` would hide the value
+   from a file loaded after it.
 9. **Error-message niceties go.** Code that only made an error more specific,
    such as "set X in `.env`" provenance and a factory-name headline, was
    deleted.
@@ -57,18 +59,12 @@ values. A copy is one checkout running its own service.
 
 ## Consequences
 
-- The development pattern: each engineer adds one hub factory (say
-  `alice-dev`) assigned the same apps as production, and each worktree sets
-  its own ports, compose project, the dev token and the one `*_ACTIVE=true` it
-  is working on. Everything else stays off. A copy that needs no provider
-  needs no token.
+- The development pattern is recorded in [0015](./0015-hub.md).
 - A deployed copy sets its variables through its platform (task definitions,
   a secrets manager) and needs no file.
 - The environment loads once per process and a set value wins, so tests that
   load two factories in one process stub the environment or use separate
   processes.
-- Turning a trigger on never replays what arrived while it was off: its
-  waiting occurrences are withdrawn, and the hub cursor moved past its events.
 - Rejected: a jigs `env()` helper (a second way to read what `process.env`
   already gives); a `JIGS_TRIGGERS` allowlist (one variable naming config keys,
   out of sight of the trigger it governs); `roles` on triggers (a vocabulary

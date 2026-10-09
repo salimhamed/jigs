@@ -46,7 +46,7 @@ export async function initFactory(deps: InitDeps): Promise<InitResult> {
   const next: Array<[string, string?]> = [
     ["pnpm install"],
     ["cp .env.example .env", "values every copy of this factory shares"],
-    ["$EDITOR .env.local", "this copy's values, uncommented from the end of .env.example"],
+    ["cp .env.local.example .env.local", "this copy's own values, such as its ports"],
     ["pnpm exec jigs up", "start Postgres and the service, then run doctor"],
     ["pnpm exec jigs run hello"],
     ["pnpm exec jigs doctor", "re-check what your workflows need, any time"],

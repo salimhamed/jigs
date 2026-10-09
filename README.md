@@ -25,14 +25,11 @@ your factory added to it: see
 mkdir my-factory && cd my-factory && git init
 pnpm --config.minimum-release-age-exclude=@jigs-ai/jigs dlx @jigs-ai/jigs init
 pnpm install
-cp .env.example .env
-$EDITOR .env.local
+cp .env.example .env && cp .env.local.example .env.local
 pnpm exec jigs up
 ```
 
-`.env` holds the values every copy of the factory shares. `.env.local` holds
-this copy's own, such as its ports: uncomment them from the end of
-`.env.example`. `jigs up` starts Postgres and the service, checks the factory, and ends by
+`jigs up` starts Postgres and the service, checks the factory, and ends by
 listing what it started, with the dashboard URL. Then run the starter workflow:
 
 ```sh

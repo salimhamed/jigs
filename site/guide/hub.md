@@ -247,8 +247,9 @@ and every event waiting for it.
 
 Each running copy that connects needs its own factory on the hub, with its own
 token. Two copies with one token split its events between them, so each misses
-some. See
-[A dev factory per engineer](#dev-factories).
+some. See [Developing in worktrees](/guide/worktrees). A copy with no active
+trigger, whose workflows and bindings use none of these providers, needs no
+token.
 
 **Factories** opens on **My factories**, the ones you added; **All factories**
 lists every factory in the Organization. Both show when each factory last
@@ -343,21 +344,10 @@ Both bots see a message in a channel they share, but a trigger takes only
 events from its own installation, so a message mentioning Alice's bot starts
 one run, in Alice's factory.
 
-### A dev factory per engineer {#dev-factories}
-
-To try changes against real events without touching production, each engineer
-adds one more factory on the hub, such as `alice-dev`, and assigns it the same
-apps as the production factory. It receives every event production receives.
-Its copies run the same `jigs.config.ts`, but turn on only the trigger or
-schedule they are working on, through [`active`](/guide/configuration#active),
-often pointed at a test channel. Every other trigger stays off, so a dev copy
-never answers in production's place. A dev copy that uses no provider needs no
-token at all. See [Developing in worktrees](/guide/worktrees) for the steps.
-
 ### Check the factory {#doctor}
 
-`pnpm exec jigs doctor`, in a copy with a hub connection, checks that it
-reaches the hub, then:
+`pnpm exec jigs doctor`, for each provider something in the factory uses,
+checks that the copy reaches the hub, then:
 
 - that each installation name the factory uses, in its bindings, triggers and
   agents, is named and assigned to it;

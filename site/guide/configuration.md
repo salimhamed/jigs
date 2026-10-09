@@ -76,10 +76,6 @@ fails its preflight with `this copy has no hub connection`. `jigs doctor` runs
 no hub or provider checks in such a copy, so a copy that is quiet on purpose
 gets a clean doctor.
 
-Each copy that connects needs its own factory on the hub, with its own token.
-Two copies sharing a token split the events between them. See
-[Developing in worktrees](/guide/worktrees).
-
 ## `workflows`
 
 A map from a workflow's name to a deferred import of its file. The name is what
@@ -616,19 +612,15 @@ instead, and jigs sees whatever ends up in the environment. A deployed copy
 needs neither file: set its variables through its platform, such as its
 container's environment or a secrets manager.
 
-Every command except `jigs init` changes to the factory's directory and loads
-`jigs.config.ts` before anything else, so the files load for every command. A
-config that fails to load stops every command. The service inherits the
-environment of the `jigs up` that started it.
+The service inherits the environment of the `jigs up` that started it.
 
-`jigs init` writes `.env.example` with both sections. Copy it to `.env`, then
-uncomment the second section's lines into `.env.local`. The second section
-stays commented out in `.env.example`, so a `.env` copied from it never
-carries one copy's values into another. jigs treats an empty value as unset,
-but an empty `X=` in `.env.local` still hides the value of `X` in `.env`, so
-leave out what you don't set.
+`jigs init` writes `.env.example`, with the shared values, and
+`.env.local.example`, with this copy's values and the ports it suggests. Copy
+them to `.env` and `.env.local`. jigs treats an empty value as unset, but an
+empty `X=` in `.env.local` still hides the value of `X` in `.env`, so leave out
+what you don't set.
 
-These are the values every copy shares:
+These are the values every copy shares, in `.env`:
 
 | Variable | When you need it |
 | --- | --- |
@@ -637,7 +629,7 @@ These are the values every copy shares:
 | `JIGS_CLAUDE_EXECUTABLE` | Optional. Path to `claude` when it is not on the service's `PATH`. |
 | `AWS_PROFILE` | Workflows that declare `requires: { aws: true }`. Preflight checks the profile with `aws sts get-caller-identity`. For an SSO profile it skips cached role credentials, so an expired `aws sso login` fails the check. |
 
-These are this copy's own:
+These are this copy's own, in `.env.local`:
 
 | Variable | When you need it |
 | --- | --- |
@@ -649,18 +641,6 @@ These are this copy's own:
 Also set any variable your `jigs.config.ts` names, such as an MCP server's
 `bearerTokenEnv`, in the file it belongs to.
 
-::: details Changing the Postgres port
-`docker-compose.yml` publishes Postgres on `JIGS_POSTGRES_PORT`, and
-`WORKFLOW_POSTGRES_URL` names the same port. Change both together in
-`.env.local`. Run `pnpm exec jigs down` before you change the port or
-`COMPOSE_PROJECT_NAME`, then `pnpm exec jigs up`. A new
-`COMPOSE_PROJECT_NAME` starts an empty Postgres; the old project's data stays
-in its own Docker volume.
-
-`docker-compose.yml` publishes Postgres on `127.0.0.1` only, so other machines
-on your network cannot reach it. Keep that prefix if you edit the file.
-:::
-
 `JIGS_SERVICE_URL` is read by the CLI, not the service. Set it in your shell to
 point commands such as `jigs status` at a different service, or pass
 `--service-url`.
@@ -669,5 +649,5 @@ point commands such as `jigs status` at a different service, or pass
 
 A workflow that reads a credential of its own lists the variable's name in
 `requires.secrets`, and its steps read the value from `process.env`. Add each
-name to the shared section of `.env.example` with an empty value, so a new
+name to `.env.example` with an empty value, so a new
 checkout knows to fill it in. See [Secrets](/guide/build-a-workflow#secrets).

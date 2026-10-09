@@ -6,16 +6,14 @@ A [jigs](https://salimhamed.github.io/jigs/) factory: workflows and the service 
 
 ```sh
 pnpm install
-cp .env.example .env
-$EDITOR .env.local
+cp .env.example .env && cp .env.local.example .env.local
 pnpm exec jigs up
 pnpm exec jigs run hello
 ```
 
-`.env` holds the values every copy of this factory shares, such as API keys.
-`.env.local` holds this copy's own: uncomment the lines at the end of
-`.env.example` into it. `jigs.config.ts` loads both, and a variable already set
-in the shell wins. Neither file is committed.
+`.env` holds values every copy of this factory shares; `.env.local` holds this
+copy's own, such as its ports. See
+[the environment](https://salimhamed.github.io/jigs/guide/configuration#env).
 
 `jigs up` starts Postgres and the service and ends by running `jigs doctor`,
 which checks only what this factory's workflows use. `hello` needs no

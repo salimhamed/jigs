@@ -25,6 +25,7 @@ The rest of this page shows the same process manually.
 - **Node.js 24 or newer**
 - **pnpm**
 - **Docker**, with Docker running
+
 `hello` doesn't use a model, a coding agent or any provider, so you don't need
 model credentials, agent CLIs or a [hub](/guide/hub) yet. A factory reaches
 GitHub, Linear, Slack and PagerDuty through a hub, which you connect once a
@@ -59,26 +60,12 @@ registers it under the name `hello`.
 ```sh
 pnpm install
 cp .env.example .env
+cp .env.local.example .env.local
 ```
 
-`.env.example` has two sections. The first holds values every copy of the
-factory shares, such as API keys; `.env` is where they go. The second holds
-this copy's own values: its docker compose project, its ports and its
-database, with the ports `jigs init` suggested. Uncomment those lines into a
-new file, `.env.local`. Your ports will differ:
-
-```sh
-# .env.local
-COMPOSE_PROJECT_NAME=my-factory
-JIGS_SERVICE_PORT=8990
-JIGS_DASHBOARD_PORT=9090
-JIGS_POSTGRES_PORT=5440
-WORKFLOW_POSTGRES_URL=postgres://jigs:jigs@localhost:5440/jigs
-```
-
-`jigs.config.ts` loads both files, and neither is committed. `hello` needs
-nothing else. See [The environment](/guide/configuration#env) for what each
-variable is for.
+`.env` holds values every copy of the factory shares, such as API keys.
+`.env.local` holds this copy's own, such as the ports `jigs init` suggested.
+`hello` needs nothing else. See [The environment](/guide/configuration#env).
 
 ## 4. Start the service
 

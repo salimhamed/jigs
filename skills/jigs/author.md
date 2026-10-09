@@ -241,7 +241,7 @@ feedback nor your completed work.
 
 `jigs.config.ts` declares its hub (optional until something uses a provider), bindings,
 deferred workflow imports, schedules and triggers; ports and everything else that differs
-between copies of the factory live in the environment. Declare used credential providers in `requires.integrations`. Secrets live in the environment, usually the shared `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in the shared section of `.env.example` with an empty value. A schedule names a `workflow`, cron
+between copies of the factory live in the environment. Declare used credential providers in `requires.integrations`. Secrets live in the environment, usually the shared `.env`; a workflow lists the names its steps read from `process.env` in `requires.secrets`, and each name goes in `.env.example` with an empty value. A schedule names a `workflow`, cron
 expression and inputs; the service validates its inputs against the workflow's
 schema. An active prior run causes a tick to be skipped; downtime isn't replayed.
 

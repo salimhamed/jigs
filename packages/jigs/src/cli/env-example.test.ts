@@ -62,13 +62,16 @@ function envNamesReadBySource(): Set<string> {
   return names;
 }
 
+// The shared values, then this copy's. JIGS_HUB_TOKEN is a commented-out slot in
+// .env.local.example, so a copy that needs no hub leaves it unset.
 function envExampleNames(): string[] {
-  const text = readFileSync(path.join(locateTemplates(), ".env.example.tmpl"), "utf8");
-  // A copy's own values are listed commented out, so a .env copied from the file never carries them.
-  return [...text.matchAll(/^(?:# )?([A-Z][A-Z0-9_]*)=/gm)].map(([, name]) => `${name}`);
+  return [".env.example.tmpl", ".env.local.example.tmpl"].flatMap((file) => {
+    const text = readFileSync(path.join(locateTemplates(), file), "utf8");
+    return [...text.matchAll(/^(?:# )?([A-Z][A-Z0-9_]*)=/gm)].map(([, name]) => `${name}`);
+  });
 }
 
-test(".env.example covers every variable jigs reads from a factory's environment", () => {
+test("the .env examples cover every variable jigs reads from a factory's environment", () => {
   const listed = new Set(envExampleNames());
   const missing = [...envNamesReadBySource()].filter(
     (name) => !listed.has(name) && !NOT_IN_ENV_EXAMPLE.has(name),
@@ -76,7 +79,7 @@ test(".env.example covers every variable jigs reads from a factory's environment
   expect(missing).toEqual([]);
 });
 
-test("the configuration guide's environment tables list exactly the .env.example variables", () => {
+test("the configuration guide's environment tables list exactly the .env examples' variables", () => {
   const guide = readFileSync(
     path.join(packageRoot(), "..", "..", "site", "guide", "configuration.md"),
     "utf8",

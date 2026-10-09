@@ -32,6 +32,7 @@ test("scaffolds a factory that can be installed and built", async () => {
   expect(created.sort()).toEqual(
     [
       ".env.example",
+      ".env.local.example",
       ".gitignore",
       "README.md",
       "docker-compose.yml",
@@ -150,7 +151,7 @@ test("the tsconfig compiles the code this factory starts with", async () => {
   expect(tsconfig).toContain('"erasableSyntaxOnly": true');
 });
 
-test("the docker project and ports are suggested in .env.example, never committed", async () => {
+test("the docker project and ports are suggested in .env.local.example, never committed", async () => {
   const dir = scaffold("alpha");
   const a = await init(dir);
 
@@ -160,11 +161,12 @@ test("the docker project and ports are suggested in .env.example, never committe
   expect(readFileSync(path.join(dir, "jigs.config.ts"), "utf8")).not.toContain(
     String(a.servicePort),
   );
-  const example = readFileSync(path.join(dir, ".env.example"), "utf8");
-  expect(example).toContain("\n# COMPOSE_PROJECT_NAME=alpha\n");
-  expect(example).toContain(`\n# JIGS_SERVICE_PORT=${a.servicePort}\n`);
-  expect(example).toContain(`\n# JIGS_DASHBOARD_PORT=${a.dashboardPort}\n`);
-  expect(example).toContain(`\n# JIGS_POSTGRES_PORT=${a.postgresPort}\n`);
+  const example = readFileSync(path.join(dir, ".env.local.example"), "utf8");
+  expect(example).toContain("\nCOMPOSE_PROJECT_NAME=alpha\n");
+  expect(example).toContain(`\nJIGS_SERVICE_PORT=${a.servicePort}\n`);
+  expect(example).toContain(`\nJIGS_DASHBOARD_PORT=${a.dashboardPort}\n`);
+  expect(example).toContain(`\nJIGS_POSTGRES_PORT=${a.postgresPort}\n`);
+  expect(readFileSync(path.join(dir, ".env.example"), "utf8")).not.toContain("PORT=");
 
   // One offset under 100 shared by three ranges 100 apart, so no factory's
   // service port can be another's dashboard or World port. Two scaffolds
@@ -187,8 +189,8 @@ test("the docker project and ports are suggested in .env.example, never committe
   // the directory rather than the ports.
   const other = scaffold("beta");
   const b = await init(other);
-  expect(readFileSync(path.join(other, ".env.example"), "utf8")).toContain(
-    "\n# COMPOSE_PROJECT_NAME=beta\n",
+  expect(readFileSync(path.join(other, ".env.local.example"), "utf8")).toContain(
+    "\nCOMPOSE_PROJECT_NAME=beta\n",
   );
   for (const port of [a.servicePort, b.servicePort]) {
     expect(a.dashboardPort).not.toBe(port);
@@ -226,7 +228,7 @@ test("the next steps are printed, not run", async () => {
   expect(steps.map((l) => l.split("  ")[0])).toEqual([
     "pnpm install",
     "cp .env.example .env",
-    "$EDITOR .env.local",
+    "cp .env.local.example .env.local",
     "pnpm exec jigs up",
     "pnpm exec jigs run hello",
     "pnpm exec jigs doctor",

@@ -50,22 +50,16 @@ from the factory path; pick others if they are taken.
 
 ## 2. Install and the environment
 
-`jigs.config.ts` says what the factory is; the environment says how this copy
-runs. jigs reads only the process environment, and the scaffolded
-`jigs.config.ts` loads `.env.local`, then `.env`, never replacing a value already
-set. `.env` holds values every copy shares (API keys, secrets, channel IDs);
-`.env.local` holds this copy's own (ports, `COMPOSE_PROJECT_NAME`,
-`WORKFLOW_POSTGRES_URL`, `JIGS_HUB_TOKEN`, `*_ACTIVE` flags). Neither is committed.
-
 ```sh
 pnpm install
-cp .env.example .env
+cp .env.example .env && cp .env.local.example .env.local
 ```
 
-Then write `.env.local` from the commented lines at the end of `.env.example`,
-uncommented: `COMPOSE_PROJECT_NAME`, the three ports and `WORKFLOW_POSTGRES_URL`.
-Never leave an empty `X=` in `.env.local`: it hides the value in `.env`. `hello`
-needs nothing else, and no hub.
+The scaffolded `jigs.config.ts` loads both; jigs itself reads only the process
+environment. `.env` holds values every copy shares (API keys, secrets, channel
+IDs); `.env.local` holds this copy's own (ports, `COMPOSE_PROJECT_NAME`,
+`WORKFLOW_POSTGRES_URL`, `JIGS_HUB_TOKEN`, `*_ACTIVE` flags). `hello` needs
+nothing else, and no hub.
 
 A factory hears GitHub, Linear, Slack and PagerDuty only through a hub, and needs
 one once a workflow, binding or trigger uses one of them. Then ask the user for
