@@ -356,8 +356,8 @@ token at all. See [Developing in worktrees](/guide/worktrees) for the steps.
 
 ### Check the factory {#doctor}
 
-`pnpm exec jigs doctor`, in the factory, checks that it reaches the hub when a
-workflow, binding or trigger uses a provider, then:
+`pnpm exec jigs doctor`, in a copy with a hub connection, checks that it
+reaches the hub, then:
 
 - that each installation name the factory uses, in its bindings, triggers and
   agents, is named and assigned to it;
@@ -367,7 +367,8 @@ workflow, binding or trigger uses a provider, then:
   one has your [`linear.operator`](/guide/configuration#linear-operator) as a
   user.
 
-It names what to fix in the hub when one fails.
+It names what to fix in the hub when one fails. A copy with no hub connection
+runs none of these checks.
 
 Before a run starts, preflight checks only the installations the workflow's
 agents name. One that a step names, or that comes from the run's inputs, is

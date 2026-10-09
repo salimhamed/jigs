@@ -9,10 +9,10 @@ for (const file of [".env.local", ".env"]) {
 
 export default defineFactory({
   // GitHub, Linear, Slack and PagerDuty events and tokens reach this factory through its hub.
-  // Set its URL here and the factory token as JIGS_HUB_TOKEN in the environment.
-  // Workflows, bindings and triggers name each installation they use by the
-  // name an admin gave it on the hub.
-  hub: { url: "https://hub.example.com" },
+  // Once a workflow, binding or trigger uses one, set the hub's URL here and this copy's
+  // factory token as JIGS_HUB_TOKEN in its environment. They name each installation they use
+  // by the name an admin gave it on the hub.
+  // hub: { url: "https://hub.example.com" },
   bindings: {},
   // Agents get only a small base environment; name any other variable they need.
   // agents: { env: ["SSH_AUTH_SOCK"] },

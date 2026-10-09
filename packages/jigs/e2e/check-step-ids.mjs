@@ -950,7 +950,13 @@ async function checkScaffold(name) {
   if (hub !== undefined && name === "linear-ticket-to-pr") {
     writeFileSync(path.join(factory, ".env"), `JIGS_HUB_TOKEN=${hub.token}\n`);
     const config = path.join(factory, "jigs.config.ts");
-    writeFileSync(config, readFileSync(config, "utf8").replace("https://hub.example.com", hub.url));
+    writeFileSync(
+      config,
+      readFileSync(config, "utf8").replace(
+        '// hub: { url: "https://hub.example.com" }',
+        `hub: { url: "${hub.url}" }`,
+      ),
+    );
   }
   if (name === "linear-ticket-to-pr") {
     run(path.join(factory, "node_modules", ".bin", "jigs"), [

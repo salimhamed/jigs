@@ -71,9 +71,10 @@ the `JIGS_HUB_TOKEN=` line for this copy's `.env.local`. Then run
 
 A copy with no connection still starts and runs workflows that use no
 provider. It refuses to start while an active trigger, or an active schedule
-whose workflow uses a provider, needs the hub. A run that needs a provider
-fails its preflight, and `jigs doctor` checks the hub only when a workflow,
-binding or trigger uses a provider.
+whose workflow uses a provider, needs the hub, and a run that needs a provider
+fails its preflight with `this copy has no hub connection`. `jigs doctor` runs
+no hub or provider checks in such a copy, so a copy that is quiet on purpose
+gets a clean doctor.
 
 Each copy that connects needs its own factory on the hub, with its own token.
 Two copies sharing a token split the events between them. See

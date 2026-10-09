@@ -245,6 +245,7 @@ test("the scaffold leaves GitHub to its hub and the approval to its default", as
   const dir = scaffold("github-factory");
   await init(dir);
   const config = readFileSync(path.join(dir, "jigs.config.ts"), "utf8");
+  expect(config).toContain('// hub: { url: "https://hub.example.com" },');
   expect(config).toContain('// github: { operator: "your-github-login" },');
   expect(config).not.toContain("merge");
 });

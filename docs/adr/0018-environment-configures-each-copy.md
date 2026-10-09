@@ -37,8 +37,9 @@ values. A copy is one checkout running its own service.
    copy is quiet. An inactive trigger is not armed or checked, its queued
    occurrences are withdrawn at start, and an inactive schedule never fires.
 7. **The hub is optional and checked when used.** `hub` and `JIGS_HUB_TOKEN`
-   are both optional; a copy is connected only with both. Doctor and preflight
-   check the hub only for what uses a provider.
+   are both optional; a copy is connected only with both. An unconnected copy
+   starts, its doctor runs no hub or provider checks, and a run that needs a
+   provider fails preflight.
 8. **Shared and per-copy files, by convention.** `.env` holds values every
    copy shares and is what a worktree copies; `.env.local` holds this copy's
    and is never copied. Template slots for per-copy values are commented out,
