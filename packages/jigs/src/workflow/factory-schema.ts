@@ -120,9 +120,9 @@ const eventTriggerSchema: z.ZodType<EventTrigger, EventTrigger> = z.strictObject
 export const factoryConfigSchema = z
   .strictObject({
     bindings: z.record(z.string(), bindingSchema).default({}),
-    // The hub this factory hears its providers through. Its token is
-    // JIGS_HUB_TOKEN in the factory's environment.
-    hub: z.strictObject({ url: z.url() }),
+    // The hub this factory hears its providers through. A copy is connected
+    // only when JIGS_HUB_TOKEN is also set in its environment.
+    hub: z.strictObject({ url: z.url() }).optional(),
     // Who the operator is on GitHub, and how they approve a merge.
     github: githubSchema.prefault({}),
     linear: linearSchema.prefault({}),

@@ -267,7 +267,7 @@ function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> 
             </SettingRow>
             <SettingRow
               label="Connection token"
-              hint="Issuing a new one stops the old token. Run the new connect command on the factory."
+              hint="Issuing a new one stops the old token. Set the new one as JIGS_HUB_TOKEN in the factory's environment."
             >
               <ReissueTokenButton factory={factory} className={secondaryButton}>
                 <KeyRound className="size-4" />

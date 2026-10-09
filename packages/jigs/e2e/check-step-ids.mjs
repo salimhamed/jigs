@@ -946,7 +946,8 @@ async function checkScaffold(name) {
   // Exercise recipe discovery, copying and registration from the installed
   // tarball. Both versions use these same files.
   installFromTarball(tarballs.bumped);
-  if (hub !== undefined) {
+  // Only the boot that reaches the hub needs a connection; the bare factory runs without one.
+  if (hub !== undefined && name === "linear-ticket-to-pr") {
     writeFileSync(path.join(factory, ".env"), `JIGS_HUB_TOKEN=${hub.token}\n`);
     const config = path.join(factory, "jigs.config.ts");
     writeFileSync(config, readFileSync(config, "utf8").replace("https://hub.example.com", hub.url));
@@ -1135,7 +1136,7 @@ if (hub === undefined) {
       { cwd: packageRoot, stdio: "inherit" },
     );
     console.log(
-      "\n=== bare boot: with no harness CLI and no provider credential, the bare factory starts and doctor is clean",
+      "\n=== bare boot: with no harness CLI, provider credential or hub connection, the bare factory starts and doctor is clean",
     );
     const recipeFactory = factory;
     factory = factories.get("bare");

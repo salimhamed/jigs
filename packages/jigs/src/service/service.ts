@@ -51,9 +51,9 @@ export function startService(factory: Factory, config: FactoryDefinition): void 
   seedFactoryContext(parseFactoryConfig(config));
   // Started in this order and never awaited, the way Nitro runs separate
   // plugins: each later part waits on the World's readiness itself.
-  void startWorld();
-  void startDashboard();
   const live = activeFactory(factory);
+  void startWorld(live);
+  void startDashboard();
   for (const name of Object.keys(factory.schedules ?? {}))
     if (live.schedules?.[name] === undefined) console.log(`[schedule] ${name} inactive`);
   const inactive = Object.keys(factory.triggers ?? {}).filter(

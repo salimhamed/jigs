@@ -61,6 +61,11 @@ function integrationsOf(requires: WorkflowRequires): Provider[] {
   return [...new Set([...(requires.integrations ?? []), ...opted])];
 }
 
+/** Whether a workflow's runs reach a provider, and so need this copy's hub connection. */
+export function needsHub(requires: WorkflowRequires): boolean {
+  return integrationsOf(requires).length > 0 || (requires.bindings ?? []).length > 0;
+}
+
 /** An event trigger as doctor sees it: the provider its source reads, and the installation it names. */
 export interface TriggerInstallation {
   provider: Provider;
@@ -139,6 +144,7 @@ export function preflightChecks(
         ];
   };
   return [
+    ...(integrations.length > 0 ? hubChecks(ctx) : []),
     ...PROVIDERS.filter((provider) => integrations.includes(provider)).flatMap(installations),
     ...bindingChecks({ context: ctx, names: bindings }),
     ...descriptorChecks(requiredDescriptors(requires)),
@@ -323,9 +329,10 @@ export function doctorChecks(
       watching.map(([name]) => name),
     );
   };
+  const providers = PROVIDERS.flatMap(installations);
   return [
-    ...hubChecks(ctx, status),
-    ...PROVIDERS.flatMap(installations),
+    ...(providers.length > 0 ? hubChecks(ctx, status) : []),
+    ...providers,
     ...bindingChecks({ context: ctx }),
     ...usedDescriptorChecks(workflows),
     ...usedAgentGithubChecks(workflows),

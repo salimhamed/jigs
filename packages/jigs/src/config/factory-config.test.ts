@@ -99,7 +99,6 @@ test.each([
     },
     "must be an installation name from the hub",
   ],
-  [{}, "hub"],
   [{ hub: { url: "hub.example.test" } }, "url"],
   [
     {
