@@ -248,7 +248,7 @@ export default defineFactory({
 | `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
 | `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
-| `github.pushes` | A push to a branch | `{ installationName, owner, repo, ref, before, after }` | `installationName`, `repositories`, `branches` |
+| `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
 
 `installationName` is required on every source.
 
@@ -268,17 +268,17 @@ the moment they start, the occurrence under SOURCE, such as
 
 - `installationName`, `owner` and `repo`: the repository, ready to pass to
   the GitHub steps the run calls.
-- `ref`: the branch pushed to, such as `main`.
+- `branch`: the branch pushed to, such as `main`.
 - `before` and `after`: the commits the branch pointed at before and after the
   push. `before` is all zeros for a new branch.
 
-A push is its repository, branch and `after` commit, so it starts at most one
-run even if GitHub sends it twice. Tag pushes and branch deletions start no
+A push is its repository, branch and `before` and `after` commits, so it
+starts at most one run even if GitHub sends it twice. Tag pushes and branch deletions start no
 run. A push the factory's own App made, such as merging a person's pull
 request, starts runs like any other.
 
 `repositories` takes `owner/repo` names, in any case, and `branches` takes
-branch names such as `main`, not `refs/heads/main`. Both match exact names.
+branch names such as `main`. Both match exact names.
 
 ```ts
 import { github } from "@jigs-ai/jigs";

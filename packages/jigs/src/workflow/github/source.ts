@@ -42,7 +42,7 @@ export type GitHubPushesParams = z.input<typeof gitHubPushesParamsSchema>;
  */
 export type GitHubPushInputs = RepositoryRef & {
   /** The branch pushed to, such as `main`. */
-  ref: string;
+  branch: string;
   /** The commit the branch pointed at before the push, all zeros for a new branch. */
   before: string;
   /** The commit the branch points at after the push. */

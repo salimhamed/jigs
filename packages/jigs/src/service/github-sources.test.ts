@@ -10,6 +10,7 @@ const pushes = SOURCES["github.pushes"];
 if (pushes === undefined) throw new Error("github.pushes is not registered");
 
 const ACME = { installationName: "acme" };
+const BEFORE = "6113728f27ae82c7b1a177c8d03f9e96e0adf246";
 const AFTER = "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c";
 
 // A push to `main` as GitHub's webhooks send it: the factory's App merging a person's pull request.
@@ -36,18 +37,30 @@ test("a push to a branch is that branch moving to its new commit, as of when it 
   const pushed = await pushes.fromPush(ACME, from(push()));
 
   expect(pushed).toEqual({
-    key: `Acme/api:main:${AFTER}`,
+    key: `Acme/api:main:${BEFORE}:${AFTER}`,
     inputs: {
       installationName: "acme",
       owner: "Acme",
       repo: "api",
-      ref: "main",
-      before: "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+      branch: "main",
+      before: BEFORE,
       after: AFTER,
     },
     at: new Date(1_791_734_322_000),
   });
   expect(pushes.describe(pushed?.inputs ?? {})).toBe("github Acme/api main 0d1a26e");
+});
+
+test("a force-push back to a commit the branch held before is a push of its own", async () => {
+  const rolledBack = {
+    ...push(),
+    before: "9f0a8c2d6b1e4f3a7c5d2e8b0a6f4c1d3e7b9a25",
+    forced: true,
+  };
+  const forward = await pushes.fromPush(ACME, from(push()));
+  const back = await pushes.fromPush(ACME, from(rolledBack));
+  expect(back?.inputs.after).toBe(forward?.inputs.after);
+  expect(back?.key).not.toBe(forward?.key);
 });
 
 test("any other event, or one from another installation, is not a push", async () => {
@@ -92,7 +105,7 @@ const deploy: Factory = {
         installationName: z.string(),
         owner: z.string(),
         repo: z.string(),
-        ref: z.string(),
+        branch: z.string(),
         before: z.string(),
         after: z.string(),
       }),

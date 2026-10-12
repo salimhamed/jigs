@@ -1,6 +1,6 @@
 // The GitHub sources, read off the webhooks the hub passes on under GitHub's
 // event name. A push to a branch is one occurrence, keyed by the branch and
-// the commit it moved to.
+// the commits it moved from and to.
 
 import { z } from "zod";
 import {
@@ -27,15 +27,6 @@ const pushSchema = z.object({
   }),
 });
 
-const SAMPLE_PUSH = {
-  installationName: "acme",
-  owner: "acme",
-  repo: "api",
-  ref: "main",
-  before: "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
-  after: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
-} satisfies GitHubPushInputs;
-
 // GitHub keeps an owner's casing wherever it is shown, so a name written by hand may differ.
 const inRepositories = (repositories: readonly string[] | undefined, owner: string, repo: string) =>
   repositories === undefined ||
@@ -46,7 +37,14 @@ const inRepositories = (repositories: readonly string[] | undefined, owner: stri
 const GITHUB_PUSHES: Source<GitHubPushesParams> = {
   provider: "github",
   params: gitHubPushesParamsSchema,
-  sampleInputs: SAMPLE_PUSH,
+  sampleInputs: {
+    installationName: "acme",
+    owner: "acme",
+    repo: "api",
+    branch: "main",
+    before: "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+    after: "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+  } satisfies GitHubPushInputs,
   async fromPush(params, { installationName, name, payload }) {
     if (installationName !== params.installationName || name !== "push") return null;
     // A shape GitHub will send the same way every time is no reason to retry.
@@ -62,22 +60,15 @@ const GITHUB_PUSHES: Source<GitHubPushesParams> = {
     const repo = repository.name;
     if (!inRepositories(params.repositories, owner, repo)) return null;
     if (params.branches && !params.branches.includes(branch)) return null;
-    const inputs = {
-      installationName,
-      owner,
-      repo,
-      ref: branch,
-      before,
-      after,
-    } satisfies GitHubPushInputs;
     return {
-      key: `${owner}/${repo}:${branch}:${after}`,
-      inputs,
+      // `before` keeps a force-push back to a commit the branch held earlier a push of its own.
+      key: `${owner}/${repo}:${branch}:${before}:${after}`,
+      inputs: { installationName, owner, repo, branch, before, after } satisfies GitHubPushInputs,
       at: new Date(repository.pushed_at * 1000),
     };
   },
-  describe: ({ owner, repo, ref, after }) =>
-    `github ${String(owner)}/${String(repo)} ${String(ref)} ${String(after).slice(0, 7)}`,
+  describe: ({ owner, repo, branch, after }) =>
+    `github ${String(owner)}/${String(repo)} ${String(branch)} ${String(after).slice(0, 7)}`,
 };
 
 export const GITHUB_SOURCES = {
