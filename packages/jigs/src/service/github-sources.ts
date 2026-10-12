@@ -40,14 +40,17 @@ const pushSchema = z.object({
   }),
 });
 
+const issueSchema = z.object({
+  number: z.number(),
+  state: z.string(),
+  updated_at: z.iso.datetime({ offset: true }),
+  user: z.object({ login: z.string() }),
+  labels: z.array(z.object({ name: z.string() })),
+});
+
 const pullRequestEventSchema = z.object({
-  pull_request: z.object({
-    number: z.number(),
-    state: z.string(),
+  pull_request: issueSchema.extend({
     draft: z.boolean(),
-    updated_at: z.iso.datetime({ offset: true }),
-    user: z.object({ login: z.string() }),
-    labels: z.array(z.object({ name: z.string() })),
     base: z.object({ ref: z.string() }),
   }),
   repository: repositorySchema,
@@ -55,13 +58,7 @@ const pullRequestEventSchema = z.object({
 });
 
 const issueEventSchema = z.object({
-  issue: z.object({
-    number: z.number(),
-    state: z.string(),
-    updated_at: z.iso.datetime({ offset: true }),
-    user: z.object({ login: z.string() }),
-    labels: z.array(z.object({ name: z.string() })),
-  }),
+  issue: issueSchema,
   repository: repositorySchema,
   sender: z.object({ id: z.number() }),
 });
@@ -81,6 +78,9 @@ const matches = (values: readonly string[] | undefined, ...found: string[]) =>
 const inRepositories = (repositories: readonly string[] | undefined, owner: string, repo: string) =>
   repositories === undefined ||
   repositories.some((name) => name.toLowerCase() === `${owner}/${repo}`.toLowerCase());
+
+const describeNumbered = ({ owner, repo, number }: Record<string, unknown>) =>
+  `github ${String(owner)}/${String(repo)}#${String(number)}`;
 
 // No sender check: the factory's App merging a person's pull request is how
 // commits usually reach a branch, and that push should start runs.
@@ -148,8 +148,7 @@ const GITHUB_PULL_REQUESTS: Source<GitHubPullRequestsParams> = {
       at: new Date(pr.updated_at),
     };
   },
-  describe: ({ owner, repo, number }) =>
-    `github ${String(owner)}/${String(repo)}#${String(number)}`,
+  describe: describeNumbered,
 };
 
 const GITHUB_ISSUES: Source<GitHubIssuesParams> = {
@@ -182,8 +181,7 @@ const GITHUB_ISSUES: Source<GitHubIssuesParams> = {
       at: new Date(issue.updated_at),
     };
   },
-  describe: ({ owner, repo, number }) =>
-    `github ${String(owner)}/${String(repo)}#${String(number)}`,
+  describe: describeNumbered,
 };
 
 export const GITHUB_SOURCES = {
