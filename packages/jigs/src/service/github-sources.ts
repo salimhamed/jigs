@@ -37,7 +37,7 @@ const pushSchema = z.object({
 
 const pullRequestEventSchema = z.object({
   pull_request: z.object({
-    number: z.number().int().positive(),
+    number: z.number(),
     state: z.string(),
     draft: z.boolean(),
     updated_at: z.iso.datetime({ offset: true }),
@@ -100,8 +100,6 @@ const GITHUB_PUSHES: Source<GitHubPushesParams> = {
     `github ${String(owner)}/${String(repo)} ${String(branch)} ${String(after).slice(0, 7)}`,
 };
 
-// Any event showing the pull request matching starts its run, so a filter it
-// meets only later, such as a label added after it opened, still starts one.
 const GITHUB_PULL_REQUESTS: Source<GitHubPullRequestsParams> = {
   provider: "github",
   params: gitHubPullRequestsParamsSchema,
@@ -126,7 +124,6 @@ const GITHUB_PULL_REQUESTS: Source<GitHubPullRequestsParams> = {
       !matches(params.baseBranches, pr.base.ref)
     )
       return null;
-    // Asked last, so an event the filters skip costs no call to the hub.
     if (sender.id === (await githubAuthFor(installationName).bot()).id) return null;
     return {
       key: `${owner}/${repo}#${pr.number}`,

@@ -256,8 +256,8 @@ export default defineFactory({
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
 [Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
-[GitHub App](/guide/hub-github) for `github.pullRequests`, subscribed to
-**Push** too for `github.pushes`.
+[GitHub App](/guide/hub-github) for the `github` sources, subscribed to
+**Push** for `github.pushes`.
 `jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
