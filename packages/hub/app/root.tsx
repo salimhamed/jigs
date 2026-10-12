@@ -15,11 +15,17 @@ import {
 import { Toaster } from "sonner";
 import type { Route } from "./+types/root.ts";
 import stylesheet from "./app.css?url";
+import appleTouchIcon from "./apple-touch-icon.png?url";
 import { ThemeToggle } from "./components/theme-toggle.tsx";
 import { quietButton } from "./components/ui.ts";
+import favicon from "./favicon.ico?url";
 import type { loader as organizationLoader } from "./routes/organization.tsx";
 
-export const links: Route.LinksFunction = () => [{ rel: "stylesheet", href: stylesheet }];
+export const links: Route.LinksFunction = () => [
+  { rel: "stylesheet", href: stylesheet },
+  { rel: "icon", href: favicon, sizes: "any" },
+  { rel: "apple-touch-icon", href: appleTouchIcon },
+];
 
 export function Layout({ children }: { children: ReactNode }) {
   return (
