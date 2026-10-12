@@ -1,9 +1,10 @@
 import { z } from "zod";
 import type { SourceDescriptor } from "../factory.ts";
 import { installationNameSchema } from "../factory-schema.ts";
-import type { RepositoryRef } from "../pull-requests/pull-request.ts";
+import type { PullRequestRef, RepositoryRef } from "../pull-requests/pull-request.ts";
 
 export const GITHUB_PUSHES_SOURCE = "github.pushes";
+export const GITHUB_PULL_REQUESTS_SOURCE = "github.pullRequests";
 
 // An empty list would match nothing, which no one means.
 const names = z.array(z.string().min(1)).min(1);
@@ -49,6 +50,29 @@ export type GitHubPushInputs = RepositoryRef & {
   after: string;
 };
 
+export const gitHubPullRequestsParamsSchema = z.strictObject({
+  ...repositoryParams,
+  authors: names.optional(),
+  labels: names.optional(),
+  baseBranches: names.optional(),
+});
+
+/**
+ * Which pull requests a `github.pullRequests` source starts runs for. Each
+ * list matches any of its values; leaving one out does not filter on it.
+ *
+ * - `installationName`: the GitHub App installation, as named on the hub,
+ *   whose repositories it watches.
+ * - `repositories`: `owner/repo` names, such as `acme/api`, in any case.
+ * - `authors`: GitHub logins of who opened the pull request, such as
+ *   `dependabot[bot]`.
+ * - `labels`: label names; a pull request with any of them matches.
+ * - `baseBranches`: the branches the pull request merges into, such as `main`.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubPullRequestsParams = z.input<typeof gitHubPullRequestsParamsSchema>;
+
 /**
  * Event-trigger sources on GitHub.
  *
@@ -77,5 +101,32 @@ export const github = {
    */
   pushes(params: GitHubPushesParams): SourceDescriptor {
     return { kind: GITHUB_PUSHES_SOURCE, params: { ...params } };
+  },
+  /**
+   * Start a run for each pull request, with its {@link PullRequestRef} as
+   * the inputs. A pull request starts at most one run, ever: the first time
+   * any of its events shows it open, not a draft and matching the filters,
+   * such as when it is opened, labeled or marked ready for review. A pull
+   * request reopened after its run ended starts no new one; rerun it with
+   * `jigs run`.
+   *
+   * @remarks
+   * Events the factory's own GitHub App caused start no run, so a pull
+   * request the App opens starts one only once a person acts on it, such as
+   * by adding a label the trigger filters on.
+   *
+   * @example
+   * ```ts
+   * import { github } from "@jigs-ai/jigs";
+   *
+   * const source = github.pullRequests({
+   *   installationName: "github-acme",
+   *   repositories: ["acme/api"],
+   *   authors: ["dependabot[bot]"],
+   * });
+   * ```
+   */
+  pullRequests(params: GitHubPullRequestsParams): SourceDescriptor {
+    return { kind: GITHUB_PULL_REQUESTS_SOURCE, params: { ...params } };
   },
 } as const;

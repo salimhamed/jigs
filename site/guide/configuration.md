@@ -249,13 +249,15 @@ export default defineFactory({
 | `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
 | `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
+| `github.pullRequests` | An open pull request that is not a draft | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels`, `baseBranches` |
 
 `installationName` is required on every source.
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
 [Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
-[GitHub App](/guide/hub-github) subscribed to **Push** for `github.pushes`.
+[GitHub App](/guide/hub-github) for `github.pullRequests`, subscribed to
+**Push** too for `github.pushes`.
 `jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
@@ -292,6 +294,46 @@ const triggers = {
       installationName: "github-acme",
       repositories: ["acme/api"],
       branches: ["main"],
+    }),
+  },
+};
+```
+
+### GitHub pull requests {#github-pull-requests}
+
+`github.pullRequests` starts a run for each pull request in the repositories
+its `installationName` reaches. Each run gets `installationName`, `owner`,
+`repo` and `number`: the pull request, ready to pass to the pull request steps
+and routines.
+
+A pull request starts at most one run, ever. The first event that shows it
+open, not a draft and matching the filters starts the run, whether it was
+opened, labeled, marked ready for review or pushed to. A pull request reopened
+after its run ended starts no new one; rerun it by hand with `jigs run`.
+
+Events the factory's own App caused start no run, so a pull request the App
+opened starts one only once a person acts on it, such as by adding a label
+the trigger filters on.
+
+`authors` takes the GitHub logins of who opened the pull request, such as
+`dependabot[bot]`, `labels` takes label names, and `baseBranches` takes the
+branches it merges into, such as `main`. `repositories` takes `owner/repo`
+names, in any case. All match exact names.
+
+This trigger starts `upgrade` for each Dependabot pull request:
+
+```ts
+import { github } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "dependabot-upgrades": {
+    active: process.env.DEPENDABOT_UPGRADES_ACTIVE === "true",
+    workflow: "upgrade",
+    source: github.pullRequests({
+      installationName: "github-acme",
+      repositories: ["acme/api"],
+      authors: ["dependabot[bot]"],
     }),
   },
 };

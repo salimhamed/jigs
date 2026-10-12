@@ -1,13 +1,32 @@
 import { readFileSync } from "node:fs";
-import { expect, test, vi } from "vitest";
+import { beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
+import { githubAuthFor } from "../providers/github-auth.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { github } from "../workflow/github/source.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
 import { triggerChecks, triggerInstallations } from "./event-triggers/view.ts";
 
+vi.mock("../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
+
 const pushes = SOURCES["github.pushes"];
-if (pushes === undefined) throw new Error("github.pushes is not registered");
+const pullRequests = SOURCES["github.pullRequests"];
+if (pushes === undefined || pullRequests === undefined)
+  throw new Error("the GitHub sources are not registered");
+
+const BOT = { login: "acme-jigs[bot]", id: 9919 };
+const ADA = { login: "ada", id: 583231, type: "User" };
+const bot = vi.fn(async () => BOT);
+
+beforeEach(() => {
+  bot.mockClear();
+  vi.mocked(githubAuthFor).mockReturnValue({
+    bearer: async () => "token",
+    invalidate: () => {},
+    bot,
+    account: async () => "Acme",
+  });
+});
 
 const ACME = { installationName: "acme" };
 const BEFORE = "6113728f27ae82c7b1a177c8d03f9e96e0adf246";
@@ -97,6 +116,111 @@ test("a push it cannot read is ignored loudly, not retried", async () => {
   errors.mockRestore();
 });
 
+// A pull request Dependabot opened against `main`, as GitHub's webhooks send it.
+const opened = (): Record<string, unknown> & { pull_request: Record<string, unknown> } =>
+  JSON.parse(
+    readFileSync(new URL("./fixtures/github-pull-request-opened.json", import.meta.url), "utf8"),
+  );
+const withPullRequest = (pr: Record<string, unknown>, event: Record<string, unknown> = {}) => {
+  const payload = opened();
+  return { ...payload, ...event, pull_request: { ...payload.pull_request, ...pr } };
+};
+const pullRequest = (
+  payload: unknown,
+  options: { name?: string; installationName?: string } = {},
+) => from(payload, { name: "pull_request", ...options });
+
+test("pull request params take an installation name, then repositories, authors, labels and base branches only", () => {
+  const params = (value: unknown) => pullRequests.params.safeParse(value).success;
+  expect(
+    params({
+      ...ACME,
+      repositories: ["acme/api"],
+      authors: ["dependabot[bot]"],
+      labels: ["dependencies"],
+      baseBranches: ["main"],
+    }),
+  ).toBe(true);
+  expect(params({ authors: ["ada"] })).toBe(false);
+  for (const list of ["repositories", "authors", "labels", "baseBranches"])
+    expect(params({ ...ACME, [list]: [] })).toBe(false);
+  expect(params({ ...ACME, actions: ["opened"] })).toBe(false);
+});
+
+test("an open pull request is its repository and number, as of its event", async () => {
+  const pulled = await pullRequests.fromPush(ACME, pullRequest(opened()));
+
+  expect(pulled).toEqual({
+    key: "Acme/api#42",
+    inputs: { installationName: "acme", owner: "Acme", repo: "api", number: 42 },
+    at: new Date("2026-10-11T09:12:03Z"),
+  });
+  expect(pullRequests.describe(pulled?.inputs ?? {})).toBe("github Acme/api#42");
+});
+
+test("any event that shows the pull request matching is that same pull request", async () => {
+  for (const action of ["reopened", "labeled", "ready_for_review", "synchronize", "edited"])
+    expect(
+      (await pullRequests.fromPush(ACME, pullRequest(withPullRequest({}, { action }))))?.key,
+    ).toBe("Acme/api#42");
+});
+
+test("another event or installation, or a closed or draft pull request, starts nothing and asks no one", async () => {
+  for (const name of ["push", "pull_request_review", "issues", "check_suite"])
+    expect(await pullRequests.fromPush(ACME, pullRequest(opened(), { name }))).toBeNull();
+  expect(
+    await pullRequests.fromPush(ACME, pullRequest(opened(), { installationName: "other" })),
+  ).toBeNull();
+  const closed = withPullRequest({ state: "closed" }, { action: "closed" });
+  expect(await pullRequests.fromPush(ACME, pullRequest(closed))).toBeNull();
+  expect(
+    await pullRequests.fromPush(ACME, pullRequest(withPullRequest({ draft: true }))),
+  ).toBeNull();
+  expect(
+    await pullRequests.fromPush({ ...ACME, authors: ["ada"] }, pullRequest(opened())),
+  ).toBeNull();
+  expect(bot).not.toHaveBeenCalled();
+});
+
+test("a pull request is filtered by repository, in any case, author, label and base branch", async () => {
+  const matches = async (params: Record<string, unknown>) =>
+    (await pullRequests.fromPush({ ...ACME, ...params }, pullRequest(opened()))) !== null;
+  expect(await matches({ repositories: ["acme/web", "ACME/api"] })).toBe(true);
+  expect(await matches({ repositories: ["acme/web"] })).toBe(false);
+  expect(await matches({ authors: ["renovate[bot]", "dependabot[bot]"] })).toBe(true);
+  expect(await matches({ authors: ["dependabot"] })).toBe(false);
+  expect(await matches({ labels: ["javascript"] })).toBe(true);
+  expect(await matches({ labels: ["agent"] })).toBe(false);
+  expect(await matches({ baseBranches: ["main"] })).toBe(true);
+  expect(await matches({ baseBranches: ["release"] })).toBe(false);
+});
+
+test("a pull request the factory's App opened starts nothing", async () => {
+  const fromApp = withPullRequest({ user: BOT }, { sender: BOT });
+  expect(await pullRequests.fromPush(ACME, pullRequest(fromApp))).toBeNull();
+  expect(githubAuthFor).toHaveBeenCalledWith("acme");
+});
+
+test("a person labeling the App's pull request starts its run", async () => {
+  const labeled = withPullRequest(
+    { user: BOT, labels: [{ name: "agent" }] },
+    { action: "labeled", label: { name: "agent" }, sender: ADA },
+  );
+  expect(
+    (await pullRequests.fromPush({ ...ACME, labels: ["agent"] }, pullRequest(labeled)))?.key,
+  ).toBe("Acme/api#42");
+});
+
+test("a pull request event it cannot read is ignored loudly, not retried", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  const unreadable = withPullRequest({ number: undefined });
+  expect(await pullRequests.fromPush(ACME, pullRequest(unreadable))).toBeNull();
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[github] ignored a pull_request event it could not read"),
+  );
+  errors.mockRestore();
+});
+
 const deploy: Factory = {
   workflows: {
     deploy: {
@@ -110,6 +234,15 @@ const deploy: Factory = {
         after: z.string(),
       }),
     },
+    review: {
+      workflow: async () => undefined,
+      inputs: z.object({
+        installationName: z.string(),
+        owner: z.string(),
+        repo: z.string(),
+        number: z.number(),
+      }),
+    },
   },
   triggers: {
     "deploy-main": {
@@ -117,13 +250,22 @@ const deploy: Factory = {
       workflow: "deploy",
       source: github.pushes({ installationName: "acme", branches: ["main"] }),
     },
+    "review-dependabot": {
+      active: true,
+      workflow: "review",
+      source: github.pullRequests({ installationName: "acme", authors: ["dependabot[bot]"] }),
+    },
   },
 };
 
-test("the source is shipped, and its trigger names its GitHub installation for doctor", async () => {
+test("the sources are shipped, and their triggers name their GitHub installation for doctor", async () => {
   expect(triggerInstallations(deploy)).toEqual({
     "deploy-main": { provider: "github", installationName: "acme" },
+    "review-dependabot": { provider: "github", installationName: "acme" },
   });
-  const [check] = triggerChecks(deploy);
-  expect(await check?.run()).toEqual({ ok: true });
+  const checks = triggerChecks(deploy);
+  for (const name of ["deploy-main", "review-dependabot"])
+    expect(await checks.find((check) => check.id === `trigger.${name}`)?.run()).toEqual({
+      ok: true,
+    });
 });
