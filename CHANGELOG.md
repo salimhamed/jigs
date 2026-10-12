@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.2](https://github.com/salimhamed/jigs/compare/jigs-v0.104.1...jigs-v0.104.2) (2026-10-12)
+
+
+### Features
+
+* start runs from GitHub pushes ([#667](https://github.com/salimhamed/jigs/issues/667)) ([48852bc](https://github.com/salimhamed/jigs/commit/48852bc86484ffd822f981acb5cc0d430d716c22))
+
 ## [0.104.1](https://github.com/salimhamed/jigs/compare/jigs-v0.104.0...jigs-v0.104.1) (2026-10-09)
 
 
