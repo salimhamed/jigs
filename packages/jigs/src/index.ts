@@ -147,6 +147,8 @@ export {
   renderChangeSummary,
 } from "./workflow/git/change.ts";
 export {
+  type GitHubIssueInputs,
+  type GitHubIssuesParams,
   type GitHubPullRequestsParams,
   type GitHubPushesParams,
   type GitHubPushInputs,

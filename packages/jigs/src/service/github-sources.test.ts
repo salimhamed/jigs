@@ -11,7 +11,8 @@ vi.mock("../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 
 const pushes = SOURCES["github.pushes"];
 const pullRequests = SOURCES["github.pullRequests"];
-if (pushes === undefined || pullRequests === undefined)
+const issues = SOURCES["github.issues"];
+if (pushes === undefined || pullRequests === undefined || issues === undefined)
   throw new Error("the GitHub sources are not registered");
 
 const BOT = { login: "acme-jigs[bot]", id: 9919 };
@@ -221,6 +222,93 @@ test("a pull request event it cannot read is ignored loudly, not retried", async
   errors.mockRestore();
 });
 
+// An issue a person opened, as GitHub's webhooks send it.
+const issueOpened = (): Record<string, unknown> & { issue: Record<string, unknown> } =>
+  JSON.parse(readFileSync(new URL("./fixtures/github-issue-opened.json", import.meta.url), "utf8"));
+const withIssue = (issue: Record<string, unknown>, event: Record<string, unknown> = {}) => {
+  const payload = issueOpened();
+  return { ...payload, ...event, issue: { ...payload.issue, ...issue } };
+};
+const issue = (payload: unknown, options: { name?: string; installationName?: string } = {}) =>
+  from(payload, { name: "issues", ...options });
+
+test("issue params take an installation name, then repositories, authors and labels only", () => {
+  const params = (value: unknown) => issues.params.safeParse(value).success;
+  expect(params({ ...ACME, repositories: ["acme/api"], authors: ["ada"], labels: ["agent"] })).toBe(
+    true,
+  );
+  expect(params({ labels: ["agent"] })).toBe(false);
+  for (const list of ["repositories", "authors", "labels"])
+    expect(params({ ...ACME, [list]: [] })).toBe(false);
+  expect(params({ ...ACME, baseBranches: ["main"] })).toBe(false);
+});
+
+test("an open issue is its repository and number, as of its event", async () => {
+  const opened = await issues.fromPush(ACME, issue(issueOpened()));
+
+  expect(opened).toEqual({
+    key: "Acme/api#57",
+    inputs: { installationName: "acme", owner: "Acme", repo: "api", number: 57 },
+    at: new Date("2026-10-11T10:04:17Z"),
+  });
+  expect(issues.describe(opened?.inputs ?? {})).toBe("github Acme/api#57");
+});
+
+test("any event that shows the issue matching is that same issue", async () => {
+  for (const action of ["reopened", "labeled", "edited", "assigned"])
+    expect((await issues.fromPush(ACME, issue(withIssue({}, { action }))))?.key).toBe(
+      "Acme/api#57",
+    );
+});
+
+test("another event or installation, or a closed issue, starts nothing and asks no one", async () => {
+  for (const name of ["issue_comment", "pull_request", "push"])
+    expect(await issues.fromPush(ACME, issue(issueOpened(), { name }))).toBeNull();
+  expect(
+    await issues.fromPush(ACME, issue(issueOpened(), { installationName: "other" })),
+  ).toBeNull();
+  const closed = withIssue({ state: "closed" }, { action: "closed" });
+  expect(await issues.fromPush(ACME, issue(closed))).toBeNull();
+  expect(await issues.fromPush({ ...ACME, authors: ["grace"] }, issue(issueOpened()))).toBeNull();
+  expect(bot).not.toHaveBeenCalled();
+});
+
+test("an issue is filtered by repository, in any case, author and label", async () => {
+  const matches = async (params: Record<string, unknown>) =>
+    (await issues.fromPush({ ...ACME, ...params }, issue(issueOpened()))) !== null;
+  expect(await matches({ repositories: ["acme/web", "ACME/API"] })).toBe(true);
+  expect(await matches({ repositories: ["acme/web"] })).toBe(false);
+  expect(await matches({ authors: ["grace", "ada"] })).toBe(true);
+  expect(await matches({ authors: ["Ada Lovelace"] })).toBe(false);
+  expect(await matches({ labels: ["agent"] })).toBe(true);
+  expect(await matches({ labels: ["question"] })).toBe(false);
+});
+
+test("an issue the factory's App opened starts nothing", async () => {
+  const fromApp = withIssue({ user: BOT, labels: [] }, { sender: BOT });
+  expect(await issues.fromPush(ACME, issue(fromApp))).toBeNull();
+  expect(githubAuthFor).toHaveBeenCalledWith("acme");
+});
+
+test("a person labeling the App's issue starts its run", async () => {
+  const labeled = withIssue(
+    { user: BOT, labels: [{ name: "agent" }] },
+    { action: "labeled", label: { name: "agent" }, sender: ADA },
+  );
+  expect((await issues.fromPush({ ...ACME, labels: ["agent"] }, issue(labeled)))?.key).toBe(
+    "Acme/api#57",
+  );
+});
+
+test("an issues event it cannot read is ignored loudly, not retried", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  expect(await issues.fromPush(ACME, issue(withIssue({ number: undefined })))).toBeNull();
+  expect(errors).toHaveBeenCalledWith(
+    expect.stringContaining("[github] ignored an issues event it could not read"),
+  );
+  errors.mockRestore();
+});
+
 const deploy: Factory = {
   workflows: {
     deploy: {
@@ -255,6 +343,11 @@ const deploy: Factory = {
       workflow: "review",
       source: github.pullRequests({ installationName: "acme", authors: ["dependabot[bot]"] }),
     },
+    "fix-labeled": {
+      active: true,
+      workflow: "review",
+      source: github.issues({ installationName: "acme", labels: ["agent"] }),
+    },
   },
 };
 
@@ -262,9 +355,10 @@ test("the sources are shipped, and their triggers name their GitHub installation
   expect(triggerInstallations(deploy)).toEqual({
     "deploy-main": { provider: "github", installationName: "acme" },
     "review-dependabot": { provider: "github", installationName: "acme" },
+    "fix-labeled": { provider: "github", installationName: "acme" },
   });
   const checks = triggerChecks(deploy);
-  for (const name of ["deploy-main", "review-dependabot"])
+  for (const name of ["deploy-main", "review-dependabot", "fix-labeled"])
     expect(await checks.find((check) => check.id === `trigger.${name}`)?.run()).toEqual({
       ok: true,
     });

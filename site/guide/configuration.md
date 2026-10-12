@@ -250,6 +250,7 @@ export default defineFactory({
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
 | `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
 | `github.pullRequests` | An open pull request that is not a draft | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels`, `baseBranches` |
+| `github.issues` | An open issue | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels` |
 
 `installationName` is required on every source.
 
@@ -257,7 +258,7 @@ A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
 [Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
 [GitHub App](/guide/hub-github) for the `github` sources, subscribed to
-**Push** for `github.pushes`.
+**Push** for `github.pushes` and **Issues** for `github.issues`.
 `jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
@@ -334,6 +335,42 @@ const triggers = {
       installationName: "github-acme",
       repositories: ["acme/api"],
       authors: ["dependabot[bot]"],
+    }),
+  },
+};
+```
+
+### GitHub issues {#github-issues}
+
+`github.issues` starts a run for each issue in the repositories its
+`installationName` reaches. Each run gets `installationName`, `owner`, `repo`
+and `number`: the issue, ready to pass to the GitHub steps the run calls.
+
+An issue starts at most one run, ever. The first event that shows it open and
+matching the filters starts the run, whether it was opened, labeled or edited.
+An issue reopened after its run ended starts no new one; rerun it by hand with
+`jigs run`.
+
+Events the factory's own App caused start no run, so an issue the App opened
+starts one only once a person acts on it, such as by adding a label the
+trigger filters on.
+
+`authors` takes the GitHub logins of who opened the issue and `labels` takes
+label names. `repositories` takes `owner/repo` names, in any case. All match
+exact names.
+
+```ts
+import { github } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "fix-labeled-issues": {
+    active: process.env.FIX_LABELED_ISSUES_ACTIVE === "true",
+    workflow: "fix",
+    source: github.issues({
+      installationName: "github-acme",
+      repositories: ["acme/api"],
+      labels: ["agent"],
     }),
   },
 };

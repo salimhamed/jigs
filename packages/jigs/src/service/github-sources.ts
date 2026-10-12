@@ -1,15 +1,20 @@
 // The GitHub sources, read off the webhooks the hub passes on under GitHub's
 // event name. A push to a branch is one occurrence, keyed by the branch and
-// the commits it moved from and to; a pull request is one, keyed by its number.
+// the commits it moved from and to; a pull request or an issue is one, keyed
+// by its number.
 
 import { z } from "zod";
 import { githubAuthFor } from "../providers/github-auth.ts";
 import {
+  GITHUB_ISSUES_SOURCE,
   GITHUB_PULL_REQUESTS_SOURCE,
   GITHUB_PUSHES_SOURCE,
+  type GitHubIssueInputs,
+  type GitHubIssuesParams,
   type GitHubPullRequestsParams,
   type GitHubPushesParams,
   type GitHubPushInputs,
+  gitHubIssuesParamsSchema,
   gitHubPullRequestsParamsSchema,
   gitHubPushesParamsSchema,
 } from "../workflow/github/source.ts";
@@ -49,11 +54,23 @@ const pullRequestEventSchema = z.object({
   sender: z.object({ id: z.number() }),
 });
 
+const issueEventSchema = z.object({
+  issue: z.object({
+    number: z.number(),
+    state: z.string(),
+    updated_at: z.iso.datetime({ offset: true }),
+    user: z.object({ login: z.string() }),
+    labels: z.array(z.object({ name: z.string() })),
+  }),
+  repository: repositorySchema,
+  sender: z.object({ id: z.number() }),
+});
+
 // A shape GitHub will send the same way every time is no reason to retry.
-function read<T>(schema: z.ZodType<T>, payload: unknown, event: string): T | null {
+function read<T>(schema: z.ZodType<T>, payload: unknown, what: string): T | null {
   const parsed = schema.safeParse(payload);
   if (!parsed.success)
-    console.error(`[github] ignored a ${event} it could not read: ${parsed.error.message}`);
+    console.error(`[github] ignored ${what} it could not read: ${parsed.error.message}`);
   return parsed.data ?? null;
 }
 
@@ -80,7 +97,7 @@ const GITHUB_PUSHES: Source<GitHubPushesParams> = {
   } satisfies GitHubPushInputs,
   async fromPush(params, { installationName, name, payload }) {
     if (installationName !== params.installationName || name !== "push") return null;
-    const push = read(pushSchema, payload, "push");
+    const push = read(pushSchema, payload, "a push");
     if (push === null) return null;
     const { ref, before, after, deleted, repository } = push;
     if (!ref.startsWith(BRANCH_REF) || deleted) return null;
@@ -111,7 +128,7 @@ const GITHUB_PULL_REQUESTS: Source<GitHubPullRequestsParams> = {
   } satisfies PullRequestRef,
   async fromPush(params, { installationName, name, payload }) {
     if (installationName !== params.installationName || name !== "pull_request") return null;
-    const event = read(pullRequestEventSchema, payload, "pull_request event");
+    const event = read(pullRequestEventSchema, payload, "a pull_request event");
     if (event === null) return null;
     const { pull_request: pr, repository, sender } = event;
     const owner = repository.owner.login;
@@ -135,7 +152,42 @@ const GITHUB_PULL_REQUESTS: Source<GitHubPullRequestsParams> = {
     `github ${String(owner)}/${String(repo)}#${String(number)}`,
 };
 
+const GITHUB_ISSUES: Source<GitHubIssuesParams> = {
+  provider: "github",
+  params: gitHubIssuesParamsSchema,
+  sampleInputs: {
+    installationName: "acme",
+    owner: "acme",
+    repo: "api",
+    number: 1,
+  } satisfies GitHubIssueInputs,
+  async fromPush(params, { installationName, name, payload }) {
+    if (installationName !== params.installationName || name !== "issues") return null;
+    const event = read(issueEventSchema, payload, "an issues event");
+    if (event === null) return null;
+    const { issue, repository, sender } = event;
+    const owner = repository.owner.login;
+    const repo = repository.name;
+    if (issue.state !== "open") return null;
+    if (
+      !inRepositories(params.repositories, owner, repo) ||
+      !matches(params.authors, issue.user.login) ||
+      !matches(params.labels, ...issue.labels.map((label) => label.name))
+    )
+      return null;
+    if (sender.id === (await githubAuthFor(installationName).bot()).id) return null;
+    return {
+      key: `${owner}/${repo}#${issue.number}`,
+      inputs: { installationName, owner, repo, number: issue.number } satisfies GitHubIssueInputs,
+      at: new Date(issue.updated_at),
+    };
+  },
+  describe: ({ owner, repo, number }) =>
+    `github ${String(owner)}/${String(repo)}#${String(number)}`,
+};
+
 export const GITHUB_SOURCES = {
   [GITHUB_PUSHES_SOURCE]: GITHUB_PUSHES,
   [GITHUB_PULL_REQUESTS_SOURCE]: GITHUB_PULL_REQUESTS,
+  [GITHUB_ISSUES_SOURCE]: GITHUB_ISSUES,
 };

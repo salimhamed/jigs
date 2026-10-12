@@ -5,6 +5,7 @@ import type { PullRequestRef, RepositoryRef } from "../pull-requests/pull-reques
 
 export const GITHUB_PUSHES_SOURCE = "github.pushes";
 export const GITHUB_PULL_REQUESTS_SOURCE = "github.pullRequests";
+export const GITHUB_ISSUES_SOURCE = "github.issues";
 
 // An empty list would match nothing, which no one means.
 const names = z.array(z.string().min(1)).min(1);
@@ -73,6 +74,36 @@ export const gitHubPullRequestsParamsSchema = z.strictObject({
  */
 export type GitHubPullRequestsParams = z.input<typeof gitHubPullRequestsParamsSchema>;
 
+export const gitHubIssuesParamsSchema = z.strictObject({
+  ...repositoryParams,
+  authors: names.optional(),
+  labels: names.optional(),
+});
+
+/**
+ * Which issues a `github.issues` source starts runs for. Each list matches
+ * any of its values; leaving one out does not filter on it.
+ *
+ * - `installationName`: the GitHub App installation, as named on the hub,
+ *   whose repositories it watches.
+ * - `repositories`: `owner/repo` names, such as `acme/api`, in any case.
+ * - `authors`: GitHub logins of who opened the issue.
+ * - `labels`: label names; an issue with any of them matches.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubIssuesParams = z.input<typeof gitHubIssuesParamsSchema>;
+
+/**
+ * The inputs a `github.issues` source hands each run it starts.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubIssueInputs = RepositoryRef & {
+  /** The repository-local issue number. */
+  number: number;
+};
+
 /**
  * Event-trigger sources on GitHub.
  *
@@ -128,5 +159,32 @@ export const github = {
    */
   pullRequests(params: GitHubPullRequestsParams): SourceDescriptor {
     return { kind: GITHUB_PULL_REQUESTS_SOURCE, params: { ...params } };
+  },
+  /**
+   * Start a run for each issue, with {@link GitHubIssueInputs} as its inputs.
+   * An issue starts at most one run, ever: the first time any of its events
+   * shows it open and matching the filters, such as when it is opened or
+   * labeled. An issue reopened after its run ended starts no new one; rerun
+   * it with `jigs run`.
+   *
+   * @remarks
+   * The GitHub App must subscribe to the **Issues** event. Events the
+   * factory's own GitHub App caused start no run, so an issue the App opens
+   * starts one only once a person acts on it, such as by adding a label the
+   * trigger filters on.
+   *
+   * @example
+   * ```ts
+   * import { github } from "@jigs-ai/jigs";
+   *
+   * const source = github.issues({
+   *   installationName: "github-acme",
+   *   repositories: ["acme/api"],
+   *   labels: ["agent"],
+   * });
+   * ```
+   */
+  issues(params: GitHubIssuesParams): SourceDescriptor {
+    return { kind: GITHUB_ISSUES_SOURCE, params: { ...params } };
   },
 } as const;
