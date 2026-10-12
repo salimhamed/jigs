@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.5](https://github.com/salimhamed/jigs/compare/jigs-v0.104.4...jigs-v0.104.5) (2026-10-12)
+
+
+### Features
+
+* **hub:** add a favicon ([#674](https://github.com/salimhamed/jigs/issues/674)) ([1b9c187](https://github.com/salimhamed/jigs/commit/1b9c1878953f9e255c3a2b7177c0974f47372a10))
+
 ## [0.104.4](https://github.com/salimhamed/jigs/compare/jigs-v0.104.3...jigs-v0.104.4) (2026-10-12)
 
 
