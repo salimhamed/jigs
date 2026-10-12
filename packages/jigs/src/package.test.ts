@@ -221,6 +221,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "describeHarness",
     "defineFactory",
     "defineWorkflow",
+    "github",
     "githubMcp",
     "haltOptionSchema",
     "haltQuestionSchema",

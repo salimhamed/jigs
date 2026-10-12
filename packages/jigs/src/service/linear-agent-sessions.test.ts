@@ -27,7 +27,11 @@ const SESSION = "9b7e5c3a-1d2f-4e6a-8b0c-2d4f6a8c0e1b";
 const ISSUE = "1e2d3c4b-5a69-4788-9a0b-1c2d3e4f5a6b";
 
 const ACME = { installationName: "acme" };
-const from = (payload: unknown, installationName = "acme") => ({ installationName, payload });
+const from = (payload: unknown, installationName = "acme") => ({
+  installationName,
+  name: "AgentSessionEvent",
+  payload,
+});
 
 type IssueFiling = (issueId: string, installationName: string) => Promise<LinearIssueFiling | null>;
 

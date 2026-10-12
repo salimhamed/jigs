@@ -131,6 +131,7 @@ describe.skipIf(!configured)("a PagerDuty incident trigger, live", () => {
     const id = mine.id;
     const triggered = {
       installationName: "live",
+      name: "incident.triggered",
       payload: {
         event: {
           event_type: "incident.triggered",

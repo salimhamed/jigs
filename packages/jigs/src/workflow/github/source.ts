@@ -1,0 +1,81 @@
+import { z } from "zod";
+import type { SourceDescriptor } from "../factory.ts";
+import { installationNameSchema } from "../factory-schema.ts";
+import type { RepositoryRef } from "../pull-requests/pull-request.ts";
+
+export const GITHUB_PUSHES_SOURCE = "github.pushes";
+
+// An empty list would match nothing, which no one means.
+const names = z.array(z.string().min(1)).min(1);
+
+// What every GitHub source watches: one installation, and optionally some of its repositories.
+const repositoryParams = {
+  installationName: installationNameSchema,
+  repositories: z
+    .array(z.string().regex(/^[^/\s]+\/[^/\s]+$/, "must be owner/repo, such as acme/api"))
+    .min(1)
+    .optional(),
+};
+
+export const gitHubPushesParamsSchema = z.strictObject({
+  ...repositoryParams,
+  branches: names.optional(),
+});
+
+/**
+ * Which pushes a `github.pushes` source starts runs for. Each list matches
+ * any of its values; leaving one out does not filter on it.
+ *
+ * - `installationName`: the GitHub App installation, as named on the hub,
+ *   whose repositories it watches.
+ * - `repositories`: `owner/repo` names, such as `acme/api`, in any case.
+ * - `branches`: branch names, such as `main`.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubPushesParams = z.input<typeof gitHubPushesParamsSchema>;
+
+/**
+ * The inputs a `github.pushes` source hands each run it starts.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubPushInputs = RepositoryRef & {
+  /** The branch pushed to, such as `main`. */
+  ref: string;
+  /** The commit the branch pointed at before the push, all zeros for a new branch. */
+  before: string;
+  /** The commit the branch points at after the push. */
+  after: string;
+};
+
+/**
+ * Event-trigger sources on GitHub.
+ *
+ * @group Factory and workflows
+ */
+export const github = {
+  /**
+   * Start a run for each push to a branch, with {@link GitHubPushInputs} as
+   * its inputs. Each push starts at most one run, ever. Tag pushes and
+   * branch deletions start none. A push the factory's own GitHub App made,
+   * such as merging a person's pull request, starts runs like any other.
+   *
+   * @remarks
+   * The GitHub App must subscribe to the **Push** event.
+   *
+   * @example
+   * ```ts
+   * import { github } from "@jigs-ai/jigs";
+   *
+   * const source = github.pushes({
+   *   installationName: "github-acme",
+   *   repositories: ["acme/api"],
+   *   branches: ["main"],
+   * });
+   * ```
+   */
+  pushes(params: GitHubPushesParams): SourceDescriptor {
+    return { kind: GITHUB_PUSHES_SOURCE, params: { ...params } };
+  },
+} as const;

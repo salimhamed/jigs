@@ -108,8 +108,8 @@ test("routes a batch in order, then confirms its last position", async () => {
   await vi.waitFor(() => expect(seen.filter((r) => r.method === "POST")).toHaveLength(1));
 
   expect(push.mock.calls).toEqual([
-    ["pagerduty", { installationName: "acme", payload: "first" }],
-    ["pagerduty", { installationName: "acme", payload: "second" }],
+    ["pagerduty", { installationName: "acme", name: "incident.triggered", payload: "first" }],
+    ["pagerduty", { installationName: "acme", name: "incident.triggered", payload: "second" }],
   ]);
   const [poll, confirm] = seen;
   expect(poll?.method).toBe("GET");

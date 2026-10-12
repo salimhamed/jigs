@@ -270,7 +270,11 @@ test("a created Linear agent session goes to the triggers, and wakes nothing", a
     outcome: "triggered",
     triggers: ["mentions"],
   });
-  expect(push).toHaveBeenCalledExactlyOnceWith("linear", { installationName: "acme", payload });
+  expect(push).toHaveBeenCalledExactlyOnceWith("linear", {
+    installationName: "acme",
+    name: "AgentSessionEvent",
+    payload,
+  });
   expect(resumeHookMock).not.toHaveBeenCalled();
   expect(log).toHaveBeenCalledExactlyOnceWith(
     "[events] linear accepted triggers=mentions event=AgentSessionEvent session=s1",
@@ -451,6 +455,7 @@ test("a Slack message goes to the triggers and wakes the thread it replies in", 
   expect(await route(slack())).toEqual({ outcome: "woken" });
   expect(push).toHaveBeenCalledExactlyOnceWith("slack", {
     installationName: "acme",
+    name: "message",
     payload: callback(reply),
   });
   expect(resumeHookMock).toHaveBeenCalledExactlyOnceWith(THREAD, undefined);
@@ -533,7 +538,11 @@ test.each([
   ["slack", callback(reply)],
 ] as const)("every %s event goes to the triggers", async (provider, payload) => {
   await route({ provider, installationName: "acme", name: "x", payload });
-  expect(push).toHaveBeenCalledExactlyOnceWith(provider, { installationName: "acme", payload });
+  expect(push).toHaveBeenCalledExactlyOnceWith(provider, {
+    installationName: "acme",
+    name: "x",
+    payload,
+  });
 });
 
 test("an event a trigger takes and that wakes a run reports the trigger", async () => {

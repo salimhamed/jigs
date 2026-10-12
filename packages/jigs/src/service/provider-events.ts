@@ -127,11 +127,11 @@ function combine(results: RouteResult[]): RouteResult {
 
 // The push returns once the occurrence is recorded, never waiting on the start.
 async function trigger(
-  { provider, installationName, payload }: NamedEvent,
+  { provider, installationName, name, payload }: NamedEvent,
   ref: string,
   deps: RouteDeps,
 ): Promise<RouteResult> {
-  const triggers = await deps.push(provider, { installationName, payload });
+  const triggers = await deps.push(provider, { installationName, name, payload });
   if (triggers.length === 0) return { outcome: "ignored" };
   console.log(`[events] ${provider} accepted triggers=${triggers.join(",")} ${ref}`);
   return { outcome: "triggered", triggers };

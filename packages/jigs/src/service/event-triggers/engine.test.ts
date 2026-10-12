@@ -48,7 +48,7 @@ function fakeSource() {
   return { source };
 }
 
-const pushed = (payload: unknown) => ({ installationName: "acme", payload });
+const pushed = (payload: unknown) => ({ installationName: "acme", name: "page", payload });
 
 const memoryStore = (now: () => Date = () => T0) => memoryTriggerStore(now, T0);
 

@@ -7,6 +7,7 @@ import type { z } from "zod";
 import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
+import { GITHUB_SOURCES } from "../github-sources.ts";
 import { LINEAR_AGENT_SESSIONS } from "../linear-agent-sessions.ts";
 import { PAGERDUTY_INCIDENTS } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
@@ -22,6 +23,8 @@ export interface SourceOccurrence {
 /** A provider event the hub passed on, with the named installation it came through. */
 export interface PushedEvent {
   installationName: string;
+  /** The provider's name for the event, such as GitHub's `push`, which some send only beside the payload. */
+  name: string;
   payload: unknown;
 }
 
@@ -49,6 +52,7 @@ export type SourceRegistry = Readonly<Record<string, Source<any>>>;
 
 export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
+  ...GITHUB_SOURCES,
   [PAGERDUTY_INCIDENTS_SOURCE]: PAGERDUTY_INCIDENTS,
   [LINEAR_AGENT_SESSIONS_SOURCE]: LINEAR_AGENT_SESSIONS,
 };

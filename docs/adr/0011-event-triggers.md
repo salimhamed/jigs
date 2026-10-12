@@ -51,11 +51,14 @@ starts a second run for an occurrence.
   status` and `jigs doctor` show it with its repair.
 - Past `maxActive`, occurrences wait as `pending` and start oldest first as
   runs finish.
-- A Slack source skips messages from the factory's own bot. That is an
-  intended exception to identifying jigs' own posts by id rather than author
-  ([0009](./0009-factory-identity-per-provider.md)). It holds because each
-  factory has its own Slack app, which only ever acts as itself; posting as a
-  person would need a table of posted ids instead.
+- A source never starts a run from an event its own app caused, such as a
+  Slack message the bot posted. That is an intended exception to identifying
+  jigs' own posts by id rather than author
+  ([0009](./0009-factory-identity-per-provider.md)). On a hub an app belongs to
+  an account, and every factory on it shares the app, so this also keeps
+  factories from starting runs on each other's activity; a hand-off between
+  factories goes through a person. Pushes are the exception: a push the app
+  made, such as merging a person's pull request, still starts runs.
 - The Slack source uses polling plus Socket Mode, with no Events API: Socket
   Mode needs no public URL, and polling covers what Slack drops after about
   6 minutes.

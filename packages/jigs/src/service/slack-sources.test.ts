@@ -140,6 +140,7 @@ const body = (message: object, channelType = "channel", channel = CHANNEL) => ({
 
 const pushed = (...args: Parameters<typeof body>) => ({
   installationName: "acme",
+  name: "message",
   payload: body(...args),
 });
 
@@ -215,7 +216,11 @@ test.each([
   ["another channel", pushed(TOP_LEVEL, "channel", "C0ELSEWHERE")],
   [
     "a body that is no event callback",
-    { installationName: "acme", payload: { type: "url_verification", challenge: "c" } },
+    {
+      installationName: "acme",
+      name: "url_verification",
+      payload: { type: "url_verification", challenge: "c" },
+    },
   ],
   ["a direct message", pushed(TOP_LEVEL, "im")],
 ])("a pushed %s is no occurrence", async (_name, event) => {

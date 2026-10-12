@@ -1,0 +1,63 @@
+{
+  "ref": "refs/heads/main",
+  "before": "6113728f27ae82c7b1a177c8d03f9e96e0adf246",
+  "after": "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+  "created": false,
+  "deleted": false,
+  "forced": false,
+  "base_ref": null,
+  "compare": "https://github.com/Acme/api/compare/6113728f27ae...0d1a26e67d8f",
+  "commits": [
+    {
+      "id": "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+      "tree_id": "f9d2a07e9488b91af2641b26b9407fe22a451433",
+      "distinct": true,
+      "message": "Merge pull request #12 from Acme/fix-retries",
+      "timestamp": "2026-10-11T08:58:40-07:00",
+      "url": "https://github.com/Acme/api/commit/0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+      "author": { "name": "Ada", "email": "ada@example.com", "username": "ada" },
+      "committer": { "name": "GitHub", "email": "noreply@github.com", "username": "web-flow" },
+      "added": [],
+      "removed": [],
+      "modified": ["src/retries.ts"]
+    }
+  ],
+  "head_commit": {
+    "id": "0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+    "tree_id": "f9d2a07e9488b91af2641b26b9407fe22a451433",
+    "distinct": true,
+    "message": "Merge pull request #12 from Acme/fix-retries",
+    "timestamp": "2026-10-11T08:58:40-07:00",
+    "url": "https://github.com/Acme/api/commit/0d1a26e67d8f5eaf1f6ba5c57fc3c7d91ac0fd1c",
+    "author": { "name": "Ada", "email": "ada@example.com", "username": "ada" },
+    "committer": { "name": "GitHub", "email": "noreply@github.com", "username": "web-flow" },
+    "added": [],
+    "removed": [],
+    "modified": ["src/retries.ts"]
+  },
+  "repository": {
+    "id": 186853002,
+    "node_id": "MDEwOlJlcG9zaXRvcnkxODY4NTMwMDI=",
+    "name": "api",
+    "full_name": "Acme/api",
+    "private": true,
+    "owner": {
+      "name": "Acme",
+      "email": null,
+      "login": "Acme",
+      "id": 21031067,
+      "type": "Organization"
+    },
+    "html_url": "https://github.com/Acme/api",
+    "created_at": 1557933565,
+    "updated_at": "2026-10-11T15:58:41Z",
+    "pushed_at": 1791734322,
+    "default_branch": "main",
+    "master_branch": "main",
+    "organization": "Acme"
+  },
+  "pusher": { "name": "acme-jigs[bot]", "email": null },
+  "organization": { "login": "Acme", "id": 21031067 },
+  "installation": { "id": 2311213, "node_id": "MDIzOkludGVncmF0aW9uSW5zdGFsbGF0aW9uMjMxMTIxMw==" },
+  "sender": { "login": "acme-jigs[bot]", "id": 9919, "type": "Bot" }
+}

@@ -147,6 +147,11 @@ export {
   renderChangeSummary,
 } from "./workflow/git/change.ts";
 export {
+  type GitHubPushesParams,
+  type GitHubPushInputs,
+  github,
+} from "./workflow/github/source.ts";
+export {
   type HaltOption,
   type HaltQuestion,
   haltOptionSchema,

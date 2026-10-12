@@ -27,7 +27,11 @@ test("params take an installation name, then services, teams and urgencies only"
   expect(source.params.safeParse({ ...ACME, statuses: ["acknowledged"] }).success).toBe(false);
 });
 
-const from = (payload: unknown, installationName = "acme") => ({ installationName, payload });
+const from = (payload: unknown, installationName = "acme") => ({
+  installationName,
+  name: "incident.triggered",
+  payload,
+});
 
 // An `incident.triggered` delivery as PagerDuty's v3 webhooks send it.
 const triggered = (): { event: Record<string, unknown> & { data: Record<string, unknown> } } =>

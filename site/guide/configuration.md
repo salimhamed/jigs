@@ -248,16 +248,54 @@ export default defineFactory({
 | `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
 | `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
+| `github.pushes` | A push to a branch | `{ installationName, owner, repo, ref, before, after }` | `installationName`, `repositories`, `branches` |
 
 `installationName` is required on every source.
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`
-and [Slack](/guide/slack) for `slack.messages` and `slack.mentions`.
+for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
+[Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
+[GitHub App](/guide/hub-github) subscribed to **Push** for `github.pushes`.
 `jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
 `slack C0123ABCD 1790723244.335019` or `pagerduty Q1ABCDEF`.
+
+### GitHub pushes {#github-pushes}
+
+`github.pushes` starts a run for each push to a branch in the repositories its
+`installationName` reaches. Each run gets:
+
+- `installationName`, `owner` and `repo`: the repository, ready to pass to
+  the GitHub steps the run calls.
+- `ref`: the branch pushed to, such as `main`.
+- `before` and `after`: the commits the branch pointed at before and after the
+  push. `before` is all zeros for a new branch.
+
+A push is its repository, branch and `after` commit, so it starts at most one
+run even if GitHub sends it twice. Tag pushes and branch deletions start no
+run. A push the factory's own App made, such as merging a person's pull
+request, starts runs like any other.
+
+`repositories` takes `owner/repo` names, in any case, and `branches` takes
+branch names such as `main`, not `refs/heads/main`. Both match exact names.
+
+```ts
+import { github } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "deploy-main": {
+    active: process.env.DEPLOY_MAIN_ACTIVE === "true",
+    workflow: "deploy",
+    source: github.pushes({
+      installationName: "github-acme",
+      repositories: ["acme/api"],
+      branches: ["main"],
+    }),
+  },
+};
+```
 
 ### Linear mentions and assignments {#linear-agent-sessions}
 
