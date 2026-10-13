@@ -92,6 +92,7 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
         creatorRole: "admin",
         roles: { admin: adminAc, member: memberAc },
         disableOrganizationDeletion: true,
+        invitationExpiresIn: 7 * 24 * 60 * 60,
         requireEmailVerificationOnInvitation: true,
         allowUserToCreateOrganization: (user) => mayCreateOrganization(config, db, user),
         organizationHooks: {

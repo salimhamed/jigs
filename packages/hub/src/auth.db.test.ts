@@ -74,6 +74,8 @@ dbTest("bootstraps the admin, invites a member and keeps an admin", async () => 
     headers: admin,
     body: { email: "Bob@example.com", role: "member" },
   });
+  const week = 7 * 24 * 60 * 60 * 1000;
+  expect(new Date(invite.expiresAt).getTime() - Date.now()).toBeGreaterThan(week - 60_000);
 
   await expect(signIn("carol@example.com")).rejects.toMatchObject(refused);
   await expect(signIn("bob@example.com", false)).rejects.toMatchObject(refused);
