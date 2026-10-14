@@ -68,8 +68,8 @@ export async function createPullRequest(request: {
   const repo = repositoryOf(worktree);
   const { branch: head, defaultBranch: base } = worktree;
   // The pull request's author is the App's bot, which is what lets the
-  // operator approve it. The assignee and the opening line are how the
-  // operator still shows up on it — GitHub has no second author field.
+  // operator approve it. The assignee is how the operator still shows up on
+  // it — GitHub has no second author field.
   const operator = currentFactoryContext().config.github.operator ?? null;
   let opened = await findOpenPullRequestByBranch(repo, head, base);
   if (opened === null) {
@@ -78,7 +78,7 @@ export async function createPullRequest(request: {
       head,
       base,
       title,
-      body: operator === null ? body : `Requested by @${operator}.\n\n${body}`,
+      body,
       ...(draft === undefined ? {} : { draft }),
     });
     opened = { ...repo, number, url: html_url };

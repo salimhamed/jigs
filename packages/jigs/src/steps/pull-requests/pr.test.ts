@@ -287,7 +287,7 @@ test("a rebase has no merge message to carry a trailer in", async () => {
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
-test("with no operator or co-author, no trailer, no assignee and no requested-by line", async () => {
+test("with no operator or co-author, no trailer and no assignee", async () => {
   expect(await createPullRequest({ worktree, title: "fix: search", body: "Body." })).toEqual({
     ...pr,
     url: "https://github.example/owner/repo/pull/1",
@@ -299,15 +299,13 @@ test("with no operator or co-author, no trailer, no assignee and no requested-by
   expect(vi.mocked(mergePr).mock.calls[0]?.[1].message).toBeUndefined();
 });
 
-test("an operator is named and assigned, and the provider's URL returned", async () => {
+test("an operator is assigned, the body is sent as given, and the provider's URL returned", async () => {
   withOperator();
   await expect(
     createPullRequest({ worktree, title: "fix: search", body: "Body." }),
   ).resolves.toEqual({ ...pr, url: "https://github.example/owner/repo/pull/1" });
   expect(findOpenPullRequestByBranch).toHaveBeenCalledExactlyOnceWith(repo, "fix", "main");
-  expect(createPr).toHaveBeenCalledWith(
-    expect.objectContaining({ body: "Requested by @salimhamed.\n\nBody." }),
-  );
+  expect(createPr).toHaveBeenCalledWith(expect.objectContaining({ body: "Body." }));
   expect(assignPullRequest).toHaveBeenCalledWith(pr, ["salimhamed"]);
 });
 
