@@ -16,20 +16,6 @@ jobs:
   long-step:
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    services:
-      postgres:
-        image: public.ecr.aws/docker/library/postgres:17-alpine
-        env:
-          POSTGRES_USER: jigs
-          POSTGRES_PASSWORD: jigs
-          POSTGRES_DB: jigs
-        ports:
-          - 5432:5432
-        options: >-
-          --health-cmd "pg_isready -U jigs -d jigs"
-          --health-interval 5s
-          --health-timeout 3s
-          --health-retries 20
     steps:
       - name: Check out requested revision
         uses: actions/checkout@v5
@@ -42,6 +28,11 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+
+      - name: Start Postgres
+        run: |
+          sudo systemctl start postgresql.service
+          sudo -u postgres psql -c "CREATE USER jigs WITH SUPERUSER PASSWORD 'jigs'" -c "CREATE DATABASE jigs OWNER jigs"
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
