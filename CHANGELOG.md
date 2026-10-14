@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.104.11](https://github.com/salimhamed/jigs/compare/jigs-v0.104.10...jigs-v0.104.11) (2026-10-14)
+
+
+### Features
+
+* let a factory set the address its dashboard links use ([#691](https://github.com/salimhamed/jigs/issues/691)) ([6685e2a](https://github.com/salimhamed/jigs/commit/6685e2af5524f64e1a1c99de18510cb0cc827765))
+* **linear:** filter agent-session triggers by who started them ([#688](https://github.com/salimhamed/jigs/issues/688)) ([b7bbb79](https://github.com/salimhamed/jigs/commit/b7bbb790dd95c8c3283cce0537bf48350d9972f7))
+
 ## [0.104.10](https://github.com/salimhamed/jigs/compare/jigs-v0.104.9...jigs-v0.104.10) (2026-10-14)
 
 
