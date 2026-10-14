@@ -222,8 +222,17 @@ export function claudeProcessSpawner(options: ClaudeLaunchOptions = {}): ClaudeP
   const spawnHook = (spawnOptions: SpawnOptions): SpawnedProcess => {
     const launch = spawnClaudeCode(
       spawnOptions,
-      // Replaces any inherited parent-session marker.
-      { ...spawnOptions.env, CLAUDE_CODE_ENTRYPOINT: "sdk-ts" },
+      {
+        ...spawnOptions.env,
+        // Replaces any inherited parent-session marker.
+        CLAUDE_CODE_ENTRYPOINT: "sdk-ts",
+        // Under the SDK, Claude Code starts subagents in the background and
+        // ends the turn before they report. A step reads only that first
+        // result, and a structured output is demanded at once, so the agent
+        // answers without its subagents' work. In the foreground they report
+        // inside the turn.
+        CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "1",
+      },
       owner,
       signal,
     );

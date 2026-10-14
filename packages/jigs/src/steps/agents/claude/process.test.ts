@@ -26,6 +26,7 @@ writeFileSync(process.env.JIGS_CLAUDE_TEST_RECORD, JSON.stringify({
   aws: "AWS_SECRET_ACCESS_KEY" in process.env,
   anthropic: "ANTHROPIC_API_KEY" in process.env,
   entrypoint: process.env.CLAUDE_CODE_ENTRYPOINT,
+  backgroundTasksDisabled: process.env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS,
   allowedToken: process.env.JIGS_ALLOWED_TOKEN,
   names: Object.keys(process.env),
   cwd: process.cwd(),
@@ -121,6 +122,7 @@ test("the real SDK launch isolates ask and run and fails with Claude Code's stde
       aws: false,
       anthropic: false,
       entrypoint: "sdk-ts",
+      backgroundTasksDisabled: "1",
       cwd: testCase.cwd,
     });
     const names = new Set<string>(launched.names);
@@ -133,6 +135,7 @@ test("the real SDK launch isolates ask and run and fails with Claude Code's stde
       "SYNTHETIC_DECLARED",
       "JIGS_CLAUDE_TEST_RECORD",
       "CLAUDE_CODE_ENTRYPOINT",
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS",
       "CLAUDE_CODE_SDK_READS_SESSION_STATE",
     ]);
     expect(
@@ -203,6 +206,7 @@ test("the launch hook gives Claude Code the SDK's environment and nothing from t
       JIGS_CLAUDE_TEST_RECORD: record,
       JIGS_ALLOWED_TOKEN: "kept",
       CLAUDE_CODE_ENTRYPOINT: "parent-claude-session",
+      CLAUDE_CODE_DISABLE_BACKGROUND_TASKS: "0",
       CLAUDE_AGENT_SDK_VERSION: "0.0.0",
     });
     const errors: unknown[] = [];
@@ -210,10 +214,15 @@ test("the launch hook gives Claude Code the SDK's environment and nothing from t
     await expect(exited(child)).resolves.toEqual([0, null]);
     expect(errors).toHaveLength(1);
     const launched = JSON.parse(readFileSync(record, "utf8"));
-    expect(launched).toMatchObject({ allowedToken: "kept", entrypoint: "sdk-ts" });
+    expect(launched).toMatchObject({
+      allowedToken: "kept",
+      entrypoint: "sdk-ts",
+      backgroundTasksDisabled: "1",
+    });
     expect([...launched.names].sort()).toEqual(
       [
         "CLAUDE_AGENT_SDK_VERSION",
+        "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS",
         "CLAUDE_CODE_ENTRYPOINT",
         "JIGS_ALLOWED_TOKEN",
         "JIGS_CLAUDE_TEST_RECORD",
