@@ -1,6 +1,6 @@
 import { randomBytes } from "node:crypto";
 import { makeSignature } from "better-auth/crypto";
-import { afterAll, beforeAll, expect } from "vitest";
+import { afterAll, beforeAll, expect, vi } from "vitest";
 import { createAuth, type HubAuth, NOT_INVITED } from "./auth.ts";
 import type { HubConfig } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
@@ -121,4 +121,35 @@ dbTest("refuses a revoked invitation", async () => {
   });
   await auth.api.cancelInvitation({ headers: bob, body: { invitationId: invite.id } });
   await expect(signIn("dave@example.com")).rejects.toMatchObject(refused);
+});
+
+dbTest("names the verified GitHub email an invitation was sent to", async () => {
+  const bob = await signIn("bob@example.com");
+  await auth.api.createInvitation({
+    headers: bob,
+    body: { email: "Erin@personal.example", role: "member" },
+  });
+  const githubUser = async (emails: { email: string; primary: boolean; verified: boolean }[]) => {
+    vi.stubGlobal("fetch", async (url: string) =>
+      Response.json(
+        url.endsWith("/user/emails")
+          ? emails
+          : { id: 7, login: "erin", name: null, email: "erin@work.example", avatar_url: "" },
+      ),
+    );
+    try {
+      const github = (await auth.$context).socialProviders.find((p) => p.id === "github");
+      return (await github?.getUserInfo({ accessToken: "token" }))?.user;
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  };
+  const work = { email: "erin@work.example", primary: false, verified: true };
+
+  expect(
+    await githubUser([work, { email: "erin@personal.example", primary: true, verified: true }]),
+  ).toMatchObject({ name: "erin", email: "erin@personal.example", emailVerified: true });
+  expect(
+    await githubUser([work, { email: "erin@personal.example", primary: true, verified: false }]),
+  ).toMatchObject({ email: "erin@work.example", emailVerified: true });
 });
