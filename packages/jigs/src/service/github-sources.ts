@@ -67,12 +67,13 @@ const issueEventSchema = z.object({
   sender: z.object({ id: z.number() }),
 });
 
+// GitHub sends `released` once a release is out and not a prerelease, so
+// drafts and prereleases, whose other events carry no `published_at`, need no reading.
+const releasedSchema = z.object({ action: z.literal("released") });
+
 const releaseEventSchema = z.object({
-  action: z.string(),
   release: z.object({
     tag_name: z.string(),
-    draft: z.boolean(),
-    prerelease: z.boolean(),
     published_at: z.iso.datetime({ offset: true }),
   }),
   repository: repositorySchema,
@@ -211,13 +212,13 @@ const GITHUB_RELEASES: Source<GitHubReleasesParams> = {
   } satisfies GitHubReleaseInputs,
   async fromPush(params, { installationName, name, payload }) {
     if (installationName !== params.installationName || name !== "release") return null;
+    if (!releasedSchema.safeParse(payload).success) return null;
     const event = read(releaseEventSchema, payload, "a release event");
     if (event === null) return null;
-    const { action, release, repository } = event;
+    const { release, repository } = event;
     const owner = repository.owner.login;
     const repo = repository.name;
     const tag = release.tag_name;
-    if (action !== "published" || release.draft || release.prerelease) return null;
     if (!inRepositories(params.repositories, owner, repo)) return null;
     return {
       key: `${owner}/${repo}@${tag}`,

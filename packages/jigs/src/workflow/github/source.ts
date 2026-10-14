@@ -214,8 +214,9 @@ export const github = {
   },
   /**
    * Start a run for each published release, with {@link GitHubReleaseInputs}
-   * as its inputs. A release starts at most one run, ever. Drafts and
-   * prereleases start none, nor does editing a release already published.
+   * as its inputs. A release starts at most one run, ever, once it is
+   * published and not a prerelease: a prerelease starts its run when it
+   * becomes a release. Drafts start none.
    *
    * @remarks
    * The GitHub App must subscribe to the **Release** event and needs

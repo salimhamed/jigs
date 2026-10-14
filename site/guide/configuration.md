@@ -384,8 +384,9 @@ const triggers = {
 its `installationName` reaches. Each run gets `installationName`, `owner`,
 `repo` and `tag`: the release's tag, such as `v1.2.0`.
 
-A release starts at most one run, ever, when it is published. Drafts and
-prereleases start none, and neither does editing a release already published.
+A release starts at most one run, ever, once it is published and not a
+prerelease. A prerelease starts its run when it becomes a release; drafts start
+none.
 Releases start runs whoever published them, the factory's own App included.
 
 `repositories` takes `owner/repo` names, in any case.

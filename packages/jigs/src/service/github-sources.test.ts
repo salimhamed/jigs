@@ -318,7 +318,7 @@ test("an issues event it cannot read is ignored loudly, not retried", async () =
 // A release published on GitHub, as its webhooks send it.
 const releasePublished = (): Record<string, unknown> & { release: Record<string, unknown> } =>
   JSON.parse(
-    readFileSync(new URL("./fixtures/github-release-published.json", import.meta.url), "utf8"),
+    readFileSync(new URL("./fixtures/github-release-released.json", import.meta.url), "utf8"),
   );
 const withRelease = (release: Record<string, unknown>, event: Record<string, unknown> = {}) => {
   const payload = releasePublished();
@@ -346,11 +346,14 @@ test("a published release is its repository and tag, as of when it was published
   expect(releases.describe(published?.inputs ?? {})).toBe("github Acme/api v1.2.0");
 });
 
-test("a draft, a prerelease or any other release action starts nothing and asks no one", async () => {
-  for (const action of ["created", "edited", "released", "prereleased", "deleted"])
-    expect(await releases.fromPush(ACME, release(withRelease({}, { action })))).toBeNull();
-  expect(await releases.fromPush(ACME, release(withRelease({ draft: true })))).toBeNull();
-  expect(await releases.fromPush(ACME, release(withRelease({ prerelease: true })))).toBeNull();
+test("only a release's `released` event starts a run, and a draft's null time is not misread", async () => {
+  const errors = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  for (const action of ["published", "created", "edited", "prereleased", "deleted"])
+    expect(
+      await releases.fromPush(ACME, release(withRelease({ published_at: null }, { action }))),
+    ).toBeNull();
+  expect(errors).not.toHaveBeenCalled();
+  errors.mockRestore();
   expect(bot).not.toHaveBeenCalled();
 });
 
