@@ -14,7 +14,15 @@ import { factoryHints } from "../components/factory-hints.ts";
 import { GitHubEvents, GitHubPermissions } from "../components/github-app-settings.tsx";
 import { Hint } from "../components/hint.tsx";
 import { InstallationName } from "../components/installation-names.tsx";
-import { Card, DangerRow, Details, PageHeader, SettingRow, UrlRow } from "../components/page.tsx";
+import {
+  Card,
+  DangerRow,
+  Details,
+  Field,
+  PageHeader,
+  SettingRow,
+  UrlRow,
+} from "../components/page.tsx";
 import { SecretInput } from "../components/secret-input.tsx";
 import { Snippet } from "../components/snippet.tsx";
 import { TimeAgo } from "../components/time.tsx";
@@ -185,13 +193,13 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
         <section className="space-y-3">
           <h2 className="font-semibold">General</h2>
           <div className={card}>
-            <SettingRow label="Name" hint={nameHints[app.provider]}>
+            <SettingRow label="Name" htmlFor="name" hint={nameHints[app.provider]}>
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
+                  id="name"
                   name="name"
                   required
                   defaultValue={app.name}
-                  aria-label="Name"
                   className={`${input} min-w-0 grow`}
                 />
                 <button type="submit" name="intent" value="rename" className={secondaryButton}>
@@ -748,19 +756,21 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
 
 function WebhookSecretForm({ replacing }: { replacing: boolean }) {
   return (
-    <Form method="post" className="flex flex-wrap items-end gap-2">
-      <div className="flex grow flex-col gap-1 text-sm">
-        <label htmlFor="webhookSecret">Webhook signing secret</label>
-        <SecretInput
-          id="webhookSecret"
-          name="webhookSecret"
-          required
-          placeholder={replacing ? "Set; enter a new one to replace it" : ""}
-        />
-      </div>
-      <button type="submit" name="intent" value="webhookSecret" className={secondaryButton}>
-        Save
-      </button>
+    <Form method="post">
+      <Field label="Webhook signing secret" htmlFor="webhookSecret">
+        <div className="flex flex-wrap gap-2">
+          <SecretInput
+            id="webhookSecret"
+            name="webhookSecret"
+            required
+            placeholder={replacing ? "Set; enter a new one to replace it" : ""}
+            className="min-w-0 grow"
+          />
+          <button type="submit" name="intent" value="webhookSecret" className={secondaryButton}>
+            Save
+          </button>
+        </div>
+      </Field>
     </Form>
   );
 }

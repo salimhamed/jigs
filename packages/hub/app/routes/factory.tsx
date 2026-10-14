@@ -251,13 +251,13 @@ function SettingsTab({ loaded }: { loaded: Extract<Loaded, { tab: "settings" }> 
         <section className="space-y-3">
           <h2 className="font-semibold">General</h2>
           <div className={`${card} divide-y divide-zinc-200 dark:divide-zinc-800`}>
-            <SettingRow label="Name" hint="Shown in the factory list.">
+            <SettingRow label="Name" htmlFor="name" hint="Shown in the factory list.">
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
+                  id="name"
                   name="name"
                   required
                   defaultValue={factory.name}
-                  aria-label="Name"
                   className={`${input} min-w-0 grow`}
                 />
                 <button type="submit" name="intent" value="rename" className={secondaryButton}>

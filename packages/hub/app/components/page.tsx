@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { type ReactNode, useId } from "react";
 import { Link } from "react-router";
 import { CopyButton } from "./copy-button.tsx";
 import { Hint } from "./hint.tsx";
@@ -87,28 +87,60 @@ export function Tabs({ tabs }: { tabs: { to: string; label: string; current: boo
   );
 }
 
-/** A setting's label and explanation beside its control. */
-export function SettingRow({
+/**
+ * A labelled control: the label, then what it is for, then the control. Give
+ * `htmlFor` when the control has that id, so clicking the label focuses it.
+ */
+export function Field({
   label,
+  htmlFor,
   hint,
   children,
 }: {
-  label: string;
-  hint: ReactNode;
+  label: ReactNode;
+  htmlFor?: string;
+  hint?: ReactNode;
   children: ReactNode;
 }) {
   return (
-    <div className="grid gap-3 p-5 sm:grid-cols-[16rem_1fr] sm:items-center">
-      <div>
-        <div className="font-medium">{label}</div>
-        <p className="text-sm text-zinc-500">{hint}</p>
+    <div className="flex flex-col gap-2 text-sm">
+      <div className="space-y-0.5">
+        {htmlFor ? (
+          <label htmlFor={htmlFor} className="block font-medium">
+            {label}
+          </label>
+        ) : (
+          <div className="font-medium">{label}</div>
+        )}
+        {hint && <p className="text-zinc-500">{hint}</p>}
       </div>
-      <div className="max-w-md">{children}</div>
+      {children}
     </div>
   );
 }
 
-/** A destructive action in a red box, explained beside its button. */
+/** A setting in a card of settings. */
+export function SettingRow({
+  label,
+  htmlFor,
+  hint,
+  children,
+}: {
+  label: string;
+  htmlFor?: string;
+  hint: ReactNode;
+  children: ReactNode;
+}) {
+  return (
+    <div className="p-5">
+      <Field label={label} htmlFor={htmlFor} hint={hint}>
+        <div className="max-w-xl">{children}</div>
+      </Field>
+    </div>
+  );
+}
+
+/** A destructive action in a red box. */
 export function DangerRow({
   label,
   hint,
@@ -156,10 +188,7 @@ export function Details({
   );
 }
 
-/**
- * A URL to paste into a provider's settings: its label, the read-only value
- * with a Copy button, and where it goes when `children` says.
- */
+/** A URL to paste into a provider's settings, read-only with a Copy button; `children` says where it goes. */
 export function UrlRow({
   label,
   value,
@@ -169,22 +198,19 @@ export function UrlRow({
   value: string;
   children?: ReactNode;
 }) {
+  const id = useId();
   return (
-    <div className="grid gap-x-4 gap-y-1 sm:grid-cols-[8rem_1fr]">
-      <span className="text-sm text-zinc-500 sm:pt-1.5">{label}</span>
-      <div className="min-w-0 space-y-1">
-        <div className="flex gap-2">
-          <input
-            readOnly
-            value={value}
-            aria-label={label}
-            onFocus={(event) => event.target.select()}
-            className={`${input} min-w-0 grow font-mono`}
-          />
-          <CopyButton text={value} label={label} />
-        </div>
-        {children && <p className="text-sm text-zinc-500">{children}</p>}
+    <Field label={label} htmlFor={id} hint={children}>
+      <div className="flex gap-2">
+        <input
+          id={id}
+          readOnly
+          value={value}
+          onFocus={(event) => event.target.select()}
+          className={`${input} min-w-0 grow font-mono`}
+        />
+        <CopyButton text={value} label={label} />
       </div>
-    </div>
+    </Field>
   );
 }

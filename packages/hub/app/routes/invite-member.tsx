@@ -3,7 +3,7 @@ import { type Role, roleLabels, roles } from "../../src/roles.ts";
 import { attempt, requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { CopyButton } from "../components/copy-button.tsx";
-import { PageHeader } from "../components/page.tsx";
+import { Field, PageHeader } from "../components/page.tsx";
 import { button, card, input, quietButton, secondaryButton } from "../components/ui.ts";
 import type { Route } from "./+types/invite-member.ts";
 
@@ -53,16 +53,16 @@ export default function InviteMember({ loaderData, actionData }: Route.Component
       />
       {loaderData.isAdmin ? (
         <Form method="post" className="space-y-5">
-          <label className="flex flex-col gap-1 text-sm">
-            <span className="font-medium">Email</span>
+          <Field label="Email" htmlFor="email">
             <input
+              id="email"
               name="email"
               type="email"
               required
               placeholder="name@company.com"
               className={input}
             />
-          </label>
+          </Field>
           <fieldset className="space-y-1">
             <legend className="mb-1 text-sm font-medium">Role</legend>
             <div className="grid gap-3 sm:grid-cols-2">
