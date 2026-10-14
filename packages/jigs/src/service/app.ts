@@ -351,7 +351,7 @@ function factoryRootOrNull(context: () => FactoryContext): string | null {
 // `workflow web`: run against a live World it opens a second queue worker and
 // steals the jobs this run is waiting on.
 function dashboardPointer(ctx: FactoryContext, runId: string): string {
-  return `${dashboardAddress(ctx, ctx.env("JIGS_DASHBOARD_PORT") ?? "")}/run/${runId}`;
+  return `${dashboardAddress(ctx)}/run/${runId}`;
 }
 
 // Every hook the run holds, the locks among them.

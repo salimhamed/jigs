@@ -20,8 +20,8 @@ export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
 
 // What a step can tell a human about the run it is inside. The Workflow SDK's
 // metadata carries the run id and the workflow name; the dashboard link is
-// jigs', and only the service process knows it — its dashboard settings, which
-// are also what `jigs status <run-id>` prints.
+// jigs', and only the service process knows it — the service's dashboard
+// address, which `jigs status <run-id>` also prints.
 
 /**
  * The run's page on the dashboard this service hosts, or undefined when the
@@ -33,7 +33,6 @@ export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
  */
 export function dashboardRunUrl(runId: string): string | undefined {
   const ctx = currentFactoryContext();
-  const port = ctx.env("JIGS_DASHBOARD_PORT");
-  if (port === undefined) return undefined;
-  return `${dashboardAddress(ctx, port)}/run/${runId}`;
+  if (ctx.env("JIGS_DASHBOARD_PORT") === undefined) return undefined;
+  return `${dashboardAddress(ctx)}/run/${runId}`;
 }

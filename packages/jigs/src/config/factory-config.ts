@@ -52,11 +52,12 @@ export interface ResolvedService {
 // that keys its service record and its bindings' directories.
 export function resolveService(ctx: FactoryContext): ResolvedService {
   const port = requiredPort(ctx, "JIGS_SERVICE_PORT");
+  requiredPort(ctx, "JIGS_DASHBOARD_PORT");
   return {
     slug: ctx.slug,
     port,
     serviceUrl: `http://localhost:${port}`,
-    dashboardUrl: dashboardAddress(ctx, requiredPort(ctx, "JIGS_DASHBOARD_PORT")),
+    dashboardUrl: dashboardAddress(ctx),
   };
 }
 
@@ -64,8 +65,9 @@ export function resolveService(ctx: FactoryContext): ResolvedService {
  * Where links to this copy's dashboard point: `JIGS_DASHBOARD_URL` when people reach the
  * dashboard through another address, such as a reverse proxy, else localhost on its port.
  */
-export function dashboardAddress(ctx: FactoryContext, port: string | number): string {
-  return ctx.env("JIGS_DASHBOARD_URL")?.replace(/\/+$/, "") ?? `http://localhost:${port}`;
+export function dashboardAddress(ctx: FactoryContext): string {
+  const url = ctx.env("JIGS_DASHBOARD_URL")?.replace(/\/+$/, "");
+  return url ?? `http://localhost:${ctx.env("JIGS_DASHBOARD_PORT")}`;
 }
 
 function requiredPort(ctx: FactoryContext, name: string): number {

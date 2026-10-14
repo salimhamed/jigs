@@ -20,7 +20,7 @@ export async function startDashboard() {
   // A dashboard tab left open holds a keep-alive socket, so drop every
   // connection rather than wait on the browser.
   onShutdown(() => server.close(true));
-  console.log(`[service] dashboard: ${dashboardAddress(ctx, port)}`);
+  console.log(`[service] dashboard: ${dashboardAddress(ctx)}`);
 }
 
 // The srvx server @workflow/web starts. The entry is loaded by path, so its
