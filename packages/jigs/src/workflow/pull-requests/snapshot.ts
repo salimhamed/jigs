@@ -88,7 +88,7 @@ export interface PullRequestSnapshot {
    * finished computing it, so the answer is "not yet, ask again".
    */
   mergeState: string;
-  /** Label names on the pull request; the `label` approval signal reads these. */
+  /** Label names on the pull request. */
   labels: string[];
   /** The merge commit, once GitHub has made one. */
   mergeCommitSha: string | null;
@@ -98,8 +98,8 @@ export interface PullRequestSnapshot {
   /** `none`: no check or status has reported on this head yet. It is never green. */
   ci: "red" | "green" | "pending" | "none";
   failingChecks: CheckRun[];
-  /** The operator's consent, read the way this factory's `github.mergeApproval` asks for it. */
-  approval: PullRequestApproval;
+  /** The operator's consent: how the people's approving reviews read on this head. */
+  approval: ApprovalState;
   /**
    * The login of the factory's GitHub App, `<slug>[bot]`: the account jigs posts as, and so do
    * agents whose harness sets `github`.
@@ -115,17 +115,6 @@ export interface PullRequestSnapshot {
  * @group Pull requests
  */
 export type ApprovalState = "approved" | "changes-requested" | "stale" | "none";
-
-/**
- * The factory's approval signal and how it reads on the pull request.
- *
- * @group Pull requests
- */
-export interface PullRequestApproval {
-  /** `review` is an approving review of the head; `label` is the `jigs:approved` label. */
-  signal: "review" | "label";
-  state: ApprovalState;
-}
 
 // Snapshot arrays are collections, not sequences: API ordering alone is not new activity.
 function canonical(value: unknown): string {

@@ -231,7 +231,7 @@ You word the note and choose where it goes.
 | --- | --- |
 | `attemptsPerUpdate` | Builder turns for each change to the pull request, recovery included. |
 | `wake` | Which facts in a snapshot wake the builder. Pass `builderWakeFacts` for the default: new reviews with a body or requesting changes, new comments, a newly failing check and a conflict with the base. Wrap it to ignore something, such as a bot's comments. |
-| `mergeWhen` | Whether you consent to merging the current snapshot. Return `false` to leave every merge to a person, or check the snapshot, such as for a label. jigs still merges only an approved, green, clean pull request, so this can only make merging stricter. |
+| `mergeWhen` | Whether you consent to merging the current snapshot. Return `false` to leave every merge to a person, or check the snapshot, such as for a label a person added. jigs still merges only an approved, green, clean pull request, so this can only make merging stricter. |
 | `approvalCovers` | Which commits a person's approving review covers. |
 | `onNeedsHuman` | Called with the facts when a person must act. For a blocked merge, `headSha` names the head; mark a note about it with that head and `defaultPullRequestScope(key)` so it does not wake the builder. |
 

@@ -16,7 +16,7 @@ const opened: PullRequestSnapshot = {
   reviews: [],
   reviewThreads: [],
   conversationComments: [],
-  approval: { signal: "review", state: "none" },
+  approval: "none",
 };
 const SCOPE = "linearTicketToPr/ABC-1";
 const marked = (marker: object) => ({
@@ -56,7 +56,7 @@ test("checks queuing, running, passing and clearing never wake the builder", () 
     opened,
     { ...opened, ci: "pending" as const, mergeState: "blocked" },
     { ...opened, ci: "green" as const, mergeState: "clean" },
-    { ...opened, ci: "green" as const, mergeState: "clean", labels: ["jigs:approved"] },
+    { ...opened, ci: "green" as const, mergeState: "clean", labels: ["ready"] },
   ];
   for (const state of states) expect(builderWakeFacts(state, SCOPE)).toEqual([]);
   const failed = { ...opened, ci: "red" as const, failingChecks: [check("build")] };

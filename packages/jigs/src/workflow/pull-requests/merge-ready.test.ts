@@ -5,7 +5,6 @@ import {
   isPullRequestMergeReady,
   mergeRefusal,
 } from "./merge-ready.ts";
-import type { MergeApproval } from "./policy.ts";
 import type { PullRequestReview, PullRequestSnapshot } from "./snapshot.ts";
 
 type Facts = Omit<PullRequestSnapshot, "approval" | "appBot">;
@@ -27,21 +26,13 @@ const facts: Facts = {
   ],
 };
 
-// A snapshot as the fetch step reads it: the facts, and consent read against the signal.
-const read = (
-  patch: Partial<Facts> = {},
-  signal: MergeApproval = "review",
-): PullRequestSnapshot => {
+// A snapshot as the fetch step reads it: the facts, and the consent they hold.
+const read = (patch: Partial<Facts> = {}): PullRequestSnapshot => {
   const current = { ...facts, ...patch };
-  return {
-    ...current,
-    appBot: "jigs[bot]",
-    approval: { signal, state: approvalState(current, signal) },
-  };
+  return { ...current, appBot: "jigs[bot]", approval: approvalState(current) };
 };
 const snapshot = read();
-const approved = (patch: Partial<Facts>, signal: MergeApproval = "review") =>
-  approvalState({ ...facts, ...patch }, signal) === "approved";
+const approved = (patch: Partial<Facts>) => approvalState({ ...facts, ...patch }) === "approved";
 
 test("GitHub's merge state decides everything it covers", () => {
   expect(isPullRequestMergeReady(snapshot)).toBe(true);
@@ -59,11 +50,9 @@ test("a merge state GitHub has not computed yet is not a merge", () => {
 test("a clean pull request with no build is not ready, whatever GitHub says", () => {
   // A repository that requires no checks is `clean` with nothing run at all,
   // including in the seconds before CI registers, so `clean` alone would merge
-  // a label-approved pull request ahead of its own build.
+  // an approved pull request ahead of its own build.
   expect(isPullRequestMergeReady(read({ ci: "pending" }))).toBe(false);
   expect(isPullRequestMergeReady(read({ ci: "red" }))).toBe(false);
-  const labelled = read({ reviews: [], labels: ["jigs:approved"], ci: "pending" }, "label");
-  expect(isPullRequestMergeReady(labelled)).toBe(false);
 });
 
 test("a draft, a closed and an already merged pull request are never ready", () => {
@@ -82,20 +71,16 @@ test("a review approval names a commit, so a push withdraws it", () => {
 // approval that named an earlier commit says so rather than reading as one
 // nobody ever gave.
 test("an unmet approval names which of the four things is missing", () => {
-  const refusalFor = (patch: Partial<Facts>, signal: MergeApproval = "review") =>
-    mergeRefusal(read(patch, signal), "new")?.reason;
+  const refusalFor = (patch: Partial<Facts>) => mergeRefusal(read(patch), "new")?.reason;
   const approval = facts.reviews[0];
   if (approval === undefined) throw new Error("Missing fixture approval");
-  expect(snapshot.approval).toEqual({ signal: "review", state: "approved" });
+  expect(snapshot.approval).toBe("approved");
   expect(refusalFor({ reviews: [] })).toBe("no approving review yet");
   expect(refusalFor({ reviews: [{ ...approval, commitSha: "older" }] })).toBe(
     "the approval does not cover new",
   );
   expect(refusalFor({ reviews: [{ ...approval, state: "CHANGES_REQUESTED" }] })).toBe(
     "a review requests changes",
-  );
-  expect(refusalFor({ reviews: [] }, "label")).toBe(
-    "the jigs:approved label is not on the pull request",
   );
 });
 
@@ -115,22 +100,6 @@ test("latest effective reviewer decision supersedes historical approvals", () =>
       reviews: [approval, { ...approval, id: 2, user: "another", state: "CHANGES_REQUESTED" }],
     }),
   ).toBe(false);
-});
-
-test("a label approval is the pull request's, not a commit's, so it survives a push", () => {
-  const labelled = { reviews: [], labels: ["jigs:approved"] };
-  expect(approved(labelled, "label")).toBe(true);
-  expect(approved({ ...labelled, headSha: "later" }, "label")).toBe(true);
-  expect(approved({ ...labelled, labels: ["needs-review"] }, "label")).toBe(false);
-  // The two signals are independent: neither stands in for the other.
-  expect(approved(labelled, "review")).toBe(false);
-  expect(approved({}, "label")).toBe(false);
-});
-
-test("merge readiness reads the configured approval signal", () => {
-  const labelled = { reviews: [], labels: ["jigs:approved"] };
-  expect(isPullRequestMergeReady(read(labelled, "review"))).toBe(false);
-  expect(isPullRequestMergeReady(read(labelled, "label"))).toBe(true);
 });
 
 test("a refusal jigs can wait out is kept apart from one only a new commit fixes", () => {
@@ -176,15 +145,11 @@ test("a workflow's own consent stands in for the operator's and for nothing else
     reviews: [{ id: 2, state: "CHANGES_REQUESTED", body: "", user: "person", submittedAt: "2" }],
   };
   expect(refusal(objection)).toMatchObject({ reason: "a review requests changes" });
-  const labelled = read({ ...objection, labels: ["jigs:approved"] }, "label");
-  expect(mergeRefusal(labelled, "new", { consent: "workflow" })).toMatchObject({
-    reason: "a review requests changes",
-  });
 });
 
 describe("an approval that covers any commit", () => {
   const anyCommit = (patch: Partial<Facts>) =>
-    approvalState({ ...facts, ...patch }, "review", { covers: "any-commit" });
+    approvalState({ ...facts, ...patch }, { covers: "any-commit" });
   const approval: PullRequestReview = {
     id: 1,
     state: "APPROVED",
@@ -198,7 +163,7 @@ describe("an approval that covers any commit", () => {
     expect(anyCommit({ reviews: [approval], headSha: "merge-of-base" })).toBe("approved");
     expect(anyCommit({ reviews: [approval], headSha: "builder-fix" })).toBe("approved");
     // The default reads the same reviews as stale.
-    expect(approvalState({ ...facts, reviews: [approval] }, "review")).toBe("stale");
+    expect(approvalState({ ...facts, reviews: [approval] })).toBe("stale");
   });
 
   test("is withdrawn by a later changes-requested from anyone", () => {
@@ -227,13 +192,6 @@ describe("an approval that covers any commit", () => {
         ],
       }),
     ).toBe("approved");
-  });
-
-  test("leaves label approval as it was", () => {
-    const labelled = { reviews: [], labels: ["jigs:approved"] };
-    expect(approvalState({ ...facts, ...labelled }, "label", { covers: "any-commit" })).toBe(
-      "approved",
-    );
   });
 });
 

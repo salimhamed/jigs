@@ -209,7 +209,6 @@ export type {
 export {
   type ApprovalState,
   type CheckRun,
-  type PullRequestApproval,
   type PullRequestComment,
   type PullRequestReview,
   type PullRequestSnapshot,

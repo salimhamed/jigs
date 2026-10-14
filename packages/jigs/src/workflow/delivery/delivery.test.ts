@@ -434,12 +434,12 @@ const snapshot: PullRequestSnapshot = {
   ],
   reviewThreads: [],
   conversationComments: [],
-  approval: { signal: "review", state: "approved" },
+  approval: "approved",
 };
 const unapproved: PullRequestSnapshot = {
   ...snapshot,
   reviews: [],
-  approval: { signal: "review", state: "none" },
+  approval: "none",
 };
 const opened: PullRequestSnapshot = { ...unapproved, ci: "none", mergeState: "unknown" };
 const comment = (id: number, body = "Please rename x.") => ({

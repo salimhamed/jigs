@@ -488,18 +488,13 @@ const withSettings = (extra: Record<string, unknown>) =>
     ...extra,
   });
 
-test("a factory that states no GitHub settings names no operator and approves by review", () => {
-  expect(withSettings({}).github).toEqual({ mergeApproval: "review" });
+test("a factory that states no GitHub settings names no operator", () => {
+  expect(withSettings({}).github).toEqual({});
 });
 
-test("the GitHub section holds the operator, co-author and approval", () => {
-  const github = {
-    operator: "salimhamed",
-    coAuthor: "Salim <s@example.com>",
-    mergeApproval: "label",
-  };
+test("the GitHub section holds the operator and co-author", () => {
+  const github = { operator: "salimhamed", coAuthor: "Salim <s@example.com>" };
   expect(withSettings({ github }).github).toEqual(github);
-  expect(() => withSettings({ github: { mergeApproval: "comment" } })).toThrow("mergeApproval");
 });
 
 test("a Linear operator is optional and must be an email", () => {

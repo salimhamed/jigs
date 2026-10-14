@@ -45,7 +45,7 @@ const snapshot = (patch: Partial<PullRequestSnapshot> = {}): PullRequestSnapshot
   conversationComments: [],
   ci: "pending",
   failingChecks: [],
-  approval: { signal: "review", state: "none" },
+  approval: "none",
   ...patch,
 });
 const comment = {

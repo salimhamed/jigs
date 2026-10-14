@@ -4,7 +4,6 @@
 import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
-import { mergeApprovalSchema } from "./pull-requests/policy.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
@@ -81,8 +80,6 @@ export const githubSchema = z.strictObject({
   operator: z.string().min(1).optional(),
   /** `Name <email>` added as a `Co-authored-by` trailer to the merge commits jigs makes. */
   coAuthor: z.string().min(1).optional(),
-  /** How the operator approves a pull request for merging. */
-  mergeApproval: mergeApprovalSchema.default("review"),
 });
 
 /**

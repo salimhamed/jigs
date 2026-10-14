@@ -75,7 +75,7 @@ const snapshot: Omit<PullRequestSnapshot, "approval" | "appBot"> = {
   merged: false,
   draft: false,
   mergeState: "clean",
-  labels: ["jigs:approved"],
+  labels: [],
   mergeCommitSha: null,
   headSha: "head",
   ci: "green",
@@ -435,7 +435,7 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
     path.join(root, "jigs.config.ts"),
     `export default {
     hub: { url: "https://hub.example.test" },
-    github: { operator: "salimhamed", mergeApproval: "review" },
+    github: { operator: "salimhamed" },
     bindings: { app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" } },
   };`,
   );

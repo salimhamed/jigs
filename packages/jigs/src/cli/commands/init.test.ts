@@ -272,6 +272,6 @@ test("the scaffold's config is what jigs accepts, so the first `jigs up` loads",
     hub: { url: "https://hub.example.test" },
     ...scaffoldedConfig(dir),
   });
-  expect(parsed.github).toEqual({ mergeApproval: "review" });
+  expect(parsed.github).toEqual({});
   expect(parsed.linear).toEqual({});
 });

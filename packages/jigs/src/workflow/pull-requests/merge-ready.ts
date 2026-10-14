@@ -1,37 +1,19 @@
-import {
-  APPROVED_LABEL,
-  type ApprovalCoverage,
-  type MergeApproval,
-  type MergeConsent,
-} from "./policy.ts";
-import type {
-  ApprovalState,
-  PullRequestApproval,
-  PullRequestReview,
-  PullRequestSnapshot,
-} from "./snapshot.ts";
+import type { ApprovalCoverage, MergeConsent } from "./policy.ts";
+import type { ApprovalState, PullRequestReview, PullRequestSnapshot } from "./snapshot.ts";
 
 /**
- * Is the operator's consent recorded on the pull request, as this factory
- * asked for it?
+ * Is the operator's consent recorded on the pull request? The latest review
+ * each person left is the one that counts, and at least one of them approves
+ * this exact commit with none requesting changes. An approval names a commit,
+ * so a push withdraws it.
  *
- * - `review`: the latest review each person left is the one that counts, and
- *   at least one of them approves this exact commit with none requesting
- *   changes. An approval names a commit, so a push withdraws it.
- * - `label`: the `jigs:approved` label is on the pull request. It means "merge whenever
- *   ready", so it survives later pushes and jigs never removes it.
- *
- * With `covers: "any-commit"` a review approval of any commit counts, except one
+ * With `covers: "any-commit"` an approval of any commit counts, except one
  * from a bot.
  */
 export function approvalState(
-  snapshot: Pick<PullRequestSnapshot, "labels" | "reviews" | "headSha">,
-  approval: MergeApproval,
+  snapshot: Pick<PullRequestSnapshot, "reviews" | "headSha">,
   { covers = "latest-commit" }: { covers?: ApprovalCoverage } = {},
 ): ApprovalState {
-  if (approval === "label") {
-    return snapshot.labels.includes(APPROVED_LABEL) ? "approved" : "none";
-  }
   // An injected instruction could make an agent approve its own work, and
   // under any-commit that approval would cover every push after it. Agents
   // act on GitHub as the App's bot (ADR 0012), so a person's approval counts.
@@ -55,12 +37,10 @@ export function approvalState(
 
 // Written for the operator reading a parked pull request: this sentence is
 // also the `blocker` line `jigs status <run-id>` prints.
-function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha: string): string {
+function approvalMissing(state: ApprovalState, expectedHeadSha: string): string {
   if (state === "changes-requested") return "a review requests changes";
   if (state === "stale") return `the approval does not cover ${expectedHeadSha}`;
-  return signal === "label"
-    ? `the ${APPROVED_LABEL} label is not on the pull request`
-    : "no approving review yet";
+  return "no approving review yet";
 }
 
 const BLOCKED =
@@ -125,14 +105,10 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  // A person asking for changes still stops a workflow that consents itself,
-  // whichever signal the factory approves with: a label never reads a review.
-  if (consent === "workflow") {
-    if (approvalState(snapshot, "review") === "changes-requested") {
-      return { reason: "a review requests changes", transient: true };
-    }
-  } else if (snapshot.approval.state !== "approved") {
-    return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
+  // A person asking for changes still stops a workflow that consents itself.
+  const { approval } = snapshot;
+  if (approval === "changes-requested" || (consent === "operator" && approval !== "approved")) {
+    return { reason: approvalMissing(approval, expectedHeadSha), transient: true };
   }
   // GitHub says only `blocked`, never which rule, and the account jigs merges
   // as may meet a rule the operator does not. Transient: changing the rule

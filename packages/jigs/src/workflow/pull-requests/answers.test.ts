@@ -41,7 +41,7 @@ const unannotated = async (): Promise<PullRequestSnapshot> => ({
   conversationComments: [],
   ci: "green",
   failingChecks: [],
-  approval: { signal: "review", state: "none" },
+  approval: "none",
 });
 
 test("a note names the commit it settles, and a failed note does not throw", async () => {

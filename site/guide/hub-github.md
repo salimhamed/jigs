@@ -45,7 +45,7 @@ your own account's, choose **New GitHub App**. The form's sections, in order:
   | --- | --- | --- |
   | Contents | Read and write | Pushing branches and merging. |
   | Pull requests | Read and write | Opening, commenting on and merging pull requests. |
-  | Issues | Read and write | Creating the `jigs:approved` label and commenting. |
+  | Issues | Read and write | Commenting on pull requests and issues. |
   | Metadata | Read | Required by GitHub. |
   | Checks | Read | Reading CI. |
   | Commit statuses | Read | Reading CI. |
