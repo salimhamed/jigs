@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.105.0](https://github.com/salimhamed/jigs/compare/jigs-v0.104.12...jigs-v0.105.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* start the Linear recipe from delegations, and split linear.agentSessions into delegations and mentions ([#694](https://github.com/salimhamed/jigs/issues/694))
+
+### Features
+
+* start the Linear recipe from delegations, and split linear.agentSessions into delegations and mentions ([#694](https://github.com/salimhamed/jigs/issues/694)) ([eea57a3](https://github.com/salimhamed/jigs/commit/eea57a388346ac266f7f7023314ca61035a98336))
+
 ## [0.104.12](https://github.com/salimhamed/jigs/compare/jigs-v0.104.11...jigs-v0.104.12) (2026-10-14)
 
 
