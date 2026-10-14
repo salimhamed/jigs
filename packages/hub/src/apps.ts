@@ -1,5 +1,6 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { appDescription } from "./app-description.ts";
 import { type HubDatabase, isUniqueViolation, type Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 import { providerNames } from "./provider-names.ts";
@@ -54,18 +55,6 @@ export async function renameApp(
     .returning({ id: apps.id });
   if (renamed.length === 0) return { error: "There is no such app." };
   return { name };
-}
-
-/** The longest description an app can have. */
-export const appDescriptionLength = 200;
-
-/** A description as stored: `null` when empty. */
-export function appDescription(text = ""): { description: string | null } | { error: string } {
-  text = text.replace(/\s+/g, " ").trim();
-  if (text.length > appDescriptionLength) {
-    return { error: `Keep the description to ${appDescriptionLength} characters.` };
-  }
-  return { description: text || null };
 }
 
 /** Describe an app, or clear its description with an empty one. Only people on the hub see it. */

@@ -8,9 +8,9 @@ import {
 import type { GitHubTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
+import { appDescription } from "./app-description.ts";
 import {
   type App,
-  appDescription,
   findApp,
   findNamedInstallation,
   type Installed,

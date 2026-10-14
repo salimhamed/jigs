@@ -2,10 +2,10 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
+import { appDescription } from "./app-description.ts";
 import { appOAuth } from "./app-oauth.ts";
 import {
   type App,
-  appDescription,
   findApp,
   findNamedInstallation,
   type Installation,

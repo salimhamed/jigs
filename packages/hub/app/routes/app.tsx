@@ -1,8 +1,8 @@
 import { AlertTriangle, Download, ExternalLink, Link2, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { data, Form, Link, redirect } from "react-router";
+import { appDescriptionLength } from "../../src/app-description.ts";
 import {
-  appDescriptionLength,
   isUuid,
   removeApp,
   renameApp,

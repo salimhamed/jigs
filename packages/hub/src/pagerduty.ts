@@ -2,13 +2,8 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type PagerDutyTokenResponse, pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
-import {
-  type App,
-  appDescription,
-  findApp,
-  findNamedInstallation,
-  recordInstallation,
-} from "./apps.ts";
+import { appDescription } from "./app-description.ts";
+import { type App, findApp, findNamedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";

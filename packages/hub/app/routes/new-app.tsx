@@ -1,7 +1,7 @@
 import { type Provider, pagerDutyScopes, providers } from "@jigs-ai/hub-protocol";
 import type { ReactNode } from "react";
 import { Form, Link, redirect } from "react-router";
-import { appDescriptionLength } from "../../src/apps.ts";
+import { appDescriptionLength } from "../../src/app-description.ts";
 import { addGitHubApp, githubWebhookPath } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
 import { addPagerDutyApp } from "../../src/pagerduty.ts";
