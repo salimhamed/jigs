@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.8](https://github.com/salimhamed/jigs/compare/jigs-v0.104.7...jigs-v0.104.8) (2026-10-14)
+
+
+### Features
+
+* **hub:** complete GitHub App setup help and reveal secrets ([#681](https://github.com/salimhamed/jigs/issues/681)) ([8343355](https://github.com/salimhamed/jigs/commit/8343355225156055e528d6b05c5ec5b80cb9328d))
+
 ## [0.104.7](https://github.com/salimhamed/jigs/compare/jigs-v0.104.6...jigs-v0.104.7) (2026-10-14)
 
 
