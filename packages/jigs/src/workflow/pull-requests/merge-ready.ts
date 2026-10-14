@@ -125,9 +125,13 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  // A person asking for changes still stops a workflow that consents itself.
-  const { state } = snapshot.approval;
-  if (state === "changes-requested" || (consent === "operator" && state !== "approved")) {
+  // A person asking for changes still stops a workflow that consents itself,
+  // whichever signal the factory approves with: a label never reads a review.
+  if (consent === "workflow") {
+    if (approvalState(snapshot, "review") === "changes-requested") {
+      return { reason: "a review requests changes", transient: true };
+    }
+  } else if (snapshot.approval.state !== "approved") {
     return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
   // GitHub says only `blocked`, never which rule, and the account jigs merges

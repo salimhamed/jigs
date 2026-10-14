@@ -176,6 +176,10 @@ test("a workflow's own consent stands in for the operator's and for nothing else
     reviews: [{ id: 2, state: "CHANGES_REQUESTED", body: "", user: "person", submittedAt: "2" }],
   };
   expect(refusal(objection)).toMatchObject({ reason: "a review requests changes" });
+  const labelled = read({ ...objection, labels: ["jigs:approved"] }, "label");
+  expect(mergeRefusal(labelled, "new", { consent: "workflow" })).toMatchObject({
+    reason: "a review requests changes",
+  });
 });
 
 describe("an approval that covers any commit", () => {

@@ -190,7 +190,6 @@ function groupThreads(
   return [...byRoot.values()];
 }
 
-// Approval is left to the caller: reading it needs the factory's configured signal.
 /** Whether the pull request's head branch lives in a fork rather than in its own repository. */
 export async function isForkPullRequest(pr: PullRequestRef): Promise<boolean> {
   const pull = await githubGet<{
@@ -200,6 +199,7 @@ export async function isForkPullRequest(pr: PullRequestRef): Promise<boolean> {
   return pull.head.repo?.full_name.toLowerCase() !== pull.base.repo.full_name.toLowerCase();
 }
 
+// Approval is left to the caller: reading it needs the factory's configured signal.
 export async function fetchPrSnapshot(
   pr: PullRequestRef,
 ): Promise<Omit<PullRequestSnapshot, "approval" | "appBot">> {
