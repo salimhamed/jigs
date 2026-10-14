@@ -231,7 +231,7 @@ You word the note and choose where it goes.
 | --- | --- |
 | `attemptsPerUpdate` | Builder turns for each change to the pull request, recovery included. |
 | `wake` | Which facts in a snapshot wake the builder. Pass `builderWakeFacts` for the default: new reviews with a body or requesting changes, new comments, a newly failing check and a conflict with the base. Wrap it to ignore something, such as a bot's comments. |
-| `mergeWhen` | Whether you consent to merging the current snapshot. Return `false` to leave every merge to a person, or check the snapshot, such as for a label. jigs still merges only an approved, green, clean pull request, so this can only make merging stricter. |
+| `mergeWhen` | Whether you consent to merging the current snapshot. Return `false` to leave every merge to a person, or check the snapshot, such as for a label a person added. jigs still merges only an approved, green, clean pull request, so this can only make merging stricter. |
 | `approvalCovers` | Which commits a person's approving review covers. |
 | `onNeedsHuman` | Called with the facts when a person must act. For a blocked merge, `headSha` names the head; mark a note about it with that head and `defaultPullRequestScope(key)` so it does not wake the builder. |
 
@@ -413,6 +413,37 @@ own delivery, with its worktree's installation on the builder.
 The `linear-ticket-to-pr` [recipe](/guide/recipes) is a complete example: it
 claims a Linear ticket, moves its status between the phases, and writes its own
 ticket notes for stops and for a pull request that needs a person.
+
+### Merging a pull request your workflow checked
+
+A workflow can judge someone else's pull request itself, such as a dependency
+update, and merge it with no person involved. `provisionPullRequestWorktree`
+checks out the pull request's current head in a worktree for this run, with no
+branch to push, and returns that commit as `headSha`. Pass it to
+`mergePullRequest` so only the commit you checked can merge, and pass
+`consent: "workflow"` so your checks stand in for a person's approval:
+
+```ts
+import type { PullRequestRef } from "@jigs-ai/jigs";
+import { mergePullRequest, provisionPullRequestWorktree } from "#jigs/steps";
+
+// `isSafe` is your own check: an agent's verdict, or commands run in the worktree.
+export async function mergeIfSafe(pr: PullRequestRef, isSafe: (cwd: string) => Promise<boolean>) {
+  const tree = await provisionPullRequestWorktree({ binding: "api", number: pr.number });
+  if (!(await isSafe(tree.path))) return null;
+  return mergePullRequest(pr, tree.headSha, { consent: "workflow" });
+}
+```
+
+Everything else a merge needs still holds: the head is still `headSha`, the pull
+request is open, not a draft and not conflicting, at least one check ran and all
+passed, GitHub reports it mergeable, and no review requests changes. A push
+after you checked moves the head, so the merge is refused until you check the
+new head in a new worktree. Only a pull request from a branch of the binding's
+own repository can be checked out, never one from a fork, because setup runs its
+code. The worktree's own setup (`copy` and `postCreate`) runs as usual, and the
+worktree is removed with the run's other resources unless it has uncommitted
+changes. Commits made in it are not kept.
 
 ### Upgrading with runs parked
 

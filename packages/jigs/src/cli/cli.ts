@@ -190,8 +190,8 @@ program
     "--installation <installation-name>",
     "the GitHub App installation, as named on the hub, that reaches the repo (default: the binding's own)",
   )
-  .action(async (remoteUrl: string, options: { bindingName?: string; installation?: string }) => {
-    await bindRepo(
+  .action((remoteUrl: string, options: { bindingName?: string; installation?: string }) => {
+    bindRepo(
       remoteUrl,
       { out },
       {

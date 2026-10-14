@@ -564,19 +564,18 @@ to you. **`coAuthor`** is optional and adds a
 
 ### Merging {#merging}
 
-These are three independent decisions:
+These are independent decisions:
 
 | Concern | Controlled by |
 | --- | --- |
-| What counts as operator approval | `github.mergeApproval` |
+| Whether a merge needs your approving review | Workflow code (`consent`) |
 | Which commits an approving review covers | Workflow code (`approvalCovers`) |
 | How GitHub creates the merge | The repository's merge settings on GitHub |
 | Whether and when to attempt a merge | Workflow code |
 
-- **`github.mergeApproval`**: what counts as your consent. `"review"` is an
-  approving review of the current commit; a new push withdraws it. `"label"`
-  is the `jigs:approved` label on the pull request; it survives later pushes,
-  so it means "merge whenever ready". The default is `"review"`.
+Your consent is an approving review. By default it covers only the commit it
+approved, so a new push withdraws it.
+
 - **`approvalCovers`**: an option workflow code passes to `watchPullRequest`,
   `fetchPullRequestState` and `mergePullRequest`, so two workflows on one
   repository can differ. `"latest-commit"`, the default, counts a review only
@@ -585,6 +584,13 @@ These are three independent decisions:
   a later review requests changes or the approval is dismissed. Approvals by
   bots never count under `"any-commit"`, so an agent acting as the App's bot
   cannot approve its own work. Changes requested by a bot still block.
+- **`consent`**: an option workflow code passes to `mergePullRequest`.
+  `"operator"`, the default, needs your approving review. `"workflow"` lets the
+  workflow's own checks stand in for it, for a workflow that judges a pull
+  request itself, such as one that tests a dependency update and merges it
+  when it passes. It applies to that one call, so other workflows in the
+  factory still wait for you. Every other requirement below still holds, and
+  a review requesting changes still stops the merge.
 - **The merge method** is the first one the repository allows on GitHub, read
   at each merge: squash, then merge commit, then rebase. To get a different
   method, turn off the ones ahead of it in the repository's settings. With
@@ -592,23 +598,19 @@ These are three independent decisions:
   With rebase, each commit is rewritten and loses its signature. A repository
   that allows none fails the merge with a message naming it.
 
-`jigs bind` creates the `jigs:approved` label on each GitHub repository it
-binds, whichever approval you use.
-
 Workflow code calls `mergePullRequest` when its policy says to merge. That step
 rereads GitHub and enforces readiness and approval, read with the
 `approvalCovers` it is given. `watchPullRequest` only
 reports facts. These checks do not restrict an agent using its own GitHub
 tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
-jigs merges only when the approval is present, GitHub reports the pull request
-mergeable, it is not a draft, at least one check has run, and CI is green.
+jigs merges only when the approval is present or the workflow consents
+itself, GitHub reports the pull request mergeable, it is not a draft, at least
+one check has run, and CI is green.
 **jigs never merges in a repository with no CI**: when no check has reported,
 `jigs status` says so, since CI may not have started yet or the repository may
 have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
-checks again later. A label cannot satisfy a branch rule that requires approving
-reviews, so label approval only works on repositories without that rule. jigs
-never changes branch protection.
+checks again later. jigs never changes branch protection.
 
 A protected branch that restricts who can push also restricts who can merge.
 If the factory's App is not on that list,

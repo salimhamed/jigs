@@ -13,9 +13,11 @@ import type {
   Halt,
   JevQuestions,
   JevResult,
+  MergeOptions,
   ModelRequest,
   PullRequestReadOptions,
   PullRequestRef,
+  PullRequestWorktree,
   ReleasePolicy,
   RunResource,
   TicketNote,
@@ -32,7 +34,7 @@ import * as pagerDutyOperations from "@jigs-ai/jigs/steps/pagerduty";
 import * as pullRequestsOperations from "@jigs-ai/jigs/steps/pull-requests";
 import * as runtimeOperations from "@jigs-ai/jigs/steps/runtime";
 import * as slackOperations from "@jigs-ai/jigs/steps/slack";
-import type { WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
+import type { PullRequestWorktreeRequest, WorktreeRequest } from "@jigs-ai/jigs/steps/workspaces";
 import * as workspacesOperations from "@jigs-ai/jigs/steps/workspaces";
 import { getStepMetadata, getWorkflowMetadata } from "workflow";
 
@@ -45,6 +47,19 @@ export async function provisionWorktree(request: WorktreeRequest): Promise<Workt
   "use step";
   const metadata = getWorkflowMetadata();
   return workspacesOperations.provisionWorktree(request, metadata);
+}
+
+/**
+ * Check out a pull request's head commit in a worktree for this run, with no branch to push.
+ *
+ * @group Workspaces and resources
+ */
+export async function provisionPullRequestWorktree(
+  request: PullRequestWorktreeRequest,
+): Promise<PullRequestWorktree> {
+  "use step";
+  const metadata = getWorkflowMetadata();
+  return workspacesOperations.provisionPullRequestWorktree(request, metadata);
 }
 
 /**
@@ -502,7 +517,7 @@ export async function markPullRequestReady(pullRequest: PullRequestRef) {
 export async function mergePullRequest(
   pullRequest: PullRequestRef,
   expectedHeadSha: string,
-  options?: PullRequestReadOptions,
+  options?: MergeOptions,
 ) {
   "use step";
   return pullRequestsOperations.mergePullRequest(pullRequest, expectedHeadSha, options);

@@ -89,14 +89,12 @@ const prSnapshot = (
   ...patch,
 });
 
-// The factory's approval signal decides what "approved" means, so the
-// enrichment reads the same config the merge gate does.
 function reviewApproval(): void {
   vi.spyOn(factoryContext, "currentFactoryContext").mockReturnValue(
     testFactoryContext({
       slug: "factory-test",
       config: {
-        github: { operator: "me", mergeApproval: "review" },
+        github: { operator: "me" },
       },
     }),
   );

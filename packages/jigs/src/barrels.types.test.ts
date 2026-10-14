@@ -64,7 +64,6 @@ import type {
   PiMcpStdioServerConfig,
   PublishDelivery,
   PublishOptions,
-  PullRequestApproval,
   PullRequestMarker,
   PullRequestReadOptions,
   PullRequestRef,
@@ -164,7 +163,6 @@ type RootTypeSurface = {
   piMcpHttpServer: PiMcpHttpServerConfig;
   piMcpServer: PiMcpServerConfig;
   piMcpStdioServer: PiMcpStdioServerConfig;
-  prApproval: PullRequestApproval;
   prMarker: PullRequestMarker;
   prReadOptions: PullRequestReadOptions;
   prRef: PullRequestRef;

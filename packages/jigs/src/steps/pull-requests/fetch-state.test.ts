@@ -9,9 +9,6 @@ vi.mock("../../providers/github-auth.ts", () => ({
     bot: async () => ({ login: `${installationName}-app[bot]`, id: 1 }),
   }),
 }));
-vi.mock("../../config/factory-context.ts", () => ({
-  currentFactoryContext: () => ({ config: { github: { mergeApproval: "review" } } }),
-}));
 
 const pr = { installationName: "github-acme", owner: "acme", repo: "api", number: 1 };
 const facts = {

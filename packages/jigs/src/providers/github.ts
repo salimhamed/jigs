@@ -190,6 +190,15 @@ function groupThreads(
   return [...byRoot.values()];
 }
 
+/** Whether the pull request's head branch lives in a fork rather than in its own repository. */
+export async function isForkPullRequest(pr: PullRequestRef): Promise<boolean> {
+  const pull = await githubGet<{
+    head: { repo: { full_name: string } | null };
+    base: { repo: { full_name: string } };
+  }>(pr.installationName, `/repos/${pr.owner}/${pr.repo}/pulls/${pr.number}`);
+  return pull.head.repo?.full_name.toLowerCase() !== pull.base.repo.full_name.toLowerCase();
+}
+
 // Approval is left to the caller: reading it needs the factory's configured signal.
 export async function fetchPrSnapshot(
   pr: PullRequestRef,

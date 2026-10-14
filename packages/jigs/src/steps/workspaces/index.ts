@@ -2,15 +2,18 @@
  * Prepare a run-owned worktree for a configured GitHub binding.
  *
  * `provisionWorktree` cuts the run's own branch and working copy from the
- * binding's clone. Call its generated `#jigs/steps` wrapper from workflow code so a resumed
- * workflow receives the recorded workspace information. The low-level function
- * here belongs inside a factory-owned `"use step"` implementation.
+ * binding's clone; `provisionPullRequestWorktree` checks out a pull request's
+ * head instead. Call their generated `#jigs/steps` wrappers from workflow code so a resumed
+ * workflow receives the recorded workspace information. The low-level functions
+ * here belong inside a factory-owned `"use step"` implementation.
  *
  * @module steps/workspaces
  * @packageDocumentation
  */
 
 export {
+  type PullRequestWorktreeRequest,
+  provisionPullRequestWorktree,
   provisionWorktree,
   type WorktreeRequest,
 } from "./provision-worktree.ts";

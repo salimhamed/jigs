@@ -1,6 +1,6 @@
 import type { PullRequestSnapshot } from "../../providers/github.ts";
 import { PULL_REQUEST_TOKEN_PREFIX } from "../hook-tokens.ts";
-import type { ApprovalCoverage } from "./policy.ts";
+import type { ApprovalCoverage, MergeConsent } from "./policy.ts";
 
 /**
  * Build the durable hook token shared by a pull request watcher and the GitHub events that wake it.
@@ -88,4 +88,14 @@ export type FetchPrState = (
 export interface PullRequestReadOptions {
   /** Which commits an approving review covers. Default `"latest-commit"`. */
   approvalCovers?: ApprovalCoverage;
+}
+
+/**
+ * How workflow code asks for a pull request to be merged.
+ *
+ * @group Pull requests
+ */
+export interface MergeOptions extends PullRequestReadOptions {
+  /** Whose consent the merge needs. Default `"operator"`. */
+  consent?: MergeConsent;
 }

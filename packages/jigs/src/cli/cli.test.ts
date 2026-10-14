@@ -44,9 +44,7 @@ test("init scaffolds through the CLI parser, and bind records its binding", () =
       "--installation",
       "github-some-org",
     );
-    // With no hub behind it the label leg fails, after the binding is recorded.
-    expect(bound.status).not.toBe(0);
-    expect(bound.stderr).toContain("jigs:approved label could not be ensured");
+    expect(bound.status).toBe(0);
     const config = readFactoryConfig(cwd);
     expect(config.bindings["example-alias"]).toMatchObject({
       remote: "git@github.com:some-org/example.git",

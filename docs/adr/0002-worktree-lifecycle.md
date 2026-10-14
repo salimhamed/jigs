@@ -13,6 +13,11 @@ while the service runs needs a restart.
   worktree or branch, so there is no ownership check, handoff or reuse test. A
   branch is never reset, and a path holding anything unexpected is refused
   untouched.
+- **A pull request's head gets a detached worktree.** A workflow that checks
+  someone else's pull request, such as a dependency update, needs that exact
+  commit and must pin its merge to it. The head is fetched into a ref only the
+  run uses, checked out with no branch, and returned as `headSha`. With no
+  branch there is nothing to push, and each head gets its own path.
 - **Provisioning fails fast.** A `copy` pattern that matches nothing, or a
   failing `postCreate` hook, fails the request and keeps the tree for
   diagnosis.
@@ -29,6 +34,7 @@ that the freshly fetched `origin/<default>` lacks.
 | dirty | keep the worktree and branch; the record is `kept` |
 | clean, 0 unmerged commits | remove the worktree; delete the local branch |
 | clean, unmerged commits or no answer | remove the worktree; keep the local branch |
+| clean, detached at a pull request's head | remove the worktree |
 
 Any doubt about the remote counts as no answer. jigs never deletes the pushed
 branch on the remote; `jigs resources prune` lists the ones finished runs left

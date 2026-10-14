@@ -24,6 +24,7 @@ step//./.jigs/steps//postLinearAgentActivity
 step//./.jigs/steps//postSlackMessage
 step//./.jigs/steps//postTicketHumanInputRequest
 step//./.jigs/steps//postTicketNote
+step//./.jigs/steps//provisionPullRequestWorktree
 step//./.jigs/steps//provisionWorktree
 step//./.jigs/steps//pushApprovedChange
 step//./.jigs/steps//pushBranch

@@ -219,7 +219,7 @@ async function withPrState(suspension: RunSuspension, pr: PullRequestRef): Promi
       ...suspension,
       headSha: snapshot.headSha.slice(0, 7),
       ci: snapshot.ci,
-      approval: snapshot.approval.state,
+      approval: snapshot.approval,
       draft: snapshot.draft,
       mergeState: snapshot.mergeState,
       blocker: mergeRefusal(snapshot, snapshot.headSha)?.reason ?? "nothing — it can merge",

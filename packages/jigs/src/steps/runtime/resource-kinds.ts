@@ -51,10 +51,8 @@ const removeDirectory =
     return released("removed");
   };
 
-function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: string } {
-  if (row.repoDir === null || row.branch === null) {
-    throw new Error(`worktree record ${row.identity} has no clone or branch`);
-  }
+function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: string | null } {
+  if (row.repoDir === null) throw new Error(`worktree record ${row.identity} has no clone`);
   return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
 }
 
@@ -62,10 +60,14 @@ const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
   return async () => {
-    const unmerged = await fetchOriginDefault(repoDir).then(
-      () => countUnmergedCommits(repoDir, branch),
-      () => null,
-    );
+    // A pull request's worktree has no branch, and its commit is the pull request's.
+    const unmerged =
+      branch === null
+        ? 0
+        : await fetchOriginDefault(repoDir).then(
+            () => countUnmergedCommits(repoDir, branch),
+            () => null,
+          );
     // Forced only when merged, where nothing left in the tree can be lost.
     if (existsSync(path)) {
       await git(["worktree", "remove", path, ...(unmerged === 0 ? ["--force"] : [])], repoDir);
@@ -78,6 +80,7 @@ const worktree: DecideRelease = async (row) => {
           : `branch kept locally: ${unmerged} unmerged commit${unmerged === 1 ? "" : "s"}`,
       );
     }
+    if (branch === null) return released("worktree removed");
     // Pin and recheck the ref so an independently advanced branch stays.
     const ref = `refs/heads/${branch}`;
     const sha = await tryGit(["rev-parse", "--verify", ref], repoDir);

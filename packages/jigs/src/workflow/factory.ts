@@ -175,11 +175,11 @@ export interface Factory {
 }
 
 /**
- * Who the operator is on GitHub, and how they approve a pull request for merging.
+ * Who the operator is on GitHub.
  *
  * @remarks
  * jigs acts on GitHub as the GitHub App the hub assigns this factory, so its pull requests come
- * from `<app-slug>[bot]` and the operator can approve them. `mergeApproval` defaults to `review`.
+ * from `<app-slug>[bot]` and the operator approves them with a review.
  *
  * @example
  * Use this value for `github` in `jigs.config.ts`.
@@ -188,7 +188,7 @@ export interface Factory {
  *
  * const github = {
  *   operator: "octocat",
- *   mergeApproval: "label",
+ *   coAuthor: "Octo Cat <octocat@example.com>",
  * } satisfies GitHubDefinition;
  * ```
  *

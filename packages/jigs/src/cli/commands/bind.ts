@@ -2,25 +2,18 @@ import { existsSync, mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { upsertBinding } from "../../config/config-edit.ts";
 import { readFactoryConfigText, writeFactoryConfigText } from "../../config/factory-config.ts";
-import { currentFactoryContext, type FactoryContext } from "../../config/factory-context.ts";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
-import { GitHubApiError } from "../../providers/github-http.ts";
-import {
-  type EnsureRepoLabelOptions,
-  ensureRepoLabel,
-  JIGS_LABELS,
-} from "../../providers/github-label.ts";
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { bindingFilesDir, cloneDir, cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { installationNameSchema } from "../../workflow/factory-schema.ts";
-import { detail, hint, note } from "../output.ts";
+import { detail, hint } from "../output.ts";
 
 const BINDING_NAME_PATTERN = /^[A-Za-z0-9][A-Za-z0-9._-]*$/;
 
 export interface BindDeps {
   out: (line: string) => void;
-  ensureLabel?: (options: EnsureRepoLabelOptions) => Promise<"created" | "verified">;
 }
 
 export interface BindOptions {
@@ -35,12 +28,8 @@ export interface BindResult {
   installationName: string;
 }
 
-// A config edit plus jigs-owned repository furniture: the jigs labels. The clone is the service's to make at its next start.
-export async function bindRepo(
-  remoteUrl: string,
-  deps: BindDeps,
-  options: BindOptions = {},
-): Promise<BindResult> {
+// A config edit only. The clone is the service's to make at its next start.
+export function bindRepo(remoteUrl: string, deps: BindDeps, options: BindOptions = {}): BindResult {
   const ctx = currentFactoryContext();
   const factoryRoot = ctx.root;
   // The remote is handed to git in positional slots for the life of the
@@ -114,20 +103,9 @@ export async function bindRepo(
     );
   }
   // A new entry has nothing cloned yet, or — after the unbind a repoint takes
-  // — the old repo's objects sitting where its clone goes. An entry a failed
-  // label leg already wrote owes the clone as much on the re-run.
+  // — the old repo's objects sitting where its clone goes.
   const owesClone =
     existing === undefined || !hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }));
-
-  // Last, so furniture that cannot be ensured leaves the binding recorded and
-  // the whole verb re-runnable: the config edit above and the labels below are
-  // idempotent.
-  const reBindCommand = `pnpm exec jigs bind ${remoteUrl}${
-    options.name !== undefined || name !== derivedName ? ` --binding-name ${name}` : ""
-  } --installation ${installationName}`;
-  // The repair it prints has to land on this binding, not on the one the
-  // remote alone would derive.
-  await ensureJigsLabels(remoteUrl, installationName, ctx, reBindCommand, deps);
   if (owesClone) {
     for (const line of [
       "",
@@ -137,45 +115,6 @@ export async function bindRepo(
     }
   }
   return { name, remote: remoteUrl, installationName };
-}
-
-// Every label, whatever this factory's approval: a switch to label approval
-// later should not need a re-bind of every repository.
-async function ensureJigsLabels(
-  remoteUrl: string,
-  installationName: string,
-  ctx: FactoryContext,
-  reBindCommand: string,
-  deps: BindDeps,
-): Promise<void> {
-  const repoRef = parseGithubRemote(remoteUrl);
-  if (repoRef === null) {
-    deps.out(note(`note: skipping jigs labels (${remoteUrl} is not a github.com remote)`));
-    return;
-  }
-  const slug = `${repoRef.owner}/${repoRef.repo}`;
-  for (const label of JIGS_LABELS) {
-    const outcome = await (deps.ensureLabel ?? ensureRepoLabel)({
-      ...repoRef,
-      installationName,
-      label,
-      context: ctx,
-    }).catch((err: unknown) => {
-      const rerun = `re-run: \`${reBindCommand}\``;
-      const repair = tokenWasRejected(err)
-        ? `grant the factory's GitHub App "Issues: read & write", accept it on the installation for ${slug}, then ${rerun}`
-        : err instanceof GitHubApiError && err.status === 404
-          ? `check the remote, and that the GitHub installation ${installationName} can see ${slug}, then ${rerun}`
-          : err instanceof JigsError && err.hint !== undefined
-            ? `${err.hint}, then ${rerun}`
-            : `once that clears, ${rerun}`;
-      throw new JigsError(
-        `${slug}'s ${label.name} label could not be ensured: ${err instanceof Error ? err.message : String(err)}`,
-        repair,
-      );
-    });
-    deps.out(`label ${outcome}: ${slug}#${label.name}`);
-  }
 }
 
 // Only a missing folder is created: an existing one may hold secrets the
@@ -215,11 +154,4 @@ function defaultBindingName(remoteUrl: string): string {
   const repo = repoRef?.repo ?? last.replace(/\.git$/, "");
   // Lowercased: the name is typed on a command line and written into yaml.
   return repo.toLowerCase();
-}
-
-// GitHub lays a token it will not take on 401, and one whose scopes fall short
-// on 403 — but a rate limit is a 403 too, and no re-issued token clears one.
-function tokenWasRejected(err: unknown): boolean {
-  if (!(err instanceof GitHubApiError)) return false;
-  return err.status === 401 || (err.status === 403 && !/rate limit/i.test(err.body));
 }

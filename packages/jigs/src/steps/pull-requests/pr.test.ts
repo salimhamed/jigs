@@ -75,7 +75,7 @@ const snapshot: Omit<PullRequestSnapshot, "approval" | "appBot"> = {
   merged: false,
   draft: false,
   mergeState: "clean",
-  labels: ["jigs:approved"],
+  labels: [],
   mergeCommitSha: null,
   headSha: "head",
   ci: "green",
@@ -174,6 +174,14 @@ test("does not merge when the head or readiness changed after the gate wake", as
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "blocked" });
   expect(await mergePullRequest(pr, "head")).toMatchObject({ merged: false });
   expect(mergePr).not.toHaveBeenCalled();
+});
+
+test("a workflow consenting itself merges a pull request nobody approved", async () => {
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, labels: [], reviews: [] });
+  expect(await mergePullRequest(pr, "head")).toMatchObject({ merged: false });
+  expect(await mergePullRequest(pr, "head", { consent: "workflow" })).toMatchObject({
+    merged: true,
+  });
 });
 
 test("a refusal says whether asking again could merge the same commit", async () => {
@@ -427,7 +435,7 @@ test("an approval of an earlier commit merges only when the workflow lets it cov
     path.join(root, "jigs.config.ts"),
     `export default {
     hub: { url: "https://hub.example.test" },
-    github: { operator: "salimhamed", mergeApproval: "review" },
+    github: { operator: "salimhamed" },
     bindings: { app: { remote: "git@github.com:owner/repo.git", installationName: "github-acme" } },
   };`,
   );
