@@ -53,9 +53,8 @@ them apart from yours. No Jev model is required.
 
 #### Start it from Linear
 
-A run starts when someone delegates a ticket to the factory's Linear app, or
-mentions the app on a ticket, through a
-[`linear.agentSessions` trigger](/guide/configuration#linear-agent-sessions).
+A run starts when someone delegates a ticket to the factory's Linear app,
+through a [`linear.delegations` trigger](/guide/configuration#linear-agent-sessions).
 `recipe add` prints the trigger to add to `triggers` in `jigs.config.ts`. Set
 `LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env.local` to turn it on, then run
 `pnpm exec jigs up`:
@@ -68,7 +67,7 @@ const triggers = {
   "linear-ticket-to-pr": {
     active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",
     workflow: "linear-ticket-to-pr",
-    source: linear.agentSessions({ installationName: "linear-acme" }),
+    source: linear.delegations({ installationName: "linear-acme" }),
     inputs: { binding: "app" },
   },
 };
@@ -84,8 +83,8 @@ Linear tells the run which ticket. The trigger's `inputs` add the rest:
 | `budget` | `{ reviewRounds: 3, attemptsPerUpdate: 3 }` | Implementation review rounds, and agent attempts allowed for each PR update. `attemptsPerUpdate` must be positive. |
 
 For several repositories, add one trigger per binding, each with a `teams`,
-`projects` or `labels` filter that no other trigger matches. Every trigger on
-the app hears every delegation and mention. A ticket holds one run at a time, so
+`projects` or `labels` filter that no other trigger matches. Every
+`linear.delegations` trigger on the app hears every delegation. A ticket holds one run at a time, so
 when two triggers match it, the second run fails.
 
 #### Customize

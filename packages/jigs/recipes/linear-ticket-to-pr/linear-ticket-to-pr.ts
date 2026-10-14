@@ -43,9 +43,9 @@ const agents = {
 };
 const agentName = z.enum(["builder", "reviewer"]);
 
-// What a linear.agentSessions trigger hands the run when someone delegates a
-// ticket to the factory's Linear app or mentions it, plus the trigger's own
-// `inputs`: the binding to build in, and optionally the agents and budget.
+// What a linear.delegations trigger hands the run when someone delegates a
+// ticket to the factory's Linear app, plus the trigger's own `inputs`: the
+// binding to build in, and optionally the agents and budget.
 const inputs = z.object({
   installationName: installationNameSchema,
   issue: z.object({ identifier: z.string().min(1) }),

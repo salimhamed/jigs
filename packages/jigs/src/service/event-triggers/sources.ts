@@ -4,11 +4,11 @@
 // engine runs.
 
 import type { z } from "zod";
-import { LINEAR_AGENT_SESSIONS_SOURCE } from "../../workflow/linear/source.ts";
+import { LINEAR_DELEGATIONS_SOURCE, LINEAR_MENTIONS_SOURCE } from "../../workflow/linear/source.ts";
 import { PAGERDUTY_INCIDENTS_SOURCE } from "../../workflow/pagerduty/source.ts";
 import type { Provider } from "../../workflow/providers.ts";
 import { GITHUB_SOURCES } from "../github-sources.ts";
-import { LINEAR_AGENT_SESSIONS } from "../linear-agent-sessions.ts";
+import { LINEAR_DELEGATIONS, LINEAR_MENTIONS } from "../linear-agent-sessions.ts";
 import { PAGERDUTY_INCIDENTS } from "../pagerduty-incidents.ts";
 import { SLACK_SOURCES } from "../slack-sources.ts";
 
@@ -54,5 +54,6 @@ export const SOURCES: SourceRegistry = {
   ...SLACK_SOURCES,
   ...GITHUB_SOURCES,
   [PAGERDUTY_INCIDENTS_SOURCE]: PAGERDUTY_INCIDENTS,
-  [LINEAR_AGENT_SESSIONS_SOURCE]: LINEAR_AGENT_SESSIONS,
+  [LINEAR_DELEGATIONS_SOURCE]: LINEAR_DELEGATIONS,
+  [LINEAR_MENTIONS_SOURCE]: LINEAR_MENTIONS,
 };

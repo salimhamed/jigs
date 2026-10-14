@@ -87,12 +87,11 @@ const claim = {
 } as TicketClaim;
 const handoff: TicketHandoff = { brief: "Use the flag.", snapshot, assumptions: [] };
 
-// What a linear.agentSessions trigger hands the run, with the trigger's binding.
+// What a linear.delegations trigger hands the run, with the trigger's binding.
 const triggered = {
   session: "session-1",
   installationName: "linear-acme",
   issue: { id: snapshot.id, identifier: "ABC-123", title: "Ship it", url: snapshot.url },
-  comment: null,
   promptContext: null,
   creator: { id: "user-1", name: "Ada", email: "ada@acme.test" },
   binding: "app",

@@ -1,14 +1,12 @@
 # linear-ticket-to-pr
 
 This workflow takes a Linear ticket to a merged pull request. It starts when
-someone delegates a ticket to the factory's Linear app, or mentions the app on
-a ticket. It claims the ticket, asks in the ticket's Linear agent session when the requirements are
+someone delegates a ticket to the factory's Linear app. It claims the ticket, asks in the ticket's Linear agent session when the requirements are
 unclear, has one agent build the change and another review it, opens the pull
 request, and follows its review comments and CI with the same builder session
 until it merges.
 
-The run says everything in the Linear agent session the delegation or mention
-opened: its questions, its notes, and its last word, "Merged" with
+The run says everything in the Linear agent session the delegation opened: its questions, its notes, and its last word, "Merged" with
 the pull request, or why it stopped. Answer a question by replying in the
 session. A message sent while the run is working waits for its next question.
 Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
@@ -95,17 +93,16 @@ const triggers = {
   "linear-ticket-to-pr": {
     active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",
     workflow: "linear-ticket-to-pr",
-    source: linear.agentSessions({ installationName: "linear-acme" }),
+    source: linear.delegations({ installationName: "linear-acme" }),
     inputs: { binding: "app" },
   },
 };
 ```
 
 Set `LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env.local`, then run `pnpm exec jigs up`.
-Delegating a ticket to the factory's Linear app, or mentioning the app on a
-ticket, now starts a run. Linear tells the run which ticket; the trigger's
+Delegating a ticket to the factory's Linear app now starts a run. Linear tells the run which ticket; the trigger's
 `inputs` tell it which binding to build in. See
-[Linear mentions and assignments](https://salimhamed.github.io/jigs/guide/configuration#linear-agent-sessions)
+[Linear delegations and mentions](https://salimhamed.github.io/jigs/guide/configuration#linear-agent-sessions)
 for the filters a trigger takes.
 
 For several repositories, add one trigger per binding, each with a filter such

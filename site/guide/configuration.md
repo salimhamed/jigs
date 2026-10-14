@@ -246,7 +246,8 @@ export default defineFactory({
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
 | `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
-| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels`, `creators` |
+| `linear.delegations` | An issue delegated to the Linear app | `{ session, installationName, issue, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels`, `creators` |
+| `linear.mentions` | A comment that mentions the Linear app on an issue | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels`, `creators` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
 | `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
 | `github.pullRequests` | An open pull request that is not a draft | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels`, `baseBranches` |
@@ -256,7 +257,7 @@ export default defineFactory({
 `installationName` is required on every source.
 
 A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
-for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
+for `pagerduty.incidents`, [Linear](#linear-app) for `linear.delegations` and `linear.mentions`,
 [Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
 [GitHub App](/guide/hub-github) for the `github` sources, subscribed to
 **Push** for `github.pushes`, **Issues** for `github.issues` and **Release**
@@ -407,63 +408,67 @@ const triggers = {
 };
 ```
 
-### Linear mentions and assignments {#linear-agent-sessions}
+### Linear delegations and mentions {#linear-agent-sessions}
 
-`linear.agentSessions` starts a run each time someone mentions the Linear app
-on an issue or assigns an issue to it, in the workspace its `installationName`
-names. Linear calls each of these an
-agent session. The hub posts the session's first reply at once, so Linear shows
-the app at work while the run starts. Each run gets:
+Delegating an issue to the factory's Linear app, or mentioning the app in a
+comment on an issue, opens what Linear calls an agent session.
+`linear.delegations` starts a run for each delegation, and `linear.mentions`
+for each mention, in the workspace its `installationName` names. The hub posts
+the session's first reply at once, so Linear shows the app at work while the
+run starts. Each run gets:
 
 - `session`: the agent session's id, which is also the occurrence, so a
-  session starts at most one run even if Linear sends it twice.
+  session starts at most one run per trigger even if Linear sends it twice.
 - `installationName`: the trigger's Linear installation. Pass it to the Linear
   steps and routines the run calls.
 - `issue`: the issue's `id`, `identifier`, `title` and `url`.
-- `comment`: the body of the comment the session started from, or `null` for
-  an assignment.
 - `promptContext`: Linear's formatted context for the session, with the issue,
-  its description and the comments around the request, or `null` if Linear
-  sent none.
-- `creator`: the `id`, `name` and `email` of who started it.
+  its description and the comments around it, or `null` if Linear sent none.
+- `creator`: the `id`, `name` and `email` of who delegated the issue or
+  mentioned the app.
+- `comment`, from `linear.mentions` only: the body of the comment that
+  mentioned the app.
 
 `teams` takes team keys such as `ENG` or team ids, `projects` takes project
 ids or the id at the end of a project's URL, `labels` takes label names, and
-`creators` takes the emails, in any case, of the people whose sessions start
-runs: whoever assigned the issue to the app or mentioned it.
-Sessions not on an issue start no run, and neither do sessions no person
-started, such as the ones ticket runs open.
+`creators` takes the emails, in any case, of the people whose delegations or
+mentions start runs. Sessions not on an issue start no run, and neither do
+sessions no person started, such as the ones ticket runs open.
 
 ```ts
 import { linear } from "@jigs-ai/jigs";
 
 // In defineFactory's `triggers`.
 const triggers = {
-  "fix-on-mention": {
-    active: process.env.FIX_ON_MENTION_ACTIVE === "true",
+  "fix-on-delegation": {
+    active: process.env.FIX_ON_DELEGATION_ACTIVE === "true",
     workflow: "fix",
-    source: linear.agentSessions({
-      installationName: "linear-acme",
-      teams: ["ENG"],
-      labels: ["agent"],
-    }),
+    source: linear.delegations({ installationName: "linear-acme", teams: ["ENG"] }),
+  },
+  "answer-on-mention": {
+    active: process.env.ANSWER_ON_MENTION_ACTIVE === "true",
+    workflow: "answer",
+    source: linear.mentions({ installationName: "linear-acme", labels: ["agent"] }),
   },
 };
 ```
+
+For one workflow to take both, give it two triggers, one on each source, and
+make its inputs accept both shapes.
 
 To have Claude Code answer in the session and keep answering replies, call
 `linearAgentConversation` in the run; see
 [Linear conversations](/guide/linear-conversations).
 
-Every factory assigned the app hears every mention of it, and each trigger on
-this source in each of those factories starts its own run. jigs does not pick
+Every factory assigned the app hears every delegation and mention, and each
+matching trigger in each of those factories starts its own run. jigs does not pick
 one for you: give each purpose its own Linear app, or split the issues between
 triggers with `teams`, `projects` and `labels`.
 
 The hub replies "Received — working on it." to every session before any
 factory reads it, so that reply appears even when this factory's filters skip
 the session and no run starts. Make the filters match what the app is for, so
-that a mention the app answers is one a run takes.
+that a delegation or mention the app answers is one a run takes.
 
 ## Active triggers and schedules {#active}
 
@@ -685,7 +690,7 @@ the `installationName` it acts through. Nothing about the app goes in
 factory names, and says when a workspace must be connected again in the hub.
 
 Use one Linear app per purpose: two factories assigned the same app both answer
-a mention of it; see [Linear mentions and assignments](#linear-agent-sessions).
+a delegation or mention of it; see [Linear delegations and mentions](#linear-agent-sessions).
 
 ### Who a ticket run mentions {#linear-operator}
 

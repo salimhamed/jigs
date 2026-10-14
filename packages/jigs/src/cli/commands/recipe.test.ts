@@ -40,7 +40,7 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
     '    "linear-ticket-to-pr": {',
     '      active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",',
     '      workflow: "linear-ticket-to-pr",',
-    '      source: linear.agentSessions({ installationName: "<your Linear installation>" }),',
+    '      source: linear.delegations({ installationName: "<your Linear installation>" }),',
     '      inputs: { binding: "<a binding>" },',
     "    },",
     "  pnpm exec jigs up  # build and restart with linear-ticket-to-pr, then doctor lists what it still needs",
