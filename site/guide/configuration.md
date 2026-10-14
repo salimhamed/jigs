@@ -792,6 +792,7 @@ These are this copy's own, in `.env.local`:
 | `COMPOSE_PROJECT_NAME` | Always. This copy's docker compose project, so each copy has its own Postgres. |
 | `JIGS_SERVICE_PORT`, `JIGS_DASHBOARD_PORT`, `JIGS_POSTGRES_PORT` | Always. Where this copy's service, dashboard and Postgres listen. `jigs init` suggests ports from the factory's path. The service refuses to start without its two. |
 | `WORKFLOW_POSTGRES_URL` | Always. This copy's database, on `JIGS_POSTGRES_PORT`. |
+| `JIGS_DASHBOARD_URL` | Optional. The address people open this copy's dashboard at when it is not `http://localhost:<JIGS_DASHBOARD_PORT>`, such as `https://jigs.example.com` behind a reverse proxy. Every dashboard link uses it: run links, Linear's Open button, and what `jigs up` and `jigs service status` print. The dashboard still listens on `JIGS_DASHBOARD_PORT`, on every network address, and has no sign-in, so keep the address private. |
 | `JIGS_HUB_TOKEN` | Once a workflow, binding or trigger uses GitHub, Linear, Slack or PagerDuty. The factory token the [hub](#hub) showed. GitHub, Linear, Slack and PagerDuty tokens come from the hub. |
 
 Also set any variable your `jigs.config.ts` names, such as an MCP server's

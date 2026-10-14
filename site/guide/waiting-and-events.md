@@ -18,8 +18,9 @@ to people only in that session. Linear shows it working, with a Stop button,
 while the run works; once the run waits on people, such as a pull request
 review, the session asks for input instead and the run's message says how to
 stop it. When the service has a dashboard, an Open button
-links to the run's page; the dashboard listens on `localhost`, so the link
-opens only on the factory's machine.
+links to the run's page. The link points at `localhost`, so it opens only on
+the factory's machine unless [`JIGS_DASHBOARD_URL`](/guide/configuration)
+names another address.
 
 This complete workflow resolves its `ticket` input in the Linear installation
 its `linearInstallation` input names, such as `linear-acme`, claims the ticket, then

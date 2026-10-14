@@ -8,6 +8,7 @@ import { getRun } from "workflow/api";
 import { getWorld } from "workflow/runtime";
 import { z } from "zod";
 import { doctorChecks, failedChecks, runDoctorChecks } from "../checks/index.ts";
+import { dashboardAddress } from "../config/factory-config.ts";
 import {
   currentFactoryContext,
   type FactoryContext,
@@ -350,7 +351,7 @@ function factoryRootOrNull(context: () => FactoryContext): string | null {
 // `workflow web`: run against a live World it opens a second queue worker and
 // steals the jobs this run is waiting on.
 function dashboardPointer(ctx: FactoryContext, runId: string): string {
-  return `http://localhost:${ctx.env("JIGS_DASHBOARD_PORT")}/run/${runId}`;
+  return `${dashboardAddress(ctx)}/run/${runId}`;
 }
 
 // Every hook the run holds, the locks among them.

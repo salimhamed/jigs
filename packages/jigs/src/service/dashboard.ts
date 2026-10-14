@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
+import { dashboardAddress } from "../config/factory-config.ts";
 import { currentFactoryContext } from "../config/factory-context.ts";
 import { onShutdown } from "./shutdown.ts";
 
@@ -8,7 +9,8 @@ import { onShutdown } from "./shutdown.ts";
 // runs a second queue worker, which steals the service's jobs.
 /** Start the Workflow dashboard and register its shutdown cleanup. */
 export async function startDashboard() {
-  const port = Number(currentFactoryContext().env("JIGS_DASHBOARD_PORT"));
+  const ctx = currentFactoryContext();
+  const port = Number(ctx.env("JIGS_DASHBOARD_PORT"));
   // Nitro does not await its plugins, so touching the World through the
   // runtime is what makes the SDK's resolution win the process-global cache.
   const { getWorld } = await import("workflow/runtime");
@@ -18,7 +20,7 @@ export async function startDashboard() {
   // A dashboard tab left open holds a keep-alive socket, so drop every
   // connection rather than wait on the browser.
   onShutdown(() => server.close(true));
-  console.log(`[service] dashboard: http://localhost:${port}`);
+  console.log(`[service] dashboard: ${dashboardAddress(ctx)}`);
 }
 
 // The srvx server @workflow/web starts. The entry is loaded by path, so its
