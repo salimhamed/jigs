@@ -8,6 +8,7 @@ import {
 import type { GitHubTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
+import { appDescription } from "./app-description.ts";
 import {
   type App,
   findApp,
@@ -47,6 +48,7 @@ interface GitHubAppSecrets {
 /** What an admin copies from a GitHub App they made by hand. */
 export interface GitHubAppInput extends GitHubAppSecrets {
   name: string;
+  description?: string;
   appId: string;
   slug: string;
   clientId: string;
@@ -66,6 +68,8 @@ export async function addGitHubApp(
   input: GitHubAppInput,
   { apiUrl = defaultApiUrl }: { apiUrl?: string } = {},
 ): Promise<{ app: App } | { error: string }> {
+  const described = appDescription(input.description);
+  if ("error" in described) return described;
   if (!input.name) return { error: "Name the app." };
   if (!/^\d+$/.test(input.appId)) return { error: "The App ID is a number." };
   if (!/^[a-z0-9-]+$/i.test(input.slug)) return { error: "The slug is the app's URL name." };
@@ -90,6 +94,7 @@ export async function addGitHubApp(
         organizationId,
         provider: "github",
         name: input.name,
+        description: described.description,
         externalId: input.appId,
         settings: { slug: input.slug, clientId: input.clientId } satisfies GitHubAppSettings,
         secrets: encryptJson<GitHubAppSecrets>(encryptionKey, {

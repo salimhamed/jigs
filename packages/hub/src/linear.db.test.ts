@@ -566,9 +566,19 @@ dbTest("validates a Linear app and adds it once per hub", async () => {
   expect(
     await addLinearApp(db, encryptionKey, organizationId, { ...input, clientSecret: "" }),
   ).toEqual({ error: "Enter the name, client ID, client secret and webhook signing secret." });
-  const added = await addLinearApp(db, encryptionKey, organizationId, input);
+  expect(
+    await addLinearApp(db, encryptionKey, organizationId, {
+      ...input,
+      description: "x".repeat(201),
+    }),
+  ).toEqual({ error: "Keep the description to 200 characters." });
+  const added = await addLinearApp(db, encryptionKey, organizationId, {
+    ...input,
+    description: "Triage",
+  });
   if (!("app" in added)) throw new Error(added.error);
   expect(added.app.secrets).not.toContain("webhookSecret");
+  expect(added.app.description).toBe("Triage");
   expect(await addLinearApp(db, encryptionKey, "other", input)).toEqual({
     error: "The Linear app with client ID dup is already on this hub.",
   });

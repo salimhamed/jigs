@@ -1,6 +1,7 @@
 import { type Provider, pagerDutyScopes, providers } from "@jigs-ai/hub-protocol";
 import type { ReactNode } from "react";
 import { Form, Link, redirect } from "react-router";
+import { appDescriptionLength } from "../../src/app-description.ts";
 import { addGitHubApp, githubWebhookPath } from "../../src/github.ts";
 import { addLinearApp } from "../../src/linear.ts";
 import { addPagerDutyApp } from "../../src/pagerduty.ts";
@@ -44,6 +45,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       case "linear":
         return addLinearApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
+          description: field("description"),
           clientId: field("clientId"),
           clientSecret: field("clientSecret"),
           webhookSecret: field("webhookSecret"),
@@ -51,6 +53,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       case "slack":
         return addSlackApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
+          description: field("description"),
           appId: field("appId"),
           clientId: field("clientId"),
           clientSecret: field("clientSecret"),
@@ -59,6 +62,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       case "pagerduty":
         return addPagerDutyApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
+          description: field("description"),
           clientId: field("clientId"),
           clientSecret: field("clientSecret"),
           subdomain: field("subdomain"),
@@ -68,6 +72,7 @@ export async function action({ context, request }: Route.ActionArgs) {
       case "github":
         return addGitHubApp(db, config.encryptionKey, organizationId, {
           name: field("name"),
+          description: field("description"),
           appId: field("appId"),
           slug: field("slug"),
           clientId: field("clientId"),
@@ -89,6 +94,8 @@ type FormField = {
   help?: ReactNode;
   secret?: boolean;
   multiline?: boolean;
+  optional?: boolean;
+  maxLength?: number;
   options?: { value: string; label: string }[];
 };
 
@@ -105,6 +112,14 @@ const slackCredentials = (
     <strong>Basic Information</strong>, under <strong>App Credentials</strong>.
   </>
 );
+
+const descriptionField: FormField = {
+  name: "description",
+  label: "Description",
+  help: "What the app is for, such as which team or factories use it. Only people on this hub see it.",
+  optional: true,
+  maxLength: appDescriptionLength,
+};
 
 const forms: Record<
   Provider,
@@ -195,6 +210,7 @@ const forms: Record<
         label: "Name",
         help: "A label for this app in the hub. Factories and GitHub never see it, and you can change it later.",
       },
+      descriptionField,
       {
         name: "slug",
         label: "Slug",
@@ -264,6 +280,7 @@ const forms: Record<
         label: "Name",
         help: "Use the app's name in Linear. People @mention it by this name, and agents are told it's their own. You can rename it in Linear later; rename it here to match.",
       },
+      descriptionField,
       { name: "clientId", label: "Client ID", help: "On the application's page in Linear." },
       {
         name: "clientSecret",
@@ -310,6 +327,7 @@ const forms: Record<
         label: "Name",
         help: "Usually the app's name in Slack. Factories see it as the bot's name.",
       },
+      descriptionField,
       { name: "appId", label: "App ID", help: slackCredentials },
       { name: "clientId", label: "Client ID", help: slackCredentials },
       {
@@ -364,6 +382,7 @@ const forms: Record<
         label: "Name",
         help: "A label for this app in the hub. Factories and PagerDuty never see it, and you can change it later.",
       },
+      descriptionField,
       {
         name: "clientId",
         label: "Client ID",
@@ -498,10 +517,26 @@ function FieldInput({ field }: { field: FormField }) {
       <SecretInput id={field.name} name={field.name} required />
     )
   ) : (
-    <input id={field.name} name={field.name} required autoComplete="off" className={input} />
+    <input
+      id={field.name}
+      name={field.name}
+      required={!field.optional}
+      maxLength={field.maxLength}
+      autoComplete="off"
+      className={input}
+    />
   );
   return (
-    <Field label={field.label} htmlFor={field.name} hint={field.help}>
+    <Field
+      label={
+        <>
+          {field.label}
+          {field.optional && <span className="font-normal text-zinc-500"> (optional)</span>}
+        </>
+      }
+      htmlFor={field.name}
+      hint={field.help}
+    >
       {control}
     </Field>
   );

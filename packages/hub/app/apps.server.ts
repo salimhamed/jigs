@@ -40,7 +40,7 @@ import {
 export async function listInstalledApps(context: AppLoadContext, organizationId: string) {
   const [rows, installed] = await Promise.all([
     context.db.query.apps.findMany({
-      columns: { id: true, provider: true, name: true },
+      columns: { id: true, provider: true, name: true, description: true },
       where: eq(apps.organizationId, organizationId),
       orderBy: [asc(apps.provider), asc(apps.name)],
     }),
@@ -122,6 +122,7 @@ export async function readApp(context: AppLoadContext, organizationId: string, a
   const common = {
     id: app.id,
     name: app.name,
+    description: app.description,
     factories: assignedFactories.map(({ id, name, lastSeenAt }) => ({
       id,
       name,

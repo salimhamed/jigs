@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import type { LinearTokenResponse } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
+import { appDescription } from "./app-description.ts";
 import { appOAuth } from "./app-oauth.ts";
 import {
   type App,
@@ -49,6 +50,7 @@ interface LinearWorkspaceSecrets {
 /** What an admin copies from a Linear OAuth app they made by hand. */
 export interface LinearAppInput extends LinearAppSecrets {
   name: string;
+  description?: string;
   clientId: string;
 }
 
@@ -62,6 +64,8 @@ export async function addLinearApp(
   organizationId: string,
   input: LinearAppInput,
 ): Promise<{ app: App } | { error: string }> {
+  const described = appDescription(input.description);
+  if ("error" in described) return described;
   if (!input.name || !input.clientId || !input.clientSecret || !input.webhookSecret) {
     return { error: "Enter the name, client ID, client secret and webhook signing secret." };
   }
@@ -71,6 +75,7 @@ export async function addLinearApp(
       organizationId,
       provider: "linear",
       name: input.name,
+      description: described.description,
       externalId: input.clientId,
       settings: {},
       secrets: encryptJson<LinearAppSecrets>(encryptionKey, {

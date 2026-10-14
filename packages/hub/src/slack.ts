@@ -2,6 +2,7 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type SlackTokenResponse, slackBotScopes } from "@jigs-ai/hub-protocol";
 import { and, eq, sql } from "drizzle-orm";
 import express, { type Request, type Router } from "express";
+import { appDescription } from "./app-description.ts";
 import { appOAuth } from "./app-oauth.ts";
 import { type App, findNamedInstallation, recordInstallation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
@@ -48,6 +49,7 @@ interface SlackWorkspaceSecrets {
 /** What an admin copies from a Slack app they made by hand. */
 export interface SlackAppInput extends SlackAppSecrets {
   name: string;
+  description?: string;
   appId: string;
   clientId: string;
 }
@@ -62,6 +64,8 @@ export async function addSlackApp(
   organizationId: string,
   input: SlackAppInput,
 ): Promise<{ app: App } | { error: string }> {
+  const described = appDescription(input.description);
+  if ("error" in described) return described;
   if (
     !input.name ||
     !input.appId ||
@@ -77,6 +81,7 @@ export async function addSlackApp(
       organizationId,
       provider: "slack",
       name: input.name,
+      description: described.description,
       externalId: input.appId,
       settings: {
         clientId: input.clientId,

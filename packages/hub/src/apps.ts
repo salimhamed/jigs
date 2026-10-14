@@ -1,5 +1,6 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
+import { appDescription } from "./app-description.ts";
 import { type HubDatabase, isUniqueViolation, type Transaction } from "./db/database.ts";
 import { apps, assignments, factories, installations } from "./db/schema.ts";
 import { providerNames } from "./provider-names.ts";
@@ -54,6 +55,24 @@ export async function renameApp(
     .returning({ id: apps.id });
   if (renamed.length === 0) return { error: "There is no such app." };
   return { name };
+}
+
+/** Describe an app, or clear its description with an empty one. Only people on the hub see it. */
+export async function setAppDescription(
+  db: HubDatabase,
+  organizationId: string,
+  appId: string,
+  text: string,
+): Promise<{ description: string | null } | { error: string }> {
+  const described = appDescription(text);
+  if ("error" in described) return described;
+  const updated = await db
+    .update(apps)
+    .set(described)
+    .where(and(eq(apps.id, appId), eq(apps.organizationId, organizationId)))
+    .returning({ id: apps.id });
+  if (updated.length === 0) return { error: "There is no such app." };
+  return described;
 }
 
 /** Assign an app to a factory, so the factory receives its events. Both must be the Organization's. */
