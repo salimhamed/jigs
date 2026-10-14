@@ -18,7 +18,6 @@ export function RevealButton({
       type="button"
       onClick={onToggle}
       aria-label={shown ? "Hide secret" : "Show secret"}
-      aria-pressed={shown}
       className={`rounded p-1 text-zinc-500 hover:text-zinc-900 dark:hover:text-zinc-100 ${className}`}
     >
       <Icon className="size-4" />
@@ -34,7 +33,7 @@ export function SecretInput({ className = "", ...props }: ComponentProps<"input"
       <input
         {...props}
         type={shown ? "text" : "password"}
-        autoComplete="off"
+        autoComplete="new-password"
         className={`${input} w-full pr-9`}
       />
       <RevealButton

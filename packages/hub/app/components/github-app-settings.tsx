@@ -31,12 +31,12 @@ const permissions: { name: string; access: string; why: ReactNode }[] = [
 const events: { name: string; why: string }[] = [
   { name: "Check suite", why: "Wakes runs waiting on CI" },
   { name: "Issue comment", why: "Wakes runs waiting on a pull request comment" },
-  { name: "Issues", why: "Starts runs from issues" },
-  { name: "Pull request", why: "Wakes runs waiting on a pull request, and starts runs" },
+  { name: "Issues", why: "Optional. Only if a factory starts runs from issues" },
+  { name: "Pull request", why: "Wakes runs waiting on a pull request, and can start runs" },
   { name: "Pull request review", why: "Wakes runs waiting on a review" },
   { name: "Pull request review comment", why: "Wakes runs waiting on a review comment" },
-  { name: "Push", why: "Starts runs from pushes" },
-  { name: "Release", why: "Starts runs from releases" },
+  { name: "Push", why: "Optional. Only if a factory starts runs from pushes" },
+  { name: "Release", why: "Optional. Only if a factory starts runs from releases" },
   { name: "Status", why: "Wakes runs waiting on CI that reports statuses" },
 ];
 

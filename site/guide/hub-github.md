@@ -49,6 +49,7 @@ your own account's, choose **New GitHub App**. The form's sections, in order:
   | Metadata | Read | Required by GitHub. |
   | Checks | Read | Reading CI. |
   | Commit statuses | Read | Reading CI. |
+  | Workflows | Read and write | Optional. Only if agents may change files in `.github/workflows`; GitHub refuses those pushes without it. |
 
   Leave every other permission, in every section, at **No access**. Add one
   only when your own GitHub calls need it, such as **Members** read under
@@ -65,10 +66,12 @@ your own account's, choose **New GitHub App**. The form's sections, in order:
 - **Where can this GitHub App be installed?**: **Only on this account**.
   Otherwise anyone can install it, and their events reach your factories.
 
-Create the App. On its settings page, note the **App ID** and **Client ID**,
-generate a **client secret**, and under **Private keys** generate a private
-key, which downloads a `.pem` file. The App's **slug** is the last part of its
-public page's URL, `https://github.com/apps/<slug>`.
+Create the App. On its **General** page, note the **App ID** and **Client ID**
+under **About**. Then open **Credentials** in the sidebar: on the **Client
+secrets** tab, click **New secret** and copy it, since GitHub shows it only
+once, and on the **Key pairs** tab, click **New key**, which downloads a
+private key as a `.pem` file. The App's **slug** is the last part of its
+settings page's URL, `https://github.com/settings/apps/<slug>`.
 
 ## 2. Add the App to the hub
 

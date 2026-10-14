@@ -228,6 +228,7 @@ const forms: Record<
       {
         name: "privateKey",
         label: "Private key",
+        secret: true,
         multiline: true,
         help: (
           <>
@@ -490,10 +491,12 @@ function FieldInput({ field }: { field: Field }) {
         </option>
       ))}
     </Select>
-  ) : field.multiline ? (
-    <SecretTextarea id={field.name} name={field.name} required rows={5} />
   ) : field.secret ? (
-    <SecretInput id={field.name} name={field.name} required />
+    field.multiline ? (
+      <SecretTextarea id={field.name} name={field.name} required rows={5} />
+    ) : (
+      <SecretInput id={field.name} name={field.name} required />
+    )
   ) : (
     <input id={field.name} name={field.name} required autoComplete="off" className={input} />
   );
