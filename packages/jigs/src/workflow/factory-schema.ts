@@ -77,7 +77,7 @@ export const bindingSchema = z.strictObject({
 // jigs acts on GitHub as the App the hub assigns this factory, so pull requests
 // come from `<app-slug>[bot]` and the operator can review them normally.
 export const githubSchema = z.strictObject({
-  /** The operator's GitHub login: assigned every pull request jigs opens, and named in its body. */
+  /** The operator's GitHub login: assigned every pull request jigs opens. */
   operator: z.string().min(1).optional(),
   /** `Name <email>` added as a `Co-authored-by` trailer to the merge commits jigs makes. */
   coAuthor: z.string().min(1).optional(),

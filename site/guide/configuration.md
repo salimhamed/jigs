@@ -554,7 +554,7 @@ github: {
 ```
 
 **`operator`** is optional: your GitHub login. jigs assigns its pull requests
-to you and names you in them. **`coAuthor`** is optional and adds a
+to you. **`coAuthor`** is optional and adds a
 `Co-authored-by` line to merge commits.
 
 ### Merging {#merging}
