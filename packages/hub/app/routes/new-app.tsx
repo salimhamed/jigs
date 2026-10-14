@@ -10,8 +10,11 @@ import { requireAdmin, requireMember } from "../auth.server.ts";
 import { useActionToast } from "../components/action-toast.tsx";
 import { Callout } from "../components/callout.tsx";
 import { Codes } from "../components/codes.tsx";
+import { GitHubEvents, GitHubPermissions } from "../components/github-app-settings.tsx";
 import { PageHeader, UrlRow } from "../components/page.tsx";
+import { SecretInput, SecretTextarea } from "../components/secret-input.tsx";
 import { Select } from "../components/select.tsx";
+import { Snippet } from "../components/snippet.tsx";
 import { button, external, input, link, quietButton } from "../components/ui.ts";
 import type { Route } from "./+types/new-app.ts";
 
@@ -116,24 +119,76 @@ const forms: Record<
 > = {
   github: {
     summary: "Repos, PRs, checks",
-    primary: "Create a GitHub App for your organization first, then copy its details here.",
+    primary: "First, create the app on GitHub:",
     steps: (urls) => [
       <>
         On GitHub, open your organization's <strong>Settings</strong> →{" "}
         <strong>Developer settings</strong> → <strong>GitHub Apps</strong> →{" "}
-        <strong>New GitHub App</strong>.
+        <strong>New GitHub App</strong>. For a personal account, follow the same path from your own{" "}
+        <strong>Settings</strong>.
       </>,
       <>
-        Under <strong>Webhook</strong>, set the <strong>Webhook URL</strong> to:
+        Fill in the top of the form:
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            <strong>GitHub App name</strong>: any name not already taken on GitHub. It becomes the
+            app's slug, and pull requests and comments show it as the author.
+          </li>
+          <li>
+            <strong>Homepage URL</strong>: GitHub requires one. The hub's address works:
+            <UrlRow label="Hub address" value={urls.hub} />
+          </li>
+        </ul>
+      </>,
+      <>
+        Under <strong>Webhook</strong>, keep <strong>Active</strong> checked and set the{" "}
+        <strong>Webhook URL</strong> to:
         <UrlRow label="Webhook URL" value={urls.githubWebhook} />
       </>,
       <>
-        Create the app, leaving everything else as GitHub's defaults for now, then copy its details
-        below. Once you add it, the hub lists the permissions, events and other settings to change
-        on GitHub.
+        In the same section, set the <strong>Secret</strong> to a long random string. This command
+        makes one:
+        <Snippet text="openssl rand -hex 32" label="Command" command />
+        <p className="mt-2">
+          Keep a copy, because GitHub never shows it again, and you paste it below as the webhook
+          secret.
+        </p>
       </>,
+      <>
+        Under <strong>Permissions</strong> → <strong>Repository permissions</strong>, set:
+        <GitHubPermissions />
+      </>,
+      <>
+        Under <strong>Subscribe to events</strong>, check these. GitHub lists an event only once its
+        permission above is set.
+        <GitHubEvents />
+      </>,
+      <>
+        Under <strong>Where can this GitHub App be installed?</strong>, keep{" "}
+        <strong>Only on this account</strong>. Otherwise anyone can install it, and their events
+        reach your factories.
+      </>,
+      <>
+        Leave everything else as GitHub's defaults and click <strong>Create GitHub App</strong>.
+        GitHub opens the app's <strong>General</strong> page.
+      </>,
+      <>
+        In the app's sidebar, open <strong>Credentials</strong> and create the two secrets the form
+        asks for:
+        <ul className="mt-2 list-disc space-y-1 pl-5">
+          <li>
+            On the <strong>Client secrets</strong> tab, click <strong>New secret</strong>. Copy it
+            now, because GitHub shows it only once.
+          </li>
+          <li>
+            On the <strong>Key pairs</strong> tab, click <strong>New key</strong>. Your browser
+            downloads a private key as a <code>.pem</code> file.
+          </li>
+        </ul>
+      </>,
+      <>Copy the app's details into the form below.</>,
     ],
-    note: "Factories act on GitHub through this app, for example to open pull requests. It isn't the GitHub login people use to sign in to this hub.",
+    note: "Factories use this app to push code, open, review and merge pull requests, and comment on issues. GitHub also sends it events, such as pushes, new issues, reviews and CI results, that start or wake factory runs. It's separate from the GitHub login people use to sign in to this hub.",
     fields: [
       {
         name: "name",
@@ -145,7 +200,8 @@ const forms: Record<
         label: "Slug",
         help: (
           <>
-            The end of the app's public page address: <code>github.com/apps/&lt;slug&gt;</code>.
+            The last part of the app's settings address on GitHub:{" "}
+            <code>github.com/settings/apps/&lt;slug&gt;</code>.
           </>
         ),
       },
@@ -155,12 +211,7 @@ const forms: Record<
         name: "clientSecret",
         label: "Client secret",
         secret: true,
-        help: (
-          <>
-            On the <strong>General</strong> page, under <strong>Client secrets</strong>, click{" "}
-            <strong>Generate a new client secret</strong>. GitHub shows it only once.
-          </>
-        ),
+        help: "The client secret you generated in step 9.",
       },
       {
         name: "webhookSecret",
@@ -168,8 +219,9 @@ const forms: Record<
         secret: true,
         help: (
           <>
-            The secret you entered under <strong>Webhook</strong> when creating the app. If you left
-            it empty, set one on GitHub first.
+            The <strong>Secret</strong> you set under <strong>Webhook</strong> in step 4. If you
+            lost it or left it empty, set a new one on the <strong>General</strong> page, under{" "}
+            <strong>Webhook</strong>, and paste that.
           </>
         ),
       },
@@ -179,9 +231,8 @@ const forms: Record<
         multiline: true,
         help: (
           <>
-            On the <strong>General</strong> page, under <strong>Private keys</strong>, click{" "}
-            <strong>Generate a private key</strong>. Paste the whole contents of the downloaded{" "}
-            <code>.pem</code> file.
+            The whole <code>.pem</code> file from step 9, including the <code>BEGIN</code> and{" "}
+            <code>END</code> lines.
           </>
         ),
       },
@@ -440,22 +491,11 @@ function FieldInput({ field }: { field: Field }) {
       ))}
     </Select>
   ) : field.multiline ? (
-    <textarea
-      id={field.name}
-      name={field.name}
-      required
-      rows={5}
-      className={`${input} font-mono`}
-    />
+    <SecretTextarea id={field.name} name={field.name} required rows={5} />
+  ) : field.secret ? (
+    <SecretInput id={field.name} name={field.name} required />
   ) : (
-    <input
-      id={field.name}
-      name={field.name}
-      type={field.secret ? "password" : "text"}
-      required
-      autoComplete="off"
-      className={input}
-    />
+    <input id={field.name} name={field.name} required autoComplete="off" className={input} />
   );
   return (
     <div className="flex flex-col gap-1 text-sm">

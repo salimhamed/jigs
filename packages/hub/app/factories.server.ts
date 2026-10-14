@@ -73,6 +73,7 @@ export async function readFactory(
 /** What a factory's owner copies to connect it: a line for its `jigs.config.ts` and one for its environment. */
 export function connectLines(context: AppLoadContext, token: string) {
   return {
+    token,
     config: `hub: { url: "${context.config.publicUrl.origin}" }`,
     env: `JIGS_HUB_TOKEN=${token}`,
   };

@@ -13,9 +13,9 @@ import {
   justConnectedRow,
   useJustConnected,
 } from "../components/connect-app.tsx";
-import { CopyButton } from "../components/copy-button.tsx";
 import { InstallationNames } from "../components/installation-names.tsx";
 import { PageHeader, StatusDot } from "../components/page.tsx";
+import { Snippet } from "../components/snippet.tsx";
 import {
   button,
   card,
@@ -112,6 +112,7 @@ export default function NewFactory({ actionData }: Route.ComponentProps) {
 const CHECK_EVERY_MS = 5_000;
 
 const UP_COMMAND = "pnpm exec jigs up";
+const DOCTOR_COMMAND = "pnpm exec jigs doctor";
 
 /**
  * Setting a factory up: connecting its apps when it is new, the one-time
@@ -123,6 +124,7 @@ function ConnectFactory({
   factory: {
     id: string;
     name: string;
+    token: string;
     config: string;
     env: string;
     issuedAt: string;
@@ -184,7 +186,7 @@ function ConnectFactory({
           }
         >
           <Snippet text={factory.config} label="Config line" />
-          <Snippet text={factory.env} label="Environment line" />
+          <Snippet text={factory.env} label="Environment line" secret={factory.token} />
           <p className={`text-sm ${warningText}`}>
             The token is shown once. Copy it before leaving this page.
           </p>
@@ -194,13 +196,14 @@ function ConnectFactory({
           title="Start it"
           description={
             <>
-              <code>{UP_COMMAND}</code> ends by running doctor, which flags any app the factory uses
-              that isn't installed, named or connected to it yet. Fix that in the hub, then run{" "}
-              <code>pnpm exec jigs doctor</code>.
+              Run this in the factory's folder. It ends by running doctor, which flags any app the
+              factory uses that isn't installed, named or connected to it yet. Fix that in the hub,
+              then run doctor again with the second command.
             </>
           }
         >
           <Snippet text={UP_COMMAND} label="Command" command />
+          <Snippet text={DOCTOR_COMMAND} label="Doctor command" command />
           {gone ? (
             <p className={`text-sm ${warningText}`}>This factory was removed.</p>
           ) : connected ? (
@@ -256,18 +259,6 @@ function Step({
         {children}
       </div>
     </li>
-  );
-}
-
-function Snippet({ text, label, command }: { text: string; label: string; command?: boolean }) {
-  return (
-    <div className={`${card} flex items-center gap-3 p-3`}>
-      <code className="grow break-all text-sm">
-        {command && <span className="select-none text-zinc-500">$ </span>}
-        {text}
-      </code>
-      <CopyButton text={text} label={label} />
-    </div>
   );
 }
 

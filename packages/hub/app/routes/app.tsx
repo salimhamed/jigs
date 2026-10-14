@@ -11,9 +11,12 @@ import { useActionToast } from "../components/action-toast.tsx";
 import { Codes } from "../components/codes.tsx";
 import { ConfirmForm } from "../components/confirm-form.tsx";
 import { factoryHints } from "../components/factory-hints.ts";
+import { GitHubEvents, GitHubPermissions } from "../components/github-app-settings.tsx";
 import { Hint } from "../components/hint.tsx";
 import { InstallationName } from "../components/installation-names.tsx";
 import { Card, DangerRow, Details, PageHeader, SettingRow, UrlRow } from "../components/page.tsx";
+import { SecretInput } from "../components/secret-input.tsx";
+import { Snippet } from "../components/snippet.tsx";
 import { TimeAgo } from "../components/time.tsx";
 import {
   button,
@@ -278,7 +281,9 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
         description={
           <>
             In the app's settings on GitHub: <strong>Settings</strong> →{" "}
-            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the app.
+            <strong>Developer settings</strong> → <strong>GitHub Apps</strong> → the app. If you
+            followed the steps when adding it, only the <strong>Setup URL</strong> and{" "}
+            <strong>Redirect on update</strong> are left; the rest is here to check.
           </>
         }
         urls={[
@@ -296,7 +301,8 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
             value: app.setupUrl,
             where: (
               <>
-                <strong>General</strong>, under <strong>Post installation</strong>.
+                <strong>General</strong>, under <strong>Post installation</strong>. Also check{" "}
+                <strong>Redirect on update</strong> there; it is off by default.
               </>
             ),
           },
@@ -308,26 +314,21 @@ function GitHubSections({ app, isAdmin }: { app: AppOf<"github">; isAdmin: boole
               <strong>Active</strong> on, <strong>SSL verification</strong> enabled
             </>,
           ],
-          ["Redirect on update", "On; it is off by default"],
           ["Callback URL", "Leave empty"],
           ["Request user authorization (OAuth) during installation", "Off"],
           [
             "Repository permissions",
+            <GitHubPermissions key="permissions" />,
             <>
-              <strong>Contents</strong>, <strong>Pull requests</strong>, <strong>Issues</strong>:
-              Read and write · <strong>Metadata</strong>, <strong>Checks</strong>,{" "}
-              <strong>Commit statuses</strong>: Read-only · every other: No access. Factories push,
-              open, comment on and merge pull requests, create their labels, and read CI with them.
+              <strong>Permissions &amp; events</strong>, under{" "}
+              <strong>Repository permissions</strong>.
             </>,
           ],
           [
             "Subscribe to events",
+            <GitHubEvents key="events" />,
             <>
-              <strong>Pull request</strong>, <strong>Pull request review</strong>,{" "}
-              <strong>Pull request review comment</strong>, <strong>Issue comment</strong>,{" "}
-              <strong>Check suite</strong>,{" "}
-              <strong className={warningText}>Status (easy to miss)</strong>. These wake the factory
-              runs waiting on a pull request.
+              <strong>Permissions &amp; events</strong>, under <strong>Subscribe to events</strong>.
             </>,
           ],
           [
@@ -552,10 +553,10 @@ function SlackSections({ app, isAdmin }: { app: AppOf<"slack">; isAdmin: boolean
           ],
           [
             "Channels",
-            "Invite the bot to each channel factories should hear",
             <>
-              In Slack itself, not the app's settings: send <code>/invite @bot-name</code> in the
-              channel.
+              Invite the bot to each channel factories should hear. In Slack itself, not the app's
+              settings, send this in the channel, with the bot's name:
+              <Snippet text="/invite @bot-name" label="Slack command" />
             </>,
           ],
         ]}
@@ -748,17 +749,15 @@ function PagerDutySections({ app, isAdmin }: { app: AppOf<"pagerduty">; isAdmin:
 function WebhookSecretForm({ replacing }: { replacing: boolean }) {
   return (
     <Form method="post" className="flex flex-wrap items-end gap-2">
-      <label className="flex grow flex-col gap-1 text-sm">
-        Webhook signing secret
-        <input
+      <div className="flex grow flex-col gap-1 text-sm">
+        <label htmlFor="webhookSecret">Webhook signing secret</label>
+        <SecretInput
+          id="webhookSecret"
           name="webhookSecret"
-          type="password"
           required
-          autoComplete="off"
           placeholder={replacing ? "Set; enter a new one to replace it" : ""}
-          className={input}
         />
-      </label>
+      </div>
       <button type="submit" name="intent" value="webhookSecret" className={secondaryButton}>
         Save
       </button>
