@@ -37,6 +37,7 @@ export type ApprovalCoverage = "latest-commit" | "any-commit";
  * @remarks
  * `operator`, the default, needs the approval `github.mergeApproval` asks for. `workflow` lets the
  * workflow's own checks stand in for it, for a workflow that judges a pull request itself, such as
- * one that tests a dependency update before merging it. Every other merge requirement still holds.
+ * one that tests a dependency update before merging it. Every other merge requirement still holds,
+ * and a review requesting changes still stops the merge.
  */
 export type MergeConsent = "operator" | "workflow";

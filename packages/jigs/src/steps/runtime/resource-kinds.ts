@@ -59,19 +59,15 @@ function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: 
 const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
-  // A pull request's worktree has no branch: its commit is the pull request's.
-  if (branch === null) {
-    return async () => {
-      if (existsSync(path)) await git(["worktree", "remove", path], repoDir);
-      await git(["worktree", "prune"], repoDir);
-      return released("worktree removed");
-    };
-  }
   return async () => {
-    const unmerged = await fetchOriginDefault(repoDir).then(
-      () => countUnmergedCommits(repoDir, branch),
-      () => null,
-    );
+    // A pull request's worktree has no branch, and its commit is the pull request's.
+    const unmerged =
+      branch === null
+        ? 0
+        : await fetchOriginDefault(repoDir).then(
+            () => countUnmergedCommits(repoDir, branch),
+            () => null,
+          );
     // Forced only when merged, where nothing left in the tree can be lost.
     if (existsSync(path)) {
       await git(["worktree", "remove", path, ...(unmerged === 0 ? ["--force"] : [])], repoDir);
@@ -84,6 +80,7 @@ const worktree: DecideRelease = async (row) => {
           : `branch kept locally: ${unmerged} unmerged commit${unmerged === 1 ? "" : "s"}`,
       );
     }
+    if (branch === null) return released("worktree removed");
     // Pin and recheck the ref so an independently advanced branch stays.
     const ref = `refs/heads/${branch}`;
     const sha = await tryGit(["rev-parse", "--verify", ref], repoDir);

@@ -435,13 +435,15 @@ export async function mergeIfSafe(pr: PullRequestRef, isSafe: (cwd: string) => P
 }
 ```
 
-Everything else a merge needs still holds: the head is still `headSha`, the
-pull request is open, not a draft and not conflicting, at least one check ran
-and all passed, and GitHub reports it mergeable. A push after you checked moves
-the head, so the merge is refused until you check the new head in a new
-worktree. The worktree's own setup (`copy` and `postCreate`) runs as usual, and
-the worktree is removed with the run's other resources unless it has
-uncommitted changes. Commits made in it are not kept.
+Everything else a merge needs still holds: the head is still `headSha`, the pull
+request is open, not a draft and not conflicting, at least one check ran and all
+passed, GitHub reports it mergeable, and no review requests changes. A push
+after you checked moves the head, so the merge is refused until you check the
+new head in a new worktree. Only a pull request from a branch of the binding's
+own repository can be checked out, never one from a fork, because setup runs its
+code. The worktree's own setup (`copy` and `postCreate`) runs as usual, and the
+worktree is removed with the run's other resources unless it has uncommitted
+changes. Commits made in it are not kept.
 
 ### Upgrading with runs parked
 

@@ -591,7 +591,8 @@ These are independent decisions:
   workflow's own checks stand in for it, for a workflow that judges a pull
   request itself, such as one that tests a dependency update and merges it
   when it passes. It applies to that one call, so other workflows in the
-  factory still wait for you. Every other requirement below still holds.
+  factory still wait for you. Every other requirement below still holds, and
+  a review requesting changes still stops the merge.
 - **The merge method** is the first one the repository allows on GitHub, read
   at each merge: squash, then merge commit, then rebase. To get a different
   method, turn off the ones ahead of it in the repository's settings. With
@@ -609,7 +610,8 @@ reports facts. These checks do not restrict an agent using its own GitHub
 tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access).
 
 jigs merges only when the approval is present or the workflow consents
-itself, GitHub reports the pull request mergeable, it is not a draft, at least one check has run, and CI is green.
+itself, GitHub reports the pull request mergeable, it is not a draft, at least
+one check has run, and CI is green.
 **jigs never merges in a repository with no CI**: when no check has reported,
 `jigs status` says so, since CI may not have started yet or the repository may
 have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and

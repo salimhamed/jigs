@@ -64,7 +64,7 @@ function approvalMissing({ signal, state }: PullRequestApproval, expectedHeadSha
 }
 
 const BLOCKED =
-  "GitHub blocks the merge although the pull request is approved and CI is green. Most likely the account that merges does not meet a branch rule: push restrictions that leave it out, or a required check or reviewer still missing. Add the account to the rule, or merge by hand; the pull request is still being watched.";
+  "GitHub blocks the merge although CI is green and the merge has consent. Most likely the account that merges does not meet a branch rule: push restrictions that leave it out, or a required check or reviewer still missing. Add the account to the rule, or merge by hand; the pull request is still being watched.";
 
 /** Why a merge did not happen, and whether a later wake could change it. */
 export interface MergeRefusal {
@@ -100,7 +100,8 @@ export interface MergeRefusal {
  * and every one of them passed. The cost is deliberate — jigs never merges a
  * repository with no CI, so a person merges there.
  *
- * Under `workflow` consent the approval is the only requirement dropped.
+ * Under `workflow` consent the approval is the only requirement dropped; a review requesting
+ * changes still refuses.
  */
 export function mergeRefusal(
   snapshot: PullRequestSnapshot,
@@ -124,7 +125,9 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  if (consent === "operator" && snapshot.approval.state !== "approved") {
+  // A person asking for changes still stops a workflow that consents itself.
+  const { state } = snapshot.approval;
+  if (state === "changes-requested" || (consent === "operator" && state !== "approved")) {
     return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
   // GitHub says only `blocked`, never which rule, and the account jigs merges

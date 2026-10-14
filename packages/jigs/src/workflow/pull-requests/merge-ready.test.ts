@@ -172,6 +172,10 @@ test("a workflow's own consent stands in for the operator's and for nothing else
   expect(refusal({ state: "closed" })).not.toBeNull();
   expect(refusal({ mergeState: "dirty" })).not.toBeNull();
   expect(refusal({ mergeState: "blocked" })).not.toBeNull();
+  const objection = {
+    reviews: [{ id: 2, state: "CHANGES_REQUESTED", body: "", user: "person", submittedAt: "2" }],
+  };
+  expect(refusal(objection)).toMatchObject({ reason: "a review requests changes" });
 });
 
 describe("an approval that covers any commit", () => {
@@ -232,7 +236,7 @@ describe("an approval that covers any commit", () => {
 test("an approved, green pull request GitHub still blocks says why jigs is waiting", () => {
   const blocked = read({ mergeState: "blocked" });
   const note = blockedMergeNote(blocked);
-  expect(note).toMatch(/approved and CI is green.*branch rule.*push restrictions/s);
+  expect(note).toMatch(/CI is green and the merge has consent.*branch rule.*push restrictions/s);
   // The same words reach `jigs status`, and jigs keeps waiting.
   expect(mergeRefusal(blocked, "new")).toEqual({ reason: note, transient: true });
 

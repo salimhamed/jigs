@@ -4,6 +4,7 @@ import { Pool } from "pg";
 import { afterAll, beforeAll, expect, vi } from "vitest";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { databaseUrl, dbTest, postgresAdminUrl } from "../../db-test-fixtures.ts";
+import { isForkPullRequest } from "../../providers/github.ts";
 import {
   type AutomaticReleaseDeps,
   reconcileAutomaticRelease,
@@ -21,6 +22,12 @@ import { readRunState } from "../runtime/run-state.ts";
 import { provisionPullRequestWorktree, provisionWorktree } from "./index.ts";
 import { cloneDir } from "./layout.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+
+vi.mock("../../providers/github.ts", () => ({ isForkPullRequest: vi.fn(async () => false) }));
+// The fixture's remote is a local path; the pull request is read as if it were on GitHub.
+vi.mock("../../providers/github-remote.ts", () => ({
+  parseGithubRemote: () => ({ owner: "acme", repo: "api" }),
+}));
 
 // Real Postgres, a real clone and real cuts: provisioning, explicit release and
 // automatic release all through the one registry and the one release function.
@@ -169,12 +176,24 @@ dbTest("a pull request's worktree is its head commit, and each new head gets its
   expect(git(tree.path, "rev-parse", "HEAD")).toBe(first);
   expect(existsSync(path.join(tree.path, "first.txt"))).toBe(true);
 
-  // A retry of the same step lands on the same tree.
+  expect(isForkPullRequest).toHaveBeenCalledWith({
+    installationName: "github-acme",
+    owner: "acme",
+    repo: "api",
+    number: 7,
+  });
+
+  // A retry of the same step lands on the same tree, but not once it has changed.
   const retried = await provisionPullRequestWorktree(
     { binding: "api", number: 7 },
     { workflowRunId: runId },
   );
   expect(retried).toEqual(tree);
+  writeFileSync(path.join(tree.path, "first.txt"), "edited\n");
+  await expect(
+    provisionPullRequestWorktree({ binding: "api", number: 7 }, { workflowRunId: runId }),
+  ).rejects.toThrow("exists but is not a worktree");
+  git(tree.path, "checkout", "--", "first.txt");
 
   const second = pushPullRequestHead(7, "second.txt");
   const next = await provisionPullRequestWorktree(
@@ -194,4 +213,12 @@ dbTest("a pull request's worktree is its head commit, and each new head gets its
     ["worktree", "released", "worktree removed"],
     ["worktree", "kept", "uncommitted work kept"],
   ]);
+});
+
+dbTest("a pull request from a fork is never checked out, since setup runs its code", async () => {
+  vi.mocked(isForkPullRequest).mockResolvedValueOnce(true);
+  await expect(
+    provisionPullRequestWorktree({ binding: "api", number: 8 }, { workflowRunId: "wrun_forked" }),
+  ).rejects.toThrow("is not a branch of");
+  expect(await states("wrun_forked")).toEqual([]);
 });

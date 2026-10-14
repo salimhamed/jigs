@@ -10,6 +10,8 @@ import { pathToFileURL } from "node:url";
 import { resolveBinding } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
+import { isForkPullRequest } from "../../providers/github.ts";
+import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { Binding } from "../../workflow/factory-schema.ts";
 import type { PullRequestWorktree, Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
@@ -84,7 +86,9 @@ export async function provisionWorktree(
  * dependencies.
  *
  * @remarks
- * The worktree has no branch, so nothing in it is pushed. Each head gets its own worktree, so a
+ * Only a pull request from a branch of the binding's own repository is checked out, never one
+ * from a fork, because the binding's setup runs the pull request's code. The worktree has no
+ * branch, so nothing in it is pushed. Each head gets its own worktree, so a
  * run that provisions again after a push gets the new head beside the old one. Pass the returned
  * `headSha` to `mergePullRequest` to merge only the commit that was checked.
  *
@@ -96,6 +100,19 @@ export async function provisionPullRequestWorktree(
 ): Promise<PullRequestWorktree> {
   const runId = metadata.workflowRunId;
   return provisionRecorded(request.binding, runId, async (binding, repoDir, dirs) => {
+    // Setup runs the checked-out code with the service's whole environment, so
+    // a stranger's fork must never reach it.
+    const repository = parseGithubRemote(binding.remote);
+    const { installationName } = binding;
+    if (
+      repository === null ||
+      (await isForkPullRequest({ installationName, ...repository, number: request.number }))
+    ) {
+      throw new JigsError(
+        `pull request #${request.number} on binding ${binding.name} is not a branch of ${binding.remote}`,
+        "only a pull request from a branch of the binding's own GitHub repository can be checked out, because setup runs its code",
+      );
+    }
     const headSha = await fetchPullRequestHead(repoDir, request.number, runId);
     const name = runBranch(`pull-${request.number}-${headSha.slice(0, 12)}`, runId);
     const target = worktreePath({ ...dirs, branch: name });
