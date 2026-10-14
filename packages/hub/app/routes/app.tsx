@@ -229,15 +229,16 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
             </SettingRow>
             <SettingRow
               label="Description"
+              htmlFor="description"
               hint="What the app is for. Only people on this hub see it; leave it empty to clear it."
             >
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
                   key={app.description}
+                  id="description"
                   name="description"
                   maxLength={appDescriptionLength}
                   defaultValue={app.description ?? ""}
-                  aria-label="Description"
                   className={`${input} min-w-0 grow`}
                 />
                 <button type="submit" name="intent" value="describe" className={secondaryButton}>

@@ -113,7 +113,7 @@ const slackCredentials = (
   </>
 );
 
-const descriptionField: Field = {
+const descriptionField: FormField = {
   name: "description",
   label: "Description",
   help: "What the app is for, such as which team or factories use it. Only people on this hub see it.",
