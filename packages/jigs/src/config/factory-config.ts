@@ -56,8 +56,16 @@ export function resolveService(ctx: FactoryContext): ResolvedService {
     slug: ctx.slug,
     port,
     serviceUrl: `http://localhost:${port}`,
-    dashboardUrl: `http://localhost:${requiredPort(ctx, "JIGS_DASHBOARD_PORT")}`,
+    dashboardUrl: dashboardAddress(ctx, requiredPort(ctx, "JIGS_DASHBOARD_PORT")),
   };
+}
+
+/**
+ * Where links to this copy's dashboard point: `JIGS_DASHBOARD_URL` when people reach the
+ * dashboard through another address, such as a reverse proxy, else localhost on its port.
+ */
+export function dashboardAddress(ctx: FactoryContext, port: string | number): string {
+  return ctx.env("JIGS_DASHBOARD_URL")?.replace(/\/+$/, "") ?? `http://localhost:${port}`;
 }
 
 function requiredPort(ctx: FactoryContext, name: string): number {

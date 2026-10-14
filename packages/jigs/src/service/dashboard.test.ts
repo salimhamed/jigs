@@ -28,6 +28,13 @@ test("the dashboard port in the environment starts the dashboard the run links p
   expect(dashboardRunUrl("run-1")).toBe("http://localhost:9123/run/run-1");
 });
 
+test("JIGS_DASHBOARD_URL replaces localhost in run links while the dashboard keeps its port", async () => {
+  vi.stubEnv("JIGS_DASHBOARD_URL", "https://jigs.example.com/");
+  await startDashboard();
+  expect(startServer).toHaveBeenCalledWith(9123);
+  expect(dashboardRunUrl("run-1")).toBe("https://jigs.example.com/run/run-1");
+});
+
 test("stopping the service closes the dashboard and drops its open connections", async () => {
   await startDashboard();
   await vi.mocked(onShutdown).mock.calls.at(-1)?.[0]();

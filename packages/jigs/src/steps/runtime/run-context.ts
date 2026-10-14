@@ -1,4 +1,5 @@
 import type { StepMetadata, WorkflowMetadata } from "workflow";
+import { dashboardAddress } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 
 /**
@@ -19,8 +20,8 @@ export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
 
 // What a step can tell a human about the run it is inside. The Workflow SDK's
 // metadata carries the run id and the workflow name; the dashboard link is
-// jigs', and only the service process knows it — the port the service was
-// started on, which is also what `jigs status <run-id>` prints.
+// jigs', and only the service process knows it — its dashboard settings, which
+// are also what `jigs status <run-id>` prints.
 
 /**
  * The run's page on the dashboard this service hosts, or undefined when the
@@ -31,7 +32,8 @@ export type StepRunMetadata = NamedRunMetadata & Pick<StepMetadata, "stepId">;
  * @group Advanced run context
  */
 export function dashboardRunUrl(runId: string): string | undefined {
-  const port = currentFactoryContext().env("JIGS_DASHBOARD_PORT");
-  if (port === undefined || port === "") return undefined;
-  return `http://localhost:${port}/run/${runId}`;
+  const ctx = currentFactoryContext();
+  const port = ctx.env("JIGS_DASHBOARD_PORT");
+  if (port === undefined) return undefined;
+  return `${dashboardAddress(ctx, port)}/run/${runId}`;
 }

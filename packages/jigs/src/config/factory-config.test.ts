@@ -135,6 +135,17 @@ test("the service's ports come from the environment", () => {
   });
 });
 
+test("JIGS_DASHBOARD_URL is the dashboard URL the service reports", () => {
+  const ctx = testFactoryContext({
+    env: {
+      JIGS_SERVICE_PORT: "7001",
+      JIGS_DASHBOARD_PORT: "7002",
+      JIGS_DASHBOARD_URL: "https://jigs.example.com",
+    },
+  });
+  expect(resolveService(ctx)).toMatchObject({ dashboardUrl: "https://jigs.example.com" });
+});
+
 test.each(["JIGS_SERVICE_PORT", "JIGS_DASHBOARD_PORT"])("an unset %s fails by name", (name) => {
   const env = { JIGS_SERVICE_PORT: "7001", JIGS_DASHBOARD_PORT: "7002", [name]: "" };
   expect(() => resolveService(testFactoryContext({ env }))).toThrow(`${name} is not set`);
