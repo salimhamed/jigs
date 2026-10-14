@@ -2,7 +2,7 @@
 
 A workflow can hold a conversation with Claude Code in Linear's agent panel.
 Someone mentions the factory's [Linear app](/guide/hub-linear) on an issue, or
-assigns the issue to it, and Claude answers there. People reply in the same
+delegates the issue to it, and Claude answers there. People reply in the same
 thread, and Claude answers each reply in the same Claude session and worktree,
 until the conversation goes quiet or someone presses stop.
 
@@ -28,7 +28,7 @@ continues where Claude got to instead of starting over.
 
 When no one has replied for the idle time, the conversation ends and Linear
 shows nothing new. A later reply in that thread gets
-`This conversation has ended; mention @<app name> again to start a new one.`
+`This conversation has ended; delegate the issue to @<app name> or mention @<app name> to start a new one.`
 
 ## A conversation workflow
 
@@ -46,7 +46,7 @@ const inputs = z.object({
   session: z.string(),
   installationName: z.string(),
   issue: z.object({ id: z.string(), identifier: z.string(), title: z.string(), url: z.string() }),
-  comment: z.string().nullable(),
+  comment: z.string(),
   promptContext: z.string().nullable(),
   creator: z.object({ id: z.string(), name: z.string(), email: z.string() }),
 });
@@ -70,7 +70,7 @@ export default defineWorkflow({
 });
 ```
 
-Register it with a [`linear.agentSessions` trigger](/guide/configuration#linear-agent-sessions):
+Register it with a [`linear.mentions` trigger](/guide/configuration#linear-agent-sessions):
 
 ```ts
 import { linear } from "@jigs-ai/jigs";
@@ -80,10 +80,13 @@ const triggers = {
   "converse-on-mention": {
     active: process.env.CONVERSE_ON_MENTION_ACTIVE === "true",
     workflow: "converse",
-    source: linear.agentSessions({ installationName: "linear-acme", teams: ["ENG"] }),
+    source: linear.mentions({ installationName: "linear-acme", teams: ["ENG"] }),
   },
 };
 ```
+
+To answer delegations too, add a `linear.delegations` trigger for the same
+workflow and make `comment` optional.
 
 Provision the worktree first, then call `linearAgentConversation`.
 The routine works in the worktree you give it and never changes it; your
@@ -100,8 +103,8 @@ request, and runs on once the conversation ends.
 - `instructions`: optional text that leads the first message Claude reads. The
   first message carries Linear's context for the session when Linear sends
   one: the issue, its description and the comments around the request. A
-  mention opens with that context, or the comment without it; an assignment
-  opens with a line saying the issue was assigned, followed by the context. Put
+  mention opens with that context, or the comment without it; a delegation
+  opens with a line saying the issue was delegated, followed by the context. Put
   anything else Claude needs to know here.
 - `idleFor`: how long a conversation waits for a reply before it ends, as a
   duration such as `"30m"` or milliseconds. Four hours by default.
@@ -121,7 +124,7 @@ Each matching trigger starts one run for the session. The first to call
 `linearAgentConversation` holds it for the whole conversation; any other run
 that calls it throws `ClaimConflictError`.
 
-Every factory assigned a Linear app hears every mention of it. For
+Every factory assigned a Linear app hears every delegation and mention. For
 conversations, give each factory its own Linear app, or two factories answer
 the same mention in the same thread.
 

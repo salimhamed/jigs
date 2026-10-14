@@ -11,7 +11,7 @@ import {
   stopAnswerKey,
 } from "./agent-session.ts";
 import { ClaimConflictError } from "./claim.ts";
-import type { LinearAgentSessionInputs } from "./source.ts";
+import type { LinearDelegationInputs, LinearMentionInputs } from "./source.ts";
 
 type SessionRef = { installationName: string; sessionId: string };
 
@@ -64,7 +64,7 @@ const STOPPED = "Stopped.";
  * one replies for `idleFor`, someone presses stop, or a turn fails.
  *
  * @remarks
- * Claude answers the mention that opened the session, then each reply, in the same session and
+ * Claude answers the delegation or mention that opened the session, then each reply, in the same session and
  * worktree. A reply sent while Claude works joins its turn. Linear shows a live status line while
  * Claude works, each answer as a response, a failure as an error, and a link to the run. A stop
  * ends the conversation with "Stopped.". Provision the worktree before calling this: the workflow
@@ -75,7 +75,7 @@ const STOPPED = "Stopped.";
  * @group Linear agent sessions
  */
 export async function linearAgentConversation(
-  session: LinearAgentSessionInputs,
+  session: LinearDelegationInputs | LinearMentionInputs,
   options: LinearAgentConversationOptions,
   steps: LinearAgentConversationSteps,
 ): Promise<LinearAgentConversationResult> {
@@ -109,17 +109,17 @@ export async function linearAgentConversation(
     (await steps.listLinearAgentSessionPrompts(ref)).filter((p) => !consumed.includes(p.id));
   const lastStop = (prompts: LinearAgentPrompt[]) =>
     prompts.findLast((prompt) => prompt.signal === "stop");
-  const { issue, comment, promptContext } = session;
-  const assigned = `${issue.identifier} "${issue.title}" was assigned to you.`;
+  const { issue, promptContext } = session;
+  const delegated = `${issue.identifier} "${issue.title}" was delegated to you.`;
   let opening: ConversationMessage | undefined = {
     uuid: session.session,
     author: session.creator.name,
     text:
-      comment !== null
-        ? (promptContext ?? comment)
+      "comment" in session
+        ? (promptContext ?? session.comment)
         : promptContext === null
-          ? assigned
-          : `${assigned}\n\n${promptContext}`,
+          ? delegated
+          : `${delegated}\n\n${promptContext}`,
   };
   let turns = 0;
 

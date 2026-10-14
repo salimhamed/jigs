@@ -1,21 +1,22 @@
 # linear-ticket-to-pr
 
-This workflow takes a Linear ticket to a merged pull request. It claims the
-ticket, asks in the ticket's Linear agent session when the requirements are
-unclear, has one agent build the change and another review it, opens the pull
-request, and follows its review comments and CI with the same builder session
-until it merges.
+This workflow takes a Linear ticket to a merged pull request. It starts when
+someone delegates a ticket to the factory's Linear app. It claims the ticket,
+asks in the ticket's Linear agent session when the requirements are unclear,
+has one agent build the change and another review it, opens the pull request,
+and follows its review comments and CI with the same builder session until it
+merges.
 
-The run opens one Linear agent session on the ticket when it starts, and says
-everything there: its questions, its notes, and its last word, "Merged" with
-the pull request, or why it stopped. Answer a question by replying in the
-session. A message sent while the run is working waits for its next question.
-Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
-as it is. Once the pull request opens, the session links to it and a note
-says it is open and waits on people. That keeps the session awaiting input,
-so Linear never marks it stale however long review takes. To change the work,
-comment on the pull request; to stop the run, close it. Every note mentions the
-operator (or the ticket's creator) and the assignee, so they get a Linear notification.
+The run says everything in the Linear agent session the delegation opened: its
+questions, its notes, and its last word, "Merged" with the pull request, or why
+it stopped. Answer a question by replying in the session. A message sent while
+the run is working waits for its next question. Stop cancels the run, as
+`jigs cancel` does, and leaves the ticket's status as it is. Once the pull request
+opens, the session links to it and a note says it is open and waits on people.
+That keeps the session awaiting input, so Linear never marks it stale however
+long review takes. To change the work, comment on the pull request; to stop the
+run, close it. Every note mentions the operator (or the ticket's creator) and
+the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and
@@ -48,15 +49,16 @@ following the pull request, runs in four jigs routines the workflow calls.
 - **A binding** for the repository to change, naming the GitHub installation
   that reaches it: `pnpm exec jigs bind <remote> --installation <installation>`,
   then `pnpm exec jigs up`. See [bindings](https://salimhamed.github.io/jigs/guide/configuration#bindings).
-- **Who merges.** `mergedBy` near the top of `linear-ticket-to-pr.ts` is
-  `"jigs"`, so jigs merges once the pull request is approved and CI is green.
-  Set it to `"human"` to have the run wait for you to merge. jigs never merges
-  in a repository with no CI: add CI, or set `"human"` and merge yourself.
-  The workflow passes it to jigs as `mergeWhen: () => mergedBy === "jigs"`; for a rule of your own, such as
-  merging only with a label, check the snapshot `mergeWhen` receives instead.
-  `approvalCovers`, next to it, is `"latest-commit"`,
-  so a push needs a new approving review; `"any-commit"` lets a person's
-  approval cover later pushes too. How you approve is set in
+- **A trigger** that starts the workflow from Linear; see
+  [Start it from Linear](#start-it-from-linear).
+- **Who merges.** jigs merges once the pull request is approved and CI is
+  green, and never in a repository with no CI. In `linear-ticket-to-pr.ts`,
+  change `mergeWhen: () => true` to `() => false` to merge yourself, or check
+  the snapshot `mergeWhen` receives for a rule of your own, such as merging
+  only with a label. `approvalCovers` beside it is `"any-commit"`, so a
+  person's approving review also covers the builder's later pushes, such as a
+  CI fix; `"latest-commit"` needs a new approval after every push. How you
+  approve is set in
   [jigs.config.ts](https://salimhamed.github.io/jigs/guide/configuration#merging).
   The merge method is the first one the repository allows on GitHub: squash,
   then merge commit, then rebase.
@@ -79,25 +81,40 @@ To allow any title, delete the `check` passed to `describePullRequest` in
 `linear-ticket-to-pr.ts`, along with `titleProblems` and the title rule in the
 `describe` prompt.
 
-## Launch a run
+## Start it from Linear
 
-```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
-pnpm exec jigs watch
+`pnpm exec jigs recipe add linear-ticket-to-pr` prints this trigger. Add it to
+`triggers` in `jigs.config.ts`, import `linear` from `@jigs-ai/jigs`, and fill
+in your Linear installation's name and the binding to build in:
+
+```ts
+import { linear } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "linear-ticket-to-pr": {
+    active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",
+    workflow: "linear-ticket-to-pr",
+    source: linear.delegations({ installationName: "linear-acme" }),
+    inputs: { binding: "app" },
+  },
+};
 ```
 
-`linearInstallation` is the installation name of the Linear workspace the
-ticket is in.
+Set `LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env.local`, then run `pnpm exec jigs up`.
+Delegating a ticket to the factory's Linear app now starts a run. Linear tells the run which ticket; the trigger's
+`inputs` tell it which binding to build in. See
+[Linear delegations and mentions](https://salimhamed.github.io/jigs/guide/configuration#linear-agent-sessions)
+for the filters a trigger takes.
 
-A run picks its builder and reviewer by name. By default the `builder` agent
-builds and the `reviewer` agent reviews both the ticket's requirements and the
-change. To have Claude Code build too:
+For several repositories, add one trigger per binding, each with a filter such
+as `teams: ["WEB"]` or `labels: ["api"]` that no other trigger matches; see
+[Recipes](https://salimhamed.github.io/jigs/guide/recipes#linear-ticket-to-pr).
 
-```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input builder=reviewer
-```
-
-A run cannot type a model name. To change a model, edit its line in `agents`.
+By default the `builder` agent builds and the `reviewer` agent reviews both the
+ticket's requirements and the change. A trigger can swap them, for example to
+have Claude Code build too, with `inputs: { binding: "app", builder: "reviewer" }`.
+A trigger cannot name a model. To change a model, edit its line in `agents`.
 
 ## Budgets
 
@@ -106,10 +123,8 @@ A run cannot type a model name. To change a model, edit its line in `agents`.
 | `reviewRounds` | One build plus one review of what it committed | 3 |
 | `attemptsPerUpdate` | Builder attempts to handle each changed PR snapshot, including immediate recovery | 3 |
 
-```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app --input 'budget={"reviewRounds":5}'
-```
-
+A trigger sets them in its `inputs`, such as
+`inputs: { binding: "app", budget: { reviewRounds: 5 } }`.
 Budget settings belong to this recipe and are fixed when the run starts.
 `attemptsPerUpdate` is positive and resets for every PR change that wakes the
 builder; it is not a lifetime limit on PR activity.
@@ -158,7 +173,7 @@ const agents = {
 const agentName = z.enum(["builder", "reviewer", "careful"]);
 ```
 
-Adding `careful` as above lets a run pass `--input builder=careful`. Every agent
+Adding `careful` as above lets a trigger pass `builder: "careful"` in its `inputs`. Every agent
 in the object is checked before a run starts, whether or not a run picks it.
 
 The builder session continues from implementation into PR maintenance. It
@@ -294,7 +309,7 @@ export async function deliverTicket(
   `onNeedsHuman` with facts, never the same facts twice in a row, and keeps
   watching. To move the ticket back to `Todo` as well, do it inside
   `onNeedsHuman`.
-  With `mergedBy: "jigs"`, the default, the recipe checks merge readiness after
+  With `mergeWhen` returning true, as shipped, the recipe checks merge readiness after
   every watcher yield and every builder turn, whatever the builder last
   reported: the configured GitHub approval (read with `approvalCovers`), green
   CI, a clean merge state, no unseen wake facts, and published local work. A
@@ -302,7 +317,7 @@ export async function deliverTicket(
   GitHub reports an approved, green pull request as `blocked`, `onNeedsHuman`
   receives `merge-blocked` with the head; the recipe posts a note on the pull
   request, marked with the delivery's scope so it does not wake the builder and
-  a later run does not post it again. With `"human"` it waits for you to merge.
+  a later run does not post it again. When `mergeWhen` returns false, it waits for you to merge.
   The watcher never merges, and the agent is instructed not to merge or approve;
   see [GitHub access for agents](https://salimhamed.github.io/jigs/guide/models-and-harnesses#github-access)
   for what actually holds a merge back.

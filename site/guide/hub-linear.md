@@ -2,7 +2,7 @@
 
 Factories act on Linear as a Linear OAuth app your [hub](/guide/hub) holds, so
 their messages and mentions reach people like anyone else's. People can
-mention the app on an issue or assign an issue to it, as they would a
+mention the app on an issue or delegate an issue to it, as they would a
 teammate. The hub receives the app's webhooks, holds each workspace's tokens
 and refreshes them.
 
@@ -73,7 +73,7 @@ apps and workspaces, and names the installation it uses in each trigger, step
 and agent.
 
 In the factory, `pnpm exec jigs doctor` checks that the hub hands it a token
-for each Linear installation it uses. To start runs from mentions and assignments, see
-[Linear mentions and assignments](/guide/configuration#linear-agent-sessions).
+for each Linear installation it uses. To start runs from delegations and mentions, see
+[Linear delegations and mentions](/guide/configuration#linear-agent-sessions).
 To have Claude Code answer in Linear's agent panel, see
 [Linear conversations](/guide/linear-conversations).

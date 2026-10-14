@@ -1,12 +1,14 @@
-// The `linear.agentSessions` source: every Linear agent session a person
-// created on an issue, by a mention of the factory's app or an assignment to
-// it, is one occurrence, keyed by the session's id, read off the event the hub passes on.
+// The `linear.delegations` and `linear.mentions` sources: every Linear agent
+// session a person created on an issue, by delegating it to the factory's app or
+// mentioning the app, is one occurrence of one of them, keyed by the session's id,
+// read off the event the hub passes on.
 
 import { z } from "zod";
 import { type LinearIssueFiling, linearFor } from "../providers/linear.ts";
 import {
-  type LinearAgentSessionInputs,
   type LinearAgentSessionsParams,
+  type LinearDelegationInputs,
+  type LinearMentionInputs,
   linearAgentSessionsParamsSchema,
 } from "../workflow/linear/source.ts";
 import type { Source } from "./event-triggers/sources.ts";
@@ -27,13 +29,13 @@ const createdSchema = z.object({
         team: z.object({ id: z.string(), key: z.string() }),
       })
       .nullish(),
-    comment: z.object({ body: z.string() }).nullish(),
+    comment: z.object({ body: z.string(), userId: z.string().nullish() }).nullish(),
     creator: z.object({ id: z.string(), name: z.string(), email: z.string() }).nullish(),
   }),
   promptContext: z.string().nullish().catch(null),
 });
 
-const SAMPLE_INPUTS = {
+const SAMPLE_DELEGATION = {
   session: "00000000-0000-0000-0000-000000000000",
   installationName: "acme",
   issue: {
@@ -42,10 +44,9 @@ const SAMPLE_INPUTS = {
     title: "An issue",
     url: "https://linear.app/acme/issue/ENG-1/an-issue",
   },
-  comment: "@jigs take a look",
   promptContext: '<issue identifier="ENG-1">\n<title>An issue</title>\n</issue>',
   creator: { id: "00000000-0000-0000-0000-000000000000", name: "Ada", email: "ada@example.com" },
-} satisfies LinearAgentSessionInputs;
+} satisfies LinearDelegationInputs;
 
 // The issue's project and labels, read as the factory's app in the trigger's
 // installation. An issue that is gone will read the same way every time, so the
@@ -62,10 +63,15 @@ async function readFiling(
   return filing;
 }
 
-export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
+// Linear gives every session a comment. A delegation's is a placeholder Linear writes
+// itself, so a mention is a session whose comment its creator wrote.
+const agentSessions = (
+  started: "delegation" | "mention",
+  sampleInputs: Record<string, unknown>,
+): Source<LinearAgentSessionsParams> => ({
   provider: "linear",
   params: linearAgentSessionsParamsSchema,
-  sampleInputs: SAMPLE_INPUTS,
+  sampleInputs,
   async fromPush(params, { installationName, payload: event }) {
     if (installationName !== params.installationName) return null;
     const head = headSchema.safeParse(event).data;
@@ -82,6 +88,9 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
     const { issue, creator } = agentSession;
     // A session with no creator is one the app opened itself, for a run already working on it.
     if (!issue || !creator) return null;
+    const comment = agentSession.comment;
+    const mention = comment != null && comment.userId === creator.id;
+    if (mention !== (started === "mention")) return null;
     if (
       params.teams &&
       !params.teams.some((team) => [issue.team.key, issue.team.id].includes(team))
@@ -105,16 +114,24 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
         return null;
       if (params.labels && !params.labels.some((label) => labels.includes(label))) return null;
     }
-    const inputs = {
+    const delegation = {
       session: agentSession.id,
       installationName,
       issue: { id: issue.id, identifier: issue.identifier, title: issue.title, url: issue.url },
-      comment: agentSession.comment?.body ?? null,
       promptContext: promptContext ?? null,
       creator: { id: creator.id, name: creator.name, email: creator.email },
-    } satisfies LinearAgentSessionInputs;
+    } satisfies LinearDelegationInputs;
+    const inputs = mention
+      ? ({ ...delegation, comment: comment.body } satisfies LinearMentionInputs)
+      : delegation;
     return { key: agentSession.id, inputs, at: new Date(agentSession.createdAt) };
   },
   describe: ({ session, issue }) =>
     `linear ${String((issue as { identifier?: unknown } | undefined)?.identifier)} session ${String(session)}`,
-};
+});
+
+export const LINEAR_DELEGATIONS = agentSessions("delegation", SAMPLE_DELEGATION);
+export const LINEAR_MENTIONS = agentSessions("mention", {
+  ...SAMPLE_DELEGATION,
+  comment: "@jigs take a look",
+} satisfies LinearMentionInputs);

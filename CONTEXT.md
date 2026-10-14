@@ -166,9 +166,9 @@ harness session it holds, and starts fresh when that session is unusable.
 _Avoid_: role session, resumeOrRebuild
 
 **Linear agent session**: Linear's thread between people and a Linear app on
-one issue, opened by a mention of the app, an assignment to it, or a ticket run
-at its claim. One a person opened is the `linear.agentSessions` source's
-occurrence. Not an agent session.
+one issue, opened by a mention of the app, a delegation of the issue to it, or a
+ticket run at its claim. One a person opened is an occurrence of the
+`linear.delegations` or `linear.mentions` source. Not an agent session.
 
 **Ticket note**: A message a ticket run posts in its Linear agent session that
 asks for nothing. Its `run` says what the run does next: an `ended` note ends

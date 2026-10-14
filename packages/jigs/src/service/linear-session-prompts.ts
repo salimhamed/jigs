@@ -235,8 +235,8 @@ async function answerEndedTicketRun(
   const app = await deps.appName(installationName).catch(() => null);
   const start =
     app === null
-      ? "Assign the issue to the app or mention it"
-      : `Assign the issue to @${app} or mention @${app}`;
+      ? "Delegate the issue to the app or mention it"
+      : `Delegate the issue to @${app} or mention @${app}`;
   await linear.postActivityOnce(
     sessionId,
     { type: "response", body: `This conversation has ended. ${start} to start a new run.` },
@@ -250,8 +250,11 @@ const isLive = (status: string | undefined) => status === "pending" || status ==
 
 async function endedMessage(installationName: string, deps: SessionPromptDeps): Promise<string> {
   const app = await deps.appName(installationName).catch(() => null);
-  const mention = app === null ? "mention the app again" : `mention @${app} again`;
-  return `This conversation has ended; ${mention} to start a new one.`;
+  const start =
+    app === null
+      ? "delegate the issue to the app or mention it"
+      : `delegate the issue to @${app} or mention @${app}`;
+  return `This conversation has ended; ${start} to start a new one.`;
 }
 
 // One "Stopped." per stop, whether the route or the fallback posts it.

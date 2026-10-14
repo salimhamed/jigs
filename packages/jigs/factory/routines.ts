@@ -10,7 +10,8 @@
 
 import type {
   LinearAgentConversationOptions,
-  LinearAgentSessionInputs,
+  LinearDelegationInputs,
+  LinearMentionInputs,
   SlackQuestion,
 } from "@jigs-ai/jigs";
 import {
@@ -263,7 +264,7 @@ export const waitForSlackReply = (question: SlackQuestion) =>
  * @group Linear agent sessions
  */
 export const linearAgentConversation = (
-  session: LinearAgentSessionInputs,
+  session: LinearDelegationInputs | LinearMentionInputs,
   options: LinearAgentConversationOptions,
 ) =>
   linearAgentConversationRoutine(session, options, {

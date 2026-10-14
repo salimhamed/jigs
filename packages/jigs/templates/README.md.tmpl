@@ -59,8 +59,9 @@ pnpm exec jigs recipe add linear-ticket-to-pr
 
 `recipe add` copies a recipe's workflow, tests and supporting code into this factory,
 keeps any file that already exists, and registers the workflow under
-`workflows` in `jigs.config.ts`. The copied code is yours; upgrades never
-overwrite it. After adding linear-ticket-to-pr, read
+`workflows` in `jigs.config.ts`. A recipe started by a trigger, such as
+linear-ticket-to-pr, also prints the trigger to add to `triggers`. The copied
+code is yours; upgrades never overwrite it. After adding linear-ticket-to-pr, read
 `workflows/linear-ticket-to-pr/README.md`. See
 [recipes](https://salimhamed.github.io/jigs/guide/recipes).
 

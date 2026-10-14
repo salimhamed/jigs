@@ -3,7 +3,7 @@ import type { TurnStepResult } from "../agents/conversation.ts";
 import type { Harness } from "../agents/harness-config.ts";
 import type { LinearAgentConversationSteps } from "./agent-conversation.ts";
 import type { LinearAgentPrompt, LinearAgentTurnRequest } from "./agent-session.ts";
-import type { LinearAgentSessionInputs } from "./source.ts";
+import type { LinearMentionInputs } from "./source.ts";
 
 const { createHook, sleep, hook, timer } = vi.hoisted(() => ({
   createHook: vi.fn(),
@@ -22,7 +22,7 @@ const { linearAgentConversation } = await import("./agent-conversation.ts");
 
 const claude = { kind: "claude", model: "opus" } as Harness;
 const SESSION = "5f0c2a8e-7d1b-4c3e-9a6f-1b2c3d4e5f60";
-const inputs: LinearAgentSessionInputs = {
+const inputs: LinearMentionInputs = {
   session: SESSION,
   installationName: "acme",
   issue: { id: "i1", identifier: "AGE-1", title: "Fix it", url: "https://linear.app/i/AGE-1" },
@@ -30,6 +30,7 @@ const inputs: LinearAgentSessionInputs = {
   promptContext: null,
   creator: { id: "u1", name: "Ada", email: "ada@example.com" },
 };
+const { comment: _, ...delegation } = inputs;
 const ref = { installationName: "acme", sessionId: SESSION };
 const OWNED = `linear:session:acme:${SESSION}`;
 const LISTENING = `linear:listening:acme:${SESSION}`;
@@ -254,30 +255,30 @@ test("Linear's prompt context opens a mention in place of its comment", async ()
   await done;
 });
 
-test("an assignment opens with the assignment, then Linear's prompt context", async () => {
+test("a delegation opens with the delegation, then Linear's prompt context", async () => {
   const done = linearAgentConversation(
-    { ...inputs, comment: null, promptContext },
+    { ...delegation, promptContext },
     { harness: claude, cwd: "/w" },
     steps,
   );
   await parked();
   expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
-    opening: { text: `AGE-1 "Fix it" was assigned to you.\n\n${promptContext}` },
+    opening: { text: `AGE-1 "Fix it" was delegated to you.\n\n${promptContext}` },
   });
   await goIdle();
   await done;
 });
 
-test("an assignment without prompt context opens with a plain message", async () => {
+test("a delegation without prompt context opens with a plain message", async () => {
   const done = linearAgentConversation(
-    { ...inputs, comment: null },
+    delegation,
     { harness: claude, cwd: "/w", instructions: "Be brief." },
     steps,
   );
   await parked();
   expect(steps.executeLinearAgentTurn.mock.calls[0]?.[0]).toMatchObject({
     instructions: "Be brief.",
-    opening: { uuid: SESSION, author: "Ada", text: 'AGE-1 "Fix it" was assigned to you.' },
+    opening: { uuid: SESSION, author: "Ada", text: 'AGE-1 "Fix it" was delegated to you.' },
   });
   await goIdle();
   await done;

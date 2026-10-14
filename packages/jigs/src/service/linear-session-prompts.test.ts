@@ -276,7 +276,7 @@ test("a reply after the session's runs ended is told the conversation is over, o
       derivedUuid(["linear-session-ended", event.agentActivity.id]),
       {
         sessionId: "session-1",
-        body: "This conversation has ended; mention @jigs again to start a new one.",
+        body: "This conversation has ended; delegate the issue to @jigs or mention @jigs to start a new one.",
       },
     ],
   ]);
@@ -299,7 +299,7 @@ test("without the app's name, the ended message names no one", async () => {
   };
   await route(prompted());
   expect(bodies()).toEqual([
-    "This conversation has ended; mention the app again to start a new one.",
+    "This conversation has ended; delegate the issue to the app or mention it to start a new one.",
   ]);
 });
 
@@ -473,7 +473,7 @@ test("an event that is not a readable prompt is ignored", async () => {
 });
 
 const ENDED_RUN =
-  "This conversation has ended. Assign the issue to @jigs or mention @jigs to start a new run.";
+  "This conversation has ended. Delegate the issue to @jigs or mention @jigs to start a new run.";
 
 test("a message in an ended ticket run's session is told the run ended, once", async () => {
   last = { type: "response", createdAt: "2026-10-06T00:00:00.000Z" };

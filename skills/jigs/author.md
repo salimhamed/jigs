@@ -13,7 +13,9 @@ The guides, in the order you need them:
 
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
-preserves existing files and reports created/kept paths. Recipes
+preserves existing files and reports created/kept paths. It also prints a `linear.delegations`
+trigger to add to `triggers` by hand, with the Linear installation and binding to fill in: the
+recipe runs only when someone delegates a ticket to the factory's Linear app. Recipes
 become editable factory source; upgrades never overwrite them.
 
 ## Code responsibilities
@@ -106,7 +108,7 @@ one-active-run-per-ticket lock. A run that provisions, posts, writes, or pushes
 before claiming can collide with the run that already holds the ticket. Use
 `acquireTicket({ installationName, reference, session? })` from `#jigs/routines` to resolve, claim, and snapshot in the required order before
 starting protected work. The claim also opens the run's Linear agent session on
-the ticket, or takes `session` when a `linear.agentSessions` trigger started
+the ticket, or takes `session` when a `linear.delegations` or `linear.mentions` trigger started
 the run. The claim carries the session, so `noteOnTicket` and `haltForHuman`
 take only the claim.
 
@@ -132,7 +134,7 @@ rebuilds. To notify more people, add `mention: ["<email>"]` to a halt or note.
 Unknown emails are skipped with a warning; the message still posts.
 
 To let Claude Code answer in Linear's agent panel, trigger the workflow with
-`linear.agentSessions`, provision a worktree, then call
+`linear.mentions` (or `linear.delegations`), provision a worktree, then call
 `linearAgentConversation(input, { harness, cwd })` from `#jigs/routines`. It
 needs a Claude harness. Its `outcome` is `idle` when no one replied for
 `idleFor` (4h by default), `stopped` when someone pressed stop, or `failed`

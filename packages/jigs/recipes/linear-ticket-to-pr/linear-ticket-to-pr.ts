@@ -1,5 +1,4 @@
 import {
-  type ApprovalCoverage,
   type BuildStopped,
   builderWakeFacts,
   defaultPullRequestScope,
@@ -44,19 +43,13 @@ const agents = {
 };
 const agentName = z.enum(["builder", "reviewer"]);
 
-// Who merges a pull request once it is approved and CI is green: "jigs"
-// merges it, "human" leaves the merge to you. jigs never merges in a repository
-// with no CI. For a rule of your own, such as merging only with a label, pass a
-// check on the snapshot as `mergeWhen` below.
-const mergedBy: "jigs" | "human" = "jigs";
-
-// "any-commit" lets a person's approving review also cover later pushes.
-const approvalCovers: ApprovalCoverage = "latest-commit";
-
+// What a linear.delegations trigger hands the run when someone delegates a
+// ticket to the factory's Linear app, plus the trigger's own `inputs`: the
+// binding to build in, and optionally the agents and budget.
 const inputs = z.object({
-  ticket: z.string().min(1),
-  // The Linear installation, as named on the hub, the ticket is in.
-  linearInstallation: installationNameSchema,
+  installationName: installationNameSchema,
+  issue: z.object({ identifier: z.string().min(1) }),
+  session: z.string().min(1),
   binding: z.string().min(1),
   builder: agentName.default("builder"),
   reviewer: agentName.default("reviewer"),
@@ -73,8 +66,12 @@ const inputs = z.object({
 export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
   "use workflow";
 
-  const installationName = input.linearInstallation;
-  const { claim, snapshot } = await acquireTicket({ installationName, reference: input.ticket });
+  const { installationName } = input;
+  const { claim, snapshot } = await acquireTicket({
+    installationName,
+    reference: input.issue.identifier,
+    session: input.session,
+  });
   // Every way out ends the ticket's session, or Linear shows the run working
   // after it has gone: a stop with its own note, anything else with the error.
   let ended = false;
@@ -166,8 +163,12 @@ export async function linearTicketToPr(input: WorkflowInputs<typeof inputs>) {
     const followed = await followPullRequestToOutcome(delivery, pr, {
       attemptsPerUpdate,
       wake: builderWakeFacts,
-      mergeWhen: () => mergedBy === "jigs",
-      approvalCovers,
+      // jigs merges once the pull request is approved and CI is green, and never
+      // in a repository with no CI. Return false to merge yourself, or check the
+      // snapshot for a rule of your own, such as a label.
+      mergeWhen: () => true,
+      // An approving review also covers the builder's later pushes, such as a CI fix.
+      approvalCovers: "any-commit",
       // A blocked merge is noted on the pull request, marked so it wakes no
       // builder and a later run does not post it again. Anything else is only a
       // note in the ticket's session: the ticket stays In Review while the run keeps watching.
@@ -279,9 +280,7 @@ const openedNote = (url: string): TicketNote => ({
   headline: `Pull request ${url} is open.`,
   notes: [],
   closing:
-    mergedBy === "jigs"
-      ? "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run."
-      : "It's yours to merge once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
+    "The pull request will be merged once it's approved and CI passes. Comment on the pull request to change anything, or close it to stop the run.",
   run: "waiting",
 });
 

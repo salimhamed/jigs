@@ -8,7 +8,7 @@ import type { Factory } from "../workflow/factory.ts";
 import { type LinearAgentSessionsParams, linear } from "../workflow/linear/source.ts";
 import { createTriggerEngine } from "./event-triggers/engine.ts";
 import type { PreparedRun } from "./launch.ts";
-import { LINEAR_AGENT_SESSIONS as source } from "./linear-agent-sessions.ts";
+import { LINEAR_DELEGATIONS, LINEAR_MENTIONS as source } from "./linear-agent-sessions.ts";
 import { eventTriggerId } from "./runs.ts";
 import { memoryTriggerStore } from "./test-fixtures.ts";
 
@@ -86,12 +86,32 @@ test("a mention starts a run with the session, its issue, the comment and who as
   expect(source.describe(pushed?.inputs ?? {})).toBe(`linear ENG-42 session ${SESSION}`);
 });
 
-test("an assignment starts a run with no comment", async () => {
-  const assigned = withSession({}, { comment: null, commentId: null });
-  expect((await source.fromPush(ACME, from(assigned)))?.inputs).toMatchObject({
-    session: SESSION,
-    comment: null,
-  });
+// Linear opens a delegation's session on a placeholder comment it writes itself.
+const delegated = () =>
+  withSession(
+    {},
+    {
+      comment: {
+        id: "5e4d3c2b-1a0f-4e9d-8c7b-6a5f4e3d2c1b",
+        body: "This thread is for an agent session with jigs.",
+        userId: "5c07d33f-5e8f-484b-8100-67908589ec45",
+        issueId: ISSUE,
+      },
+    },
+  );
+
+test("a delegation starts a delegations run with no comment, and no mentions run", async () => {
+  const pushed = await LINEAR_DELEGATIONS.fromPush(ACME, from(delegated()));
+  expect(pushed?.inputs).toMatchObject({ session: SESSION, creator: { name: "Ada Lovelace" } });
+  expect(pushed?.inputs).not.toHaveProperty("comment");
+  expect(await source.fromPush(ACME, from(delegated()))).toBeNull();
+  const uncommented = withSession({}, { comment: null, commentId: null });
+  expect(await LINEAR_DELEGATIONS.fromPush(ACME, from(uncommented))).not.toBeNull();
+  expect(await source.fromPush(ACME, from(uncommented))).toBeNull();
+});
+
+test("a mention starts no delegations run", async () => {
+  expect(await LINEAR_DELEGATIONS.fromPush(ACME, from(created()))).toBeNull();
 });
 
 test("a session the app opened itself, with no creator, starts no run", async () => {
@@ -217,9 +237,13 @@ test("an installation name is required, and empty filter lists are refused", () 
   expect(source.params.safeParse({}).success).toBe(false);
   expect(source.params.safeParse({ ...ACME, teams: [] }).success).toBe(false);
   expect(source.params.safeParse({ ...ACME, team: ["ENG"] }).success).toBe(false);
-  expect(linear.agentSessions({ ...ACME, labels: ["agent"] })).toEqual({
-    kind: "linear.agentSessions",
+  expect(linear.mentions({ ...ACME, labels: ["agent"] })).toEqual({
+    kind: "linear.mentions",
     params: { installationName: "acme", labels: ["agent"] },
+  });
+  expect(linear.delegations(ACME)).toEqual({
+    kind: "linear.delegations",
+    params: { installationName: "acme" },
   });
 });
 
@@ -242,7 +266,7 @@ function sessionEngine(params: Omit<LinearAgentSessionsParams, "installationName
       mentions: {
         active: true,
         workflow: "answer",
-        source: linear.agentSessions({ ...ACME, ...params }),
+        source: linear.mentions({ ...ACME, ...params }),
       },
     },
   };

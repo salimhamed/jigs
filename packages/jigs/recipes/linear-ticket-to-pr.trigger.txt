@@ -1,0 +1,8 @@
+// Import linear from "@jigs-ai/jigs", and set LINEAR_TICKET_TO_PR_ACTIVE=true
+// in .env.local to turn it on.
+"linear-ticket-to-pr": {
+  active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",
+  workflow: "linear-ticket-to-pr",
+  source: linear.delegations({ installationName: "<your Linear installation>" }),
+  inputs: { binding: {{binding}} },
+},
