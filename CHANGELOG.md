@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.10](https://github.com/salimhamed/jigs/compare/jigs-v0.104.9...jigs-v0.104.10) (2026-10-14)
+
+
+### Features
+
+* **hub:** accept an invitation at any verified GitHub email ([#687](https://github.com/salimhamed/jigs/issues/687)) ([cf713bb](https://github.com/salimhamed/jigs/commit/cf713bb467a4e5923695e2bf17323b11d20961aa))
+
 ## [0.104.9](https://github.com/salimhamed/jigs/compare/jigs-v0.104.8...jigs-v0.104.9) (2026-10-14)
 
 
