@@ -11,7 +11,7 @@ import { useActionToast } from "../components/action-toast.tsx";
 import { Callout } from "../components/callout.tsx";
 import { Codes } from "../components/codes.tsx";
 import { GitHubEvents, GitHubPermissions } from "../components/github-app-settings.tsx";
-import { PageHeader, UrlRow } from "../components/page.tsx";
+import { Field, PageHeader, UrlRow } from "../components/page.tsx";
 import { SecretInput, SecretTextarea } from "../components/secret-input.tsx";
 import { Select } from "../components/select.tsx";
 import { Snippet } from "../components/snippet.tsx";
@@ -83,7 +83,7 @@ export async function action({ context, request }: Route.ActionArgs) {
   return redirect(`/apps/${added.app.id}`);
 }
 
-type Field = {
+type FormField = {
   name: string;
   label: string;
   help?: ReactNode;
@@ -113,7 +113,7 @@ const forms: Record<
     primary: string;
     steps: (urls: HubUrls) => ReactNode[];
     note?: ReactNode;
-    fields: Field[];
+    fields: FormField[];
     submit: string;
   }
 > = {
@@ -482,7 +482,7 @@ function AppForm({ provider, urls }: { provider: Provider; urls: HubUrls }) {
   );
 }
 
-function FieldInput({ field }: { field: Field }) {
+function FieldInput({ field }: { field: FormField }) {
   const control = field.options ? (
     <Select id={field.name} name={field.name} defaultValue={field.options[0]?.value}>
       {field.options.map((option) => (
@@ -501,12 +501,8 @@ function FieldInput({ field }: { field: Field }) {
     <input id={field.name} name={field.name} required autoComplete="off" className={input} />
   );
   return (
-    <div className="flex flex-col gap-1 text-sm">
-      <label htmlFor={field.name} className="font-medium">
-        {field.label}
-      </label>
-      {field.help && <p className="text-zinc-500">{field.help}</p>}
+    <Field label={field.label} htmlFor={field.name} hint={field.help}>
       {control}
-    </div>
+    </Field>
   );
 }

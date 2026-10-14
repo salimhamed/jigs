@@ -14,7 +14,7 @@ import {
   useJustConnected,
 } from "../components/connect-app.tsx";
 import { InstallationNames } from "../components/installation-names.tsx";
-import { PageHeader, StatusDot } from "../components/page.tsx";
+import { Field, PageHeader, StatusDot } from "../components/page.tsx";
 import { Snippet } from "../components/snippet.tsx";
 import {
   button,
@@ -91,11 +91,13 @@ export default function NewFactory({ actionData }: Route.ComponentProps) {
     <div className="space-y-6">
       <PageHeader title="Add a factory" parent={{ to: "/factories", label: "Factories" }} />
       <Form method="post" className="max-w-xl space-y-4">
-        <label className="flex flex-col gap-1 text-sm">
-          Name
-          <input name="name" required autoComplete="off" className={input} />
-          <span className="text-zinc-500">Shown in the factory list. You can rename it later.</span>
-        </label>
+        <Field
+          label="Name"
+          htmlFor="name"
+          hint="Shown in the factory list. You can rename it later."
+        >
+          <input id="name" name="name" required autoComplete="off" className={input} />
+        </Field>
         <div className="flex gap-2">
           <button type="submit" className={button}>
             Create factory
