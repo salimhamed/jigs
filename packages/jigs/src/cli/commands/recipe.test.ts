@@ -30,16 +30,41 @@ test("lists linear-ticket-to-pr, installs its source and registers its workflow"
     "workflows/linear-ticket-to-pr/review-ticket.test.ts",
     "workflows/linear-ticket-to-pr/review-ticket.ts",
   ]);
-  expect(deps.lines.slice(-4)).toEqual([
+  expect(deps.lines.slice(-11)).toEqual([
     'registered linear-ticket-to-pr in jigs.config.ts by adding "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts")',
     "",
     "Next",
+    "  add this to triggers in jigs.config.ts, importing linear from @jigs-ai/jigs",
+    '    "linear-ticket-to-pr": {',
+    '      active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",',
+    '      workflow: "linear-ticket-to-pr",',
+    '      source: linear.agentSessions({ installationName: "<your Linear installation>" }),',
+    '      inputs: { binding: "<a binding>" },',
+    "    },",
     "  pnpm exec jigs up  # build and restart with linear-ticket-to-pr, then doctor lists what it still needs",
   ]);
   expect(layoutProblems(deps.lines)).toEqual([]);
   expect(readFileSync(path.join(deps.cwd, "jigs.config.ts"), "utf8")).toContain(
     '  workflows: {\n    hello: () => import("./workflows/hello/hello.ts"),\n    "linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),\n  },',
   );
+});
+
+test("the printed trigger names the factory's binding, or lists them", async () => {
+  const deps = factory();
+  await initFactory(deps);
+  const config = path.join(deps.cwd, "jigs.config.ts");
+  const bind = (bindings: string) =>
+    writeFileSync(config, readFileSync(config, "utf8").replace(/bindings: \{.*\},/, bindings));
+  bind(
+    'bindings: { app: { remote: "git@github.com:acme/app.git", installationName: "github-acme" } },',
+  );
+  addRecipe("linear-ticket-to-pr", deps);
+  expect(deps.lines).toContain('      inputs: { binding: "app" },');
+  bind(
+    'bindings: { app: { remote: "a", installationName: "b" }, docs: { remote: "c", installationName: "d" } },',
+  );
+  addRecipe("linear-ticket-to-pr", deps);
+  expect(deps.lines).toContain('      inputs: { binding: "<one of app, docs>" },');
 });
 
 test("keeps edited files when a recipe is added again", async () => {

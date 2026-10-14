@@ -87,14 +87,19 @@ const claim = {
 } as TicketClaim;
 const handoff: TicketHandoff = { brief: "Use the flag.", snapshot, assumptions: [] };
 
+// What a linear.agentSessions trigger hands the run, with the trigger's binding.
+const triggered = {
+  session: "session-1",
+  installationName: "linear-acme",
+  issue: { id: snapshot.id, identifier: "ABC-123", title: "Ship it", url: snapshot.url },
+  comment: null,
+  promptContext: null,
+  creator: { id: "user-1", name: "Ada", email: "ada@acme.test" },
+  binding: "app",
+};
 const run = (inputs: Record<string, unknown> = {}) =>
   linearTicketToPr({
-    ...entry.inputs.parse({
-      ticket: "ABC-123",
-      binding: "app",
-      linearInstallation: "linear-acme",
-      ...inputs,
-    }),
+    ...entry.inputs.parse({ ...triggered, ...inputs }),
     triggerId: "test",
   });
 const statuses = () =>
@@ -140,6 +145,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(routines.acquireTicket).toHaveBeenCalledWith({
     installationName: "linear-acme",
     reference: "ABC-123",
+    session: "session-1",
   });
   expect(statuses()).toEqual(["In Progress", "In Review", "Done"]);
   expect(vi.mocked(steps.setTicketStatus).mock.invocationCallOrder[1]).toBeGreaterThan(
@@ -160,7 +166,7 @@ test("a delivered ticket moves through In Progress, In Review and Done", async (
   expect(following()).toMatchObject({
     attemptsPerUpdate: 3,
     wake: builderWakeFacts,
-    approvalCovers: "latest-commit",
+    approvalCovers: "any-commit",
   });
   expect(following()?.mergeWhen({} as PullRequestSnapshot)).toBe(true);
   expect(posted()).toEqual([opened, merged]);
@@ -251,14 +257,7 @@ test("a run picks its builder and reviewer by name, each in its own session", as
     ...actingAsApp,
   });
   expect(handed()?.reviewer.harness).toBe(entry.requires?.agents?.builder);
-  expect(
-    entry.inputs.safeParse({
-      ticket: "ABC-123",
-      binding: "app",
-      linearInstallation: "linear-acme",
-      builder: "opus",
-    }).success,
-  ).toBe(false);
+  expect(entry.inputs.safeParse({ ...triggered, builder: "opus" }).success).toBe(false);
 });
 
 test("the chosen reviewer also reviews the requirements", async () => {
@@ -268,12 +267,12 @@ test("the chosen reviewer also reviews the requirements", async () => {
   );
 });
 
-test("a run needs a binding and a Linear installation before it claims the ticket", () => {
-  expect(
-    entry.inputs.safeParse({ ticket: "ABC-123", binding: "", linearInstallation: "linear-acme" })
-      .success,
-  ).toBe(false);
-  expect(entry.inputs.safeParse({ ticket: "ABC-123", binding: "app" }).success).toBe(false);
+test("a run needs the trigger's binding and Linear session before it claims the ticket", () => {
+  const { binding: _, ...unbound } = triggered;
+  expect(entry.inputs.safeParse(unbound).success).toBe(false);
+  expect(entry.inputs.safeParse({ ...triggered, binding: "" }).success).toBe(false);
+  const { session: __, ...sessionless } = triggered;
+  expect(entry.inputs.safeParse(sessionless).success).toBe(false);
 });
 
 test("the reviewer's notes are appended to the pull request body", async () => {
@@ -505,18 +504,12 @@ test("the workflow requires its two agents, Linear and GitHub", () => {
     integrations: ["linear", "github"],
   });
   expect(
-    entry.inputs.safeParse({ ticket: "", binding: "app", linearInstallation: "linear-acme" })
-      .success,
+    entry.inputs.safeParse({ ...triggered, issue: { ...triggered.issue, identifier: "" } }).success,
   ).toBe(false);
 });
 
 test("attempts per update must be positive", () => {
-  expect(
-    entry.inputs.safeParse({
-      ticket: "ABC-123",
-      binding: "app",
-      linearInstallation: "linear-acme",
-      budget: { attemptsPerUpdate: 0 },
-    }).success,
-  ).toBe(false);
+  expect(entry.inputs.safeParse({ ...triggered, budget: { attemptsPerUpdate: 0 } }).success).toBe(
+    false,
+  );
 });

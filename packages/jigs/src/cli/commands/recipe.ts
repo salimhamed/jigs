@@ -1,13 +1,26 @@
 import { existsSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { packageRoot } from "../../build/templates.ts";
-import { addWorkflow, workflowEntry } from "../../config/config-edit.ts";
+import { addWorkflow, bindingNames, workflowEntry } from "../../config/config-edit.ts";
 import { JigsError } from "../../errors.ts";
 import { FACTORY_CONFIG_FILE } from "../../workflow/factory-schema.ts";
 import { copyFiles, reportCopied } from "../copy-files.ts";
 import { command, heading, note } from "../output.ts";
 
 const recipesRoot = () => path.join(packageRoot(), "recipes");
+
+// A recipe that runs from a trigger ships the entry beside its directory, so it
+// is printed for the factory to fill in rather than copied with the workflow.
+function triggerEntry(name: string, config: string): string[] | undefined {
+  const file = path.join(recipesRoot(), `${name}.trigger.txt`);
+  if (!existsSync(file)) return undefined;
+  const bindings = bindingNames(config);
+  const binding =
+    bindings.length === 1
+      ? JSON.stringify(bindings[0])
+      : `"<${bindings.length === 0 ? "a binding" : `one of ${bindings.join(", ")}`}>"`;
+  return readFileSync(file, "utf8").trimEnd().replace("{{binding}}", binding).split("\n");
+}
 
 export function recipeNames(): string[] {
   return readdirSync(recipesRoot(), { withFileTypes: true })
@@ -32,7 +45,8 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
     );
   }
   // Parse before copying, so a config jigs cannot edit leaves the factory untouched.
-  const registered = addWorkflow(readFileSync(configFile, "utf8"), name);
+  const config = readFileSync(configFile, "utf8");
+  const registered = addWorkflow(config, name);
   // A recipe directory is exactly what the factory receives at workflows/<name>/.
   const directory = path.join("workflows", name);
   const copied = copyFiles(path.join(recipesRoot(), name), path.join(root, directory), {
@@ -53,6 +67,13 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
   }
   deps.out("");
   deps.out(heading("Next"));
+  const trigger = triggerEntry(name, config);
+  if (trigger !== undefined) {
+    deps.out(
+      `  ${note(`add this to triggers in ${FACTORY_CONFIG_FILE}, importing linear from @jigs-ai/jigs`)}`,
+    );
+    for (const line of trigger) deps.out(`    ${line}`);
+  }
   deps.out(
     `  ${command("pnpm exec jigs up")}  ${note(`# build and restart with ${name}, then doctor lists what it still needs`)}`,
   );

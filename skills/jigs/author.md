@@ -13,7 +13,9 @@ The guides, in the order you need them:
 
 For the linear-ticket-to-pr process, run `jigs recipe add linear-ticket-to-pr`. It adds
 `"linear-ticket-to-pr": () => import("./workflows/linear-ticket-to-pr/linear-ticket-to-pr.ts"),` to the config's `workflows` map,
-preserves existing files and reports created/kept paths. Recipes
+preserves existing files and reports created/kept paths. It also prints a `linear.agentSessions`
+trigger to add to `triggers` by hand, with the Linear installation and binding to fill in: the
+recipe runs only when someone delegates a ticket to the factory's Linear app or mentions it. Recipes
 become editable factory source; upgrades never overwrite them.
 
 ## Code responsibilities

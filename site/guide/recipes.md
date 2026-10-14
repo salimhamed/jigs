@@ -15,8 +15,10 @@ pnpm exec jigs up
 ```
 
 Adding a recipe also registers it in `jigs.config.ts` when the workflows map
-can be edited automatically. The command reports any manual action needed and
-keeps existing files and registrations.
+can be edited automatically. For a recipe started by a trigger, it prints the
+trigger to add to `triggers` yourself, since only you know the values to fill
+in. The command reports any manual action needed and keeps existing files and
+registrations.
 
 ## Available recipes
 
@@ -49,20 +51,40 @@ It reads discussions, posts replies and pushes fixes with `gh` and `git`, with
 no token of yours. Its replies show as the bot, which is how the recipe tells
 them apart from yours. No Jev model is required.
 
-#### Run
+#### Start it from Linear
 
-```sh
-pnpm exec jigs run linear-ticket-to-pr --input ticket=AGE-123 --input linearInstallation=linear-acme --input binding=app
+A run starts when someone delegates a ticket to the factory's Linear app, or
+mentions the app on a ticket, through a
+[`linear.agentSessions` trigger](/guide/configuration#linear-agent-sessions).
+`recipe add` prints the trigger to add to `triggers` in `jigs.config.ts`:
+
+```ts
+import { linear } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "linear-ticket-to-pr": {
+    active: process.env.LINEAR_TICKET_TO_PR_ACTIVE === "true",
+    workflow: "linear-ticket-to-pr",
+    source: linear.agentSessions({ installationName: "linear-acme" }),
+    inputs: { binding: "app" },
+  },
+};
 ```
+
+Linear tells the run which ticket. The trigger's `inputs` add the rest:
 
 | Input | Default | What it chooses |
 | --- | --- | --- |
-| `ticket` | | The Linear ticket, by identifier or ID. |
-| `linearInstallation` | | The [installation name](/guide/hub#installation-names) of the Linear workspace the ticket is in. |
 | `binding` | | The repository to change. |
 | `builder` | `builder` | The agent, by name, that builds the change. |
 | `reviewer` | `reviewer` | The agent, by name, that reviews the requirements and the change. |
 | `budget` | `{ reviewRounds: 3, attemptsPerUpdate: 3 }` | Implementation review rounds, and agent attempts allowed for each PR update. `attemptsPerUpdate` must be positive. |
+
+For several repositories, add one trigger per binding, each with a `teams`,
+`projects` or `labels` filter that no other trigger matches. Every trigger on
+the app hears every delegation and mention, so two triggers that match the
+same ticket start two runs on it.
 
 #### Customize
 
@@ -75,13 +97,13 @@ the workflow passes them its prompts, budgets and merge policy, and writes every
 note itself. The agent names above select entries defined in that source,
 rather than accepting a model name at runtime.
 
-`mergedBy` chooses who merges: `"jigs"` by default, once jigs verifies
-approval, CI, mergeability and that the builder's local work is published, or
-`"human"` to leave every merge to you. Pull request titles must be
+jigs merges once it verifies approval, CI, mergeability and that the builder's
+local work is published. To leave every merge to you, change the workflow's
+`mergeWhen: () => true` to `() => false`. Pull request titles must be
 conventional commit subjects; the writer gets one retry, and a second bad title
 stops the run. To allow any title, delete the check in the copied workflow. `approvalCovers` chooses which commits an approving review covers:
-`"latest-commit"` by default, or `"any-commit"` to let an approval carry over
-later pushes. If GitHub blocks an approved, green pull request, the recipe
+`"any-commit"` by default, so an approval carries over the builder's later
+pushes, or `"latest-commit"` to need a new approval after every push. If GitHub blocks an approved, green pull request, the recipe
 leaves one note on it for each commit and keeps waiting. When the pull request
 needs a person, the recipe notes it in the ticket's session, leaves the ticket In Review
 and keeps watching; only closing the pull request unmerged stops the run.

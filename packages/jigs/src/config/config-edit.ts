@@ -195,6 +195,16 @@ export function upsertBinding(
   return changed ? source.getFullText() : text;
 }
 
+/** The bindings declared in the config, or none when jigs cannot read them. */
+export function bindingNames(text: string): string[] {
+  try {
+    const { object } = editableBindings(text);
+    return object.getProperties().map((property) => propertyName(property as PropertyAssignment));
+  } catch {
+    return [];
+  }
+}
+
 export function removeBinding(text: string, name: string): string {
   const { source, object } = editableBindings(text);
   const property = namedProperty(object, name);

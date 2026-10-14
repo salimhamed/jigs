@@ -132,7 +132,8 @@ jigs recipe add linear-ticket-to-pr
 
 `recipe add` copies source without overwriting and registers the workflow under
 `workflows` in `jigs.config.ts`. If it cannot edit the config, it names the line
-to add by hand. The copied code is the factory's to edit; `workflows/linear-ticket-to-pr/README.md` explains the linear-ticket-to-pr recipe.
+to add by hand. For linear-ticket-to-pr it also prints the trigger to add to `triggers`, with
+the Linear installation and binding to fill in; the recipe starts only from Linear. The copied code is the factory's to edit; `workflows/linear-ticket-to-pr/README.md` explains the linear-ticket-to-pr recipe.
 
 ```sh
 jigs bind git@github.com:owner/repo.git --installation <github-installation>
