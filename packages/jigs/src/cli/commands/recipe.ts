@@ -69,9 +69,7 @@ export function addRecipe(name: string, deps: { cwd: string; out: (line: string)
   deps.out(heading("Next"));
   const trigger = triggerEntry(name, config);
   if (trigger !== undefined) {
-    deps.out(
-      `  ${note(`add this to triggers in ${FACTORY_CONFIG_FILE}, importing linear from @jigs-ai/jigs`)}`,
-    );
+    deps.out(`  ${note(`add this to triggers in ${FACTORY_CONFIG_FILE}`)}`);
     for (const line of trigger) deps.out(`    ${line}`);
   }
   deps.out(

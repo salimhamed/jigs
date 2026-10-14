@@ -101,17 +101,16 @@ const triggers = {
 };
 ```
 
-Set `LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env`, then run `pnpm exec jigs up`.
+Set `LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env.local`, then run `pnpm exec jigs up`.
 Delegating a ticket to the factory's Linear app, or mentioning the app on a
 ticket, now starts a run. Linear tells the run which ticket; the trigger's
 `inputs` tell it which binding to build in. See
 [Linear mentions and assignments](https://salimhamed.github.io/jigs/guide/configuration#linear-agent-sessions)
 for the filters a trigger takes.
 
-For several repositories, add one trigger per binding and give each a filter,
-such as `teams: ["WEB"]` or `labels: ["api"]`, that matches tickets no other
-trigger matches. Every trigger on the app hears every delegation and mention,
-so two triggers that both match a ticket start two runs on it.
+For several repositories, add one trigger per binding, each with a filter such
+as `teams: ["WEB"]` or `labels: ["api"]` that no other trigger matches; see
+[Recipes](https://salimhamed.github.io/jigs/guide/recipes#linear-ticket-to-pr).
 
 By default the `builder` agent builds and the `reviewer` agent reviews both the
 ticket's requirements and the change. A trigger can swap them, for example to

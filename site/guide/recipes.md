@@ -56,7 +56,9 @@ them apart from yours. No Jev model is required.
 A run starts when someone delegates a ticket to the factory's Linear app, or
 mentions the app on a ticket, through a
 [`linear.agentSessions` trigger](/guide/configuration#linear-agent-sessions).
-`recipe add` prints the trigger to add to `triggers` in `jigs.config.ts`:
+`recipe add` prints the trigger to add to `triggers` in `jigs.config.ts`. Set
+`LINEAR_TICKET_TO_PR_ACTIVE=true` in `.env.local` to turn it on, then run
+`pnpm exec jigs up`:
 
 ```ts
 import { linear } from "@jigs-ai/jigs";
@@ -83,8 +85,8 @@ Linear tells the run which ticket. The trigger's `inputs` add the rest:
 
 For several repositories, add one trigger per binding, each with a `teams`,
 `projects` or `labels` filter that no other trigger matches. Every trigger on
-the app hears every delegation and mention, so two triggers that match the
-same ticket start two runs on it.
+the app hears every delegation and mention. A ticket holds one run at a time, so
+when two triggers match it, the second run fails.
 
 #### Customize
 
