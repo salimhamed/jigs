@@ -12,7 +12,13 @@ vi.mock("../providers/github-auth.ts", () => ({ githubAuthFor: vi.fn() }));
 const pushes = SOURCES["github.pushes"];
 const pullRequests = SOURCES["github.pullRequests"];
 const issues = SOURCES["github.issues"];
-if (pushes === undefined || pullRequests === undefined || issues === undefined)
+const releases = SOURCES["github.releases"];
+if (
+  pushes === undefined ||
+  pullRequests === undefined ||
+  issues === undefined ||
+  releases === undefined
+)
   throw new Error("the GitHub sources are not registered");
 
 const BOT = { login: "acme-jigs[bot]", id: 9919 };
@@ -309,6 +315,57 @@ test("an issues event it cannot read is ignored loudly, not retried", async () =
   errors.mockRestore();
 });
 
+// A release published on GitHub, as its webhooks send it.
+const releasePublished = (): Record<string, unknown> & { release: Record<string, unknown> } =>
+  JSON.parse(
+    readFileSync(new URL("./fixtures/github-release-published.json", import.meta.url), "utf8"),
+  );
+const withRelease = (release: Record<string, unknown>, event: Record<string, unknown> = {}) => {
+  const payload = releasePublished();
+  return { ...payload, ...event, release: { ...payload.release, ...release } };
+};
+const release = (payload: unknown, options: { name?: string; installationName?: string } = {}) =>
+  from(payload, { name: "release", ...options });
+
+test("release params take an installation name, then repositories only", () => {
+  const params = (value: unknown) => releases.params.safeParse(value).success;
+  expect(params({ ...ACME, repositories: ["acme/api"] })).toBe(true);
+  expect(params({ repositories: ["acme/api"] })).toBe(false);
+  expect(params({ ...ACME, repositories: [] })).toBe(false);
+  expect(params({ ...ACME, tags: ["v1"] })).toBe(false);
+});
+
+test("a published release is its repository and tag, as of when it was published", async () => {
+  const published = await releases.fromPush(ACME, release(releasePublished()));
+
+  expect(published).toEqual({
+    key: "Acme/api@v1.2.0",
+    inputs: { installationName: "acme", owner: "Acme", repo: "api", tag: "v1.2.0" },
+    at: new Date("2026-10-12T17:42:03Z"),
+  });
+  expect(releases.describe(published?.inputs ?? {})).toBe("github Acme/api v1.2.0");
+});
+
+test("a draft, a prerelease or any other release action starts nothing and asks no one", async () => {
+  for (const action of ["created", "edited", "released", "prereleased", "deleted"])
+    expect(await releases.fromPush(ACME, release(withRelease({}, { action })))).toBeNull();
+  expect(await releases.fromPush(ACME, release(withRelease({ draft: true })))).toBeNull();
+  expect(await releases.fromPush(ACME, release(withRelease({ prerelease: true })))).toBeNull();
+  expect(bot).not.toHaveBeenCalled();
+});
+
+test("another event or installation, or another repository, starts nothing", async () => {
+  for (const name of ["push", "create", "issues"])
+    expect(await releases.fromPush(ACME, release(releasePublished(), { name }))).toBeNull();
+  expect(
+    await releases.fromPush(ACME, release(releasePublished(), { installationName: "other" })),
+  ).toBeNull();
+  const matches = async (repositories: string[]) =>
+    (await releases.fromPush({ ...ACME, repositories }, release(releasePublished()))) !== null;
+  expect(await matches(["acme/web", "ACME/API"])).toBe(true);
+  expect(await matches(["acme/web"])).toBe(false);
+});
+
 const deploy: Factory = {
   workflows: {
     deploy: {
@@ -331,6 +388,15 @@ const deploy: Factory = {
         number: z.number(),
       }),
     },
+    upgrade: {
+      workflow: async () => undefined,
+      inputs: z.object({
+        installationName: z.string(),
+        owner: z.string(),
+        repo: z.string(),
+        tag: z.string(),
+      }),
+    },
   },
   triggers: {
     "deploy-main": {
@@ -348,6 +414,11 @@ const deploy: Factory = {
       workflow: "review",
       source: github.issues({ installationName: "acme", labels: ["agent"] }),
     },
+    "upgrade-on-release": {
+      active: true,
+      workflow: "upgrade",
+      source: github.releases({ installationName: "acme" }),
+    },
   },
 };
 
@@ -356,9 +427,10 @@ test("the sources are shipped, and their triggers name their GitHub installation
     "deploy-main": { provider: "github", installationName: "acme" },
     "review-dependabot": { provider: "github", installationName: "acme" },
     "fix-labeled": { provider: "github", installationName: "acme" },
+    "upgrade-on-release": { provider: "github", installationName: "acme" },
   });
   const checks = triggerChecks(deploy);
-  for (const name of ["deploy-main", "review-dependabot", "fix-labeled"])
+  for (const name of ["deploy-main", "review-dependabot", "fix-labeled", "upgrade-on-release"])
     expect(await checks.find((check) => check.id === `trigger.${name}`)?.run()).toEqual({
       ok: true,
     });

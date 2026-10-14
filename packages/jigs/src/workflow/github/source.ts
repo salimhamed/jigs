@@ -6,6 +6,7 @@ import type { PullRequestRef, RepositoryRef } from "../pull-requests/pull-reques
 export const GITHUB_PUSHES_SOURCE = "github.pushes";
 export const GITHUB_PULL_REQUESTS_SOURCE = "github.pullRequests";
 export const GITHUB_ISSUES_SOURCE = "github.issues";
+export const GITHUB_RELEASES_SOURCE = "github.releases";
 
 // An empty list would match nothing, which no one means.
 const names = z.array(z.string().min(1)).min(1);
@@ -104,6 +105,30 @@ export type GitHubIssueInputs = RepositoryRef & {
   number: number;
 };
 
+export const gitHubReleasesParamsSchema = z.strictObject(repositoryParams);
+
+/**
+ * Which releases a `github.releases` source starts runs for.
+ *
+ * - `installationName`: the GitHub App installation, as named on the hub,
+ *   whose repositories it watches.
+ * - `repositories`: `owner/repo` names, such as `acme/api`, in any case;
+ *   leaving it out watches them all.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubReleasesParams = z.input<typeof gitHubReleasesParamsSchema>;
+
+/**
+ * The inputs a `github.releases` source hands each run it starts.
+ *
+ * @group Factory and workflows
+ */
+export type GitHubReleaseInputs = RepositoryRef & {
+  /** The release's tag, such as `v1.2.0`. */
+  tag: string;
+};
+
 /**
  * Event-trigger sources on GitHub.
  *
@@ -186,5 +211,27 @@ export const github = {
    */
   issues(params: GitHubIssuesParams): SourceDescriptor {
     return { kind: GITHUB_ISSUES_SOURCE, params: { ...params } };
+  },
+  /**
+   * Start a run for each published release, with {@link GitHubReleaseInputs}
+   * as its inputs. A release starts at most one run, ever. Drafts and
+   * prereleases start none, nor does editing a release already published.
+   *
+   * @remarks
+   * The GitHub App must subscribe to the **Release** event and needs
+   * **Contents: read**.
+   *
+   * @example
+   * ```ts
+   * import { github } from "@jigs-ai/jigs";
+   *
+   * const source = github.releases({
+   *   installationName: "github-acme",
+   *   repositories: ["acme/api"],
+   * });
+   * ```
+   */
+  releases(params: GitHubReleasesParams): SourceDescriptor {
+    return { kind: GITHUB_RELEASES_SOURCE, params: { ...params } };
   },
 } as const;

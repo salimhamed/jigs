@@ -251,6 +251,7 @@ export default defineFactory({
 | `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
 | `github.pullRequests` | An open pull request that is not a draft | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels`, `baseBranches` |
 | `github.issues` | An open issue | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels` |
+| `github.releases` | A published release that is not a prerelease | `{ installationName, owner, repo, tag }` | `installationName`, `repositories` |
 
 `installationName` is required on every source.
 
@@ -258,7 +259,8 @@ A trigger's source needs its provider set up: see [PagerDuty](/guide/pagerduty)
 for `pagerduty.incidents`, [Linear](#linear-app) for `linear.agentSessions`,
 [Slack](/guide/slack) for `slack.messages` and `slack.mentions`, and a
 [GitHub App](/guide/hub-github) for the `github` sources, subscribed to
-**Push** for `github.pushes` and **Issues** for `github.issues`.
+**Push** for `github.pushes`, **Issues** for `github.issues` and **Release**
+for `github.releases`.
 `jigs doctor` checks the installation every trigger names. `jigs status` lists each trigger with its waiting, active and
 failed occurrences. Its runs show `trigger:<name>` as the trigger and, from
 the moment they start, the occurrence under SOURCE, such as
@@ -371,6 +373,34 @@ const triggers = {
       installationName: "github-acme",
       repositories: ["acme/api"],
       labels: ["agent"],
+    }),
+  },
+};
+```
+
+### GitHub releases {#github-releases}
+
+`github.releases` starts a run for each release published in the repositories
+its `installationName` reaches. Each run gets `installationName`, `owner`,
+`repo` and `tag`: the release's tag, such as `v1.2.0`.
+
+A release starts at most one run, ever, when it is published. Drafts and
+prereleases start none, and neither does editing a release already published.
+Releases start runs whoever published them, the factory's own App included.
+
+`repositories` takes `owner/repo` names, in any case.
+
+```ts
+import { github } from "@jigs-ai/jigs";
+
+// In defineFactory's `triggers`.
+const triggers = {
+  "deploy-releases": {
+    active: process.env.DEPLOY_RELEASES_ACTIVE === "true",
+    workflow: "deploy",
+    source: github.releases({
+      installationName: "github-acme",
+      repositories: ["acme/api"],
     }),
   },
 };

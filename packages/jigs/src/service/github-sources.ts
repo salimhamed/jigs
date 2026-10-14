@@ -1,7 +1,7 @@
 // The GitHub sources, read off the webhooks the hub passes on under GitHub's
 // event name. A push to a branch is one occurrence, keyed by the branch and
 // the commits it moved from and to; a pull request or an issue is one, keyed
-// by its number.
+// by its number; a release is one, keyed by its tag.
 
 import { z } from "zod";
 import { githubAuthFor } from "../providers/github-auth.ts";
@@ -9,14 +9,18 @@ import {
   GITHUB_ISSUES_SOURCE,
   GITHUB_PULL_REQUESTS_SOURCE,
   GITHUB_PUSHES_SOURCE,
+  GITHUB_RELEASES_SOURCE,
   type GitHubIssueInputs,
   type GitHubIssuesParams,
   type GitHubPullRequestsParams,
   type GitHubPushesParams,
   type GitHubPushInputs,
+  type GitHubReleaseInputs,
+  type GitHubReleasesParams,
   gitHubIssuesParamsSchema,
   gitHubPullRequestsParamsSchema,
   gitHubPushesParamsSchema,
+  gitHubReleasesParamsSchema,
 } from "../workflow/github/source.ts";
 import type { PullRequestRef } from "../workflow/pull-requests/pull-request.ts";
 import type { Source } from "./event-triggers/sources.ts";
@@ -61,6 +65,17 @@ const issueEventSchema = z.object({
   issue: issueSchema,
   repository: repositorySchema,
   sender: z.object({ id: z.number() }),
+});
+
+const releaseEventSchema = z.object({
+  action: z.string(),
+  release: z.object({
+    tag_name: z.string(),
+    draft: z.boolean(),
+    prerelease: z.boolean(),
+    published_at: z.iso.datetime({ offset: true }),
+  }),
+  repository: repositorySchema,
 });
 
 // A shape GitHub will send the same way every time is no reason to retry.
@@ -184,8 +199,38 @@ const GITHUB_ISSUES: Source<GitHubIssuesParams> = {
   describe: describeNumbered,
 };
 
+// No sender check, as for pushes: who published a release does not change that it shipped.
+const GITHUB_RELEASES: Source<GitHubReleasesParams> = {
+  provider: "github",
+  params: gitHubReleasesParamsSchema,
+  sampleInputs: {
+    installationName: "acme",
+    owner: "acme",
+    repo: "api",
+    tag: "v1.2.0",
+  } satisfies GitHubReleaseInputs,
+  async fromPush(params, { installationName, name, payload }) {
+    if (installationName !== params.installationName || name !== "release") return null;
+    const event = read(releaseEventSchema, payload, "a release event");
+    if (event === null) return null;
+    const { action, release, repository } = event;
+    const owner = repository.owner.login;
+    const repo = repository.name;
+    const tag = release.tag_name;
+    if (action !== "published" || release.draft || release.prerelease) return null;
+    if (!inRepositories(params.repositories, owner, repo)) return null;
+    return {
+      key: `${owner}/${repo}@${tag}`,
+      inputs: { installationName, owner, repo, tag } satisfies GitHubReleaseInputs,
+      at: new Date(release.published_at),
+    };
+  },
+  describe: ({ owner, repo, tag }) => `github ${String(owner)}/${String(repo)} ${String(tag)}`,
+};
+
 export const GITHUB_SOURCES = {
   [GITHUB_PUSHES_SOURCE]: GITHUB_PUSHES,
   [GITHUB_PULL_REQUESTS_SOURCE]: GITHUB_PULL_REQUESTS,
   [GITHUB_ISSUES_SOURCE]: GITHUB_ISSUES,
+  [GITHUB_RELEASES_SOURCE]: GITHUB_RELEASES,
 };

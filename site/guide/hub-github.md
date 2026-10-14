@@ -58,9 +58,10 @@ your own account's, choose **New GitHub App**. The form's sections, in order:
   **Status**. These wake the runs waiting on a pull request. The list is
   long, and **Status** is easy to miss: without it, factories miss CI that
   reports through commit statuses. Check **Push** too if a factory has a
-  `github.pushes` [trigger](/guide/configuration#github-pushes), and
+  `github.pushes` [trigger](/guide/configuration#github-pushes),
   **Issues** if one has a `github.issues`
-  [trigger](/guide/configuration#github-issues).
+  [trigger](/guide/configuration#github-issues), and **Release** if one has
+  a `github.releases` [trigger](/guide/configuration#github-releases).
 - **Where can this GitHub App be installed?**: **Only on this account**.
   Otherwise anyone can install it, and their events reach your factories.
 

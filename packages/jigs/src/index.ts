@@ -152,6 +152,8 @@ export {
   type GitHubPullRequestsParams,
   type GitHubPushesParams,
   type GitHubPushInputs,
+  type GitHubReleaseInputs,
+  type GitHubReleasesParams,
   github,
 } from "./workflow/github/source.ts";
 export {
