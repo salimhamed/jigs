@@ -193,13 +193,13 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
         <section className="space-y-3">
           <h2 className="font-semibold">General</h2>
           <div className={card}>
-            <SettingRow label="Name" hint={nameHints[app.provider]}>
+            <SettingRow label="Name" htmlFor="name" hint={nameHints[app.provider]}>
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
+                  id="name"
                   name="name"
                   required
                   defaultValue={app.name}
-                  aria-label="Name"
                   className={`${input} min-w-0 grow`}
                 />
                 <button type="submit" name="intent" value="rename" className={secondaryButton}>

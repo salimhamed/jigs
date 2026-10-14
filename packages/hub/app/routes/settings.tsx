@@ -24,14 +24,18 @@ export default function Settings({ loaderData, actionData }: Route.ComponentProp
     <div className="space-y-6">
       <PageHeader title="Settings" />
       <div className={`${card} max-w-4xl`}>
-        <SettingRow label="Organization name" hint="Shown at the top of every page.">
+        <SettingRow
+          label="Organization name"
+          htmlFor="organization-name"
+          hint="Shown at the top of every page."
+        >
           <Form method="post" className="flex flex-wrap gap-2">
             <input
+              id="organization-name"
               name="name"
               required
               defaultValue={loaderData.name}
               disabled={!loaderData.isAdmin}
-              aria-label="Organization name"
               className={`${input} min-w-0 grow`}
             />
             {loaderData.isAdmin && (

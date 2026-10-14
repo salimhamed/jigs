@@ -122,16 +122,18 @@ export function Field({
 /** A setting in a card of settings. */
 export function SettingRow({
   label,
+  htmlFor,
   hint,
   children,
 }: {
   label: string;
+  htmlFor?: string;
   hint: ReactNode;
   children: ReactNode;
 }) {
   return (
     <div className="p-5">
-      <Field label={label} hint={hint}>
+      <Field label={label} htmlFor={htmlFor} hint={hint}>
         <div className="max-w-xl">{children}</div>
       </Field>
     </div>
