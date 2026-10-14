@@ -271,7 +271,7 @@ const BARREL_EXPORTS: Record<string, string[]> = {
     "startService",
   ],
   "steps/human/index.ts": [],
-  "steps/workspaces/index.ts": ["provisionWorktree"],
+  "steps/workspaces/index.ts": ["provisionPullRequestWorktree", "provisionWorktree"],
   "steps/linear/index.ts": [
     "executeLinearAgentTurn",
     "listLinearAgentSessionPrompts",

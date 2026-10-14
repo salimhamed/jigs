@@ -51,16 +51,22 @@ const removeDirectory =
     return released("removed");
   };
 
-function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: string } {
-  if (row.repoDir === null || row.branch === null) {
-    throw new Error(`worktree record ${row.identity} has no clone or branch`);
-  }
+function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: string | null } {
+  if (row.repoDir === null) throw new Error(`worktree record ${row.identity} has no clone`);
   return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
 }
 
 const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
+  // A pull request's worktree has no branch: its commit is the pull request's.
+  if (branch === null) {
+    return async () => {
+      if (existsSync(path)) await git(["worktree", "remove", path], repoDir);
+      await git(["worktree", "prune"], repoDir);
+      return released("worktree removed");
+    };
+  }
   return async () => {
     const unmerged = await fetchOriginDefault(repoDir).then(
       () => countUnmergedCommits(repoDir, branch),

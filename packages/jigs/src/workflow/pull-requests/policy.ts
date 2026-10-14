@@ -30,3 +30,13 @@ export type MergeApproval = z.output<typeof mergeApprovalSchema>;
  * agent acting as the factory's GitHub App, never count. It changes nothing for label approval.
  */
 export type ApprovalCoverage = "latest-commit" | "any-commit";
+
+/**
+ * Whose consent a merge needs, chosen in workflow code for each merge.
+ *
+ * @remarks
+ * `operator`, the default, needs the approval `github.mergeApproval` asks for. `workflow` lets the
+ * workflow's own checks stand in for it, for a workflow that judges a pull request itself, such as
+ * one that tests a dependency update before merging it. Every other merge requirement still holds.
+ */
+export type MergeConsent = "operator" | "workflow";

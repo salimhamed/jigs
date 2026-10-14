@@ -159,6 +159,21 @@ test("a refusal jigs can wait out is kept apart from one only a new commit fixes
   expect(refusal({ state: "closed" })).toMatchObject({ transient: false });
 });
 
+test("a workflow's own consent stands in for the operator's and for nothing else", () => {
+  const refusal = (patch: Partial<Facts>, head = "new") =>
+    mergeRefusal(read({ reviews: [], ...patch }), head, { consent: "workflow" });
+  expect(mergeRefusal(read({ reviews: [] }), "new")).not.toBeNull();
+  expect(refusal({})).toBeNull();
+  expect(refusal({}, "old")).toMatchObject({ reason: expect.stringContaining("head moved") });
+  expect(refusal({ ci: "none" })).not.toBeNull();
+  expect(refusal({ ci: "pending" })).not.toBeNull();
+  expect(refusal({ ci: "red" })).not.toBeNull();
+  expect(refusal({ draft: true })).not.toBeNull();
+  expect(refusal({ state: "closed" })).not.toBeNull();
+  expect(refusal({ mergeState: "dirty" })).not.toBeNull();
+  expect(refusal({ mergeState: "blocked" })).not.toBeNull();
+});
+
 describe("an approval that covers any commit", () => {
   const anyCommit = (patch: Partial<Facts>) =>
     approvalState({ ...facts, ...patch }, "review", { covers: "any-commit" });

@@ -199,8 +199,9 @@ export {
   type StatusReason,
 } from "./workflow/pull-requests/marker.ts";
 export { blockedMergeNote, isPullRequestMergeReady } from "./workflow/pull-requests/merge-ready.ts";
-export type { ApprovalCoverage } from "./workflow/pull-requests/policy.ts";
+export type { ApprovalCoverage, MergeConsent } from "./workflow/pull-requests/policy.ts";
 export type {
+  MergeOptions,
   PullRequestReadOptions,
   PullRequestRef,
   RepositoryRef,
@@ -228,4 +229,4 @@ export type { SlackAuthor, SlackMessageSnapshot, SlackPost } from "./workflow/sl
 export { slack } from "./workflow/slack/sources.ts";
 export type { SlackQuestion, SlackReplyResult } from "./workflow/slack/wait-for-reply.ts";
 export { unreachable } from "./workflow/unreachable.ts";
-export type { Worktree } from "./workflow/workspaces/worktree.ts";
+export type { PullRequestWorktree, Worktree } from "./workflow/workspaces/worktree.ts";

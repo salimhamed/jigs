@@ -18,3 +18,23 @@ export interface Worktree {
   defaultBranch: string;
   baseSha: string;
 }
+
+/**
+ * A worktree checked out at a pull request's head commit, with no branch of its own.
+ *
+ * @remarks
+ * It is for checking the pull request as it stands, so it cannot be pushed. Pass `headSha` to
+ * `mergePullRequest` to merge exactly the commit that was checked. Commits made in it are not
+ * kept when the run's resources are released.
+ *
+ * @group Runtime and resources
+ */
+export interface PullRequestWorktree {
+  /** The named repository binding in the factory configuration. */
+  binding: string;
+  /** The binding's GitHub installation, as named on the hub, that reaches its repository. */
+  installationName: string;
+  path: string;
+  /** The pull request's head commit, which the worktree is checked out at. */
+  headSha: string;
+}

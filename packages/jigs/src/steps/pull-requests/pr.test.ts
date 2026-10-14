@@ -176,6 +176,14 @@ test("does not merge when the head or readiness changed after the gate wake", as
   expect(mergePr).not.toHaveBeenCalled();
 });
 
+test("a workflow consenting itself merges a pull request nobody approved", async () => {
+  vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, labels: [], reviews: [] });
+  expect(await mergePullRequest(pr, "head")).toMatchObject({ merged: false });
+  expect(await mergePullRequest(pr, "head", { consent: "workflow" })).toMatchObject({
+    merged: true,
+  });
+});
+
 test("a refusal says whether asking again could merge the same commit", async () => {
   vi.mocked(fetchPrSnapshot).mockResolvedValue({ ...snapshot, mergeState: "unstable" });
   expect(await mergePullRequest(pr, "head")).toMatchObject({ transient: true });

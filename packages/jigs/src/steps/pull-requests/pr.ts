@@ -22,7 +22,7 @@ import {
 import { GitHubApiError } from "../../providers/github-http.ts";
 import { parseGithubRemote } from "../../providers/github-remote.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
-import type { PullRequestReadOptions } from "../../workflow/pull-requests/pull-request.ts";
+import type { MergeOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { readPullRequestSnapshot } from "./fetch-state.ts";
 
@@ -191,11 +191,11 @@ const STATE_CHANGED = new Set([405, 409]);
 export async function mergePullRequest(
   pr: PullRequestRef,
   expectedHeadSha: string,
-  options: PullRequestReadOptions = {},
+  options: MergeOptions = {},
 ): Promise<MergeOutcome> {
   const before = await readPullRequestSnapshot(pr, options);
   if (before.merged) return { merged: true, mergeCommitSha: before.mergeCommitSha };
-  const refusal = mergeRefusal(before, expectedHeadSha);
+  const refusal = mergeRefusal(before, expectedHeadSha, options);
   if (refusal !== null) return { merged: false, ...refusal };
   const method = await allowedMergeMethod(pr);
   const message = await suppliedCommitMessageBody(pr, method);
@@ -222,7 +222,7 @@ export async function mergePullRequest(
   // stopped it. Retrying that on every wake would never end.
   return {
     merged: false,
-    ...(mergeRefusal(after, expectedHeadSha) ?? {
+    ...(mergeRefusal(after, expectedHeadSha, options) ?? {
       reason: `GitHub refused to merge ${expectedHeadSha} and still reports it as ${after.mergeState}`,
       transient: false,
     }),

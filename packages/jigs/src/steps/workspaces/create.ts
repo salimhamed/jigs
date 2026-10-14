@@ -77,6 +77,51 @@ export async function createWorktree(options: CutOptions): Promise<WorktreeFacts
   return cut;
 }
 
+/**
+ * Fetch a pull request's head into a ref only this caller uses: concurrent runs share the
+ * clone, and FETCH_HEAD is one file for all of them.
+ */
+export async function fetchPullRequestHead(
+  repoDir: string,
+  number: number,
+  runId: string,
+): Promise<string> {
+  const ref = `refs/jigs/${runId}/pull/${number}`;
+  await git(
+    ["fetch", "--no-write-fetch-head", "origin", `+refs/pull/${number}/head:${ref}`],
+    repoDir,
+  );
+  const sha = await git(["rev-parse", ref], repoDir);
+  // git's prune grace period keeps the commit until the worktree's HEAD holds it.
+  await git(["update-ref", "-d", ref], repoDir);
+  return sha;
+}
+
+/** A detached worktree at `sha`, or the one a retry of the same provisioning left there. */
+export async function detachedWorktree(
+  repoDir: string,
+  worktreePath: string,
+  sha: string,
+): Promise<void> {
+  const toplevel = await tryGit(["rev-parse", "--show-toplevel"], worktreePath);
+  if (
+    toplevel !== null &&
+    path.resolve(toplevel) === realpathSync(path.resolve(worktreePath)) &&
+    (await git(["rev-parse", "HEAD"], worktreePath)) === sha
+  ) {
+    return;
+  }
+  mkdirSync(path.dirname(worktreePath), { recursive: true });
+  await tryGit(["worktree", "prune"], repoDir);
+  if (existsSync(worktreePath)) {
+    throw new JigsError(
+      `${worktreePath} exists but is not a worktree at ${sha}; it was left untouched`,
+      "inspect it, keep any work in it, then remove it and retry",
+    );
+  }
+  await git(["worktree", "add", "--detach", worktreePath, sha], repoDir);
+}
+
 /** The worktree a retry of this run's own provisioning left at the path, on the branch. */
 export async function findWorktree(options: CutOptions): Promise<WorktreeFacts | null> {
   const { worktreePath, branch } = options;

@@ -414,6 +414,35 @@ The `linear-ticket-to-pr` [recipe](/guide/recipes) is a complete example: it
 claims a Linear ticket, moves its status between the phases, and writes its own
 ticket notes for stops and for a pull request that needs a person.
 
+### Merging a pull request your workflow checked
+
+A workflow can judge someone else's pull request itself, such as a dependency
+update, and merge it with no person involved. `provisionPullRequestWorktree`
+checks out the pull request's current head in a worktree for this run, with no
+branch to push, and returns that commit as `headSha`. Pass it to
+`mergePullRequest` so only the commit you checked can merge, and pass
+`consent: "workflow"` so your checks stand in for a person's approval:
+
+```ts
+import type { PullRequestRef } from "@jigs-ai/jigs";
+import { mergePullRequest, provisionPullRequestWorktree } from "#jigs/steps";
+
+// `isSafe` is your own check: an agent's verdict, or commands run in the worktree.
+export async function mergeIfSafe(pr: PullRequestRef, isSafe: (cwd: string) => Promise<boolean>) {
+  const tree = await provisionPullRequestWorktree({ binding: "api", number: pr.number });
+  if (!(await isSafe(tree.path))) return null;
+  return mergePullRequest(pr, tree.headSha, { consent: "workflow" });
+}
+```
+
+Everything else a merge needs still holds: the head is still `headSha`, the
+pull request is open, not a draft and not conflicting, at least one check ran
+and all passed, and GitHub reports it mergeable. A push after you checked moves
+the head, so the merge is refused until you check the new head in a new
+worktree. The worktree's own setup (`copy` and `postCreate`) runs as usual, and
+the worktree is removed with the run's other resources unless it has
+uncommitted changes. Commits made in it are not kept.
+
 ### Upgrading with runs parked
 
 A run parked in `followPullRequestToOutcome` replays the routines' steps when

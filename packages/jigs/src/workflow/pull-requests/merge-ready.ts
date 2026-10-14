@@ -1,4 +1,9 @@
-import { APPROVED_LABEL, type ApprovalCoverage, type MergeApproval } from "./policy.ts";
+import {
+  APPROVED_LABEL,
+  type ApprovalCoverage,
+  type MergeApproval,
+  type MergeConsent,
+} from "./policy.ts";
 import type {
   ApprovalState,
   PullRequestApproval,
@@ -94,10 +99,13 @@ export interface MergeRefusal {
  * build. `ci` closes that: it is green only when there is at least one check
  * and every one of them passed. The cost is deliberate — jigs never merges a
  * repository with no CI, so a person merges there.
+ *
+ * Under `workflow` consent the approval is the only requirement dropped.
  */
 export function mergeRefusal(
   snapshot: PullRequestSnapshot,
   expectedHeadSha: string,
+  { consent = "operator" }: { consent?: MergeConsent } = {},
 ): MergeRefusal | null {
   if (snapshot.headSha !== expectedHeadSha) {
     return {
@@ -116,7 +124,7 @@ export function mergeRefusal(
   }
   // Approving again is all this takes, and the approval names this same
   // commit, so the wake that carries it is the one that merges.
-  if (snapshot.approval.state !== "approved") {
+  if (consent === "operator" && snapshot.approval.state !== "approved") {
     return { reason: approvalMissing(snapshot.approval, expectedHeadSha), transient: true };
   }
   // GitHub says only `blocked`, never which rule, and the account jigs merges
