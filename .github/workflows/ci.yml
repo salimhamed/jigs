@@ -30,10 +30,7 @@ jobs:
     # registry touches Postgres. Without the URL the check skips the boot.
     services:
       postgres:
-        image: postgres:17-alpine
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        image: public.ecr.aws/docker/library/postgres:17-alpine
         env:
           POSTGRES_USER: jigs
           POSTGRES_PASSWORD: jigs

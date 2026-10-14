@@ -18,10 +18,7 @@ jobs:
     timeout-minutes: 15
     services:
       postgres:
-        image: postgres:17-alpine
-        credentials:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
+        image: public.ecr.aws/docker/library/postgres:17-alpine
         env:
           POSTGRES_USER: jigs
           POSTGRES_PASSWORD: jigs
