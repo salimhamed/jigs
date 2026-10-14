@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.12](https://github.com/salimhamed/jigs/compare/jigs-v0.104.11...jigs-v0.104.12) (2026-10-14)
+
+
+### Bug Fixes
+
+* **github:** stop prefixing pull request bodies with "Requested by" ([#692](https://github.com/salimhamed/jigs/issues/692)) ([8080e3b](https://github.com/salimhamed/jigs/commit/8080e3bd7f516aee0e41e0e281e2a60a82622d29))
+
 ## [0.104.11](https://github.com/salimhamed/jigs/compare/jigs-v0.104.10...jigs-v0.104.11) (2026-10-14)
 
 
