@@ -12,18 +12,20 @@ export const linearAgentSessionsParamsSchema = z.strictObject({
   teams: names.optional(),
   projects: names.optional(),
   labels: names.optional(),
+  creators: names.optional(),
 });
 
 /**
- * Which Linear agent sessions a `linear.agentSessions` source starts runs for,
- * matched on the session's issue. Each list matches any of its values; leaving
- * one out does not filter on it.
+ * Which Linear agent sessions a `linear.agentSessions` source starts runs for.
+ * Each list matches any of its values; leaving one out does not filter on it.
  *
  * - `installationName`: the Linear installation, as named on the hub, whose
  *   sessions it watches.
  * - `teams`: team keys, such as `ENG`, or team ids.
  * - `projects`: project ids, or the id at the end of a project's URL.
  * - `labels`: label names, as Linear shows them.
+ * - `creators`: emails of the people who started the session, by delegating
+ *   the issue to the agent or mentioning it, in any case.
  *
  * @group Factory and workflows
  */

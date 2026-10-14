@@ -87,6 +87,11 @@ export const LINEAR_AGENT_SESSIONS: Source<LinearAgentSessionsParams> = {
       !params.teams.some((team) => [issue.team.key, issue.team.id].includes(team))
     )
       return null;
+    if (
+      params.creators &&
+      !params.creators.some((email) => email.toLowerCase() === creator.email.toLowerCase())
+    )
+      return null;
     if (params.projects || params.labels) {
       const filing = await readFiling(issue.id, installationName);
       if (filing === null) return null;
