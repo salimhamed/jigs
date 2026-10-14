@@ -233,6 +233,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
             >
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
+                  key={app.description}
                   name="description"
                   maxLength={appDescriptionLength}
                   defaultValue={app.description ?? ""}
