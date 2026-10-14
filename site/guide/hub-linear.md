@@ -2,7 +2,7 @@
 
 Factories act on Linear as a Linear OAuth app your [hub](/guide/hub) holds, so
 their messages and mentions reach people like anyone else's. People can
-mention the app on an issue or assign an issue to it, as they would a
+mention the app on an issue or delegate an issue to it, as they would a
 teammate. The hub receives the app's webhooks, holds each workspace's tokens
 and refreshes them.
 

@@ -108,7 +108,7 @@ request in the session, call the `setLinearAgentSessionUrls` step with
   message says where to act." The reply asks again, so the session stays
   awaiting input. The run does not read the message.
 - **A message sent after the run ended**, in a session the run opened itself,
-  gets the reply "This conversation has ended. Assign the issue to @app or
+  gets the reply "This conversation has ended. Delegate the issue to @app or
   mention @app to start a new run.", with your Linear app's name. A run
   started from a person's session (`acquireTicket({ session })`) gets the
   [conversation's ended reply](/guide/linear-conversations) instead.

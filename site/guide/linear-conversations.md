@@ -28,7 +28,7 @@ continues where Claude got to instead of starting over.
 
 When no one has replied for the idle time, the conversation ends and Linear
 shows nothing new. A later reply in that thread gets
-`This conversation has ended; mention @<app name> again to start a new one.`
+`This conversation has ended; delegate the issue to @<app name> or mention @<app name> to start a new one.`
 
 ## A conversation workflow
 

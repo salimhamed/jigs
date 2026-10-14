@@ -1,20 +1,22 @@
 # linear-ticket-to-pr
 
 This workflow takes a Linear ticket to a merged pull request. It starts when
-someone delegates a ticket to the factory's Linear app. It claims the ticket, asks in the ticket's Linear agent session when the requirements are
-unclear, has one agent build the change and another review it, opens the pull
-request, and follows its review comments and CI with the same builder session
-until it merges.
+someone delegates a ticket to the factory's Linear app. It claims the ticket,
+asks in the ticket's Linear agent session when the requirements are unclear,
+has one agent build the change and another review it, opens the pull request,
+and follows its review comments and CI with the same builder session until it
+merges.
 
-The run says everything in the Linear agent session the delegation opened: its questions, its notes, and its last word, "Merged" with
-the pull request, or why it stopped. Answer a question by replying in the
-session. A message sent while the run is working waits for its next question.
-Stop cancels the run, as `jigs cancel` does, and leaves the ticket's status
-as it is. Once the pull request opens, the session links to it and a note
-says it is open and waits on people. That keeps the session awaiting input,
-so Linear never marks it stale however long review takes. To change the work,
-comment on the pull request; to stop the run, close it. Every note mentions the
-operator (or the ticket's creator) and the assignee, so they get a Linear notification.
+The run says everything in the Linear agent session the delegation opened: its
+questions, its notes, and its last word, "Merged" with the pull request, or why
+it stopped. Answer a question by replying in the session. A message sent while
+the run is working waits for its next question. Stop cancels the run, as
+`jigs cancel` does, and leaves the ticket's status as it is. Once the pull request
+opens, the session links to it and a note says it is open and waits on people.
+That keeps the session awaiting input, so Linear never marks it stale however
+long review takes. To change the work, comment on the pull request; to stop the
+run, close it. Every note mentions the operator (or the ticket's creator) and
+the assignee, so they get a Linear notification.
 
 These files are your factory's code now. Edit them freely: upgrading jigs never
 overwrites them. The delivery itself, building, reviewing, publishing and

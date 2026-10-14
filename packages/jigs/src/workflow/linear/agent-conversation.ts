@@ -110,7 +110,7 @@ export async function linearAgentConversation(
   const lastStop = (prompts: LinearAgentPrompt[]) =>
     prompts.findLast((prompt) => prompt.signal === "stop");
   const { issue, promptContext } = session;
-  const assigned = `${issue.identifier} "${issue.title}" was delegated to you.`;
+  const delegated = `${issue.identifier} "${issue.title}" was delegated to you.`;
   let opening: ConversationMessage | undefined = {
     uuid: session.session,
     author: session.creator.name,
@@ -118,8 +118,8 @@ export async function linearAgentConversation(
       "comment" in session
         ? (promptContext ?? session.comment)
         : promptContext === null
-          ? assigned
-          : `${assigned}\n\n${promptContext}`,
+          ? delegated
+          : `${delegated}\n\n${promptContext}`,
   };
   let turns = 0;
 
