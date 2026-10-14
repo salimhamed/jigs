@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.106.0](https://github.com/salimhamed/jigs/compare/jigs-v0.105.0...jigs-v0.106.0) (2026-10-14)
+
+
+### ⚠ BREAKING CHANGES
+
+* let a workflow merge a pull request it checked, and drop label approval ([#695](https://github.com/salimhamed/jigs/issues/695))
+
+### Features
+
+* let a workflow merge a pull request it checked, and drop label approval ([#695](https://github.com/salimhamed/jigs/issues/695)) ([6e38655](https://github.com/salimhamed/jigs/commit/6e386553baf37c6cce3e1eb58ed822f118701e2b))
+
 ## [0.105.0](https://github.com/salimhamed/jigs/compare/jigs-v0.104.12...jigs-v0.105.0) (2026-10-14)
 
 
