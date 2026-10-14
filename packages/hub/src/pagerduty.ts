@@ -2,7 +2,13 @@ import { createHmac, timingSafeEqual } from "node:crypto";
 import { type PagerDutyTokenResponse, pagerDutyScopes } from "@jigs-ai/hub-protocol";
 import { and, eq } from "drizzle-orm";
 import express, { type Router } from "express";
-import { type App, findApp, findNamedInstallation, recordInstallation } from "./apps.ts";
+import {
+  type App,
+  appDescription,
+  findApp,
+  findNamedInstallation,
+  recordInstallation,
+} from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
@@ -34,6 +40,7 @@ interface PagerDutyAppSecrets {
 /** What an admin copies from a PagerDuty app they made by hand, and the account it acts in. */
 export interface PagerDutyAppInput {
   name: string;
+  description?: string;
   clientId: string;
   clientSecret: string;
   subdomain: string;
@@ -116,6 +123,8 @@ export async function addPagerDutyApp(
   input: PagerDutyAppInput,
   { apiUrl = defaultApiUrl, restApiUrl = defaultRestApiUrl }: PagerDutyApiUrls = {},
 ): Promise<{ app: App } | { error: string }> {
+  const described = appDescription(input.description);
+  if ("error" in described) return described;
   if (!input.name || !input.clientId || !input.clientSecret || !input.subdomain || !input.from) {
     return {
       error: "Enter the name, client ID, client secret, account subdomain and from email.",
@@ -139,6 +148,7 @@ export async function addPagerDutyApp(
         organizationId,
         provider: "pagerduty",
         name: input.name,
+        description: described.description,
         externalId: input.clientId,
         settings: {},
         secrets: encryptJson<PagerDutyAppSecrets>(encryptionKey, {

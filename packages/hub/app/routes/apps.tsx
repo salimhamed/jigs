@@ -57,6 +57,11 @@ export default function Apps({ loaderData }: Route.ComponentProps) {
                     <Link to={`/apps/${app.id}`} className={link}>
                       {app.name}
                     </Link>
+                    {app.description && (
+                      <div className="max-w-sm truncate text-zinc-500" title={app.description}>
+                        {app.description}
+                      </div>
+                    )}
                   </td>
                   <td className="text-zinc-500">{providerNames[app.provider]}</td>
                   <td>

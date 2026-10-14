@@ -178,6 +178,8 @@ export const apps = pgTable(
       .references(() => organization.id, { onDelete: "cascade" }),
     provider: text("provider").$type<Provider>().notNull(),
     name: text("name").notNull(),
+    /** What the app is for, which only people on the hub see. */
+    description: text("description"),
     /** The provider's id for the app, which its provider events carry, such as a GitHub App ID. */
     externalId: text("external_id").notNull(),
     /** What the provider's own settings show, such as a GitHub App's client ID. */

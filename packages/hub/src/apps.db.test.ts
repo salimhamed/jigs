@@ -1,7 +1,7 @@
 import type { Provider } from "@jigs-ai/hub-protocol";
 import { eq } from "drizzle-orm";
 import { expect } from "vitest";
-import { assignApp, assignedApps, renameApp, unassignApp } from "./apps.ts";
+import { assignApp, assignedApps, renameApp, setAppDescription, unassignApp } from "./apps.ts";
 import * as schema from "./db/schema.ts";
 import { dbTest } from "./db/test-database.ts";
 import { addFactory } from "./factories.ts";
@@ -41,6 +41,27 @@ dbTest("renames an app of the Organization, keeping its settings", async () => {
   expect(stored).toMatchObject({ name: "Acme bot", settings: app.settings });
   const untouched = await db.query.apps.findFirst({ where: eq(schema.apps.id, theirs.id) });
   expect(untouched?.name).toBe(theirs.name);
+});
+
+dbTest("describes an app of the Organization, and clears the description", async () => {
+  const app = await newApp("github");
+  const theirs = await newApp("linear", "other");
+  const described = async () =>
+    (await db.query.apps.findFirst({ where: eq(schema.apps.id, app.id) }))?.description;
+
+  expect(await setAppDescription(db, organizationId, app.id, "Opens PRs")).toEqual({
+    description: "Opens PRs",
+  });
+  expect(await described()).toBe("Opens PRs");
+  expect(await setAppDescription(db, organizationId, app.id, "x".repeat(201))).toEqual({
+    error: "Keep the description to 200 characters.",
+  });
+  expect(await described()).toBe("Opens PRs");
+  expect(await setAppDescription(db, organizationId, app.id, "")).toEqual({ description: null });
+  expect(await described()).toBeNull();
+  expect(await setAppDescription(db, organizationId, theirs.id, "Mine")).toEqual({
+    error: "There is no such app.",
+  });
 });
 
 dbTest("assigns and unassigns apps from a factory, only within its Organization", async () => {

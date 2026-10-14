@@ -207,9 +207,9 @@ works once. The person opens the link and signs in with the GitHub account
 whose sign-in email that is. Until then the invite waits under **Pending
 invites**, where an admin can copy its link again or revoke it.
 
-Admins manage apps, members, settings and every factory: they add, rename and
-remove apps, name installations, invite people, change roles and change any
-factory. Members can see everything, and add and manage their own factories:
+Admins manage apps, members, settings and every factory: they add, rename,
+describe and remove apps, name installations, invite people, change roles and
+change any factory. Members can see everything, and add and manage their own factories:
 rename them, re-issue their tokens, connect and disconnect their apps, and
 remove them. A member who leaves the Organization loses those rights while
 they are out, though their factories still show them as the one who added
@@ -270,7 +270,8 @@ An app is your Organization's own identity on a provider: a GitHub App, a
 Linear OAuth app, a Slack app or a PagerDuty app. You create each one by hand
 on the provider, then add it under **Apps → Add app**. Its page on the hub
 shows the exact URLs and settings to put back on the provider, and installs
-or connects it. An admin can rename an app on its page.
+or connects it. An admin can rename an app on its page, and give it a short
+description, which only people on the hub see.
 
 - [GitHub App](/guide/hub-github)
 - [Linear app](/guide/hub-linear)

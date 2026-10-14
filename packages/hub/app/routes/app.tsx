@@ -1,7 +1,14 @@
 import { AlertTriangle, Download, ExternalLink, Link2, Trash2 } from "lucide-react";
 import type { ReactNode } from "react";
 import { data, Form, Link, redirect } from "react-router";
-import { isUuid, removeApp, renameApp, setInstallationName } from "../../src/apps.ts";
+import {
+  appDescriptionLength,
+  isUuid,
+  removeApp,
+  renameApp,
+  setAppDescription,
+  setInstallationName,
+} from "../../src/apps.ts";
 import { setPagerDutyFrom, setPagerDutyWebhookSecret } from "../../src/pagerduty.ts";
 import { providerAppTitles, providerNames } from "../../src/provider-names.ts";
 import { setSlackScopes } from "../../src/slack.ts";
@@ -65,6 +72,18 @@ export async function action({ context, request, params }: Route.ActionArgs) {
       const renamed = await renameApp(db, organizationId, params.id, field("name"));
       if ("error" in renamed) return renamed;
       return { message: `Renamed the app ${renamed.name}.` };
+    }
+    case "describe": {
+      const described = await setAppDescription(
+        db,
+        organizationId,
+        params.id,
+        field("description"),
+      );
+      if ("error" in described) return described;
+      return {
+        message: described.description ? "Saved the description." : "Cleared the description.",
+      };
     }
     case "webhookSecret": {
       const secret = field("webhookSecret");
@@ -133,6 +152,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
               </span>
             </>
           }
+          subtitle={app.description}
           parent={{ to: "/apps", label: "Apps" }}
         />
         <Details items={providerIds(app)} />
@@ -192,7 +212,7 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
       {isAdmin && (
         <section className="space-y-3">
           <h2 className="font-semibold">General</h2>
-          <div className={card}>
+          <div className={`${card} divide-y divide-zinc-200 dark:divide-zinc-800`}>
             <SettingRow label="Name" htmlFor="name" hint={nameHints[app.provider]}>
               <Form method="post" className="flex flex-wrap gap-2">
                 <input
@@ -203,6 +223,23 @@ export default function AppPage({ loaderData, actionData }: Route.ComponentProps
                   className={`${input} min-w-0 grow`}
                 />
                 <button type="submit" name="intent" value="rename" className={secondaryButton}>
+                  Save
+                </button>
+              </Form>
+            </SettingRow>
+            <SettingRow
+              label="Description"
+              hint="What the app is for. Only people on this hub see it; leave it empty to clear it."
+            >
+              <Form method="post" className="flex flex-wrap gap-2">
+                <input
+                  name="description"
+                  maxLength={appDescriptionLength}
+                  defaultValue={app.description ?? ""}
+                  aria-label="Description"
+                  className={`${input} min-w-0 grow`}
+                />
+                <button type="submit" name="intent" value="describe" className={secondaryButton}>
                   Save
                 </button>
               </Form>
