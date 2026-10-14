@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.104.6](https://github.com/salimhamed/jigs/compare/jigs-v0.104.5...jigs-v0.104.6) (2026-10-14)
+
+
+### Features
+
+* **hub:** invite links last 7 days ([#676](https://github.com/salimhamed/jigs/issues/676)) ([fa605bd](https://github.com/salimhamed/jigs/commit/fa605bd24df0d98a2d3f1a2315d526d580e7f4e2))
+
 ## [0.104.5](https://github.com/salimhamed/jigs/compare/jigs-v0.104.4...jigs-v0.104.5) (2026-10-12)
 
 
