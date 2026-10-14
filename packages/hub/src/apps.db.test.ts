@@ -53,6 +53,9 @@ dbTest("describes an app of the Organization, and clears the description", async
     description: "Opens PRs",
   });
   expect(await described()).toBe("Opens PRs");
+  expect(await setAppDescription(db, organizationId, app.id, "Opens\n PRs ")).toEqual({
+    description: "Opens PRs",
+  });
   expect(await setAppDescription(db, organizationId, app.id, "x".repeat(201))).toEqual({
     error: "Keep the description to 200 characters.",
   });
