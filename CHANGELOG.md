@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.104.9](https://github.com/salimhamed/jigs/compare/jigs-v0.104.8...jigs-v0.104.9) (2026-10-14)
+
+
+### Features
+
+* **hub:** describe apps ([#680](https://github.com/salimhamed/jigs/issues/680)) ([c2189a1](https://github.com/salimhamed/jigs/commit/c2189a13fdb1b09677c0a274372d566c1f7d2960))
+
+
+### Bug Fixes
+
+* run Claude Code subagents in the foreground so a step gets their work ([#673](https://github.com/salimhamed/jigs/issues/673)) ([24f5c70](https://github.com/salimhamed/jigs/commit/24f5c707562738609ef690740e017aa321e81095))
+
 ## [0.104.8](https://github.com/salimhamed/jigs/compare/jigs-v0.104.7...jigs-v0.104.8) (2026-10-14)
 
 
