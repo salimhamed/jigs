@@ -149,6 +149,24 @@ test("teams match the issue's team key or id without reading the issue", async (
   expect(await source.fromPush({ ...ACME, teams: ["OPS"] }, from(created()))).toBeNull();
 });
 
+test("creators match who started the session, in any case, without reading the issue", async () => {
+  expect(
+    await source.fromPush(
+      { ...ACME, creators: ["grace@example.com", "ada@example.com"] },
+      from(created()),
+    ),
+  ).not.toBeNull();
+  expect(
+    await source.fromPush({ ...ACME, creators: ["Ada@Example.com"] }, from(created())),
+  ).not.toBeNull();
+  expect(
+    await source.fromPush(
+      { ...ACME, creators: ["grace@example.com"], labels: ["agent"] },
+      from(created()),
+    ),
+  ).toBeNull();
+});
+
 test("projects and labels match what the issue is filed under, read in the trigger's installation", async () => {
   const issueFiling = filed({
     project: { id: "d1e2f3a4-0000-4000-8000-000000000001", slugId: "8f2c1a9b7e3d" },

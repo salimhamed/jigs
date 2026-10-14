@@ -246,7 +246,7 @@ export default defineFactory({
 | Source | Occurrence | Inputs | Parameters |
 | --- | --- | --- | --- |
 | `pagerduty.incidents` | A new incident, whatever its status | `{ installationName, incident }` | `installationName`, `services`, `teams`, `urgencies` |
-| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels` |
+| `linear.agentSessions` | A mention of the Linear app on an issue, or an issue assigned to it | `{ session, installationName, issue, comment, promptContext, creator }` | `installationName`, `teams`, `projects`, `labels`, `creators` |
 | `slack.messages`, `slack.mentions` | A top-level message, or one that mentions the bot | `{ installationName, channel, ts }` | `installationName`, `channels` |
 | `github.pushes` | A push to a branch | `{ installationName, owner, repo, branch, before, after }` | `installationName`, `repositories`, `branches` |
 | `github.pullRequests` | An open pull request that is not a draft | `{ installationName, owner, repo, number }` | `installationName`, `repositories`, `authors`, `labels`, `baseBranches` |
@@ -428,7 +428,9 @@ the app at work while the run starts. Each run gets:
 - `creator`: the `id`, `name` and `email` of who started it.
 
 `teams` takes team keys such as `ENG` or team ids, `projects` takes project
-ids or the id at the end of a project's URL, and `labels` takes label names.
+ids or the id at the end of a project's URL, `labels` takes label names, and
+`creators` takes the emails, in any case, of the people whose sessions start
+runs: whoever assigned the issue to the app or mentioned it.
 Sessions not on an issue start no run, and neither do sessions no person
 started, such as the ones ticket runs open.
 
