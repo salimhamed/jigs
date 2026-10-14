@@ -2,9 +2,11 @@ import { hkdfSync } from "node:crypto";
 import { APIError, betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 import { createAuthMiddleware } from "better-auth/api";
+import type { OAuth2Tokens } from "better-auth/oauth2";
 import { organization } from "better-auth/plugins";
 import { adminAc, memberAc } from "better-auth/plugins/organization/access";
-import { and, eq, gt } from "drizzle-orm";
+import type { GithubProfile } from "better-auth/social-providers";
+import { and, eq, gt, inArray } from "drizzle-orm";
 import type { HubConfig } from "./config.ts";
 import type { HubDatabase } from "./db/database.ts";
 import * as schema from "./db/schema.ts";
@@ -52,6 +54,7 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
       github: {
         clientId: config.signInGithubClientId,
         clientSecret: config.signInGithubClientSecret,
+        getUserInfo: (token) => githubUser(db, token),
       },
     },
     databaseHooks: {
@@ -102,6 +105,39 @@ export function createAuth(config: HubConfig, db: HubDatabase) {
       }),
     ],
   });
+}
+
+// GitHub sign-in names the profile's public email, else the primary one. An invitation may name
+// any verified email on the account, so the one with a pending invitation comes first.
+async function githubUser(db: HubDatabase, { accessToken }: OAuth2Tokens) {
+  const headers = { authorization: `Bearer ${accessToken}`, "user-agent": "hub" };
+  const [profileResponse, emailsResponse] = await Promise.all([
+    fetch("https://api.github.com/user", { headers }),
+    fetch("https://api.github.com/user/emails", { headers }),
+  ]);
+  if (!profileResponse.ok || !emailsResponse.ok) return null;
+  const profile = (await profileResponse.json()) as GithubProfile;
+  const emails = (await emailsResponse.json()) as {
+    email: string;
+    primary: boolean;
+    verified: boolean;
+  }[];
+  const verified = emails.filter((e) => e.verified).map((e) => e.email.toLowerCase());
+  const invited = await db.query.invitation.findFirst({
+    columns: { email: true },
+    where: and(inArray(schema.invitation.email, verified), pendingInvitation()),
+  });
+  const email = invited?.email ?? profile.email ?? emails.find((e) => e.primary)?.email;
+  if (!email) return null;
+  return {
+    user: {
+      name: profile.name || profile.login,
+      email,
+      image: profile.avatar_url,
+      emailVerified: verified.includes(email.toLowerCase()),
+    },
+    data: profile,
+  };
 }
 
 type Person = { email: string; emailVerified?: boolean | null };
