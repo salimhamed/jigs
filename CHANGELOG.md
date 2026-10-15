@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.2](https://github.com/salimhamed/jigs/compare/jigs-v0.108.1...jigs-v0.108.2) (2026-10-15)
+
+
+### Features
+
+* run a binding's preRemove commands before removing its worktree ([#712](https://github.com/salimhamed/jigs/issues/712)) ([96e9d72](https://github.com/salimhamed/jigs/commit/96e9d725a0d263c674f0e81981e952c85d17da1c))
+
 ## [0.108.1](https://github.com/salimhamed/jigs/compare/jigs-v0.108.0...jigs-v0.108.1) (2026-10-15)
 
 
