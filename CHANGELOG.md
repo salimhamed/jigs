@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.108.1](https://github.com/salimhamed/jigs/compare/jigs-v0.108.0...jigs-v0.108.1) (2026-10-15)
+
+
+### Features
+
+* add jigs service start to start the built service without rebuilding ([#709](https://github.com/salimhamed/jigs/issues/709)) ([d78a8ae](https://github.com/salimhamed/jigs/commit/d78a8aec362ede608a12d9af2c71ba82e58157c1))
+
 ## [0.108.0](https://github.com/salimhamed/jigs/compare/jigs-v0.107.3...jigs-v0.108.0) (2026-10-15)
 
 
