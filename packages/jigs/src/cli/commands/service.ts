@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, statSync } from "node:fs";
-import { type ResolvedService, resolveService } from "../../config/factory-config.ts";
+import { resolveService } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { parsePs, type ServiceTarget } from "../../service/process-tree.ts";
@@ -27,24 +27,20 @@ import {
   writeServiceRecord,
 } from "./service-record.ts";
 
-interface Launched {
-  pid: number;
-  service: ResolvedService;
-}
-
 // Ends what a service that died without a stop left running, then spawns a
-// new one. Undefined when the recorded service is still running.
-async function launch(deps: ServiceLifecycleDeps): Promise<Launched | undefined> {
+// new one. False when the recorded service is still running.
+async function launch(deps: ServiceLifecycleDeps): Promise<boolean> {
   const { out, processes = nodeProcesses } = deps;
   const ctx = currentFactoryContext();
   const service = resolveService(ctx);
   const { slug, serviceUrl } = service;
   const releaseExclusion = acquireServiceExclusion(slug, "start");
+  let pid: number;
   try {
     const state = inspectService(slug, processes, { cleanUp: true });
     if (state.kind === "running") {
       out(`${slug} is already running at ${serviceUrl} ${detail(`pid ${state.pid}`)}`);
-      return undefined;
+      return false;
     }
     // A service that died without a stop can leave what it started running,
     // and the new service's record would lose track of it.
@@ -54,22 +50,20 @@ async function launch(deps: ServiceLifecycleDeps): Promise<Launched | undefined>
         out(`stopped ${leftovers.length} process(es) left by the previous service`);
       }
     }
-    return { pid: spawnService(deps, ctx.root, service), service };
+    pid = spawnService(deps, ctx.root, service);
   } finally {
     releaseExclusion();
   }
-}
-
-function reportStarted(out: (line: string) => void, { pid, service }: Launched): void {
-  out(`started ${service.slug} at ${service.serviceUrl} ${detail(`pid ${pid}`)}`);
+  out(`started ${slug} at ${serviceUrl} ${detail(`pid ${pid}`)}`);
   for (const line of indent(
     columns([
       ["dashboard", service.dashboardUrl],
-      ["logs", displayPath(serviceLogPath(service.slug))],
+      ["logs", displayPath(serviceLogPath(slug))],
     ]),
   )) {
     out(line);
   }
+  return true;
 }
 
 export type ServiceOutcome = "started" | "restarted" | "unchanged";
@@ -84,8 +78,7 @@ export async function ensureServiceCurrent(
   options: { restart?: boolean; beforeRestart: () => Promise<void> },
 ): Promise<ServiceOutcome> {
   const { processes = nodeProcesses } = deps;
-  const { root } = currentFactoryContext();
-  const { slug } = currentFactoryContext();
+  const { root, slug } = currentFactoryContext();
   let outcome: ServiceOutcome = "started";
   // Compared against the bundle the running process started from, not the
   // one on disk before this build: a restart refused last time must still
@@ -98,9 +91,16 @@ export async function ensureServiceCurrent(
     await stopService(deps);
     outcome = "restarted";
   }
-  const launched = await launch(deps);
-  if (launched !== undefined) reportStarted(deps.out, launched);
+  await launch(deps);
   return outcome;
+}
+
+/**
+ * Starts the service from the bundle already built and waits for it to boot,
+ * without installing, migrating or rebuilding. Leaves a running service as it is.
+ */
+export async function serviceStart(deps: ServiceLifecycleDeps): Promise<void> {
+  if (await launch(deps)) await awaitServiceReady(deps);
 }
 
 /** Waits for the recorded service to report itself ready. */

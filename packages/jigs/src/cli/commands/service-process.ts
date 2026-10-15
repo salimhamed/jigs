@@ -175,7 +175,7 @@ export function spawnService(
   if (!existsSync(entry)) {
     throw new JigsError(
       `no built service at ${entry}`,
-      `build this factory's service first: \`pnpm exec jigs build\` (in ${displayPath(factoryRoot)})`,
+      `build and start it: \`pnpm exec jigs up\` (in ${displayPath(factoryRoot)})`,
     );
   }
 
