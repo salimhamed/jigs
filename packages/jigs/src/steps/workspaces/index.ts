@@ -11,6 +11,7 @@
  * @packageDocumentation
  */
 
+export { listBindings } from "./list-bindings.ts";
 export {
   type PullRequestWorktreeRequest,
   provisionPullRequestWorktree,

@@ -79,7 +79,7 @@ test("the step wrappers are the step ids this repo has recorded", () => {
   const steps = [...wrappers.matchAll(/^export async function (\w+)\(/gm)]
     .map((match) => `step//./.jigs/steps//${match[1]}`)
     .sort();
-  expect(steps).toHaveLength(36);
+  expect(steps).toHaveLength(37);
   const recorded = readFileSync(
     path.join(packageRoot(), "e2e", "expected-ids.linear-ticket-to-pr.txt"),
     "utf8",
