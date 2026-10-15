@@ -17,7 +17,7 @@ import { addRecipe, recipeNames } from "./commands/recipe.ts";
 import { listResources, runResourcesPrune } from "./commands/resources.ts";
 import { launchRun } from "./commands/run.ts";
 import { showRuns } from "./commands/run-list.ts";
-import { serviceLogs, serviceStatus, stopService } from "./commands/service.ts";
+import { serviceLogs, serviceStart, serviceStatus, stopService } from "./commands/service.ts";
 import { resolveServiceUrl, usesFactoryService } from "./commands/service-client.ts";
 import { showRunStatus } from "./commands/status.ts";
 import { unbindRepo } from "./commands/unbind.ts";
@@ -68,6 +68,7 @@ Start and stop:
   down                      Stop the service and Postgres; data is kept
 
 Service process:
+  service start             Start the service from the current build
   service stop              Stop the service; Postgres keeps running
   service status            Report whether the service is running
   service logs              Show recent service output
@@ -347,6 +348,13 @@ resources
 const service = program
   .command("service")
   .description("supervise this factory's service process; Postgres is left running");
+
+service
+  .command("start")
+  .description("start this factory's service process from its last build, without rebuilding")
+  .action(async () => {
+    await serviceStart({ out });
+  });
 
 service
   .command("stop")

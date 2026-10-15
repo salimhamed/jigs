@@ -212,7 +212,8 @@ A suspended run holds its worktree because it will return to it. Automatic
 release handles terminal runs when its policy and Git safety checks allow it.
 For leftovers, inspect `jigs resources list` and `jigs resources prune`; both
 are read-only. To apply a preview, run `jigs service stop`, then
-`jigs resources prune --apply`; this works on macOS and Linux. Prune overrides
+`jigs resources prune --apply`, then `jigs service start` to bring the service
+back without a rebuild; this works on macOS and Linux. Prune overrides
 the release policy (the preview names what the policy kept, and why) but never
 the safety checks. Apply never stops anything: it refuses
 while the service or any process in its recorded process group is still

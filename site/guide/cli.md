@@ -96,10 +96,11 @@ jigs keeps each binding's clone and worktrees under
 Use `jigs up` and `jigs down` to start and stop the factory, and
 `jigs up --restart-service` to restart after changing the environment, such as
 `.env` or `.env.local`. The commands below
-inspect or stop only the service.
+start, stop or inspect only the service.
 
 | Command | What it does |
 | --- | --- |
+| `jigs service start` | Start the service from the last build, without installing, migrating or rebuilding. Does nothing if it is already running. |
 | `jigs service stop` | Stop the service and everything it started, giving in-flight work up to 10 seconds to finish. Postgres keeps running. |
 | `jigs service status` | Say whether the service runs, with its service and dashboard URLs. |
 | `jigs service logs` | Print the service's recent output. `--lines` sets how many. |
@@ -304,6 +305,7 @@ you add `--apply`. To apply:
 1. Run `jigs service stop`.
 2. Check the preview, optionally for one run with `--run <run>`.
 3. Run `jigs resources prune --apply`.
+4. Run `jigs service start`.
 
 Prune is your override of the release policy: it removes what the policy
 kept, what failed to release, and what the service never got to. The preview

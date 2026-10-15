@@ -103,6 +103,17 @@ export async function ensureServiceCurrent(
   return outcome;
 }
 
+/**
+ * Starts the service from the bundle already built and waits for it to boot,
+ * without installing, migrating or rebuilding. Leaves a running service as it is.
+ */
+export async function serviceStart(deps: ServiceLifecycleDeps): Promise<void> {
+  const launched = await launch(deps);
+  if (launched === undefined) return;
+  reportStarted(deps.out, launched);
+  await awaitServiceReady(deps);
+}
+
 /** Waits for the recorded service to report itself ready. */
 export async function awaitServiceReady(deps: ServiceLifecycleDeps): Promise<void> {
   const { out, processes = nodeProcesses } = deps;

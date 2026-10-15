@@ -16,6 +16,7 @@ import {
   awaitServiceReady,
   ensureServiceCurrent,
   serviceLogs,
+  serviceStart,
   serviceStatus,
   stopService,
 } from "./service.ts";
@@ -344,10 +345,32 @@ test("two factories supervise independently", async () => {
 test("start refuses when the factory has not built its service", async () => {
   const root = makeFactoryRepo(tmp);
   const io = fake();
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
   expect(err?.message).toContain(path.join(root, SERVICE_ENTRY));
-  expect(err?.hint).toContain("jigs build");
+  expect(err?.hint).toContain("jigs up");
   expect(io.spawns).toHaveLength(0);
+});
+
+test("service start runs the existing build and waits until it is ready", async () => {
+  const root = builtFactory();
+  const io = fake([booting("world"), READY]);
+
+  await serviceStart(deps(root, io));
+
+  expect(io.spawns).toHaveLength(1);
+  expect(io.probes).toHaveLength(2);
+  expect(lines[0]).toContain("started");
+});
+
+test("service start leaves a running service as it is", async () => {
+  const root = builtFactory();
+  const io = fake();
+  await startService(deps(root, io));
+
+  await serviceStart(deps(root, io));
+
+  expect(io.spawns).toHaveLength(1);
+  expect(lines.at(-1)).toContain("already running");
 });
 
 test("start replaces a record whose process is gone", async () => {

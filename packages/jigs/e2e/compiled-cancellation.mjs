@@ -338,7 +338,7 @@ export async function runCompiledCancellationMatrix({
     service(["service", "stop"]);
     serviceRunning = false;
     await wakeRun(db, delayed.runId);
-    service(["up", "--no-doctor"]);
+    service(["service", "start"]);
     serviceRunning = true;
     await until(
       async () => (await jobsFor(db, delayed.runId)).length === 0,
@@ -668,7 +668,7 @@ process.exit(0);`,
       OPENROUTER_API_KEY: "e2e-never-sent",
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service(["up", "--no-doctor"]);
+    service(["service", "start"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
@@ -765,7 +765,7 @@ process.exit(0);`,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service(["up", "--no-doctor"]);
+    service(["service", "start"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
@@ -856,7 +856,7 @@ process.exit(0);`,
       PATH: `${bin}${path.delimiter}${env.PATH}`,
       WORKFLOW_POSTGRES_WORKER_CONCURRENCY: "2",
     };
-    service(["up", "--no-doctor"]);
+    service(["service", "start"]);
     serviceRunning = true;
 
     const cancelled = await launchInlineRun(
