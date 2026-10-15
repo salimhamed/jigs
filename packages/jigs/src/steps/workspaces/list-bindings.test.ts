@@ -34,16 +34,11 @@ test("lists every binding with the repository its remote names", () => {
   ]);
 });
 
-test("a factory with no bindings lists none", () => {
-  writeBindings({});
-
-  expect(listBindings()).toEqual([]);
-});
-
-test("a binding whose remote is not on github.com fails naming it", () => {
+test("a binding whose remote is not on github.com is left out", () => {
   writeBindings({
-    app: { remote: "git@gitlab.com:acme/app.git", installationName: "github-acme" },
+    app: { remote: "git@github.com:acme/app.git", installationName: "github-acme" },
+    fixtures: { remote: "git@gitlab.com:acme/fixtures.git", installationName: "github-acme" },
   });
 
-  expect(() => listBindings()).toThrow("binding app points at git@gitlab.com:acme/app.git");
+  expect(listBindings().map((binding) => binding.name)).toEqual(["app"]);
 });

@@ -144,9 +144,9 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 
 Workflow code cannot read `jigs.config.ts`. To find which repositories the
 factory can work in, call `listBindings()` from `#jigs/steps`. It returns each
-binding's `name`, `installationName`, `owner` and `repo`, and fails when a
-binding's `remote` is not on github.com. A run that resumes gets the same list
-it read before.
+binding's `name`, `installationName`, `owner` and `repo`; bindings whose
+`remote` is not on github.com are left out. A run that resumes gets the same
+list it read before.
 
 ## `schedules` {#schedules}
 

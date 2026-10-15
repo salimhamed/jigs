@@ -63,7 +63,7 @@ export async function provisionPullRequestWorktree(
 }
 
 /**
- * List every binding in the factory's configuration, with the GitHub repository it points at.
+ * List every binding in the factory's configuration on GitHub, with the repository it points at.
  *
  * @group Workspaces and resources
  */

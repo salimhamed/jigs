@@ -5,8 +5,7 @@
  * binding's clone; `provisionPullRequestWorktree` checks out a pull request's
  * head instead. Call their generated `#jigs/steps` wrappers from workflow code so a resumed
  * workflow receives the recorded workspace information. The low-level functions
- * here belong inside a factory-owned `"use step"` implementation. `listBindings` reads
- * the bindings a worktree can be cut from.
+ * here belong inside a factory-owned `"use step"` implementation.
  *
  * @module steps/workspaces
  * @packageDocumentation
