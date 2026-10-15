@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.2](https://github.com/salimhamed/jigs/compare/jigs-v0.107.1...jigs-v0.107.2) (2026-10-15)
+
+
+### Bug Fixes
+
+* a needs-human ticket review must ask at least one question ([#702](https://github.com/salimhamed/jigs/issues/702)) ([a46e288](https://github.com/salimhamed/jigs/commit/a46e28883113ebc95f294642cfac9aaa00472978))
+
 ## [0.107.1](https://github.com/salimhamed/jigs/compare/jigs-v0.107.0...jigs-v0.107.1) (2026-10-15)
 
 
