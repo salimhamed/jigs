@@ -3,7 +3,7 @@
 
 // Better Auth's tables, with the organization plugin's: what `npx auth generate`
 // writes for the options in ../auth.ts.
-import type { MessageKind, Provider } from "@jigs-ai/hub-protocol";
+import type { EventOrigin, MessageKind, Provider } from "@jigs-ai/hub-protocol";
 import { sql } from "drizzle-orm";
 import {
   bigint,
@@ -266,11 +266,31 @@ export const providerEvents = pgTable(
     payload: jsonb("payload").notNull(),
     /** The provider's own id for the event, where it may send one event twice, such as Slack's `event_id`. */
     dedupeKey: text("dedupe_key"),
+    /** `hub` for an event a poller made from what it read on the provider. */
+    origin: text("origin").$type<EventOrigin>().default("provider").notNull(),
   },
   (table) => [
     unique("provider_events_app_dedupe_key").on(table.appId, table.dedupeKey),
     index("provider_events_organization_received_idx").on(table.organizationId, table.receivedAt),
   ],
+);
+
+/**
+ * How far each poller has read an installation's changes on its provider. A
+ * poll holds its row locked, so hubs sharing the database never poll one
+ * installation at once.
+ */
+export const pollMarkers = pgTable(
+  "poll_markers",
+  {
+    installationId: uuid("installation_id")
+      .notNull()
+      .references(() => installations.id, { onDelete: "cascade" }),
+    poller: text("poller").notNull(),
+    /** What the poller passes itself next time; `null` before its first poll. */
+    marker: text("marker"),
+  },
+  (table) => [primaryKey({ columns: [table.installationId, table.poller] })],
 );
 
 /** Every factory's messages, ordered by one sequence across all factories. */

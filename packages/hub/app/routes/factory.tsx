@@ -378,6 +378,14 @@ function EventRow({ factoryId, message }: { factoryId: string; message: Message 
         <td>{message.provider ? providerNames[message.provider] : "—"}</td>
         <td className={expandable ? "font-mono" : "text-zinc-500"}>
           {expandable ? message.name : "fell behind"}
+          {message.origin === "hub" && (
+            <span
+              title="The hub made this event from what it read on the provider, which sent none."
+              className="ml-2 rounded-full border border-zinc-300 px-2 py-0.5 font-sans text-xs text-zinc-500 dark:border-zinc-700"
+            >
+              hub
+            </span>
+          )}
         </td>
         <td className="whitespace-nowrap">
           <TimeAgo iso={message.receivedAt} />

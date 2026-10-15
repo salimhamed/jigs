@@ -6,9 +6,10 @@ import { readConfig, signInRedirectUri } from "./config.ts";
 import { connectDatabase, migrateDatabase } from "./db/database.ts";
 import { createFactoryApi } from "./factory-api.ts";
 import { createGitHubRoutes } from "./github.ts";
-import { createLinearRoutes, LinearTokens } from "./linear.ts";
+import { createLinearRoutes, dismissedSessionsPoller, LinearTokens } from "./linear.ts";
 import { MessageWaiters } from "./messages.ts";
 import { createPagerDutyRoutes } from "./pagerduty.ts";
+import { startPolling } from "./polling.ts";
 import { startRetention } from "./retention.ts";
 import { createHubApp } from "./server.ts";
 import { Shutdown } from "./shutdown.ts";
@@ -36,6 +37,7 @@ const web = await createWebApp(
 
 const { encryptionKey, publicUrl } = config;
 const linearTokens = new LinearTokens({ db, encryptionKey });
+const polling = startPolling(db, waiters, [dismissedSessionsPoller(linearTokens)]);
 const adminOf = (request: Request) => adminOrganization(auth, fromNodeHeaders(request.headers));
 const routers = [
   createFactoryApi({ db, waiters, encryptionKey, linearTokens }),
@@ -81,6 +83,7 @@ process.once("SIGTERM", async () => {
     code = 1;
   }
   await retention.stop();
+  await polling.stop();
   await web.close();
   await db.$client.end();
   process.exit(code);

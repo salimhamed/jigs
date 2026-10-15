@@ -242,6 +242,18 @@ test("a Linear event without a body is ignored", async () => {
   expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored event=");
 });
 
+test("an event the hub made says so in its log", async () => {
+  const payload = { action: "update", type: "Issue", data: { id: "issue-1" } };
+  await route({
+    provider: "linear",
+    installationName: "acme",
+    name: "Issue",
+    payload,
+    origin: "hub",
+  });
+  expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored event=Issue origin=hub");
+});
+
 test.each([
   [
     "Comment",

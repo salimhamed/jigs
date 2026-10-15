@@ -13,6 +13,7 @@ import { dbTest } from "./db/test-database.ts";
 import {
   addLinearApp,
   createLinearRoutes,
+  dismissedSessionsPoller,
   LinearTokens,
   linearCallbackPath,
   linearConnectPath,
@@ -20,6 +21,7 @@ import {
   linearWebhookPath,
 } from "./linear.ts";
 import { readMessages } from "./messages.ts";
+import { pollInstallation } from "./polling.ts";
 import {
   adminFromHeader,
   authorizeUrl,
@@ -45,6 +47,7 @@ const {
 } = setUpTestHub();
 let hub: string;
 let linearTokens: LinearTokens;
+let linearApi: string;
 
 interface Workspace {
   id: string;
@@ -58,6 +61,12 @@ const codes = new Map<string, { clientId: string; workspace: Workspace }>();
 const accessTokens = new Map<string, Workspace>();
 const refreshTokens = new Map<string, { clientId: string; workspace: Workspace }>();
 const activities: { token: string; input: unknown }[] = [];
+// Each workspace's agent sessions, listed a few at a time so a poll reads several pages.
+const sessions = new Map<
+  string,
+  { id: string; updatedAt: string; dismissedAt: string | null; issue: { identifier: string } }[]
+>();
+const SESSIONS_PAGE = 2;
 let issued = 0;
 let refreshes = 0;
 // Runs once, while the next refresh is out at Linear.
@@ -129,6 +138,22 @@ function fakeLinear() {
         response.json({ data: { agentActivityCreate: { success: true } } });
         return;
       }
+      if (query.includes("agentSessions")) {
+        const listed = (sessions.get(workspace.id) ?? []).toSorted((a, b) =>
+          b.updatedAt.localeCompare(a.updatedAt),
+        );
+        const start = Number((variables as { after?: string | null }).after ?? 0);
+        const end = start + SESSIONS_PAGE;
+        response.json({
+          data: {
+            agentSessions: {
+              nodes: listed.slice(start, end),
+              pageInfo: { hasNextPage: end < listed.length, endCursor: String(end) },
+            },
+          },
+        });
+        return;
+      }
       response.json({
         data: {
           viewer: { id: workspace.userId },
@@ -139,8 +164,8 @@ function fakeLinear() {
 }
 
 beforeAll(async () => {
-  const linear = await listen(fakeLinear());
-  linearTokens = new LinearTokens({ db, encryptionKey, apiUrl: linear });
+  linearApi = await listen(fakeLinear());
+  linearTokens = new LinearTokens({ db, encryptionKey, apiUrl: linearApi });
   hub = await serveHub({
     routes: createLinearRoutes({
       db,
@@ -149,7 +174,7 @@ beforeAll(async () => {
       publicUrl,
       linearTokens,
       adminOrganization: adminFromHeader,
-      apiUrl: linear,
+      apiUrl: linearApi,
     }),
     linearTokens,
   });
@@ -208,7 +233,8 @@ const installationOf = async (app: App, workspace: Workspace) => {
     .select()
     .from(schema.installations)
     .where(eq(schema.installations.appId, app.id));
-  expect(row?.externalId).toBe(workspace.id);
+  if (!row) throw new Error(`${app.name} has no installation`);
+  expect(row.externalId).toBe(workspace.id);
   return row;
 };
 
@@ -435,6 +461,70 @@ dbTest("acknowledges a new agent session itself, then sends it on", async () => 
     "AgentSessionEvent",
   ]);
 });
+
+dbTest(
+  "sends each session archived since the last poll once, and none from before the first",
+  async () => {
+    const linear = await newApp();
+    const workspace = newWorkspace();
+    await connect(linear.app, workspace);
+    const { factory } = await newFactory();
+    await assignApp(db, organizationId, factory.id, linear.app.id);
+    const installation = await installationOf(linear.app, workspace);
+    const poller = dismissedSessionsPoller(linearTokens, linearApi);
+    const poll = () => pollInstallation(db, waiters, poller, linear.app, installation);
+    const session = (id: string, updatedAt: string, dismissedAt: string | null = null) => ({
+      id,
+      updatedAt,
+      dismissedAt,
+      issue: { identifier: "ENG-1" },
+    });
+    const listed = [
+      session("archived-before", "2026-10-15T00:00:01.000Z", "2026-10-15T00:00:00.900Z"),
+      session("untouched", "2026-10-15T00:00:00.000Z"),
+    ];
+    sessions.set(workspace.id, listed);
+    await poll();
+    expect(await eventNames(factory.id)).toEqual([]);
+
+    // Its archive stamp falls behind the marker, but the change it made does not.
+    const archived = session("archived", "2026-10-15T00:01:00.000Z", "2026-10-15T00:00:00.950Z");
+    listed.push(
+      archived,
+      session("replied", "2026-10-15T00:01:01.000Z"),
+      session("created", "2026-10-15T00:01:02.000Z"),
+    );
+    await poll();
+    await poll();
+    archived.updatedAt = "2026-10-15T00:02:00.000Z";
+    await poll();
+
+    const messages = await readMessages(db, factory.id);
+    expect(messages).toEqual([
+      expect.objectContaining({
+        event: expect.objectContaining({
+          name: "AgentSessionEvent",
+          origin: "hub",
+          payload: {
+            type: "AgentSessionEvent",
+            action: "dismissed",
+            organizationId: workspace.id,
+            agentSession: session(
+              "archived",
+              "2026-10-15T00:01:00.000Z",
+              "2026-10-15T00:00:00.950Z",
+            ),
+          },
+        }),
+      }),
+    ]);
+    const [marker] = await db
+      .select()
+      .from(schema.pollMarkers)
+      .where(eq(schema.pollMarkers.installationId, installation.id));
+    expect(marker?.marker).toBe("2026-10-15T00:02:00.000Z");
+  },
+);
 
 dbTest("leaves a session the app opened itself unacknowledged, and sends it on", async () => {
   const linear = await newApp();

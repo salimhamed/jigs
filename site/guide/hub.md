@@ -261,8 +261,10 @@ from each, and lets whoever added the factory, or an admin, connect and
 disconnect apps, rename the factory, which keeps its token, re-issue its token
 or remove it. **Activity** is its event log, newest first: every provider
 event the hub kept for it, with when it arrived and whether the factory has
-confirmed it. Select an event to see its payload, and choose **Load older
-events** to see further back.
+confirmed it. An event marked **hub** is one the hub made from what it read
+on the provider, where the provider sends no webhook, such as a Linear agent
+session someone archived. Select an event to see its payload, and choose
+**Load older events** to see further back.
 
 ## Add apps and assign them {#apps}
 

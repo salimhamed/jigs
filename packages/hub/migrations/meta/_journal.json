@@ -15,6 +15,13 @@
       "when": 1791947856817,
       "tag": "0001_app-description",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1792025756308,
+      "tag": "0002_hub-polling",
+      "breakpoints": true
     }
   ]
 }
