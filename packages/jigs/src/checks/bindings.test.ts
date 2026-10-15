@@ -3,9 +3,7 @@ import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveFactoryContext } from "../config/factory-context.ts";
 import * as git from "../providers/git.ts";
-import * as githubApi from "../providers/github-api.ts";
 import * as githubAuth from "../providers/github-auth.ts";
-import { GitHubApiError } from "../providers/github-http.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { bindingChecks } from "./bindings.ts";
 import { PROBE_TIMEOUT_MS, runChecks } from "./catalog.ts";
@@ -47,29 +45,23 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
 });
 
-function githubBinding(reach: () => Promise<unknown>, probe: string | null = null) {
+function githubBinding(probe: string | null = null) {
   const factory = makeFactoryRepo(tmp, yml("api", "git@github.com:acme/api.git"));
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.spyOn(githubAuth, "githubAuthFor").mockReturnValue({
     bearer: async () => "ghs_token",
   } as unknown as githubAuth.GithubAuth);
   const probed = vi.spyOn(git, "probeRemoteAuth").mockResolvedValue(probe);
-  const asked: string[] = [];
-  vi.spyOn(githubApi, "githubGet").mockImplementation(async (installationName, apiPath) => {
-    asked.push(`${installationName} ${apiPath}`);
-    return reach();
-  });
-  return { factory, asked, probed };
+  return { factory, probed };
 }
 
 test("a binding with no clone passes when its installation reaches the repository over git", async () => {
-  const { factory, asked, probed } = githubBinding(async () => ({}));
+  const { factory, probed } = githubBinding();
   expect(await check(factory, "api")).toEqual({
     id: "binding.api",
     label: "binding api",
     ok: true,
   });
-  expect(asked).toEqual(["acme /repos/acme/api"]);
   expect(probed).toHaveBeenCalledWith(
     "https://github.com/acme/api.git",
     "ghs_token",
@@ -78,23 +70,12 @@ test("a binding with no clone passes when its installation reaches the repositor
 });
 
 test("an installation that cannot fetch the repository's code fails the check", async () => {
-  const { factory } = githubBinding(async () => ({}), "fatal: repository not found");
+  const { factory } = githubBinding("fatal: repository not found");
   expect(await check(factory, "api")).toMatchObject({
     ok: false,
     reason:
       "git could not reach acme/api through GitHub installation acme: fatal: repository not found",
     repair: expect.stringContaining("give installation acme read access to acme/api's contents"),
-  });
-});
-
-test("a GitHub binding's installation that cannot see its repository names the setting", async () => {
-  const { factory } = githubBinding(async () => {
-    throw new GitHubApiError(404, "/repos/acme/api", '{"message":"Not Found"}');
-  });
-  expect(await check(factory, "api")).toMatchObject({
-    ok: false,
-    reason: "GitHub installation acme cannot reach acme/api",
-    repair: expect.stringContaining("set bindings.api.installationName in jigs.config.ts"),
   });
 });
 

@@ -155,9 +155,8 @@ export async function diffSince(worktreePath: string, baseSha: string): Promise<
     : `${diff.slice(0, MAX_DIFF_CHARS)}\n… (diff truncated)`;
 }
 
-export async function deriveDefaultBranch(dir: string, remote = "origin"): Promise<string | null> {
-  const ref = await tryGit(["symbolic-ref", "--quiet", `refs/remotes/${remote}/HEAD`], dir);
-  if (ref === null) return null;
-  const prefix = `refs/remotes/${remote}/`;
-  return ref.startsWith(prefix) ? ref.slice(prefix.length) : null;
+export async function deriveDefaultBranch(dir: string): Promise<string | null> {
+  const ref = await tryGit(["symbolic-ref", "--quiet", "refs/remotes/origin/HEAD"], dir);
+  const prefix = "refs/remotes/origin/";
+  return ref?.startsWith(prefix) ? ref.slice(prefix.length) : null;
 }

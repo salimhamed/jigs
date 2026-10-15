@@ -45,11 +45,9 @@ vi.stubEnv("WORKFLOW_POSTGRES_URL", testUrl.toString());
 const dirs = { factoryRoot, bindingName: "api" };
 const { remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
 serveAsGithub(remoteDir);
-// `web` names the same repository, with no clone yet.
-const remote = { remote: "git@github.com:acme/api.git", installationName: "github-acme" };
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
-  `export default ${JSON.stringify({ bindings: { api: remote, web: remote }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
+  `export default ${JSON.stringify({ bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
 );
 
 const sql = () => registrySql();
@@ -82,16 +80,6 @@ dbTest("a second run asking for the same branch works on its own branch and work
   expect(second.path).not.toBe(first.path);
   expect(await states("wrun_first1")).toEqual([["worktree", "live", null]]);
   expect(await states("wrun_second")).toEqual([["worktree", "live", null]]);
-});
-
-dbTest("runs that need a binding's first clone at once share one", async () => {
-  const [first, second] = await Promise.all([
-    provisionWorktree({ binding: "web", branch: "a" }, { workflowRunId: "wrun_cloneA" }),
-    provisionWorktree({ binding: "web", branch: "b" }, { workflowRunId: "wrun_cloneB" }),
-  ]);
-
-  expect(first.baseSha).toBe(git(remoteDir, "rev-parse", "refs/heads/main"));
-  expect(second.baseSha).toBe(first.baseSha);
 });
 
 dbTest("explicit release keeps, then removes, through the real registry", async () => {

@@ -35,7 +35,9 @@ export async function ensureBindingClone(options: EnsureBindingCloneOptions): Pr
     await git(["init", "--bare", "--quiet", repoDir], path.dirname(repoDir));
   }
   await pointOriginAt(repoDir, url);
-  await git(["config", CLONE_INSTALLATION_KEY, installationName], repoDir);
+  // Unconditional writes would take config.lock against a concurrent `worktree add`.
+  if ((await tryGit(["config", CLONE_INSTALLATION_KEY], repoDir)) !== installationName)
+    await git(["config", CLONE_INSTALLATION_KEY, installationName], repoDir);
   if (cloned) return;
   await remoteGit(["fetch", "--quiet", "origin"], repoDir);
   await remoteGit(["remote", "set-head", "origin", "--auto"], repoDir);
