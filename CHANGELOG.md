@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.108.0](https://github.com/salimhamed/jigs/compare/jigs-v0.107.3...jigs-v0.108.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* a binding's remote must be a GitHub repository URL; jigs clones, fetches, pushes and checks it with the binding's GitHub App installation token instead of the machine's git credentials. Clones are made on a run's first worktree instead of at service start. Finish or cancel active runs before upgrading: a run whose worktree was cut before the upgrade cannot push until its binding's clone is provisioned again.
+
+### Features
+
+* clone bindings on first use with GitHub App credentials ([#706](https://github.com/salimhamed/jigs/issues/706)) ([a5d6e49](https://github.com/salimhamed/jigs/commit/a5d6e499f03bc0ff5c985cc33e0dab5c0d70e249))
+
 ## [0.107.3](https://github.com/salimhamed/jigs/compare/jigs-v0.107.2...jigs-v0.107.3) (2026-10-15)
 
 
