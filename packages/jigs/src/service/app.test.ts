@@ -300,6 +300,7 @@ test("GET /api/runs lists each run with the resources it recorded and their stat
     attempts: 0,
     repoDir: null,
     branch: null,
+    binding: null,
     createdAt: at,
     updatedAt: at,
   });
@@ -393,6 +394,7 @@ test("GET /api/runs/:runId reports the run's resources and claim from its state 
     attempts: 0,
     repoDir: null,
     branch: null,
+    binding: null,
     createdAt: new Date("2026-09-04T10:00:00.000Z"),
     updatedAt: new Date("2026-09-04T10:00:00.000Z"),
   };

@@ -1,4 +1,4 @@
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
@@ -8,6 +8,13 @@ import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
 import { decideRelease } from "./resource-kinds.ts";
 
+const preRemove = vi.hoisted(() => ({ commands: [] as string[] }));
+vi.mock("../../config/factory-context.ts", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("../../config/factory-context.ts")>()),
+  currentFactoryContext: () => ({
+    config: { bindings: { api: { preRemove: preRemove.commands, hookTimeoutMinutes: 1 } } },
+  }),
+}));
 vi.mock("../../providers/github-auth.ts", () => ({
   githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
 }));
@@ -59,6 +66,7 @@ function row(kind: string, identity: string, over: Partial<ResourceRow> = {}): R
     attempts: 0,
     repoDir: null,
     branch: null,
+    binding: null,
     createdAt: at,
     updatedAt: at,
     ...over,
@@ -140,6 +148,24 @@ test("a worktree already gone from disk is released and its admin entry pruned",
 
   expect((await releaseResource(tree, [])).state).toBe("released");
   expect(git(repoDir, "worktree", "list")).not.toContain(tree.identity);
+});
+
+test("the binding's preRemove runs in the worktree before it is removed", async () => {
+  const tree = { ...runWorktree("feat"), binding: "api" };
+  const seen = path.join(tmp, "seen");
+  preRemove.commands = [`test -f shipped.txt && pwd > ${seen}`];
+
+  expect((await releaseResource(tree, [])).state).toBe("released");
+  expect(readFileSync(seen, "utf8").trim()).toBe(tree.identity);
+  expect(existsSync(tree.identity)).toBe(false);
+});
+
+test("a failing preRemove throws, and the tree stays", async () => {
+  const tree = { ...runWorktree("feat"), binding: "api" };
+  preRemove.commands = ["exit 3"];
+
+  await expect(releaseResource(tree, [])).rejects.toThrow("preRemove command failed (exited 3)");
+  expect(existsSync(tree.identity)).toBe(true);
 });
 
 test("a git failure during removal throws, and the tree stays", async () => {

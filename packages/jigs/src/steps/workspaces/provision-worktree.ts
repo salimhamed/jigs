@@ -161,6 +161,7 @@ async function provisionRecorded<T extends { path: string }>(
       url: pathToFileURL(facts.path).href,
       repoDir,
       branch,
+      binding: binding.name,
     });
 
     try {

@@ -13,27 +13,32 @@ import { bindingFilesDir } from "./layout.ts";
 // to copy and run; its own directory in the factory repo, `bindings/<name>/`,
 // is the root both ends of a copy are relative to.
 
-export class PostCreateFailedError extends Error {
+export class HookFailedError extends Error {
+  readonly hook: Hook;
   readonly command: string;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
   readonly stderr: string;
 
   constructor(
+    hook: Hook,
     command: string,
     exitCode: number | null,
     signal: NodeJS.Signals | null,
     stderr: string,
   ) {
     const how = signal !== null ? `killed by ${signal}` : `exited ${exitCode ?? "?"}`;
-    super(`postCreate command failed (${how}): ${command}${stderr === "" ? "" : `\n${stderr}`}`);
-    this.name = "PostCreateFailedError";
+    super(`${hook} command failed (${how}): ${command}${stderr === "" ? "" : `\n${stderr}`}`);
+    this.name = "HookFailedError";
+    this.hook = hook;
     this.command = command;
     this.exitCode = exitCode;
     this.signal = signal;
     this.stderr = stderr;
   }
 }
+
+type Hook = "postCreate" | "preRemove";
 
 // `fatal` is what the SDK's FatalError.is reads: a retry finds the same folder.
 export class CopySourceMissingError extends Error {
@@ -131,6 +136,7 @@ function copySources(
 }
 
 async function runCommand(
+  hook: Hook,
   command: string,
   worktreePath: string,
   env: NodeJS.ProcessEnv,
@@ -152,18 +158,20 @@ async function runCommand(
       stderr += chunk.toString();
       process.stderr.write(chunk);
     });
-    child.on("error", (err) => reject(new PostCreateFailedError(command, null, null, String(err))));
+    child.on("error", (err) => reject(new HookFailedError(hook, command, null, null, String(err))));
     // exit, not close: close waits for the stdio pipes, which a hook that
     // backgrounds a long-lived process keeps open long after sh itself is
     // gone — and the spawn timeout no longer applies to that wait.
     child.on("exit", (code, signal) => {
       if (code === 0) return resolve();
-      reject(new PostCreateFailedError(command, code, signal, tail(stderr)));
+      reject(new HookFailedError(hook, command, code, signal, tail(stderr)));
     });
   });
 }
 
-async function runPostCreate(
+/** Run a binding's hook commands in order in the worktree, failing on the first that fails. */
+export async function runHook(
+  hook: Hook,
   worktreePath: string,
   commands: string[],
   hookTimeoutMinutes: number,
@@ -176,7 +184,7 @@ async function runPostCreate(
   // One budget across the whole list, not per command.
   const deadline = Date.now() + hookTimeoutMinutes * 60_000;
   for (const command of commands) {
-    await runCommand(command, worktreePath, env, deadline - Date.now());
+    await runCommand(hook, command, worktreePath, env, deadline - Date.now());
   }
 }
 
@@ -189,5 +197,5 @@ export interface ProvisionWorktreeOptions {
 export async function provisionWorktree(options: ProvisionWorktreeOptions): Promise<void> {
   const { binding, factoryRoot, worktreePath } = options;
   copySources(binding.name, factoryRoot, worktreePath, binding.copy);
-  await runPostCreate(worktreePath, binding.postCreate, binding.hookTimeoutMinutes);
+  await runHook("postCreate", worktreePath, binding.postCreate, binding.hookTimeoutMinutes);
 }

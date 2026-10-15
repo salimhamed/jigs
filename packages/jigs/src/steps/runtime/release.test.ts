@@ -43,6 +43,7 @@ function row(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
     attempts: 0,
     repoDir: null,
     branch: null,
+    binding: null,
     createdAt: at,
     updatedAt: at,
     ...over,

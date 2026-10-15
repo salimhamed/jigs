@@ -76,6 +76,8 @@ export const bindingSchema = z.strictObject({
   // the worktree. For what git does not carry.
   copy: z.array(z.string()).default([]),
   postCreate: z.array(z.string()).default([]),
+  // Run in the worktree just before jigs removes it, such as stopping services postCreate started.
+  preRemove: z.array(z.string()).default([]),
   hookTimeoutMinutes: z.number().positive().default(10),
 });
 

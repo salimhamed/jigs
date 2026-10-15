@@ -1,5 +1,6 @@
 import { existsSync } from "node:fs";
 import { rm } from "node:fs/promises";
+import { currentFactoryContext } from "../../config/factory-context.ts";
 import { git, tryGit } from "../../providers/git.ts";
 import {
   RELEASABLE_KINDS,
@@ -12,6 +13,7 @@ import { piRunStatePath } from "../agents/pi/home.ts";
 import { claudePluginsPath } from "../agents/shared/skills.ts";
 import { fetchOriginDefault } from "../workspaces/create.ts";
 import { countUnmergedCommits, isWorktreeDirty } from "../workspaces/git-safety.ts";
+import { runHook } from "../workspaces/provision.ts";
 import type { ResourceRow } from "./registry.ts";
 import { runDirectory } from "./run-directory/index.ts";
 
@@ -56,6 +58,14 @@ function worktreeOf(row: ResourceRow): { path: string; repoDir: string; branch: 
   return { path: row.identity, repoDir: row.repoDir, branch: row.branch };
 }
 
+// Read from the config at removal, so an edited preRemove reaches existing worktrees.
+async function runPreRemove(row: ResourceRow): Promise<void> {
+  const binding =
+    row.binding === null ? undefined : currentFactoryContext().config.bindings[row.binding];
+  if (binding === undefined) return;
+  await runHook("preRemove", row.identity, binding.preRemove, binding.hookTimeoutMinutes);
+}
+
 const worktree: DecideRelease = async (row) => {
   const { path, repoDir, branch } = worktreeOf(row);
   if (existsSync(path) && (await isWorktreeDirty(path))) return keep("uncommitted work kept");
@@ -70,6 +80,7 @@ const worktree: DecideRelease = async (row) => {
           );
     // Forced only when merged, where nothing left in the tree can be lost.
     if (existsSync(path)) {
+      await runPreRemove(row);
       await git(["worktree", "remove", path, ...(unmerged === 0 ? ["--force"] : [])], repoDir);
     }
     await git(["worktree", "prune"], repoDir);

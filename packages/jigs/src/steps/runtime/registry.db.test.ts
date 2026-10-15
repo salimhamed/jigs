@@ -71,7 +71,7 @@ dbTest("a fresh database gets the resource and trigger tables, twice without cha
       "jigs_trigger_markers",
       "jigs_triggers",
     ]);
-    expect(await migrations(fresh.db)).toHaveLength(1);
+    expect(await migrations(fresh.db)).toHaveLength(2);
   } finally {
     await fresh.db.$client.end();
   }
@@ -87,6 +87,7 @@ dbTest(
       url: "file:///w/feat",
       repoDir: "/r/repo.git",
       branch: "feat",
+      binding: "api",
     });
     await setResourceState(db, key, "kept", "uncommitted work kept");
     await db.$client.query(
@@ -103,6 +104,7 @@ dbTest(
       reason: null,
       repoDir: "/r/repo.git",
       branch: "feat",
+      binding: "api",
       createdAt: new Date("2020-01-01"),
     });
     expect(row?.updatedAt.getTime()).toBeGreaterThan(new Date("2020-01-01").getTime());

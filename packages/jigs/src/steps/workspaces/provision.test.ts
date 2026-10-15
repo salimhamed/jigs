@@ -4,7 +4,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { FatalError } from "workflow";
 import { JigsError } from "../../errors.ts";
 import type { Binding } from "../../workflow/factory-schema.ts";
-import { CopySourceMissingError, PostCreateFailedError, provisionWorktree } from "./provision.ts";
+import { CopySourceMissingError, HookFailedError, provisionWorktree } from "./provision.ts";
 import { makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 // The binding's own directory in the factory repo to copy from and a worktree
@@ -34,6 +34,7 @@ function binding(overrides: Partial<Binding> = {}): Binding {
     remote: "git@github.com:acme/api.git",
     copy: [],
     postCreate: [],
+    preRemove: [],
     hookTimeoutMinutes: 10,
     ...overrides,
   };
@@ -140,14 +141,14 @@ test("a failing postCreate command rejects with the command and exit code", asyn
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(PostCreateFailedError);
-  expect((failure as PostCreateFailedError).exitCode).toBe(3);
-  expect((failure as PostCreateFailedError).command).toBe("exit 3");
+  expect(failure).toBeInstanceOf(HookFailedError);
+  expect((failure as HookFailedError).exitCode).toBe(3);
+  expect((failure as HookFailedError).command).toBe("exit 3");
 });
 
 test("commands after a failure never run", async () => {
   await expect(provision({ postCreate: ["exit 1", "touch after.txt"] })).rejects.toThrow(
-    PostCreateFailedError,
+    HookFailedError,
   );
   expect(existsSync(path.join(worktree, "after.txt"))).toBe(false);
 });
@@ -180,8 +181,8 @@ test("the hook timeout is a single budget across commands", async () => {
     () => null,
     (err: unknown) => err,
   );
-  expect(failure).toBeInstanceOf(PostCreateFailedError);
-  expect((failure as PostCreateFailedError).signal).toBe("SIGTERM");
+  expect(failure).toBeInstanceOf(HookFailedError);
+  expect((failure as HookFailedError).signal).toBe("SIGTERM");
   expect(existsSync(path.join(worktree, "never.txt"))).toBe(false);
 });
 

@@ -116,6 +116,7 @@ bindings: {
     installationName: "github-acme",
     copy: [".env"],
     postCreate: ["pnpm install"],
+    preRemove: ["docker compose down -v"],
     hookTimeoutMinutes: 20,
   },
 },
@@ -127,7 +128,8 @@ bindings: {
 | `installationName` | required | The [installation name](/guide/hub#installation-names) of the GitHub App installation that reaches the repository. jigs acts on the repository through it. |
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
-| `hookTimeoutMinutes` | `10` | The total time `postCreate` may take. |
+| `preRemove` | `[]` | Commands to run in a worktree just before jigs removes it, such as stopping services `postCreate` started. A worktree jigs keeps doesn't run them. If one fails, the worktree stays and jigs retries the removal later. |
+| `hookTimeoutMinutes` | `10` | The total time `postCreate` may take, and separately the total time `preRemove` may take. |
 
 Each `copy` entry is a path, or a glob, inside `bindings/<name>/` in the
 factory, and lands at the same path in the worktree. `bindings/app/.env`

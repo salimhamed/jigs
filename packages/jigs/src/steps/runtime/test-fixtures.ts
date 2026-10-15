@@ -51,11 +51,19 @@ export function memoryRegistry() {
         updatedAt: now,
       };
       if (existing === undefined) {
-        memoryRows.push({ repoDir: null, branch: null, createdAt: now, ...row, ...refreshed });
+        memoryRows.push({
+          repoDir: null,
+          branch: null,
+          binding: null,
+          createdAt: now,
+          ...row,
+          ...refreshed,
+        });
       } else {
         Object.assign(existing, refreshed, {
           ...(row.repoDir === undefined ? {} : { repoDir: row.repoDir }),
           ...(row.branch === undefined ? {} : { branch: row.branch }),
+          ...(row.binding === undefined ? {} : { binding: row.binding }),
         });
       }
     },
