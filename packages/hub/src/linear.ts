@@ -14,6 +14,7 @@ import {
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations } from "./db/schema.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
+import type { Poller } from "./polling.ts";
 import { decryptJson, encryptJson } from "./secrets.ts";
 import { parseWebhookJson, webhookBody } from "./webhooks.ts";
 
@@ -306,6 +307,78 @@ export function createLinearRoutes(options: {
   });
 
   return router;
+}
+
+interface PolledSession {
+  id: string;
+  updatedAt: string;
+  dismissedAt: string | null;
+}
+
+interface SessionsPage {
+  nodes: PolledSession[];
+  pageInfo: { hasNextPage: boolean; endCursor: string | null };
+}
+
+const sessionsQuery = `query ($after: String) {
+  agentSessions(first: 50, after: $after, orderBy: updatedAt) {
+    nodes { id status createdAt updatedAt dismissedAt endedAt issue { id identifier title url } }
+    pageInfo { hasNextPage endCursor }
+  }
+}`;
+
+/**
+ * Makes an `AgentSessionEvent` with the action `dismissed` for each agent
+ * session someone archived, which Linear sends no webhook for. Linear lists
+ * only the app's own sessions, most recently changed first, and archiving
+ * changes one, so the marker is the latest change read.
+ */
+export function dismissedSessionsPoller(
+  linearTokens: LinearTokens,
+  apiUrl = defaultApiUrl,
+): Poller {
+  return {
+    name: "linear-dismissed-sessions",
+    provider: "linear",
+    async poll(app, installation, marker) {
+      const access = await linearTokens.access(app, installation);
+      if ("failure" in access) throw new Error(access.failure);
+      const read = async (after: string | null) =>
+        (
+          await graphql<{ agentSessions: SessionsPage }>(apiUrl, access.token, sessionsQuery, {
+            after,
+          })
+        ).agentSessions;
+      let page = await read(null);
+      // The first poll only takes a marker, so nothing archived before the hub looked is sent.
+      if (marker === null) {
+        return { events: [], marker: page.nodes[0]?.updatedAt ?? new Date().toISOString() };
+      }
+      const since = Date.parse(marker);
+      const changed: PolledSession[] = [];
+      for (;;) {
+        const newer = page.nodes.filter((session) => Date.parse(session.updatedAt) > since);
+        changed.push(...newer);
+        if (newer.length < page.nodes.length || !page.pageInfo.hasNextPage) break;
+        page = await read(page.pageInfo.endCursor);
+      }
+      // Any changed session that is archived, not only one archived after the marker: Linear
+      // stamps `dismissedAt` a moment before the change, which can fall behind the marker.
+      const events = changed
+        .filter((session) => session.dismissedAt !== null)
+        .map((agentSession) => ({
+          name: "AgentSessionEvent",
+          payload: {
+            type: "AgentSessionEvent",
+            action: "dismissed",
+            organizationId: installation.externalId,
+            agentSession,
+          },
+          dedupeKey: `dismissed:${agentSession.id}`,
+        }));
+      return { events, marker: changed[0]?.updatedAt ?? marker };
+    },
+  };
 }
 
 /** What {@link LinearTokens.issue} answers: a token, or the status and message to refuse with. */

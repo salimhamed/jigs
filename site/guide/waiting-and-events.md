@@ -114,6 +114,8 @@ request in the session, call the `setLinearAgentSessionUrls` step with
   [conversation's ended reply](/guide/linear-conversations) instead.
 - **Stop** cancels the run after about 30 seconds, as `jigs cancel` does,
   and posts "Stopped." The ticket's status stays as it is.
+- **Archive** on a session, without stopping it first, cancels the run within
+  about a minute and posts nothing.
 - **Ordinary comments** on the ticket answer nothing. jigs never posts or
   reads them, though an agent with Linear's MCP tools may still comment.
 

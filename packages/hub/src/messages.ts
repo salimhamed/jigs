@@ -1,4 +1,9 @@
-import { type Message, maxMessagesPerResponse, type Provider } from "@jigs-ai/hub-protocol";
+import {
+  type EventOrigin,
+  type Message,
+  maxMessagesPerResponse,
+  type Provider,
+} from "@jigs-ai/hub-protocol";
 import { and, asc, eq, gt, sql } from "drizzle-orm";
 import type { HubDatabase, Transaction } from "./db/database.ts";
 import {
@@ -74,8 +79,10 @@ export interface ReceivedProviderEvent {
   provider: Provider;
   name: string;
   payload: unknown;
-  /** The provider's own id for the event; a second event with the same key for the app is not stored or sent. */
+  /** The provider's own id for the event, or the fact a poller made it of; a second event with the same key for the app is not stored or sent. */
   dedupeKey?: string;
+  /** `hub` for an event a poller made; `provider` when left out. */
+  origin?: EventOrigin;
 }
 
 /**
@@ -157,6 +164,7 @@ export async function readMessages(db: HubDatabase, factoryId: string): Promise<
         name: event.name,
         receivedAt: event.receivedAt.toISOString(),
         payload: event.payload,
+        origin: event.origin,
       },
     };
   });

@@ -97,6 +97,7 @@ export async function readEventLog(
       createdAt: factoryMessages.createdAt,
       provider: providerEvents.provider,
       name: providerEvents.name,
+      origin: providerEvents.origin,
       receivedAt: providerEvents.receivedAt,
     })
     .from(factoryMessages)
@@ -116,6 +117,7 @@ export async function readEventLog(
       kind: row.kind,
       provider: row.provider,
       name: row.name,
+      origin: row.origin,
       receivedAt: (row.receivedAt ?? row.createdAt).toISOString(),
       confirmed: row.position <= cursor,
     })),

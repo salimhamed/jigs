@@ -18,7 +18,10 @@ import { wake } from "./wake.ts";
 import { worthRetrying } from "./worth-retrying.ts";
 
 /** What routing reads of an event the hub received. */
-export type RoutedEvent = Pick<ProviderEvent, "provider" | "installationName" | "name" | "payload">;
+export type RoutedEvent = Pick<
+  ProviderEvent,
+  "provider" | "installationName" | "name" | "payload" | "origin"
+>;
 
 type NamedEvent = RoutedEvent & { installationName: string };
 
@@ -85,7 +88,7 @@ export async function routeProviderEvent(
 const quiet = (provider: string) => provider === "slack";
 
 // The event's name and, where the payload carries them, the ids that find it again.
-function describe({ provider, name, payload }: RoutedEvent): string {
+function describe({ provider, name, payload, origin }: RoutedEvent): string {
   const ids: Record<string, unknown> =
     provider === "slack"
       ? { channel: at(payload, "event", "channel"), ts: at(payload, "event", "ts") }
@@ -97,6 +100,7 @@ function describe({ provider, name, payload }: RoutedEvent): string {
         : provider === "pagerduty"
           ? { incident: at(payload, "event", "data", "id") }
           : { repo: at(payload, "repository", "full_name"), sha: at(payload, "sha") };
+  if (origin === "hub") ids.origin = origin;
   const found = Object.entries(ids).filter(([, id]) => typeof id === "string");
   return [`event=${name}`, ...found.map(([key, id]) => `${key}=${id}`)]
     .map(sanitizeForLog)

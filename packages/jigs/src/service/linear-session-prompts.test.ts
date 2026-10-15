@@ -514,3 +514,36 @@ test("a session a person started is answered by its occurrences, not as a ticket
   expect(deps.recorded).toHaveBeenCalled();
   expect(posted.size).toBe(0);
 });
+
+const dismissed = {
+  type: "AgentSessionEvent",
+  action: "dismissed",
+  organizationId: "org-1",
+  agentSession: { id: "session-1", dismissedAt: "2026-10-15T00:31:18.046Z" },
+};
+
+test("an archived session has the run holding it cancelled, with nothing posted", async () => {
+  holder = RUN;
+  expect(await route(dismissed)).toBe("woken");
+  expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(RUN);
+  expect(posted.size).toBe(0);
+  expect(timers).toEqual([]);
+});
+
+test("an archived session no run holds yet has its started runs cancelled and its unstarted ones withdrawn", async () => {
+  rows = [
+    row({ occurrence: "session-1", runId: OTHER_RUN }),
+    row({ occurrence: "session-1b", state: "pending", runId: null, attemptedAt: null }),
+  ];
+  statuses.set(OTHER_RUN, "running");
+  expect(await route(dismissed)).toBe("woken");
+  expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(OTHER_RUN);
+  expect(rows[1]?.state).toBe("skipped");
+  expect(posted.size).toBe(0);
+});
+
+test("an archived session with no live run is ignored", async () => {
+  expect(await route(dismissed)).toBe("ignored");
+  expect(deps.cancelRun).not.toHaveBeenCalled();
+  expect(posted.size).toBe(0);
+});

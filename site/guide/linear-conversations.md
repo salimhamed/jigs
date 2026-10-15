@@ -17,6 +17,8 @@ until the conversation goes quiet or someone presses stop.
 - **A failure** as an error.
 - **Stopped.** after someone presses stop. Claude is interrupted, and replies it
   has not read yet are dropped.
+- **Nothing** after someone archives the session. The run is cancelled within
+  about a minute.
 - **An Open button** that links to the run's dashboard. The link points at
   `localhost`, so it opens only on the factory's machine unless
   [`JIGS_DASHBOARD_URL`](/guide/configuration) names another address.

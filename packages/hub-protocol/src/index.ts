@@ -34,7 +34,17 @@ export interface ProviderEvent {
   receivedAt: string;
   /** The provider's JSON body, as received. */
   payload: unknown;
+  /**
+   * `provider` for an event the provider sent. `hub` for one the hub made from
+   * what it read on the provider, where the provider sends nothing; it has the
+   * provider's own name and payload shape, with an action the provider never
+   * sends.
+   */
+  origin: EventOrigin;
 }
+
+/** Where an event came from: see {@link ProviderEvent.origin}. */
+export type EventOrigin = "provider" | "hub";
 
 /** Every kind of message on the hub connection. */
 export const messageKinds = ["event", "fellBehind"] as const;

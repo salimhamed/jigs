@@ -49,6 +49,7 @@ const review = {
   repository: { name: "api", owner: { login: "acme" } },
 };
 const github = (name: string, payload: unknown): RoutedEvent => ({
+  origin: "provider",
   provider: "github",
   installationName: "acme",
   name,
@@ -235,11 +236,29 @@ test("an unroutable GitHub event is ignored", async () => {
 
 test("a Linear event without a body is ignored", async () => {
   expect(
-    await route({ provider: "linear", installationName: "acme", name: "", payload: null }),
+    await route({
+      origin: "provider",
+      provider: "linear",
+      installationName: "acme",
+      name: "",
+      payload: null,
+    }),
   ).toEqual({
     outcome: "ignored",
   });
   expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored event=");
+});
+
+test("an event the hub made says so in its log", async () => {
+  const payload = { action: "update", type: "Issue", data: { id: "issue-1" } };
+  await route({
+    provider: "linear",
+    installationName: "acme",
+    name: "Issue",
+    payload,
+    origin: "hub",
+  });
+  expect(log).toHaveBeenCalledExactlyOnceWith("[events] linear ignored event=Issue origin=hub");
 });
 
 test.each([
@@ -249,7 +268,15 @@ test.each([
   ],
   ["Issue", { action: "update", type: "Issue", data: { id: "issue-1" } }],
 ])("a Linear %s event outside an agent session wakes nothing", async (name, payload) => {
-  expect(await route({ provider: "linear", installationName: "acme", name, payload })).toEqual({
+  expect(
+    await route({
+      origin: "provider",
+      provider: "linear",
+      installationName: "acme",
+      name,
+      payload,
+    }),
+  ).toEqual({
     outcome: "ignored",
   });
   expect(resumeHookMock).not.toHaveBeenCalled();
@@ -261,6 +288,7 @@ test("a created Linear agent session goes to the triggers, and wakes nothing", a
   const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
   expect(
     await route({
+      origin: "provider",
       provider: "linear",
       installationName: "acme",
       name: "AgentSessionEvent",
@@ -297,6 +325,7 @@ test("a prompt in a Linear agent session wakes the run conversing in it; no trig
   };
   expect(
     await route({
+      origin: "provider",
       provider: "linear",
       installationName: "acme",
       name: "AgentSessionEvent",
@@ -312,6 +341,7 @@ test("a Linear agent session no trigger could read is a failure, logged", async 
   const payload = { type: "AgentSessionEvent", action: "created", agentSession: { id: "s1" } };
   expect(
     await route({
+      origin: "provider",
       provider: "linear",
       installationName: "acme",
       name: "AgentSessionEvent",
@@ -330,6 +360,7 @@ const incidentTriggered = () =>
     readFileSync(new URL("./fixtures/pagerduty-incident-triggered.json", import.meta.url), "utf8"),
   ) as { event: { event_type: string } };
 const page = (payload = incidentTriggered()): RoutedEvent => ({
+  origin: "provider",
   provider: "pagerduty",
   installationName: "acme",
   name: payload.event.event_type,
@@ -442,6 +473,7 @@ const callback = (event: object) => ({
   event,
 });
 const slack = (event: object = reply): RoutedEvent => ({
+  origin: "provider",
   provider: "slack",
   installationName: "acme",
   name: "message",
@@ -518,7 +550,9 @@ test.each([
 ] as const)(
   "a %s event from an installation with no name is ignored, logged",
   async (provider, payload) => {
-    expect(await route({ provider, installationName: null, name: "x", payload })).toEqual({
+    expect(
+      await route({ origin: "provider", provider, installationName: null, name: "x", payload }),
+    ).toEqual({
       outcome: "ignored",
     });
     expect(log).toHaveBeenCalledExactlyOnceWith(
@@ -537,7 +571,7 @@ test.each([
   ["pagerduty", incidentTriggered()],
   ["slack", callback(reply)],
 ] as const)("every %s event goes to the triggers", async (provider, payload) => {
-  await route({ provider, installationName: "acme", name: "x", payload });
+  await route({ origin: "provider", provider, installationName: "acme", name: "x", payload });
   expect(push).toHaveBeenCalledExactlyOnceWith(provider, {
     installationName: "acme",
     name: "x",
@@ -578,6 +612,7 @@ test("a session prompt whose wake fails fails the routing", async () => {
   };
   expect(
     await route({
+      origin: "provider",
       provider: "linear",
       installationName: "acme",
       name: "AgentSessionEvent",

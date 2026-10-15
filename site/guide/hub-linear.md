@@ -4,7 +4,8 @@ Factories act on Linear as a Linear OAuth app your [hub](/guide/hub) holds, so
 their messages and mentions reach people like anyone else's. People can
 mention the app on an issue or delegate an issue to it, as they would a
 teammate. The hub receives the app's webhooks, holds each workspace's tokens
-and refreshes them.
+and refreshes them. Linear sends no webhook when someone archives an agent
+session, so the hub checks each workspace for archived sessions once a minute.
 
 Use **one Linear app per purpose**. Every factory assigned an app hears every
 mention of it, so two factories that share one both act on the same mention.

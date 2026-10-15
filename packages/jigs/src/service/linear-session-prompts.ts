@@ -1,6 +1,7 @@
 // A reply or a stop in a Linear agent session goes to the run that holds the
 // session: into its live turn, or through its listening hook while it reads
-// the session. The session's own token keys the live turn and finds the run.
+// the session. The session's own token keys the live turn and finds the run,
+// which archiving the session cancels.
 
 import { getHookByToken } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
@@ -21,6 +22,13 @@ import { wake } from "./wake.ts";
 const headSchema = z.object({
   type: z.literal("AgentSessionEvent"),
   action: z.literal("prompted"),
+});
+
+// The hub makes this event when someone archives a session, which Linear sends nothing for.
+const dismissedSchema = z.object({
+  type: z.literal("AgentSessionEvent"),
+  action: z.literal("dismissed"),
+  agentSession: z.object({ id: z.string().min(1) }),
 });
 
 const promptedSchema = z.object({
@@ -109,7 +117,8 @@ const pendingStops = new Set<string>();
  * reads it again. A run that holds the session but is not listening is working or waiting on
  * people, and the person is told so. A session whose runs have ended is told so too, including
  * a session the app opened for a ticket run that has ended, and a stop no run takes in time is
- * ended here. Any other event is ignored.
+ * ended here. A session someone archived has the run holding it cancelled. Any other event is
+ * ignored.
  */
 export async function routeSessionPrompt(
   {
@@ -119,7 +128,11 @@ export async function routeSessionPrompt(
   }: { provider: string; installationName: string; payload: unknown },
   deps: SessionPromptDeps = sessionPromptDeps,
 ): Promise<PromptRoute> {
-  if (provider !== "linear" || !headSchema.safeParse(payload).success) return "ignored";
+  if (provider !== "linear") return "ignored";
+  const dismissed = dismissedSchema.safeParse(payload);
+  if (dismissed.success)
+    return cancelDismissed({ installationName, sessionId: dismissed.data.agentSession.id }, deps);
+  if (!headSchema.safeParse(payload).success) return "ignored";
   const parsed = promptedSchema.safeParse(payload);
   if (!parsed.success) {
     console.error(
@@ -213,6 +226,21 @@ export async function routeSessionPrompt(
         derivedUuid(["linear-session-ended", prompt.id]),
       );
   return "dropped";
+}
+
+// An archived session is gone from the person's view, so its runs are cancelled without a word.
+async function cancelDismissed(
+  session: { installationName: string; sessionId: string },
+  deps: SessionPromptDeps,
+): Promise<PromptRoute> {
+  const cancelled = await cancelSessionRuns(session, "it was archived", deps);
+  const at = `dismissed session=${session.sessionId}`;
+  if (cancelled === 0) {
+    console.log(`[events] linear ignored reason=no-live-run ${at}`);
+    return "ignored";
+  }
+  console.log(`[events] linear accepted ${at}`);
+  return "woken";
 }
 
 // A session the app opened is a ticket run's, and only an ended run leaves a response as the
@@ -332,6 +360,24 @@ function awaitStop(
   deps.later(() => attempt(0), STOP_GRACE_MS);
 }
 
+// Cancel the run holding the session and every live run of it a trigger started, and withdraw
+// any not yet started, since a cancelled run runs no more code. Returns how many it cancelled.
+async function cancelSessionRuns(
+  session: { installationName: string; sessionId: string },
+  reason: string,
+  deps: SessionPromptDeps,
+): Promise<number> {
+  const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
+  const state = await sessionState(session, deps, { withdraw: true });
+  const runs = new Set(holder === null ? [] : [holder]);
+  for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
+  for (const runId of runs) {
+    console.log(`[linear] cancelling run ${runId}: ${reason} in session ${session.sessionId}`);
+    await deps.cancelRun(runId);
+  }
+  return runs.size;
+}
+
 async function endUntakenStop(
   session: { installationName: string; sessionId: string },
   stop: Prompt,
@@ -343,18 +389,9 @@ async function endUntakenStop(
     (await linear.findActivity(onceActivityId(session.sessionId, stopAnswerKey(stop.id)))) !== null
   )
     return;
-  const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
-  const state = await sessionState(session, deps, { withdraw: true });
-  const runs = new Set(holder === null ? [] : [holder]);
-  for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
-  for (const runId of runs) {
-    console.log(
-      `[linear] cancelling run ${runId}: it did not take the stop in session ${session.sessionId}`,
-    );
-    await deps.cancelRun(runId);
-  }
+  const cancelled = await cancelSessionRuns(session, "it did not take the stop", deps);
   // A run that ended on its own during the grace period already posted its final message.
-  if (runs.size === 0) {
+  if (cancelled === 0) {
     const last = await linear.lastAppActivity(session.sessionId);
     if ((last?.type === "response" || last?.type === "error") && last.createdAt > stop.createdAt)
       return;
