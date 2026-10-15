@@ -23,6 +23,7 @@ export const resources = pgTable(
     attempts: integer("attempts").notNull().default(0),
     repoDir: text("repo_dir"),
     branch: text("branch"),
+    binding: text("binding"),
     createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
     updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
   },
@@ -88,7 +89,9 @@ export async function migrateRegistry(url: string): Promise<void> {
 /** Insert or refresh a row as live; kind-specific columns are kept unless given. */
 export async function recordResource(
   db: RegistrySql,
-  row: ResourceKey & Pick<ResourceRow, "url"> & Partial<Pick<ResourceRow, "repoDir" | "branch">>,
+  row: ResourceKey &
+    Pick<ResourceRow, "url"> &
+    Partial<Pick<ResourceRow, "repoDir" | "branch" | "binding">>,
 ): Promise<void> {
   const refreshed = {
     url: row.url,
@@ -97,6 +100,7 @@ export async function recordResource(
     attempts: 0,
     ...(row.repoDir === undefined ? {} : { repoDir: row.repoDir }),
     ...(row.branch === undefined ? {} : { branch: row.branch }),
+    ...(row.binding === undefined ? {} : { binding: row.binding }),
   };
   await db
     .insert(resources)

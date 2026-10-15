@@ -42,6 +42,7 @@ test("binding defaults and declared provisioning are validated", () => {
     installationName: "gh",
     copy: [],
     postCreate: ["npm ci"],
+    preRemove: [],
     hookTimeoutMinutes: 10,
   });
 });

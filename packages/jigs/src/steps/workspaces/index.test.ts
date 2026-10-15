@@ -5,7 +5,7 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { GITHUB_URL, serveAsGithub } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { cloneDir, worktreePath } from "./layout.ts";
-import { PostCreateFailedError } from "./provision.ts";
+import { HookFailedError } from "./provision.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 vi.mock("../../providers/github-auth.ts", () => ({
@@ -100,6 +100,7 @@ test("a run cuts its own branch from the default branch and registers it", async
       state: "live",
       repoDir,
       branch,
+      binding: "api",
     },
   ]);
 });
@@ -150,7 +151,7 @@ test("a failing postCreate keeps the record for diagnosis and rethrows", async (
     (err: unknown) => err,
   );
 
-  expect(failure).toBeInstanceOf(PostCreateFailedError);
+  expect(failure).toBeInstanceOf(HookFailedError);
   expect(records()).toEqual([
     { runId: RUN, state: "kept", reason: "provisioning failed; kept for diagnosis" },
   ]);

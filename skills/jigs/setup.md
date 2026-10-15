@@ -150,7 +150,7 @@ the binding into `~/.local/share/jigs/clones/<factory>/<name>/` through its
 GitHub App installation; the machine needs no SSH key or Git credentials of its
 own. That data folder is jigs's own and is
 separate from the factory's `bindings/<name>/`, whose files `copy` lists for
-each new worktree. Worktree provisioning (`copy`, `postCreate`) is a hand edit
+each new worktree. Worktree provisioning and teardown (`copy`, `postCreate`, `preRemove`) is a hand edit
 described in the configuration guide.
 
 ## 5. Events come through the hub

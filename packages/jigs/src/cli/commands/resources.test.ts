@@ -80,6 +80,7 @@ function seed(kind: string, over: Partial<ResourceRow> = {}): ResourceRow {
     attempts: 0,
     repoDir: null,
     branch: null,
+    binding: null,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...over,
