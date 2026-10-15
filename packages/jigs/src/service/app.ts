@@ -28,11 +28,11 @@ import { startRun } from "./launch.ts";
 import { listRunDeadJobs } from "./queue.ts";
 import { bootPhase, isReady } from "./readiness.ts";
 import {
-  enrichSuspensions,
   listRunSteps,
   listRuns,
   type RunRegistry,
   runExists,
+  withLastWakes,
   worldRunFacts,
 } from "./runs.ts";
 import { listSchedules, scheduleChecks } from "./schedules.ts";
@@ -300,7 +300,7 @@ export function createApp(factory: Factory, deps: Partial<AppDeps> = {}): Reques
     );
     const body: Record<string, unknown> = {
       ...state,
-      suspensions: await enrichSuspensions(state.suspensions, runId),
+      suspensions: withLastWakes(state.suspensions, runId),
       dashboard: dashboardPointer(context(), runId),
     };
     // Read only where there is one: a running run's return value is a promise

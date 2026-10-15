@@ -6,10 +6,8 @@ import { WorkflowRunNotFoundError } from "workflow/errors";
 import { hydrateData, observabilityRevivers } from "workflow/observability";
 import { getWorld } from "workflow/runtime";
 import { currentFactoryContext } from "../config/factory-context.ts";
-import type { PullRequestRef } from "../providers/github.ts";
 import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { RunSuspension } from "../run-suspension.ts";
-import { readPullRequestSnapshot } from "../steps/pull-requests/fetch-state.ts";
 import {
   listResources,
   type RegistrySql,
@@ -23,8 +21,6 @@ import {
   type RunState,
 } from "../steps/runtime/run-state.ts";
 import type { Factory } from "../workflow/factory.ts";
-import { parseHookToken } from "../workflow/hook-tokens.ts";
-import { mergeRefusal } from "../workflow/pull-requests/merge-ready.ts";
 import { SOURCES } from "./event-triggers/sources.ts";
 import { occurrencesByAttribute } from "./event-triggers/store.ts";
 import { lastWake } from "./wake.ts";
@@ -185,48 +181,15 @@ export async function cancelRun(runId: string): Promise<void> {
   await getRun(runId).cancel();
 }
 
-/**
- * What the providers say about one run's suspensions: the pull request the
- * run is watching, and what last woke each wait. Failures leave a suspension
- * exactly as its token described it — observability must never break the
- * route — so this is for the single-run read only, never the listing.
- */
-export async function enrichSuspensions(
+/** Each suspension with what last woke it, from the service's own log. */
+export function withLastWakes(
   suspensions: readonly RunSuspension[],
   runId: string,
-): Promise<RunSuspension[]> {
-  return await Promise.all(
-    suspensions.map(async (bare) => {
-      const parsed = parseHookToken(bare.token);
-      const wake = lastWake(bare.token, runId);
-      const suspension = wake === undefined ? bare : { ...bare, lastWake: wake };
-      if (parsed?.kind === "pull-request" && parsed.pr !== null) {
-        return await withPrState(suspension, parsed.pr);
-      }
-      return suspension;
-    }),
-  );
-}
-
-/**
- * The pull request as the merge step sees it: the same refusal the step merges
- * on, so what an operator reads here and what jigs is doing cannot disagree. `blocker` is why it will not merge, in the words of the refusal.
- */
-async function withPrState(suspension: RunSuspension, pr: PullRequestRef): Promise<RunSuspension> {
-  try {
-    const snapshot = await readPullRequestSnapshot(pr);
-    return {
-      ...suspension,
-      headSha: snapshot.headSha.slice(0, 7),
-      ci: snapshot.ci,
-      approval: snapshot.approval,
-      draft: snapshot.draft,
-      mergeState: snapshot.mergeState,
-      blocker: mergeRefusal(snapshot, snapshot.headSha)?.reason ?? "nothing — it can merge",
-    };
-  } catch {
-    return suspension;
-  }
+): RunSuspension[] {
+  return suspensions.map((suspension) => {
+    const wake = lastWake(suspension.token, runId);
+    return wake === undefined ? suspension : { ...suspension, lastWake: wake };
+  });
 }
 
 export interface RunRow extends RunState {

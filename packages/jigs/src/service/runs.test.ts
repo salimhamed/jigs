@@ -5,7 +5,6 @@ import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import * as factoryContext from "../config/factory-context.ts";
 import * as github from "../providers/github.ts";
-import * as githubAuth from "../providers/github-auth.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
@@ -16,7 +15,6 @@ import { pullRequestToken } from "../workflow/pull-requests/pull-request.ts";
 import { slackThreadToken } from "../workflow/slack/thread-token.ts";
 import * as triggerStore from "./event-triggers/store.ts";
 import {
-  enrichSuspensions,
   eventTriggerId,
   findRunsByAttribute,
   listRunSteps,
@@ -28,6 +26,7 @@ import {
   type StepView,
   scheduleTriggerId,
   type WorldRun,
+  withLastWakes,
   worldRunFacts,
 } from "./runs.ts";
 import { clearWakes, recordWake } from "./wake.ts";
@@ -62,89 +61,18 @@ beforeEach(() => {
   world();
 });
 
-const prSnapshot = (
-  patch: Partial<Omit<github.PullRequestSnapshot, "approval" | "appBot">> = {},
-): Omit<github.PullRequestSnapshot, "approval" | "appBot"> => ({
-  state: "open",
-  merged: false,
-  draft: false,
-  headSha: "1234567890abcdef",
-  mergeState: "clean",
-  labels: [],
-  mergeCommitSha: null,
-  reviews: [
-    {
-      id: 1,
-      state: "APPROVED",
-      body: "",
-      user: "reviewer",
-      submittedAt: "2026-09-16T10:00:00Z",
-      commitSha: "1234567890abcdef",
-    },
-  ],
-  reviewThreads: [],
-  conversationComments: [],
-  ci: "green",
-  failingChecks: [],
-  ...patch,
-});
-
-function reviewApproval(): void {
-  vi.spyOn(factoryContext, "currentFactoryContext").mockReturnValue(
-    testFactoryContext({
-      slug: "factory-test",
-      config: {
-        github: { operator: "me" },
-      },
-    }),
-  );
-  vi.spyOn(githubAuth, "githubAuthFor").mockReturnValue({
-    bearer: async () => "t",
-    invalidate: () => {},
-    bot: async () => ({ login: "jigs-dev[bot]", id: 1 }),
-    account: async () => "acme",
-  });
-}
-
 function parkedOnPr(): RunSuspension {
   const suspension = describeSuspension(PARK_TOKEN);
   if (suspension === null) throw new Error("expected a pull-request suspension");
   return suspension;
 }
 
-test.each([
-  ["green and approved", {}, "nothing — it can merge", "approved"],
-  ["CI red", { ci: "red" as const }, "CI is red", "approved"],
-  ["branch conflicting", { mergeState: "dirty" }, "the branch conflicts with its base", "approved"],
-  ["draft", { draft: true }, "the pull request is a draft", "approved"],
-  ["no approving review", { reviews: [] }, "no approving review yet", "none"],
-])("pull-request enrichment reports %s", async (_case, patch, blocker, approval) => {
-  reviewApproval();
-  vi.spyOn(github, "fetchPrSnapshot").mockResolvedValue(prSnapshot(patch));
-  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]).toMatchObject({
-    headSha: "1234567",
-    ci: prSnapshot(patch).ci,
-    approval,
-    draft: prSnapshot(patch).draft,
-    mergeState: prSnapshot(patch).mergeState,
-    blocker,
-  });
-  expect(github.fetchPrSnapshot).toHaveBeenCalledExactlyOnceWith({
-    installationName: "acme",
-    owner: "acme",
-    repo: "api",
-    number: 41,
-  });
-});
-
 test("a run reads the wake it was sent, and never another run's", async () => {
-  reviewApproval();
-  vi.spyOn(github, "fetchPrSnapshot").mockResolvedValue(prSnapshot());
   recordWake(PARK_TOKEN, RUN_B, "github check_suite", new Date("2026-09-16T10:05:00Z"));
-  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toBeUndefined();
+  expect(withLastWakes([parkedOnPr()], RUN_A)[0]?.lastWake).toBeUndefined();
 
   recordWake(PARK_TOKEN, RUN_A, "hub fell behind", new Date("2026-09-16T10:06:00Z"));
-  expect((await enrichSuspensions([parkedOnPr()], RUN_A))[0]?.lastWake).toEqual({
+  expect(withLastWakes([parkedOnPr()], RUN_A)[0]?.lastWake).toEqual({
     kind: "hub fell behind",
     at: "2026-09-16T10:06:00.000Z",
   });
@@ -153,19 +81,10 @@ test("a run reads the wake it was sent, and never another run's", async () => {
 test("a run parked on a Slack thread reads the wake that thread was sent", async () => {
   const token = slackThreadToken("acme", "C0C5EUZ7P9Q", "1790723478.961719");
   recordWake(token, RUN_A, "slack reply", new Date("2026-09-16T10:06:00Z"));
-  expect(
-    (await enrichSuspensions([describeSuspension(token) as RunSuspension], RUN_A))[0]?.lastWake,
-  ).toEqual({
+  expect(withLastWakes([describeSuspension(token) as RunSuspension], RUN_A)[0]?.lastWake).toEqual({
     kind: "slack reply",
     at: "2026-09-16T10:06:00.000Z",
   });
-});
-
-test("a failed GitHub enrichment returns the original suspension", async () => {
-  reviewApproval();
-  vi.spyOn(github, "fetchPrSnapshot").mockRejectedValue(new Error("GitHub unavailable"));
-  const original = parkedOnPr();
-  expect(await enrichSuspensions([original], RUN_A)).toEqual([original]);
 });
 
 afterEach(() => {

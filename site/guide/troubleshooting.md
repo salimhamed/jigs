@@ -106,10 +106,10 @@ Once you have answered, the run notices on its next
 [check](/guide/waiting-and-events). `pnpm exec jigs poke <run>` makes it
 check now. A poke cannot stand in for the answer or approval itself.
 
-If the pull request is approved but `jigs status <run>` shows `CI: none` and a
-blocker saying no checks have reported, either CI has not started on that
-commit yet or the repository has none. jigs never merges without CI: add a CI
-workflow to the repository, or merge it yourself.
+A run waiting on a pull request links to it. GitHub's page shows what the merge
+still needs. If the pull request is approved but no check has reported, either
+CI has not started on that commit yet or the repository has none. jigs never
+merges without CI: add a CI workflow to the repository, or merge it yourself.
 
 A run that shows `running` but whose `ACTIVITY` age keeps growing with no step
 in flight may be stuck. `pnpm exec jigs status <run>` lists any dead queue job
