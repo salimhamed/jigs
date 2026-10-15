@@ -3,7 +3,6 @@
 // the session. The session's own token keys the live turn and finds the run,
 // which archiving the session cancels.
 
-import type { EventOrigin } from "@jigs-ai/hub-protocol";
 import { getHookByToken } from "workflow/api";
 import { HookNotFoundError } from "workflow/errors";
 import { z } from "zod";
@@ -126,14 +125,13 @@ export async function routeSessionPrompt(
     provider,
     installationName,
     payload,
-    origin,
-  }: { provider: string; installationName: string; payload: unknown; origin?: EventOrigin },
+  }: { provider: string; installationName: string; payload: unknown },
   deps: SessionPromptDeps = sessionPromptDeps,
 ): Promise<PromptRoute> {
   if (provider !== "linear") return "ignored";
   const dismissed = dismissedSchema.safeParse(payload);
   if (dismissed.success)
-    return cancelDismissed(installationName, dismissed.data.agentSession.id, origin, deps);
+    return cancelDismissed({ installationName, sessionId: dismissed.data.agentSession.id }, deps);
   if (!headSchema.safeParse(payload).success) return "ignored";
   const parsed = promptedSchema.safeParse(payload);
   if (!parsed.success) {
@@ -230,21 +228,18 @@ export async function routeSessionPrompt(
   return "dropped";
 }
 
-// An archived session is gone from the person's view, so its run is cancelled without a word.
+// An archived session is gone from the person's view, so its runs are cancelled without a word.
 async function cancelDismissed(
-  installationName: string,
-  sessionId: string,
-  origin: EventOrigin | undefined,
+  session: { installationName: string; sessionId: string },
   deps: SessionPromptDeps,
 ): Promise<PromptRoute> {
-  const at = `dismissed session=${sessionId}${origin === "hub" ? " origin=hub" : ""}`;
-  const holder = await deps.holder(linearSessionToken(installationName, sessionId));
-  if (holder === null) {
-    console.log(`[events] linear ignored reason=no-run-holds-session ${at}`);
+  const cancelled = await cancelSessionRuns(session, "it was archived", deps);
+  const at = `dismissed session=${session.sessionId}`;
+  if (cancelled === 0) {
+    console.log(`[events] linear ignored reason=no-live-run ${at}`);
     return "ignored";
   }
-  console.log(`[events] linear accepted ${at} run=${holder}`);
-  await deps.cancelRun(holder);
+  console.log(`[events] linear accepted ${at}`);
   return "woken";
 }
 
@@ -365,6 +360,24 @@ function awaitStop(
   deps.later(() => attempt(0), STOP_GRACE_MS);
 }
 
+// Cancel the run holding the session and every live run of it a trigger started, and withdraw
+// any not yet started, since a cancelled run runs no more code. Returns how many it cancelled.
+async function cancelSessionRuns(
+  session: { installationName: string; sessionId: string },
+  reason: string,
+  deps: SessionPromptDeps,
+): Promise<number> {
+  const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
+  const state = await sessionState(session, deps, { withdraw: true });
+  const runs = new Set(holder === null ? [] : [holder]);
+  for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
+  for (const runId of runs) {
+    console.log(`[linear] cancelling run ${runId}: ${reason} in session ${session.sessionId}`);
+    await deps.cancelRun(runId);
+  }
+  return runs.size;
+}
+
 async function endUntakenStop(
   session: { installationName: string; sessionId: string },
   stop: Prompt,
@@ -376,18 +389,9 @@ async function endUntakenStop(
     (await linear.findActivity(onceActivityId(session.sessionId, stopAnswerKey(stop.id)))) !== null
   )
     return;
-  const holder = await deps.holder(linearSessionToken(session.installationName, session.sessionId));
-  const state = await sessionState(session, deps, { withdraw: true });
-  const runs = new Set(holder === null ? [] : [holder]);
-  for (const runId of state.state === "open" ? state.liveRuns : []) runs.add(runId);
-  for (const runId of runs) {
-    console.log(
-      `[linear] cancelling run ${runId}: it did not take the stop in session ${session.sessionId}`,
-    );
-    await deps.cancelRun(runId);
-  }
+  const cancelled = await cancelSessionRuns(session, "it did not take the stop", deps);
   // A run that ended on its own during the grace period already posted its final message.
-  if (runs.size === 0) {
+  if (cancelled === 0) {
     const last = await linear.lastAppActivity(session.sessionId);
     if ((last?.type === "response" || last?.type === "error") && last.createdAt > stop.createdAt)
       return;

@@ -524,21 +524,25 @@ const dismissed = {
 
 test("an archived session has the run holding it cancelled, with nothing posted", async () => {
   holder = RUN;
-  expect(
-    await routeSessionPrompt(
-      { provider: "linear", installationName: "acme", payload: dismissed, origin: "hub" },
-      deps,
-    ),
-  ).toBe("woken");
+  expect(await route(dismissed)).toBe("woken");
   expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(RUN);
-  expect(console.log).toHaveBeenCalledWith(
-    `[events] linear accepted dismissed session=session-1 origin=hub run=${RUN}`,
-  );
   expect(posted.size).toBe(0);
   expect(timers).toEqual([]);
 });
 
-test("an archived session no run holds is ignored", async () => {
+test("an archived session no run holds yet has its started runs cancelled and its unstarted ones withdrawn", async () => {
+  rows = [
+    row({ occurrence: "session-1", runId: OTHER_RUN }),
+    row({ occurrence: "session-1b", state: "pending", runId: null, attemptedAt: null }),
+  ];
+  statuses.set(OTHER_RUN, "running");
+  expect(await route(dismissed)).toBe("woken");
+  expect(deps.cancelRun).toHaveBeenCalledExactlyOnceWith(OTHER_RUN);
+  expect(rows[1]?.state).toBe("skipped");
+  expect(posted.size).toBe(0);
+});
+
+test("an archived session with no live run is ignored", async () => {
   expect(await route(dismissed)).toBe("ignored");
   expect(deps.cancelRun).not.toHaveBeenCalled();
   expect(posted.size).toBe(0);

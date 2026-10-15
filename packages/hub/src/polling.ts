@@ -3,6 +3,7 @@ import { and, eq, isNull } from "drizzle-orm";
 import type { App, Installation } from "./apps.ts";
 import type { HubDatabase } from "./db/database.ts";
 import { apps, installations, pollMarkers } from "./db/schema.ts";
+import { every } from "./every.ts";
 import { fanOutProviderEvent, type MessageWaiters } from "./messages.ts";
 
 const MINUTE_MS = 60 * 1000;
@@ -91,24 +92,15 @@ export async function pollAll(
   }
 }
 
-/** Poll now and every minute until stopped. */
+/** Poll now and a minute after each poll ends, until stopped. */
 export function startPolling(
   db: HubDatabase,
   waiters: MessageWaiters,
   pollers: Poller[],
 ): { stop(): Promise<void> } {
-  const run = () =>
+  return every(MINUTE_MS, () =>
     pollAll(db, waiters, pollers).catch((error) => {
       console.error(`[polling] could not poll: ${String(error)}`);
-    });
-  let running = run();
-  const timer = setInterval(() => {
-    running = running.then(run);
-  }, MINUTE_MS);
-  return {
-    stop: () => {
-      clearInterval(timer);
-      return running;
-    },
-  };
+    }),
+  );
 }

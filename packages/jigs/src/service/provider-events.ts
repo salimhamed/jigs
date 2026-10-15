@@ -20,9 +20,8 @@ import { worthRetrying } from "./worth-retrying.ts";
 /** What routing reads of an event the hub received. */
 export type RoutedEvent = Pick<
   ProviderEvent,
-  "provider" | "installationName" | "name" | "payload"
-> &
-  Partial<Pick<ProviderEvent, "origin">>;
+  "provider" | "installationName" | "name" | "payload" | "origin"
+>;
 
 type NamedEvent = RoutedEvent & { installationName: string };
 

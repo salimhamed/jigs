@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type { HubDatabase } from "./db/database.ts";
+import { every } from "./every.ts";
 import { lockAppends, type MessageWaiters } from "./messages.ts";
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -51,24 +52,15 @@ export async function deleteExpiredMessages(
   waiters.wake(behind);
 }
 
-/** Delete expired messages now and every hour until stopped. */
+/** Delete expired messages now and an hour after each run ends, until stopped. */
 export function startRetention(
   db: HubDatabase,
   waiters: MessageWaiters,
   retentionDays: number,
 ): { stop(): Promise<void> } {
-  const run = () =>
+  return every(HOUR_MS, () =>
     deleteExpiredMessages(db, waiters, retentionDays).catch((error) => {
       console.error(`[retention] could not delete expired messages: ${String(error)}`);
-    });
-  let running = run();
-  const timer = setInterval(() => {
-    running = running.then(run);
-  }, HOUR_MS);
-  return {
-    stop: () => {
-      clearInterval(timer);
-      return running;
-    },
-  };
+    }),
+  );
 }
