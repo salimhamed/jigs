@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.107.0](https://github.com/salimhamed/jigs/compare/jigs-v0.106.0...jigs-v0.107.0) (2026-10-15)
+
+
+### ⚠ BREAKING CHANGES
+
+* jigs status reports only what it knows ([#698](https://github.com/salimhamed/jigs/issues/698))
+
+### Features
+
+* jigs status reports only what it knows ([#698](https://github.com/salimhamed/jigs/issues/698)) ([f645f95](https://github.com/salimhamed/jigs/commit/f645f955a70efdf76f050af5f864ba942388df83))
+
 ## [0.106.0](https://github.com/salimhamed/jigs/compare/jigs-v0.105.0...jigs-v0.106.0) (2026-10-14)
 
 
