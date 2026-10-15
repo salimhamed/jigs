@@ -154,7 +154,7 @@ test("resource maintenance exclusion closes the service restart race", async () 
   const io = fake();
   const release = acquireServiceExclusion(factorySlug(root), "resources-prune");
   try {
-    await expect(startService(deps(root, io))).rejects.toThrow(
+    await expect(serviceStart(deps(root, io))).rejects.toThrow(
       "maintenance exclusion is already held",
     );
     expect(io.spawns).toHaveLength(0);
@@ -162,12 +162,6 @@ test("resource maintenance exclusion closes the service restart race", async () 
     release();
   }
 });
-
-// What `jigs up` does for the service: spawn, then wait for ready.
-async function startService(d: ReturnType<typeof deps>): Promise<void> {
-  await ensureServiceCurrent(d, { beforeRestart: async () => {} });
-  await awaitServiceReady(d);
-}
 
 const failure = (run: Promise<void>) =>
   run.then(
@@ -189,7 +183,7 @@ test("start runs the built entry in the factory root with this process's environ
   vi.stubEnv("LINEAR_API_KEY", "lin");
   const io = fake();
 
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   const spec = io.spawns[0];
   expect(spec?.args).toEqual([SERVICE_ENTRY]);
@@ -203,7 +197,7 @@ test("the child inherits its dashboard port and owns the World's shutdown", asyn
   const root = builtFactory();
   const io = fake();
 
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   expect(io.spawns[0]?.env.JIGS_DASHBOARD_PORT).toBe("9200");
   expect(io.spawns[0]?.env.WORKFLOW_POSTGRES_APPLICATION_MANAGED_SHUTDOWN).toBe("1");
@@ -213,7 +207,7 @@ test("the child inherits its dashboard port and owns the World's shutdown", asyn
 test("start runs node directly and records the pid, its process group and its bundle", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   expect(io.spawns[0]?.command).toBe(process.execPath);
   const written = {
     process: {
@@ -232,7 +226,7 @@ test("start runs node directly and records the pid, its process group and its bu
 test("start records which bundle the process runs, and a dead pid runs none", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   expect(runningBundleHash(deps(root, io))).toBe(builtBundleHash(root));
   writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
@@ -308,7 +302,7 @@ test("a rename that carries the old mtime along is stale by its directory", () =
 test("a build the running service never picked up is behind the sources too", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   expect(serviceBehindSources(deps(root, io))).toBeUndefined();
 
   writeFileSync(path.join(root, SERVICE_ENTRY), "rebuilt");
@@ -319,7 +313,7 @@ test("a build the running service never picked up is behind the sources too", as
 test("an edit nobody built outranks the bundle the service booted from", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   touch(root, "jigs.config.ts", 60_000);
 
   expect(serviceBehindSources(deps(root, io))).toContain("jigs.config.ts");
@@ -336,8 +330,8 @@ test("two factories supervise independently", async () => {
   const one = builtFactory();
   const two = builtFactory(path.join(tmp, "second"));
   const io = fake();
-  await startService(deps(one, io));
-  await startService(deps(two, io));
+  await serviceStart(deps(one, io));
+  await serviceStart(deps(two, io));
   expect(existsSync(serviceRecordPath(factorySlug(one)))).toBe(true);
   expect(existsSync(serviceRecordPath(factorySlug(two)))).toBe(true);
 });
@@ -365,7 +359,7 @@ test("service start runs the existing build and waits until it is ready", async 
 test("service start leaves a running service as it is", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   await serviceStart(deps(root, io));
 
@@ -377,7 +371,7 @@ test("start replaces a record whose process is gone", async () => {
   const root = builtFactory();
   recordService(factorySlug(root), 9);
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   expect(io.spawns).toHaveLength(1);
   expect(recorded(root)?.processGroup).toBe(4242);
 });
@@ -395,7 +389,7 @@ test("the wait lasts until /health reports ready, printing the phases on the way
     READY,
   ]);
 
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   expect(io.probes).toEqual(Array(6).fill("http://localhost:9100/health"));
   expect(lines.slice(lines.indexOf("booting: registry"))).toEqual([
@@ -417,7 +411,7 @@ test("a process that dies while booting fails the start at once, printing its lo
     return probe(url);
   };
 
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
 
   expect(err?.message).toContain("exited during boot");
   expect(err?.hint).toContain("jigs service logs");
@@ -435,7 +429,7 @@ test("a start that outlives its timeout fails, names the log and the phase, and 
   const root = builtFactory();
   const io = fake([booting("cloning forge")]);
 
-  const err = await failure(startService(deps(root, io, { startTimeoutMs: 0 })));
+  const err = await failure(serviceStart(deps(root, io, { startTimeoutMs: 0 })));
 
   expect(err?.message).toContain("still booting");
   expect(err?.message).toContain("cloning forge");
@@ -450,7 +444,7 @@ test("a ready answer from another process on the port fails the start and stops 
   const io = fake([{ ...READY, pid: 777 }]);
   exitsOnTerm(io);
 
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
 
   expect(err?.message).toContain("already served by another process (pid 777)");
   expect(err?.hint).toContain("JIGS_SERVICE_PORT");
@@ -464,7 +458,7 @@ test("an answer on the port without a pid fails the start and stops the new one"
   const io = fake([{ ...READY, pid: undefined }]);
   exitsOnTerm(io);
 
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
 
   expect(err?.message).toContain("already served by another process (one that reports no pid)");
   expect(err?.hint).toContain("JIGS_SERVICE_PORT");
@@ -491,7 +485,7 @@ test("bringing the service current spawns without probing, and awaitServiceReady
 test("a service already on the built bundle is left running unless a restart is asked for", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   exitsOnTerm(io);
   const beforeRestart = vi.fn(async () => {});
 
@@ -525,7 +519,7 @@ test("awaitServiceReady without a record says the service is not running", async
 test("stop terminates the recorded pid and clears the record", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   exitsOnTerm(io);
 
   await stopService(deps(root, io));
@@ -538,7 +532,7 @@ test("stop terminates the recorded pid and clears the record", async () => {
 test("stop escalates to SIGKILL when the process outlives the timeout", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   await stopService(deps(root, io, { stopTimeoutMs: 0 }));
 
@@ -549,7 +543,7 @@ test("stop escalates to SIGKILL when the process outlives the timeout", async ()
 test("stop ends what the service started, in its group or below it", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   exitsOnTerm(io);
   io.alive.add(4300).add(4301).add(4302);
   io.table.set(4300, { ppid: 4242, pgid: 4242, command: "claude --print hi" });
@@ -570,7 +564,7 @@ test("stop ends what the service started, in its group or below it", async () =>
 test("a stop that leaves a survivor fails and keeps the record for another try", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   io.processes.signal = (pid, sig) => {
     io.signals.push({ pid, sig });
     return io.alive.has(pid);
@@ -585,14 +579,14 @@ test("a stop that leaves a survivor fails and keeps the record for another try",
 test("start first ends what a service that died without a stop left running", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   exitsOnTerm(io);
   io.alive.delete(4242);
   io.alive.add(4300);
   io.table.set(4300, { ppid: 1, pgid: 4242, command: "claude --print hi" });
   lines = [];
 
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   expect(io.signals).toContainEqual({ pid: 4300, sig: "SIGTERM" });
   expect(lines[0]).toBe("stopped 1 process(es) left by the previous service");
@@ -644,7 +638,7 @@ test("start refuses rather than run a second service beside an unverified pid", 
   const io = fake();
   reusedByTmux(root, io);
 
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
 
   expect(err?.message).toContain("cannot be verified");
   expect(io.spawns).toHaveLength(0);
@@ -664,7 +658,7 @@ test("a pid taken over after a failed boot is someone else's, so stop selects no
 test("a live pid whose command differs from the record is not the service", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   io.table.set(4242, { ppid: 1, pgid: 4242, command: "node other-app.js" });
 
   const err = await failure(stopService(deps(root, io)));
@@ -687,7 +681,7 @@ test("an unreadable service record is an error, not a missing one", async () => 
 test("after a clean stop, a new group that reuses the id is never signalled", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   exitsOnTerm(io);
   await stopService(deps(root, io));
   io.signals.length = 0;
@@ -697,7 +691,7 @@ test("after a clean stop, a new group that reuses the id is never signalled", as
   io.table.set(4243, { ppid: 1, pgid: 4242, command: "node /Users/me/other-app/server.js" });
 
   await stopService(deps(root, io));
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
 
   expect(io.signals.filter((s) => s.pid === 4243 && s.sig !== 0)).toEqual([]);
   expect(io.alive.has(4243)).toBe(true);
@@ -706,7 +700,7 @@ test("after a clean stop, a new group that reuses the id is never signalled", as
 test("an earlier boot's record whose pid still matches is not silently discarded", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   io.boot = "boot-2";
 
   const err = await failure(stopService(deps(root, io)));
@@ -734,7 +728,7 @@ test("a new service whose start time cannot be read is killed and the start fail
   const io = fake();
   io.processes.startTime = () => undefined;
 
-  const err = await failure(startService(deps(root, io)));
+  const err = await failure(serviceStart(deps(root, io)));
 
   expect(err?.message).toContain("could not read the start time");
   expect(io.signals).toContainEqual({ pid: 4242, sig: "SIGKILL" });
@@ -750,7 +744,7 @@ test("stop without a record says so instead of failing", async () => {
 test("status reports the pid, the url and the factory root", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   lines = [];
 
   serviceStatus(deps(root, io));
@@ -763,7 +757,7 @@ test("status reports the pid, the url and the factory root", async () => {
 test("status reports a dead service as not running", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   io.alive.clear();
   lines = [];
   serviceStatus(deps(root, io));
@@ -773,7 +767,7 @@ test("status reports a dead service as not running", async () => {
 test("status records when death was detected and the current run's last signal", async () => {
   const root = builtFactory();
   const io = fake();
-  await startService(deps(root, io));
+  await serviceStart(deps(root, io));
   const log = serviceLogPath(factorySlug(root));
   mkdirSync(path.dirname(log), { recursive: true });
   writeFileSync(log, "Received 'SIGHUP'; attempting global graceful shutdown...\n");
@@ -795,12 +789,12 @@ test("status does not attribute an earlier run's signal to a later silent death"
   const io = fake();
   const d = deps(root, io);
   const log = serviceLogPath(factorySlug(root));
-  await startService(d);
+  await serviceStart(d);
   mkdirSync(path.dirname(log), { recursive: true });
   writeFileSync(log, "Received 'SIGHUP'; attempting global graceful shutdown...\n");
   io.alive.clear();
 
-  await startService(d);
+  await serviceStart(d);
   io.alive.clear();
   lines = [];
   serviceStatus({ ...d, now: () => new Date("2026-09-16T12:00:00Z") });
