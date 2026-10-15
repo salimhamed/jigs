@@ -427,7 +427,7 @@ const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
 const RUNTIME_TIMEOUT_MS = 90_000;
-const LONG_STEP_MS = Number(process.env.JIGS_E2E_LONG_STEP_MS ?? "25");
+const LONG_STEP_MS = 25;
 
 const HARNESS_CLIS = ["claude", "codex", "pi"];
 

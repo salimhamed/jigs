@@ -29,12 +29,6 @@ the two as parallel jobs. Put local values in `.env.e2e.local` (copy
 `.env.e2e.example`; it is gitignored). Shell and CI values win over the file.
 Point it at a dedicated database and port, never a live factory World.
 
-Before a Workflow SDK or Postgres World upgrade, or a change to service startup
-or step transport, run the long-step regression once with the real value:
-`JIGS_E2E_LONG_STEP_MS=301000 pnpm e2e` against disposable Postgres, or dispatch
-the **Long step regression** workflow in Actions with the revision to test. It
-takes over five minutes and never runs on pull requests.
-
 Biome formats at 100 columns.
 
 ## Tests
@@ -155,8 +149,8 @@ Repository settings the release depends on:
 - A `RELEASE_PLEASE_TOKEN` secret: a fine-grained PAT on this repo with
   Contents, Pull requests and Issues read and write. `GITHUB_TOKEN` would not
   trigger checks on the release PR.
-- No Docker Hub secrets: the CI jobs that need Postgres, and the long-step
-  regression, start the runner's own server.
+- No Docker Hub secrets: the CI jobs that need Postgres start the runner's own
+  server.
 - An npm trusted publisher for each of `@jigs-ai/jigs` and `@jigs-ai/hub`:
   repository `salimhamed/jigs`, workflow `release.yml`, no environment.
   Publishing uses OIDC, no npm token. A new package's first publish is by hand
