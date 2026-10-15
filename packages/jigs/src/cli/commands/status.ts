@@ -81,13 +81,12 @@ export async function showRunStatus(
     ["last activity", `${age(result.lastActivityAt, now)} ago ${detail(result.lastActivityAt)}`],
     ...(result.error === undefined ? [] : [["error", singleLine(result.error)]]),
     ...(result.resources.length === 0 ? [["resources", "none"]] : []),
-    ...scalarResult(result),
+    ...resultRow(result),
     ...(result.dashboard === "" ? [] : [["dashboard", result.dashboard]]),
   ];
   deps.out(runHeading(result.runId, result.status));
   for (const line of columns(facts)) deps.out(`  ${line}`);
   showSuspensions(result.suspensions, now, deps);
-  if (result.status === "completed") showObjectResult(result.returnValue, deps);
   showResources(result.resources, deps);
   showTimeline(timeline, deps);
   return result;
@@ -105,48 +104,18 @@ function showSuspensions(
   deps.out(heading("Waiting"));
   for (const suspension of suspensions) {
     deps.out(`  ${suspensionLine(suspension)}`);
-    // Only the single-run route reads the providers, so these are absent
-    // whenever GitHub could not be asked.
-    const gate =
-      suspension.headSha === undefined
-        ? []
-        : [
-            ["head sha", suspension.headSha],
-            ["CI", `${suspension.ci}`],
-            ["approval", `${suspension.approval}`],
-            ["draft", suspension.draft === true ? "yes" : "no"],
-            ["mergeable state", `${suspension.mergeState}`],
-            ["blocker", `${suspension.blocker}`],
-          ];
     const wake = suspension.lastWake;
-    const wakeRow =
-      wake === undefined
-        ? []
-        : [["last wake", `${wake.kind}, ${age(wake.at, now)} ago ${detail(wake.at)}`]];
-    for (const line of columns([...gate, ...wakeRow])) deps.out(`    ${line}`);
+    if (wake !== undefined) {
+      deps.out(`    last wake  ${wake.kind}, ${age(wake.at, now)} ago ${detail(wake.at)}`);
+    }
   }
 }
 
-const RESULT_KEY_LIMIT = 12;
-
-function scalarResult(result: StatusResult): string[][] {
+// A list or object shows only its shape; `--json` prints the whole value.
+function resultRow(result: StatusResult): string[][] {
   const value = result.returnValue;
   if (result.status !== "completed" || value === undefined || value === null) return [];
-  if (typeof value === "object" && !Array.isArray(value)) return [];
   return [["result", formatResultValue(value)]];
-}
-
-function showObjectResult(value: unknown, deps: ServiceDeps): void {
-  if (value === null || typeof value !== "object" || Array.isArray(value)) return;
-  const entries = Object.entries(value);
-  deps.out("");
-  deps.out(heading("Result"));
-  const rows = entries
-    .slice(0, RESULT_KEY_LIMIT)
-    .map(([key, entryValue]) => [singleLine(key), formatResultValue(entryValue)]);
-  for (const line of columns(rows)) deps.out(`  ${line}`);
-  const omitted = entries.length - RESULT_KEY_LIMIT;
-  if (omitted > 0) deps.out(`  ${note(`… ${omitted} more ${omitted === 1 ? "key" : "keys"}`)}`);
 }
 
 function showResources(resources: readonly ResourceRecord[], deps: ServiceDeps): void {
@@ -165,9 +134,12 @@ function showResources(resources: readonly ResourceRecord[], deps: ServiceDeps):
   for (const line of formatTable(["KIND", "STATE", "RESOURCE"], rows)) deps.out(`  ${line}`);
 }
 
+const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
 function formatResultValue(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.length} ${value.length === 1 ? "item" : "items"}]`;
-  if (value !== null && typeof value === "object") return "{…}";
+  if (Array.isArray(value)) return `[${counted(value.length, "item")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${counted(Object.keys(value).length, "key")}}`;
   return singleLine(String(value));
 }
 

@@ -1,13 +1,7 @@
 import type { WakeNote } from "./service/wake.ts";
 import { describeHookToken, type HookKind, isOwnershipKind } from "./workflow/hook-tokens.ts";
-import type { ApprovalState, PullRequestSnapshot } from "./workflow/pull-requests/snapshot.ts";
 
-/**
- * One hook a run is currently parked on. Everything below `url` is read
- * from a provider, so it is present only on the single-run route: the listing
- * behind `jigs status` and `jigs watch` describes a suspension from its token
- * alone.
- */
+/** One hook a run is currently parked on. */
 export interface RunSuspension {
   token: string;
   kind: Exclude<HookKind, "ticket-claim" | "linear-session"> | "external";
@@ -15,16 +9,7 @@ export interface RunSuspension {
   reason: string;
   /** The pull request to go and act on. */
   url?: string;
-  /** The commit the pull request is on, shortened. */
-  headSha?: string;
-  ci?: PullRequestSnapshot["ci"];
-  approval?: ApprovalState;
-  draft?: boolean;
-  /** GitHub's own `mergeable_state`, as the readiness check reads it. */
-  mergeState?: string;
-  /** Why the readiness check refuses a merge, or that nothing is stopping it. */
-  blocker?: string;
-  /** What last resumed this wait, if the service has woken it since it started. */
+  /** What last resumed this wait, on the single-run route, if the service has woken it since it started. */
   lastWake?: WakeNote;
 }
 

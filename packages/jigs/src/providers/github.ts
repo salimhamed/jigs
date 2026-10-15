@@ -199,7 +199,7 @@ export async function isForkPullRequest(pr: PullRequestRef): Promise<boolean> {
   return pull.head.repo?.full_name.toLowerCase() !== pull.base.repo.full_name.toLowerCase();
 }
 
-// Approval is left to the caller: reading it needs the factory's configured signal.
+// Approval is left to the caller: it depends on which commits the workflow lets an approval cover.
 export async function fetchPrSnapshot(
   pr: PullRequestRef,
 ): Promise<Omit<PullRequestSnapshot, "approval" | "appBot">> {

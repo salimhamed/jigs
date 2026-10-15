@@ -607,8 +607,8 @@ tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access)
 jigs merges only when the approval is present or the workflow consents
 itself, GitHub reports the pull request mergeable, it is not a draft, at least
 one check has run, and CI is green.
-**jigs never merges in a repository with no CI**: when no check has reported,
-`jigs status` says so, since CI may not have started yet or the repository may
+**jigs never merges in a repository with no CI**: it does not merge until a
+check has reported, since CI may not have started yet or the repository may
 have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
 checks again later. jigs never changes branch protection.
 
@@ -616,9 +616,9 @@ A protected branch that restricts who can push also restricts who can merge.
 If the factory's App is not on that list,
 GitHub reports an approved, green pull request as `blocked` and refuses the
 merge without saying why. jigs cannot read branch rules without admin access,
-so it does not check them ahead of time. It says so in `jigs status`, and the
-`linear-ticket-to-pr` recipe also leaves one note on the pull request for each
-commit, then keeps watching. Add the account to the branch rule, or change the
+so it does not check them ahead of time. The `linear-ticket-to-pr` recipe
+leaves one note on the pull request for each commit saying so, then keeps
+watching. Add the account to the branch rule, or change the
 recipe's `mergeWhen` to return false and merge those pull requests yourself.
 
 ### Call other GitHub endpoints {#call-github}

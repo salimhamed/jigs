@@ -35,8 +35,7 @@ export function approvalState(
   return approved.length === 0 ? "none" : "stale";
 }
 
-// Written for the operator reading a parked pull request: this sentence is
-// also the `blocker` line `jigs status <run-id>` prints.
+// Written for the operator: a workflow may pass a refusal's reason on to a person.
 function approvalMissing(state: ApprovalState, expectedHeadSha: string): string {
   if (state === "changes-requested") return "a review requests changes";
   if (state === "stale") return `the approval does not cover ${expectedHeadSha}`;
@@ -148,7 +147,7 @@ export function isPullRequestMergeReady(snapshot: PullRequestSnapshot): boolean 
  *
  * @remarks
  * GitHub does not say which branch rule blocks the merge, so without a note
- * jigs would wait in silence. `jigs status` shows the same text.
+ * jigs would wait in silence.
  *
  * @group Pull requests
  */

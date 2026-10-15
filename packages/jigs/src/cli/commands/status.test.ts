@@ -156,42 +156,6 @@ test("each resource shows its state and the reason release recorded", async () =
   ]);
 });
 
-test("status prints live pull-request gate state under its suspension", async () => {
-  respond(
-    result({
-      status: "running",
-      suspensions: [
-        {
-          token: "github:pr:acme:acme/api#41",
-          kind: "pull-request",
-          reason: "waiting for an approving review and green CI on acme/api#41",
-          headSha: "1234567",
-          ci: "red",
-          approval: "approved",
-          draft: false,
-          mergeState: "blocked",
-          blocker: "CI is red",
-          lastWake: { kind: "github check_suite", at: "2026-09-04T10:08:00.000Z" },
-        },
-      ],
-    }),
-  );
-  respond({ steps: [], deadJobs: [] });
-  await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines.slice(4)).toEqual([
-    "",
-    "Waiting",
-    "  waiting for an approving review and green CI on acme/api#41",
-    "    head sha         1234567",
-    "    CI               red",
-    "    approval         approved",
-    "    draft            no",
-    "    mergeable state  blocked",
-    "    blocker          CI is red",
-    "    last wake        github check_suite, 2m ago (2026-09-04T10:08:00.000Z)",
-  ]);
-});
-
 test("status prints the last wake of a human and a Slack-thread wait", async () => {
   respond(
     result({
@@ -224,7 +188,7 @@ test("status prints the last wake of a human and a Slack-thread wait", async () 
   ]);
 });
 
-test("a pull request GitHub could not be asked about prints as it always did", async () => {
+test("a pull request wait says where to go, and GitHub says the rest", async () => {
   respond(
     result({
       status: "running",
@@ -232,7 +196,9 @@ test("a pull request GitHub could not be asked about prints as it always did", a
         {
           token: "github:pr:acme:acme/api#41",
           kind: "pull-request",
-          reason: "waiting for an approving review and green CI on acme/api#41",
+          reason: "waiting for pull request activity on acme/api#41",
+          url: "https://github.com/acme/api/pull/41",
+          lastWake: { kind: "github check_suite", at: "2026-09-04T10:08:00.000Z" },
         },
       ],
     }),
@@ -242,7 +208,8 @@ test("a pull request GitHub could not be asked about prints as it always did", a
   expect(lines.slice(4)).toEqual([
     "",
     "Waiting",
-    "  waiting for an approving review and green CI on acme/api#41",
+    "  waiting for pull request activity on acme/api#41 → https://github.com/acme/api/pull/41",
+    "    last wake  github check_suite, 2m ago (2026-09-04T10:08:00.000Z)",
   ]);
 });
 
@@ -297,7 +264,7 @@ test("a multi-line run error stays on its row in the facts block", async () => {
   expect(lines[3]).toBe("  error          Error: boom\\n  at run (agent.ts:12)");
 });
 
-test("a completed run prints a compact object result", async () => {
+test("a completed run shows only an object result's shape; --json has the rest", async () => {
   respond(
     result({
       status: "completed",
@@ -313,16 +280,8 @@ test("a completed run prints a compact object result", async () => {
   );
   respond({ steps: [], deadJobs: [] });
   await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines.slice(4)).toEqual([
-    "",
-    "Result",
-    "  status     gave-up",
-    "  attempts   3",
-    "  retryable  false",
-    "  detail     {…}",
-    "  findings   [2 items]",
-    "  note       null",
-  ]);
+  expect(lines[4]).toBe("  result         {6 keys}");
+  expect(lines).not.toContain("Result");
 });
 
 test("resources are listed independently of the workflow return shape", async () => {
@@ -366,23 +325,6 @@ test("resources are listed independently of the workflow return shape", async ()
   ]);
 });
 
-test("result keys and scalar values stay on one terminal line", async () => {
-  respond(
-    result({
-      status: "completed",
-      returnValue: {
-        "multi\nline": "one\r\ntwo\rthree\u2028four\u2029five",
-      },
-    }),
-  );
-  respond({ steps: [], deadJobs: [] });
-  await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines.slice(5, 7)).toEqual([
-    "Result",
-    "  multi\\nline  one\\ntwo\\rthree\\u2028four\\u2029five",
-  ]);
-});
-
 test("a multiline scalar result stays on the result line", async () => {
   respond(result({ status: "completed", returnValue: "one\ntwo" }));
   respond({ steps: [], deadJobs: [] });
@@ -412,24 +354,6 @@ test.each([
     "  trigger        manual",
     "  last activity  1m ago (2026-09-04T10:09:00.000Z)",
     "  resources      none",
-  ]);
-});
-
-test("an object result is capped and reports its omitted keys", async () => {
-  respond(
-    result({
-      status: "completed",
-      returnValue: Object.fromEntries(
-        Array.from({ length: 15 }, (_, index) => [`key${index + 1}`, index + 1]),
-      ),
-    }),
-  );
-  respond({ steps: [], deadJobs: [] });
-  await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines.slice(5)).toEqual([
-    "Result",
-    ...Array.from({ length: 12 }, (_, index) => `  ${`key${index + 1}`.padEnd(5)}  ${index + 1}`),
-    "  … 3 more keys",
   ]);
 });
 
