@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.3](https://github.com/salimhamed/jigs/compare/jigs-v0.107.2...jigs-v0.107.3) (2026-10-15)
+
+
+### Features
+
+* add listBindings step for workflows to read the factory's bindings ([#704](https://github.com/salimhamed/jigs/issues/704)) ([33109b7](https://github.com/salimhamed/jigs/commit/33109b7e7cb34fba22784cb1e1d51e53d55ad0e7))
+
 ## [0.107.2](https://github.com/salimhamed/jigs/compare/jigs-v0.107.1...jigs-v0.107.2) (2026-10-15)
 
 
