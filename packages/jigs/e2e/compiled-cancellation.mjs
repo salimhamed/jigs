@@ -423,16 +423,7 @@ export async function runCompiledCancellationMatrix({
       "cancellation matrix: active, pending, and default-turbo runs are terminal-cancelled",
     );
 
-    const automatic = JSON.parse(
-      runNode(
-        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
-import { getWorld } from "workflow/runtime";
-const report = await reconcileAutomaticRelease({ workflows: {} });
-console.log(JSON.stringify(report));
-await (await getWorld()).close?.();`,
-        env,
-      ),
-    );
+    const automatic = reconcile();
     assert.ok(
       automatic.busy >= 1,
       `automatic cleanup did not report active work: ${JSON.stringify(automatic)}`,
@@ -511,16 +502,7 @@ await (await getWorld()).close?.();`,
       false,
     );
 
-    const reconciled = JSON.parse(
-      runNode(
-        `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
-import { getWorld } from "workflow/runtime";
-const report = await reconcileAutomaticRelease({ workflows: {} });
-console.log(JSON.stringify(report));
-await (await getWorld()).close?.();`,
-        env,
-      ),
-    );
+    const reconciled = reconcile();
     assert.ok(
       reconciled.kept >= 1,
       `automatic cleanup did not retain the cancelled resource: ${JSON.stringify(reconciled)}`,
@@ -655,13 +637,16 @@ await (await getWorld()).close?.();`,
   }
 
   function reconcile() {
+    // The registry's pg pool keeps the process alive for its 10s idle timeout,
+    // so exit once the report is out.
     return JSON.parse(
       runNode(
         `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
 import { getWorld } from "workflow/runtime";
 const report = await reconcileAutomaticRelease({ workflows: {} });
 console.log(JSON.stringify(report));
-await (await getWorld()).close?.();`,
+await (await getWorld()).close?.();
+process.exit(0);`,
         env,
       ),
     );

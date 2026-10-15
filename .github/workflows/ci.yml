@@ -3,45 +3,57 @@ name: CI
 on: pull_request
 
 jobs:
-  ci:
+  check:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
-        with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
+      - uses: ./.github/actions/setup
       - run: pnpm lint
       - run: pnpm typecheck
-      # The installed-Pi tests skip locally without a supported pi, but fail in CI.
-      - run: npm install --global @earendil-works/pi-coding-agent@0.87.0
-      - run: pnpm test
-      - run: pnpm build
       - run: pnpm docs:check
 
-  # The only job that compiles a workflow directive — see
+  unit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      # The installed-Pi tests skip locally without a supported pi, but fail in CI.
+      - run: npm install --global @earendil-works/pi-coding-agent@0.87.0
+      - run: pnpm -r --filter '!@jigs/api-docs' --if-present test
+
+  api-docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+      - run: pnpm --filter @jigs/api-docs test
+
+  db:
+    runs-on: ubuntu-latest
+    env:
+      WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+        with:
+          postgres: true
+      # The hub's test:db builds the hub itself; nothing else here needs a build.
+      - run: pnpm test:db
+
+  # The only jobs that compile a workflow directive — see
   # packages/jigs/e2e/check-step-ids.mjs for why nothing else can.
   step-ids:
     runs-on: ubuntu-latest
+    # The boot half of the check starts the built service, whose registry gate
+    # applies jigs migrations in this database. The World itself is a stub; only the
+    # registry touches Postgres. Without the URL the check skips the boot.
+    env:
+      WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
     steps:
       - uses: actions/checkout@v5
-      - uses: pnpm/action-setup@v4
-      - uses: actions/setup-node@v5
+      - uses: ./.github/actions/setup
         with:
-          node-version: 24
-          cache: pnpm
-      - run: pnpm install --frozen-lockfile
-      # The boot half of the check starts the built service, whose registry gate
-      # applies jigs migrations in this database. The World itself is a stub; only the
-      # registry touches Postgres. Without the URL the check skips the boot.
-      # The runner's own server avoids registry pull limits, which fork PRs
-      # cannot lift with a login because they get no secrets.
-      - name: Start Postgres
-        run: |
-          sudo systemctl start postgresql.service
-          sudo -u postgres psql -c "CREATE USER jigs WITH SUPERUSER PASSWORD 'jigs'" -c "CREATE DATABASE jigs OWNER jigs"
+          postgres: true
       # `jigs init` and `jigs build` run from the CLI's dist, so the CLI has to
       # exist as the built artifact its bin entry points at.
       - run: pnpm build
@@ -49,9 +61,28 @@ jobs:
       # Claude Code and Codex are unpinned: the check reads the minimum codex version from the provider.
       # No login needed — the check only runs `--version`.
       - run: npm install --global @anthropic-ai/claude-code @openai/codex @earendil-works/pi-coding-agent@0.87.0
-      - run: pnpm test:db
-        env:
-          WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
-      - run: pnpm e2e
-        env:
-          WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
+      - run: pnpm e2e --only ids
+
+  # The cancellation matrix puts stand-ins for the agent CLIs on the service's
+  # PATH, so it installs none, and needs only the jigs CLI built.
+  cancellation:
+    runs-on: ubuntu-latest
+    env:
+      WORKFLOW_POSTGRES_URL: postgres://jigs:jigs@localhost:5432/jigs
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup
+        with:
+          postgres: true
+      - run: pnpm --filter @jigs-ai/jigs build
+      - run: pnpm e2e --only cancellation
+
+  # The ruleset on main requires this job and step-ids, so it passes only when
+  # every job above did.
+  ci:
+    if: always()
+    needs: [check, unit, api-docs, db, step-ids, cancellation]
+    runs-on: ubuntu-latest
+    steps:
+      - if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: exit 1

@@ -1,0 +1,25 @@
+name: Set up the workspace
+description: pnpm, Node and the workspace's dependencies, and Postgres when a job asks for it
+
+inputs:
+  postgres:
+    description: Start the runner's own Postgres with a jigs superuser and database
+    default: "false"
+
+runs:
+  using: composite
+  steps:
+    - uses: pnpm/action-setup@v4
+    - uses: actions/setup-node@v5
+      with:
+        node-version: 24
+        cache: pnpm
+    - run: pnpm install --frozen-lockfile
+      shell: bash
+    # The runner's own server avoids registry pull limits, which fork PRs
+    # cannot lift with a login because they get no secrets.
+    - if: inputs.postgres == 'true'
+      shell: bash
+      run: |
+        sudo systemctl start postgresql.service
+        sudo -u postgres psql -c "CREATE USER jigs WITH SUPERUSER PASSWORD 'jigs'" -c "CREATE DATABASE jigs OWNER jigs"
