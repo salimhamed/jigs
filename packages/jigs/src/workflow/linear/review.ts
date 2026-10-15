@@ -4,20 +4,28 @@ import type { TicketClaim } from "./claim.ts";
 
 // strictObject so the harness's native structured output carries
 // additionalProperties:false and a malformed verdict throws at the
-// parse in the workflow rather than degrading into a guess.
+// parse in the workflow rather than degrading into a guess. The questions rule
+// is a refinement rather than a union on verdict because strict structured
+// output needs a plain object at the root; runAgent asks once more with the
+// reason when the parse refuses an answer.
 /**
  * Structured verdict returned by the agent that reviews a ticket before work starts.
  *
  * @group Linear tickets
  */
-export const ticketReviewVerdictSchema = z.strictObject({
-  verdict: z.enum(["proceed", "needs-human"]),
-  brief: z.string().min(1),
-  // What the ticket is about, in plain words, for whoever reads the session.
-  about: z.string(),
-  questions: z.array(haltQuestionSchema),
-  assumptions: z.array(z.string()),
-});
+export const ticketReviewVerdictSchema = z
+  .strictObject({
+    verdict: z.enum(["proceed", "needs-human"]),
+    brief: z.string().min(1),
+    // What the ticket is about, in plain words, for whoever reads the session.
+    about: z.string(),
+    questions: z.array(haltQuestionSchema),
+    assumptions: z.array(z.string()),
+  })
+  .refine((review) => review.verdict === "proceed" || review.questions.length > 0, {
+    message: 'A "needs-human" verdict asks at least one question.',
+    path: ["questions"],
+  });
 
 /**
  * A note a ticket run posts in its Linear agent session that asks for nothing
