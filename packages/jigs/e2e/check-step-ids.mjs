@@ -427,7 +427,6 @@ const BOOT_WORLD = path.join(here, "e2e-world.mjs");
 const BOOT_UNRESOLVED = /ERR_MODULE_NOT_FOUND|Cannot find (?:module|package)/;
 
 const RUNTIME_TIMEOUT_MS = 90_000;
-const LONG_STEP_MS = 25;
 
 const HARNESS_CLIS = ["claude", "codex", "pi"];
 
@@ -580,7 +579,6 @@ import { defineHook, sleep } from "workflow";
 import { z } from "zod";
 
 export const runtimeE2eInputs = z.object({
-  delayMs: z.number().int().nonnegative(),
   marker: z.string(),
   token: z.string(),
 });
@@ -618,7 +616,7 @@ export async function runtimeE2eWorkflow(
   // the scenario can see a catch or finally that a suspension fired.
   let result;
   try {
-    const sequential = await recordedStep(inputs.marker, "long", inputs.delayMs);
+    const sequential = await recordedStep(inputs.marker, "sequential");
     await sleep("1s");
     const parallel = await Promise.all([
       recordedStep(inputs.marker, "parallel-a", 250),
@@ -748,7 +746,7 @@ async function runtimeScenario(postgresUrl) {
     const started = await fetch(`http://127.0.0.1:${RUNTIME_PORT}/api/workflows/runtimeE2e/runs`, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ inputs: { delayMs: LONG_STEP_MS, marker, token } }),
+      body: JSON.stringify({ inputs: { marker, token } }),
     });
     if (started.status !== 201) {
       throw new Error(`runtime workflow start returned ${started.status}: ${await started.text()}`);
@@ -763,7 +761,7 @@ async function runtimeScenario(postgresUrl) {
         return run.suspensions.length > 0;
       },
       `runtime workflow ${runId} never parked on its hook`,
-      RUNTIME_TIMEOUT_MS + LONG_STEP_MS,
+      RUNTIME_TIMEOUT_MS,
     );
 
     const resourcesBeforeRestart = (await runtimeRun(runId)).resources;
@@ -830,8 +828,8 @@ async function runtimeScenario(postgresUrl) {
       RUNTIME_TIMEOUT_MS,
     );
     const expectedLines = [
-      "start long",
-      "end long",
+      "start sequential",
+      "end sequential",
       "start parallel-a",
       "end parallel-a",
       "start parallel-b",
@@ -851,8 +849,8 @@ async function runtimeScenario(postgresUrl) {
     const parallelStarts = [at("start parallel-a"), at("start parallel-b")];
     const parallelEnds = [at("end parallel-a"), at("end parallel-b")];
     const ordered =
-      at("start long") === 0 &&
-      at("end long") === 1 &&
+      at("start sequential") === 0 &&
+      at("end sequential") === 1 &&
       Math.max(...parallelStarts) < Math.min(...parallelEnds) &&
       Math.max(...parallelEnds) < at("start resumed") &&
       at("start resumed") < at("end resumed") &&
@@ -872,14 +870,14 @@ async function runtimeScenario(postgresUrl) {
       throw new Error(`runtime workflow ${runId} completed but its finally was never logged`);
     }
     if (
-      terminal.returnValue.sequential !== "long" ||
+      terminal.returnValue.sequential !== "sequential" ||
       terminal.returnValue.resumed !== "resumed" ||
       JSON.stringify(terminal.returnValue.parallel) !== JSON.stringify(["parallel-a", "parallel-b"])
     ) {
       throw new Error(`unexpected runtime return value: ${JSON.stringify(terminal.returnValue)}`);
     }
     console.log(
-      `run ${runId} completed after ${LONG_STEP_MS}ms step, concurrent resource registration, URL update, durable sleep, restart persistence, hook resume, catch and finally untouched by suspension, and dashboard response`,
+      `run ${runId} completed after a sequential step, concurrent resource registration, URL update, durable sleep, restart persistence, hook resume, catch and finally untouched by suspension, and dashboard response`,
     );
   } finally {
     if (service.child.exitCode === null && service.child.signalCode === null) {
@@ -1221,7 +1219,7 @@ if (postgresUrl === undefined) {
       );
     }
     console.log(
-      `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard (${LONG_STEP_MS}ms long step)`,
+      `\n=== runtime: real Postgres steps, sleep, parallel work, restart recovery, hook resume, and dashboard`,
     );
     await runtimeScenario(postgresUrl);
   }
