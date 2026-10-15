@@ -14,7 +14,6 @@ import { bindingFilesDir } from "./layout.ts";
 // is the root both ends of a copy are relative to.
 
 export class HookFailedError extends Error {
-  readonly hook: Hook;
   readonly command: string;
   readonly exitCode: number | null;
   readonly signal: NodeJS.Signals | null;
@@ -30,7 +29,6 @@ export class HookFailedError extends Error {
     const how = signal !== null ? `killed by ${signal}` : `exited ${exitCode ?? "?"}`;
     super(`${hook} command failed (${how}): ${command}${stderr === "" ? "" : `\n${stderr}`}`);
     this.name = "HookFailedError";
-    this.hook = hook;
     this.command = command;
     this.exitCode = exitCode;
     this.signal = signal;
