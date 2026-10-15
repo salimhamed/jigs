@@ -134,9 +134,12 @@ function showResources(resources: readonly ResourceRecord[], deps: ServiceDeps):
   for (const line of formatTable(["KIND", "STATE", "RESOURCE"], rows)) deps.out(`  ${line}`);
 }
 
+const counted = (n: number, noun: string) => `${n} ${noun}${n === 1 ? "" : "s"}`;
+
 function formatResultValue(value: unknown): string {
-  if (Array.isArray(value)) return `[${value.length} ${value.length === 1 ? "item" : "items"}]`;
-  if (value !== null && typeof value === "object") return "{…}";
+  if (Array.isArray(value)) return `[${counted(value.length, "item")}]`;
+  if (value !== null && typeof value === "object")
+    return `{${counted(Object.keys(value).length, "key")}}`;
   return singleLine(String(value));
 }
 

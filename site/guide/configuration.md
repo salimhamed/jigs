@@ -607,9 +607,9 @@ tools; see [GitHub access for agents](/guide/models-and-harnesses#github-access)
 jigs merges only when the approval is present or the workflow consents
 itself, GitHub reports the pull request mergeable, it is not a draft, at least
 one check has run, and CI is green.
-**jigs never merges in a repository with no CI**: when no check has reported,
-the merge is refused with a reason that says so, since CI may not have started
-yet or the repository may have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
+**jigs never merges in a repository with no CI**: it does not merge until a
+check has reported, since CI may not have started yet or the repository may
+have none. While GitHub reports `behind`, `blocked` or `unknown`, jigs waits and
 checks again later. jigs never changes branch protection.
 
 A protected branch that restricts who can push also restricts who can merge.

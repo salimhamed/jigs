@@ -280,7 +280,7 @@ test("a completed run shows only an object result's shape; --json has the rest",
   );
   respond({ steps: [], deadJobs: [] });
   await showRunStatus(RUN, deps(), { now: NOW });
-  expect(lines[4]).toBe("  result         {…}");
+  expect(lines[4]).toBe("  result         {6 keys}");
   expect(lines).not.toContain("Result");
 });
 

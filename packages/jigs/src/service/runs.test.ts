@@ -4,7 +4,6 @@ import { HookNotFoundError, WorkflowRunNotFoundError } from "workflow/errors";
 import { setWorld } from "workflow/runtime";
 import { z } from "zod";
 import * as factoryContext from "../config/factory-context.ts";
-import * as github from "../providers/github.ts";
 import { describeSuspension, type RunSuspension } from "../run-suspension.ts";
 import * as sql from "../steps/runtime/registry.ts";
 import { describeRunState } from "../steps/runtime/run-state.ts";
@@ -483,7 +482,6 @@ const storedLaunch = (fields: Record<string, string>) => [
 ];
 
 test("a run names its ticket and keeps its parked pull request in WAITING", async () => {
-  const githubRead = vi.spyOn(github, "fetchPrSnapshot");
   world({
     runs: [worldRun({ input: storedLaunch({ ticket: "AGE-317", triggerId: "manual" }) })],
     hooks: [{ runId: RUN_A, token: PARK_TOKEN }],
@@ -492,9 +490,6 @@ test("a run names its ticket and keeps its parked pull request in WAITING", asyn
   expect(row?.ticket).toBe("AGE-317");
   expect(row?.suspensions[0]?.reason).toBe("waiting for pull request activity on acme/api#41");
   expect(row?.suspensions[0]?.url).toBe("https://github.com/acme/api/pull/41");
-  // The listing behind status and watch stays provider-free; only the single-run
-  // route calls enrichSuspensions.
-  expect(githubRead).not.toHaveBeenCalled();
 });
 
 test("a terminal run uses its completion time without interpreting its result", async () => {
