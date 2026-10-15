@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.107.1](https://github.com/salimhamed/jigs/compare/jigs-v0.107.0...jigs-v0.107.1) (2026-10-15)
+
+
+### Features
+
+* cancel a run when its Linear agent session is archived ([#700](https://github.com/salimhamed/jigs/issues/700)) ([47d38cb](https://github.com/salimhamed/jigs/commit/47d38cbb04c18a9377c09c475f502d2879bb6e02))
+
 ## [0.107.0](https://github.com/salimhamed/jigs/compare/jigs-v0.106.0...jigs-v0.107.0) (2026-10-15)
 
 
