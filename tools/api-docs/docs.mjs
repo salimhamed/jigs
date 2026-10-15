@@ -253,6 +253,7 @@ export async function renderEntry(entry, destination, options = {}) {
     const target = path.join(destination, entry.output);
     await mkdir(path.dirname(target), { recursive: true });
     await copyFile(path.join(temporary, "index.md"), target);
+    return project;
   } finally {
     await rm(temporary, { recursive: true, force: true });
   }

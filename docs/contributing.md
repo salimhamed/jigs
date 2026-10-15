@@ -22,8 +22,10 @@ pnpm docs:examples # type-check displayed TypeScript examples in isolation
 ```
 
 With `WORKFLOW_POSTGRES_URL` set, `pnpm e2e` also boots the linear-ticket-to-pr
-factory's service, waits for readiness and requires a clean exit on SIGTERM. Put
-local values in `.env.e2e.local` (copy `.env.e2e.example`; it is gitignored).
+factory's service, waits for readiness and requires a clean exit on SIGTERM, then
+runs the compiled cancellation matrix on the bare factory. `pnpm e2e --only ids`
+skips the matrix and `pnpm e2e --only cancellation` runs only it; CI runs the two
+as parallel jobs. Put local values in `.env.e2e.local` (copy `.env.e2e.example`; it is gitignored).
 Shell and CI values win over the file. Point it at a dedicated database and port,
 never a live factory World.
 

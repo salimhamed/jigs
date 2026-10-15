@@ -391,8 +391,8 @@ function withFakeVersion(packJigs) {
 // The service refuses to start without a WORKFLOW_POSTGRES_URL, though: the
 // registry gate applies jigs' Drizzle migrations (the jigs_resources table)
 // there before the World starts. So the boot runs only when the runner's
-// environment carries one — CI's step-ids job brings a Postgres service
-// container for it — and says so and skips when it does not. The migrations
+// environment carries one — CI's step-ids job starts the runner's Postgres
+// for it — and says so and skips when it does not. The migrations
 // need no bootstrap, so an empty database will do.
 //
 // Then the exit. Nothing under the service ends the process on SIGTERM —
@@ -1116,31 +1116,39 @@ async function checkScaffold(name) {
   );
 }
 
+// `--only ids` runs everything but the cancellation matrix and `--only
+// cancellation` runs only the matrix, on a bare scaffold built once, so CI can
+// run the two halves side by side.
+const only = process.argv.includes("--only")
+  ? process.argv[process.argv.indexOf("--only") + 1]
+  : undefined;
+if (only !== undefined && only !== "ids" && only !== "cancellation") {
+  fail(`unknown --only ${only}`, "use --only ids or --only cancellation, or neither for both");
+}
+
 scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
 const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
 // Before the scaffolds, so each is built pointing at it.
-const hub = postgresUrl ? await startHub(postgresUrl) : undefined;
+const hub = postgresUrl && only !== "cancellation" ? await startHub(postgresUrl) : undefined;
 tarballs = pack();
-checkCliBundle();
-checkDlxInit();
-const cancellationOnly = process.argv.includes("--cancellation-only");
-for (const name of cancellationOnly ? ["bare"] : ["bare", "linear-ticket-to-pr"])
-  await checkScaffold(name);
+if (only === "cancellation") {
+  scaffold("bare");
+  factories.set("bare", factory);
+  installFromTarball(tarballs.jigs);
+} else {
+  checkCliBundle();
+  checkDlxInit();
+  for (const name of ["bare", "linear-ticket-to-pr"]) await checkScaffold(name);
+}
 
 // Boot the recipe scaffold once: it registers hello and linear-ticket-to-pr, exercising the
 // optional recipe's deferred registration as well as all runtime peers.
-if (hub === undefined) {
+if (postgresUrl === undefined) {
   console.log(
-    "\nboot check skipped: WORKFLOW_POSTGRES_URL unset (CI runs it against a service container)",
+    "\nboot, runtime and cancellation checks skipped: WORKFLOW_POSTGRES_URL unset (CI runs them against its own Postgres)",
   );
 } else {
-  if (!cancellationOnly) {
-    console.log("\n=== cancel storage/transport scope: Postgres fencing and queue diagnostics");
-    execFileSync(
-      PNPM,
-      ["vitest", "run", "--project", "db", "src/service/cancel-storage.db.test.ts"],
-      { cwd: packageRoot, stdio: "inherit" },
-    );
+  if (only !== "cancellation") {
     console.log(
       "\n=== bare boot: with no harness CLI, provider credential or hub connection, the bare factory starts and doctor is clean",
     );
@@ -1217,19 +1225,22 @@ if (hub === undefined) {
     await runtimeScenario(postgresUrl);
   }
 
-  console.log(
-    "\n=== cancellation: generated v5 handler, Postgres queue states, restart drain, and offline resource prune",
-  );
-  factory = factories.get("bare");
-  if (factory === undefined) throw new Error("bare scaffold was not retained for cancellation e2e");
-  installCompiledCancellationFixture(factory);
-  await runCompiledCancellationMatrix({
-    adminPostgresUrl: postgresUrl,
-    cli,
-    factory,
-    ports: { service: CANCEL_PORT, dashboard: CANCEL_DASHBOARD_PORT },
-    scratch,
-  });
+  if (only !== "ids") {
+    console.log(
+      "\n=== cancellation: generated v5 handler, Postgres queue states, restart drain, and offline resource prune",
+    );
+    factory = factories.get("bare");
+    if (factory === undefined)
+      throw new Error("bare scaffold was not retained for cancellation e2e");
+    installCompiledCancellationFixture(factory);
+    await runCompiledCancellationMatrix({
+      adminPostgresUrl: postgresUrl,
+      cli,
+      factory,
+      ports: { service: CANCEL_PORT, dashboard: CANCEL_DASHBOARD_PORT },
+      scratch,
+    });
+  }
 }
 
 await hub?.stop().catch((err) => fail(err.message, "see the hub's output above"));
