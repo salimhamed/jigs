@@ -269,6 +269,7 @@ Every provider call names the installation it acts through, by its installation 
 Linear, Slack and PagerDuty steps take one options object with `installationName`, such as
 `postSlackMessage({ installationName, channel, text })`; `callGitHub` and `callSlack` take it in their last argument.
 A binding declares its GitHub `installationName`, and `Worktree` and `PullRequestRef` carry it into the pull request steps and routines.
+`listBindings()` returns every binding as `{ name, installationName, owner, repo }`; call it instead of copying the bindings into workflow code.
 Each trigger source takes one, and passes it to the run as the `installationName` input; thread it from there into every call the run makes.
 
 Use `jigs bind` and `jigs unbind` for literal binding declarations. Unsupported

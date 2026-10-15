@@ -63,6 +63,16 @@ export async function provisionPullRequestWorktree(
 }
 
 /**
+ * List every binding in the factory's configuration, with the GitHub repository it points at.
+ *
+ * @group Workspaces and resources
+ */
+export async function listBindings() {
+  "use step";
+  return workspacesOperations.listBindings();
+}
+
+/**
  * Release this run's resources now and return the report. The service already does this when
  * the run ends; call it to release early, to read the report, or to pass this run's policy.
  *
