@@ -1,11 +1,9 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { makeFactoryRepo, makeTmpDir, removeTmpDir, runFrom } from "../../test-fixtures.ts";
 import { layoutProblems } from "../output-layout.ts";
 import { type BindDeps, bindRepo } from "./bind.ts";
-import { unbindRepo } from "./unbind.ts";
 
 let tmp: string;
 let factory: string;
@@ -161,20 +159,19 @@ test("bind creates a derived-name entry when no binding has the remote", () => {
   expect(jigsConfig()).toContain(`remote: "${API}"`);
 });
 
-test("a new binding says jigs up applies and clones it", () => {
+test("a new binding says jigs up applies it", () => {
   bindRepo(API, deps(), { installation: "gh" });
-  expect(lines.slice(-3)).toEqual([
-    "",
-    "to apply the config and clone api, run:",
-    "  pnpm exec jigs up",
-  ]);
+  expect(lines.slice(-3)).toEqual(["", "to apply the config, run:", "  pnpm exec jigs up"]);
 });
 
-test("a non-github remote's name comes from the last path segment", () => {
-  const result = bindRepo("git@gitlab.com:acme/Other-Thing.git", deps(), {
-    installation: "gh",
-  });
-  expect(result.name).toBe("other-thing");
+test("a remote that is not a GitHub repository is refused before anything is written", () => {
+  const before = jigsConfig();
+  for (const arg of ["git@gitlab.com:acme/api.git", "../some-target-repo", "--upload-pack=x"]) {
+    expect(() => bindRepo(arg, deps(), { installation: "gh" })).toThrow(
+      "is not a GitHub repository URL",
+    );
+  }
+  expect(jigsConfig()).toBe(before);
 });
 
 test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unchanged", () => {
@@ -184,38 +181,7 @@ test("re-bind is idempotent: no duplicate entries, comments preserved, bytes unc
   bindRepo(API, deps(), { installation: "gh" });
   expect(jigsConfig()).toBe(before);
   expect(lines.some((l) => l.includes("already points at"))).toBe(true);
-});
-
-function markCloned(bindingName: string): void {
-  const originRefs = path.join(
-    cloneRepoDir({ factoryRoot: factory, bindingName }),
-    "refs/remotes/origin",
-  );
-  mkdirSync(originRefs, { recursive: true });
-  writeFileSync(path.join(originRefs, "HEAD"), "ref: refs/heads/main\n");
-}
-
-test("a binding whose clone is already on disk needs no restart", () => {
-  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  writeConfig(`api: { remote: ${JSON.stringify(API)}, installationName: "gh" }`);
-  markCloned("api");
-
-  bindRepo(API, deps(), { installation: "gh" });
   expect(lines.some((l) => l.includes("pnpm exec jigs up"))).toBe(false);
-});
-
-test("a name re-bound after an unbind says jigs up applies the changed config", () => {
-  vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
-  writeConfig(`api: { remote: ${JSON.stringify(API)}, installationName: "gh" }`);
-  markCloned("api");
-  unbindRepo("api", deps());
-
-  bindRepo("git@github.com:acme/api-moved.git", deps(), { installation: "gh", name: "api" });
-  expect(lines.slice(-3)).toEqual([
-    "",
-    "to apply the config and clone api, run:",
-    "  pnpm exec jigs up",
-  ]);
 });
 
 test("a name already bound to another remote is refused, hinting unbind", () => {
@@ -241,22 +207,6 @@ test("invalid binding name errors", () => {
   expect(() => bindRepo(API, deps(), { installation: "gh", name: "bad name!" })).toThrow(
     "invalid binding name",
   );
-});
-
-test("a path argument is refused with the remote-URL hint", () => {
-  const before = jigsConfig();
-  for (const arg of ["../some-target-repo", tmp, "~/Code/api"]) {
-    expect(() => bindRepo(arg, deps(), { installation: "gh" })).toThrow("looks like a path");
-  }
-  expect(jigsConfig()).toBe(before);
-});
-
-test("a remote starting with a dash is refused before it can become a git option", () => {
-  const before = jigsConfig();
-  expect(() => bindRepo("--upload-pack=touch /tmp/pwned", deps(), { installation: "gh" })).toThrow(
-    "starts with a dash",
-  );
-  expect(jigsConfig()).toBe(before);
 });
 
 test("bind outside a factory repo fails with guidance", () => {

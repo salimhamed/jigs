@@ -1,6 +1,5 @@
 import { currentFactoryContext } from "../../config/factory-context.ts";
-import { JigsError } from "../../errors.ts";
-import { deriveDefaultBranch, resolveRemoteUrl } from "../../providers/git.ts";
+import { deriveDefaultBranch } from "../../providers/git.ts";
 import { hasBindingClone } from "../../steps/workspaces/clone.ts";
 import { cloneRepoDir } from "../../steps/workspaces/layout.ts";
 import { displayPath, formatTable } from "../output.ts";
@@ -21,7 +20,7 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
       binding.remote,
       binding.installationName,
       displayPath(clone),
-      await resolveState(clone, binding.remote),
+      await resolveState(clone),
     ]);
   }
   if (rows.length === 0) {
@@ -33,22 +32,8 @@ export async function listBindings(deps: BindingsDeps): Promise<void> {
   }
 }
 
-async function resolveState(repoDir: string, pinnedRemote: string): Promise<string> {
-  // The same marker the startup gate, doctor and the worktree request read,
-  // so all four agree about which bindings have a clone.
-  if (!hasBindingClone(repoDir)) return "not cloned (restart the service)";
-  try {
-    const { remote, url } = await resolveRemoteUrl(repoDir);
-    if (url !== pinnedRemote) return `cloned, remote drifted: ${url}`;
-    const branch = await deriveDefaultBranch(repoDir, remote);
-    if (branch === null) {
-      // Past the marker, which is origin/HEAD itself — so this is a ref git
-      // wrote and no longer reads as a branch.
-      throw new JigsError(`${repoDir} has an origin/HEAD naming no branch`);
-    }
-    return `cloned (default: ${branch})`;
-  } catch (err) {
-    if (err instanceof JigsError) return err.message;
-    throw err;
-  }
+// The same marker the worktree request reads before it clones.
+async function resolveState(repoDir: string): Promise<string> {
+  if (!hasBindingClone(repoDir)) return "not cloned yet";
+  return `cloned (default: ${await deriveDefaultBranch(repoDir)})`;
 }

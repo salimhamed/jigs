@@ -53,12 +53,24 @@ export function makeRemoteBackedRepo(
   git(checkout, "config", "user.name", "jigs-fixture");
   git(checkout, "config", "user.email", "fixture@jigs.test");
   git(checkout, "remote", "add", "origin", remoteDir);
+  git(checkout, "config", "jigs.installation", "github-acme");
   writeFileSync(path.join(checkout, "README.md"), "# fixture\n");
   git(checkout, "add", "README.md");
   git(checkout, "commit", "-q", "-m", "initial");
   git(checkout, "push", "-q", "-u", "origin", defaultBranch);
   git(checkout, "remote", "set-head", "origin", defaultBranch);
   return { remoteDir, checkout };
+}
+
+export const GITHUB_URL = "https://github.com/acme/api.git";
+
+// git, jigs' own included, reaches `remoteDir` at {@link GITHUB_URL}, so a clone
+// jigs points at GitHub stays real and offline. Undone by vi.unstubAllEnvs().
+export function serveAsGithub(remoteDir: string): string {
+  vi.stubEnv("GIT_CONFIG_COUNT", "1");
+  vi.stubEnv("GIT_CONFIG_KEY_0", `url.${remoteDir}.insteadOf`);
+  vi.stubEnv("GIT_CONFIG_VALUE_0", GITHUB_URL);
+  return GITHUB_URL;
 }
 
 // Tests can supply an object or raw TypeScript to exercise invalid configuration.

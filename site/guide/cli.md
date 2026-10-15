@@ -69,7 +69,7 @@ before any run is created.
 | Command | What it does |
 | --- | --- |
 | `jigs bind <remote-url> --installation <installation>` | Add a binding for a repository, acting through the GitHub [installation](/guide/hub#installation-names) with that name, and create the factory's `bindings/<name>/` folder for [copied files](/guide/configuration#bindings) if it is missing. |
-| `jigs bindings` | List bindings, their clone paths and whether each clone exists. |
+| `jigs bindings` | List bindings, their clone paths and whether each is cloned yet. A binding is cloned the first time a run needs a worktree there. |
 | `jigs unbind <name>` | Remove a binding. The clone stays on disk for you to delete, and so does the factory's `bindings/<name>/` folder. |
 
 jigs keeps each binding's clone and worktrees under

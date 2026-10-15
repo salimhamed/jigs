@@ -19,6 +19,10 @@ import {
   SERVICE_COMMAND,
 } from "./test-fixtures.ts";
 
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
+
 vi.mock("../../steps/runtime/registry.ts", async (original) => ({
   ...(await original<typeof import("../../steps/runtime/registry.ts")>()),
   ...(await import("../../steps/runtime/test-fixtures.ts")).memoryRegistry(),

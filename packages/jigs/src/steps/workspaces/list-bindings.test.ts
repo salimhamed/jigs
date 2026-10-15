@@ -33,12 +33,3 @@ test("lists every binding with the repository its remote names", () => {
     { name: "docs", installationName: "github-docs", owner: "acme", repo: "docs" },
   ]);
 });
-
-test("a binding whose remote is not on github.com is left out", () => {
-  writeBindings({
-    app: { remote: "git@github.com:acme/app.git", installationName: "github-acme" },
-    fixtures: { remote: "git@gitlab.com:acme/fixtures.git", installationName: "github-acme" },
-  });
-
-  expect(listBindings().map((binding) => binding.name)).toEqual(["app"]);
-});

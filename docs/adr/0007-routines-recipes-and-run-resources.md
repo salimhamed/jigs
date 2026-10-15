@@ -51,8 +51,7 @@ A run's cleanup status is its rows' states; nothing else records it.
 
 The factory service owns release. Policy resolves from the workflow entry, then
 the factory default, then `{ onSuccess: "release", onFailure: "keep" }`. A
-workflow may call the `release` step to get the report early. Each worktree is
-decided by the [teardown rules](./0002-worktree-lifecycle.md). Harness homes
+workflow may call the `release` step to get the report early. Harness homes
 hold the sessions that resume a worktree, so they are removed only once every
 worktree of the run is released.
 

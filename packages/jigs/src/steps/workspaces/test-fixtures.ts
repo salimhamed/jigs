@@ -89,6 +89,7 @@ function buildClonedBinding(parent: string, cloneDir: string): ClonedBinding {
   // global config.
   git(repoDir, "config", "user.name", "jigs-fixture");
   git(repoDir, "config", "user.email", "fixture@jigs.test");
+  git(repoDir, "config", "jigs.installation", "github-acme");
   git(repoDir, "remote", "add", "origin", remoteDir);
   git(repoDir, "fetch", "-q", "origin");
   git(repoDir, "remote", "set-head", "origin", "-a");

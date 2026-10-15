@@ -9,6 +9,7 @@ import {
   type AutomaticReleaseDeps,
   reconcileAutomaticRelease,
 } from "../../service/automatic-release.ts";
+import { serveAsGithub } from "../../test-fixtures.ts";
 import type { Factory } from "../../workflow/factory.ts";
 import {
   ensureRegistry,
@@ -24,9 +25,8 @@ import { cloneDir } from "./layout.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 vi.mock("../../providers/github.ts", () => ({ isForkPullRequest: vi.fn(async () => false) }));
-// The fixture's remote is a local path; the pull request is read as if it were on GitHub.
-vi.mock("../../providers/github-remote.ts", () => ({
-  parseGithubRemote: () => ({ owner: "acme", repo: "api" }),
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
 }));
 
 // Real Postgres, a real clone and real cuts: provisioning, explicit release and
@@ -44,9 +44,10 @@ vi.stubEnv("WORKFLOW_POSTGRES_URL", testUrl.toString());
 
 const dirs = { factoryRoot, bindingName: "api" };
 const { remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
+serveAsGithub(remoteDir);
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
-  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
+  `export default ${JSON.stringify({ bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
 );
 
 const sql = () => registrySql();

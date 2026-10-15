@@ -2,39 +2,18 @@ import { getWorkflowMetadata } from "workflow";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import {
   commitsAhead,
-  DEFAULT_PUSH_TARGET,
   diffSince,
   git,
   pushBranch as gitPushBranch,
   headSha,
   type Pushed,
-  type PushTarget,
   pushCommit,
-  resolveRemoteUrl,
 } from "../../providers/git.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
-import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { BranchState } from "../../workflow/git/committed-work.ts";
+import { bindingRepository } from "../../workflow/github-remote.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { recordResource, registrySql } from "../runtime/registry.ts";
 import { isWorktreeDirty } from "../workspaces/git-safety.ts";
-
-// A binding's remote is an SSH URL, which authenticates as whoever owns the
-// key on this machine — the operator. An installation token cannot travel that
-// way, so jigs pushes to the same repository over HTTPS and hands the token
-// to `PushTarget`, which keeps it out of the URL and out of argv. Only the push
-// is redirected: the binding's clone and every fetch still use its own remote,
-// as the operator. A remote off GitHub has no installation token, so it is
-// pushed to as the operator too.
-async function pushTarget({ path: worktreePath, installationName }: Worktree): Promise<PushTarget> {
-  const { url } = await resolveRemoteUrl(worktreePath);
-  const ref = parseGithubRemote(url);
-  if (ref === null) return DEFAULT_PUSH_TARGET;
-  return {
-    remote: `https://github.com/${ref.owner}/${ref.repo}.git`,
-    token: await githubAuthFor(installationName).bearer(),
-  };
-}
 
 /**
  * Push, recording the branch as this run's only when this push created it on the remote, so a
@@ -44,11 +23,10 @@ async function pushTarget({ path: worktreePath, installationName }: Worktree): P
  */
 async function pushAndRecord(worktreePath: string, branch: string, push: () => Promise<Pushed>) {
   const { created } = await push();
-  const { url } = await resolveRemoteUrl(worktreePath);
-  const ref = parseGithubRemote(url);
   // A retry after a push that created the branch but died before this point
   // sees an existing ref and records nothing: the branch is then never listed.
-  if (!created || ref === null) return;
+  if (!created) return;
+  const ref = bindingRepository(await git(["config", "remote.origin.url"], worktreePath));
   await recordResource(registrySql(), {
     factory: currentFactoryContext().slug,
     runId: getWorkflowMetadata().workflowRunId,
@@ -86,9 +64,7 @@ export async function pushBranch(worktree: Worktree): Promise<{
   headSha: string;
 }> {
   const { path: worktreePath, branch } = worktree;
-  await pushAndRecord(worktreePath, branch, async () =>
-    gitPushBranch(worktreePath, branch, await pushTarget(worktree)),
-  );
+  await pushAndRecord(worktreePath, branch, () => gitPushBranch(worktreePath, branch));
   return { headSha: await headSha(worktreePath) };
 }
 
@@ -119,9 +95,7 @@ export async function pushApprovedChange(
       `Cannot publish ${branch}: ${head} is not the approved commit ${approvedCommit}`,
     );
   }
-  await pushAndRecord(worktreePath, branch, async () =>
-    pushCommit(worktreePath, branch, approvedCommit, await pushTarget(worktree)),
-  );
+  await pushAndRecord(worktreePath, branch, () => pushCommit(worktreePath, branch, approvedCommit));
   return { headSha: approvedCommit };
 }
 

@@ -2,10 +2,15 @@ import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
+import { GITHUB_URL, serveAsGithub } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { cloneDir, worktreePath } from "./layout.ts";
 import { PostCreateFailedError } from "./provision.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
+
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
 
 vi.mock("../runtime/registry.ts", async (original) => ({
   ...(await original<typeof import("../runtime/registry.ts")>()),
@@ -45,8 +50,9 @@ beforeEach(() => {
   });
 
   const dirs = { factoryRoot, bindingName: "api" };
-  // The clone goes exactly where the layout says the service put it.
+  // The clone goes exactly where the layout says provisioning puts it.
   ({ repoDir, remoteDir } = makeClonedBinding(tmp, cloneDir(dirs)));
+  serveAsGithub(remoteDir);
   target = worktreePath({ ...dirs, branch });
   writeBinding();
   memoryRows.length = 0;
@@ -60,7 +66,7 @@ afterEach(() => {
 function writeBinding(provisioning: Record<string, unknown> = {}): void {
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme", ...provisioning } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "github-acme", ...provisioning } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
   );
 }
 
@@ -150,15 +156,14 @@ test("a failing postCreate keeps the record for diagnosis and rethrows", async (
   ]);
 });
 
-test("a binding with no clone is refused, naming the restart that makes one", async () => {
+test("a binding's first worktree clones it from GitHub as its installation", async () => {
   rmSync(repoDir, { recursive: true, force: true });
-  const failure = await provisionWorktree(request, run).then(
-    () => null,
-    (err: unknown) => err,
-  );
-  expect(String(failure)).toContain(`binding api has no clone at ${repoDir}`);
-  expect((failure as { hint?: string }).hint).toContain("jigs up --restart-service");
-  expect(memoryRows).toEqual([]);
+
+  const facts = await provisionWorktree(request, run);
+
+  expect(git(repoDir, "config", "remote.origin.url")).toBe(GITHUB_URL);
+  expect(git(repoDir, "config", "jigs.installation")).toBe("github-acme");
+  expect(facts.baseSha).toBe(git(remoteDir, "rev-parse", "refs/heads/main"));
 });
 
 test("a provisioned worktree logs its binding, branch, and path", async () => {

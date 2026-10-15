@@ -1,6 +1,5 @@
 import { afterEach, expect, test, vi } from "vitest";
 import { WorkflowRunNotFoundError } from "workflow/errors";
-import { JigsError } from "../errors.ts";
 import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
 import { inTestFactory, testFactoryContext } from "../test-fixtures.ts";
@@ -8,7 +7,6 @@ import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { Factory } from "../workflow/factory.ts";
 import {
   fenceTerminalWorkflowDeliveries,
-  gateOnBindingClones,
   gateOnHarnessRuntimes,
   gateOnHubUse,
   gateOnRegistry,
@@ -209,105 +207,6 @@ test("no configured Postgres exits at the gate instead of starting a registry-le
   expect(proceed).toBe(false);
   expect(exits).toEqual([1]);
   expect(errors[0]).toContain("WORKFLOW_POSTGRES_URL is not set");
-});
-
-// The clone gate: what a run against an unreachable remote used to discover
-// mid-agent, the service now discovers before it starts.
-const forge = {
-  name: "forge",
-  remote: "git@github.com:acme/forge.git",
-  repoDir: "/data/clones/factory/forge/repo.git",
-};
-
-test("every declared binding is ensured, and says so before the fetch runs", async () => {
-  const ensured: string[] = [];
-  const logs: string[] = [];
-
-  const proceed = await gateOnBindingClones({
-    bindings: () => [forge],
-    ensure: async (options) => {
-      // The line is out before the fetch that can hold the boot for minutes.
-      expect(logs).toEqual([`[service] binding forge: ensuring clone at ${forge.repoDir}`]);
-      ensured.push(`${options.repoDir} ${options.remote}`);
-    },
-    log: (line) => logs.push(line),
-  });
-
-  expect(proceed).toBe(true);
-  expect(ensured).toEqual([`${forge.repoDir} ${forge.remote}`]);
-});
-
-test("a clone that fails names the binding and exits instead of starting", async () => {
-  const exits: number[] = [];
-  const errors: string[] = [];
-
-  const proceed = await gateOnBindingClones({
-    bindings: () => [forge],
-    ensure: () => Promise.reject(new Error("could not fetch git@github.com:acme/forge.git")),
-    exit: (code) => exits.push(code),
-    error: (line) => errors.push(line),
-    log: () => {},
-  });
-
-  expect(proceed).toBe(false);
-  expect(exits).toEqual([1]);
-  expect(errors).toEqual([
-    "[service] binding forge: could not fetch git@github.com:acme/forge.git",
-  ]);
-});
-
-test("a JigsError's repair reaches the log beside the reason", async () => {
-  const errors: string[] = [];
-
-  await gateOnBindingClones({
-    bindings: () => [forge],
-    ensure: () =>
-      Promise.reject(
-        new JigsError(
-          "could not fetch acme/forge",
-          "give git credentials\nthen restart the service",
-        ),
-      ),
-    exit: () => {},
-    error: (line) => errors.push(line),
-    log: () => {},
-  });
-
-  expect(errors).toEqual([
-    "[service] binding forge: could not fetch acme/forge\n  → give git credentials\n    then restart the service",
-  ]);
-});
-
-test("a factory config that cannot be read exits too", async () => {
-  const exits: number[] = [];
-  const errors: string[] = [];
-
-  const proceed = await gateOnBindingClones({
-    bindings: () => {
-      throw new Error("invalid jigs.config.ts");
-    },
-    ensure: async () => {},
-    exit: (code) => exits.push(code),
-    error: (line) => errors.push(line),
-    log: () => {},
-  });
-
-  expect(proceed).toBe(false);
-  expect(exits).toEqual([1]);
-  expect(errors[0]).toContain("invalid jigs.config.ts");
-});
-
-test("a factory with no bindings clones nothing and still starts", async () => {
-  const logs: string[] = [];
-
-  const proceed = await gateOnBindingClones({
-    bindings: () => [],
-    ensure: () => Promise.reject(new Error("never called")),
-    log: (line) => logs.push(line),
-  });
-
-  expect(proceed).toBe(true);
-  expect(logs).toEqual([]);
 });
 
 // Resolution is part of the last gate too: an invalid WORKFLOW_TARGET_WORLD

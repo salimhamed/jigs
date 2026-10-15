@@ -13,6 +13,10 @@ import {
 import { layoutProblems } from "../output-layout.ts";
 import { listBindings } from "./bindings.ts";
 
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
+
 let tmp: string;
 let factory: string;
 let remoteDir: string;
@@ -20,9 +24,8 @@ let remoteDir: string;
 beforeEach(() => {
   tmp = makeTmpDir();
   remoteDir = makeRemoteBackedRepo(tmp).remoteDir;
-  // A local bare repo stands in for GitHub, so the clone is real and offline.
   factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: remoteDir, installationName: "github-acme" } },
+    bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "github-acme" } },
   });
   vi.stubEnv("XDG_DATA_HOME", path.join(tmp, "data"));
 });
@@ -43,34 +46,29 @@ const cloneDir = () => cloneRepoDir({ factoryRoot: factory, bindingName: "api" }
 
 // "api" and "github-acme" pad to their headers' widths; the remote, clone and state
 // columns are each already wider than their header.
-const apiRow = (state: string) => `api   ${remoteDir}  github-acme   ${cloneDir()}  ${state}`;
+const apiRow = (state: string) =>
+  `api   git@github.com:acme/api.git  github-acme   ${cloneDir()}  ${state}`;
+// A local bare repo stands in for GitHub, so the clone is real and offline.
+const clone = () =>
+  ensureBindingClone({ repoDir: cloneDir(), url: remoteDir, installationName: "github-acme" });
 
 test("a binding with no clone yet reports where the clone will land", async () => {
   const lines = await printed();
   expect(lines[0]?.split(/ {2,}/)).toEqual(["NAME", "REMOTE", "INSTALLATION", "CLONE", "STATE"]);
-  expect(lines.slice(1)).toEqual([apiRow("not cloned (restart the service)")]);
+  expect(lines.slice(1)).toEqual([apiRow("not cloned yet")]);
 });
 
 test("a cloned binding reports the default branch it derived", async () => {
-  await ensureBindingClone({ repoDir: cloneDir(), remote: remoteDir });
+  await clone();
   const lines = await printed();
   expect(lines[1]).toBe(apiRow("cloned (default: main)"));
 });
 
-test("a clone whose remote no longer matches names the url it found", async () => {
-  const repoDir = cloneDir();
-  await ensureBindingClone({ repoDir, remote: remoteDir });
-  git(repoDir, "remote", "set-url", "origin", "git@github.com:other/api.git");
+test("a clone that lost its remote HEAD reports as not cloned", async () => {
+  await clone();
+  git(cloneDir(), "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
   const lines = await printed();
-  expect(lines[1]).toBe(apiRow("cloned, remote drifted: git@github.com:other/api.git"));
-});
-
-test("a clone that lost its remote HEAD reports as not cloned, like doctor does", async () => {
-  const repoDir = cloneDir();
-  await ensureBindingClone({ repoDir, remote: remoteDir });
-  git(repoDir, "symbolic-ref", "-d", "refs/remotes/origin/HEAD");
-  const lines = await printed();
-  expect(lines[1]).toBe(apiRow("not cloned (restart the service)"));
+  expect(lines[1]).toBe(apiRow("not cloned yet"));
 });
 
 test("a factory with no bindings says so instead of printing a header", async () => {

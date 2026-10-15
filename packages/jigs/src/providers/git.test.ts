@@ -1,6 +1,6 @@
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { git, makeRemoteBackedRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import {
   commitsAhead,
@@ -8,9 +8,14 @@ import {
   diffSince,
   probeRemoteAuth,
   pushBranch,
-  resolveRemoteUrl,
+  remoteGit,
   scrubCredentials,
 } from "./git.ts";
+import { githubAuthFor } from "./github-auth.ts";
+
+vi.mock("./github-auth.ts", () => ({
+  githubAuthFor: vi.fn(() => ({ bearer: async () => "ghs_secret_value" })),
+}));
 
 let tmp: string;
 beforeEach(() => {
@@ -28,40 +33,6 @@ function repoWithRemotes(name: string, ...remotes: Array<[string, string]>): str
   for (const [remote, url] of remotes) git(dir, "remote", "add", remote, url);
   return dir;
 }
-
-test("resolveRemoteUrl prefers origin", async () => {
-  const repo = repoWithRemotes(
-    "prefers-origin",
-    ["origin", "git@github.com:acme/api.git"],
-    ["upstream", "git@github.com:other/api.git"],
-  );
-  expect(await resolveRemoteUrl(repo)).toEqual({
-    remote: "origin",
-    url: "git@github.com:acme/api.git",
-  });
-});
-
-test("resolveRemoteUrl falls back to a sole non-origin remote", async () => {
-  const repo = repoWithRemotes("sole-remote", ["upstream", "git@github.com:acme/api.git"]);
-  expect(await resolveRemoteUrl(repo)).toEqual({
-    remote: "upstream",
-    url: "git@github.com:acme/api.git",
-  });
-});
-
-test("resolveRemoteUrl errors with no remote", async () => {
-  const repo = repoWithRemotes("no-remote");
-  await expect(resolveRemoteUrl(repo)).rejects.toThrow("no git remote");
-});
-
-test("resolveRemoteUrl errors on multiple remotes without origin", async () => {
-  const repo = repoWithRemotes(
-    "two-remotes",
-    ["upstream", "git@github.com:a/x.git"],
-    ["fork", "git@github.com:b/x.git"],
-  );
-  await expect(resolveRemoteUrl(repo)).rejects.toThrow("none is origin");
-});
 
 test("deriveDefaultBranch reads refs/remotes/origin/HEAD", async () => {
   const repo = repoWithRemotes("with-head", ["origin", "git@github.com:acme/api.git"]);
@@ -154,46 +125,27 @@ test("a runaway diff is truncated rather than handed to a prompt whole", async (
 
 test("probeRemoteAuth returns null for a reachable remote and stderr for an unreachable one", async () => {
   const { remoteDir } = makeRemoteBackedRepo(tmp);
-  expect(await probeRemoteAuth(remoteDir, 10_000)).toBeNull();
+  expect(await probeRemoteAuth(remoteDir, "ghs_token", 10_000)).toBeNull();
 
   // The regression guard for GIT_TERMINAL_PROMPT=0: an unreachable remote
   // must fail inside the timeout, not hang on a credential prompt.
-  const stderr = await probeRemoteAuth(path.join(tmp, "nonexistent.git"), 10_000);
+  const stderr = await probeRemoteAuth(path.join(tmp, "nonexistent.git"), "ghs_token", 10_000);
   expect(stderr).not.toBeNull();
   expect(stderr).toContain("nonexistent.git");
 }, 20_000);
 
-test("probeRemoteAuth never lets the remote string become a git option", async () => {
-  const marker = path.join(tmp, "pwned");
-  // Positionally, this is the repository. Parsed as an option it is a command
-  // git runs against the trailing `HEAD`.
-  const stderr = await probeRemoteAuth(`--upload-pack=touch ${marker}`, 10_000);
-
-  expect(existsSync(marker)).toBe(false);
-  expect(stderr).toContain("--upload-pack=");
-}, 20_000);
-
-test("the push credential travels in the environment, not the URL or argv", async () => {
+test("remoteGit sends the clone's installation token to GitHub without writing it anywhere", async () => {
   const { checkout } = makeRemoteBackedRepo(tmp);
-  // Refused on the first connection: nothing here leaves the machine.
-  const remote = "https://127.0.0.1:1/acme/api.git";
-  const failure = await pushBranch(checkout, "feature", {
-    remote,
-    token: "ghs_secret_value",
-  }).catch((err: unknown) => String(err));
-  expect(failure).not.toContain("ghs_secret_value");
-  // The command git ran is in the message, so this is also the argv assertion.
-  expect(failure).toContain(remote);
-  expect(failure).not.toContain("@127.0.0.1");
-});
+  const header = await remoteGit(
+    ["config", "--get-urlmatch", "http.extraheader", "https://github.com/acme/api.git"],
+    checkout,
+  );
 
-test("a URL that carries a credential anyway is still scrubbed out of the failure", async () => {
-  const { checkout } = makeRemoteBackedRepo(tmp);
-  const failure = await pushBranch(checkout, "feature", {
-    remote: "https://x-access-token:ghs_secret_value@127.0.0.1:1/acme/api.git",
-  }).catch((err: unknown) => String(err));
-  expect(failure).not.toContain("ghs_secret_value");
-  expect(failure).toContain("***@127.0.0.1");
+  expect(githubAuthFor).toHaveBeenCalledWith("github-acme");
+  expect(header).toBe(
+    `Authorization: Basic ${Buffer.from("x-access-token:ghs_secret_value").toString("base64")}`,
+  );
+  expect(git(checkout, "config", "--list", "--local")).not.toContain("extraheader");
 });
 
 test("scrubCredentials leaves a URL that carries none alone", () => {

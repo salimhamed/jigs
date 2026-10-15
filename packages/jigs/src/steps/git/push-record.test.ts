@@ -1,32 +1,19 @@
-// How the reviewed commit reaches its remote. The git provider is a stand-in
-// here: what is under test is the target jigs hands it, not what git does with
-// it.
+// Which pushes record a branch for the run. The git provider is a stand-in
+// here: what is under test is the record, not what git does.
 
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import {
-  git,
-  pushBranch as gitPushBranch,
-  headSha,
-  pushCommit,
-  resolveRemoteUrl,
-} from "../../providers/git.ts";
-import { githubAuthFor } from "../../providers/github-auth.ts";
+import { git, pushBranch as gitPushBranch, headSha, pushCommit } from "../../providers/git.ts";
 import { removeTmpDir, useTestFactory } from "../../test-fixtures.ts";
 import { memoryRows } from "../runtime/test-fixtures.ts";
 import { pushApprovedChange, pushBranch } from "./branch.ts";
 
 vi.mock("../../providers/git.ts", () => ({
   commitsAhead: vi.fn(),
-  DEFAULT_PUSH_TARGET: { remote: "origin" },
   diffSince: vi.fn(),
   git: vi.fn().mockResolvedValue(""),
   headSha: vi.fn(),
   pushBranch: vi.fn(),
   pushCommit: vi.fn(),
-  resolveRemoteUrl: vi.fn(),
-}));
-vi.mock("../../providers/github-auth.ts", () => ({
-  githubAuthFor: vi.fn(() => ({ bearer: async () => "ghs_installation" })),
 }));
 vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_push" }) }));
 vi.mock("../runtime/registry.ts", async () =>
@@ -47,20 +34,21 @@ const worktree = {
 
 let factory: string;
 
-const remote = (url: string) =>
-  vi.mocked(resolveRemoteUrl).mockResolvedValue({ remote: "origin", url });
-
 const branches = () => memoryRows.map((row) => [row.kind, row.identity, row.url]);
 
 beforeEach(() => {
   factory = useTestFactory(`export default { hub: { url: "https://hub.example.test" } }`);
   memoryRows.length = 0;
-  vi.mocked(git).mockResolvedValue("");
+  vi.mocked(git).mockImplementation(
+    async (args) =>
+      ({ "rev-parse": "/data/clones/api/repo.git", config: "https://github.com/acme/api.git" })[
+        args[0] ?? ""
+      ] ?? "",
+  );
   // The first push creates the branch; every later one updates it.
   vi.mocked(pushCommit).mockReset().mockResolvedValue({ created: false });
   vi.mocked(gitPushBranch).mockReset().mockResolvedValue({ created: false });
   vi.mocked(headSha).mockResolvedValue("approved");
-  remote("git@github.com:acme/api.git");
 });
 
 afterEach(() => {
@@ -68,29 +56,7 @@ afterEach(() => {
   removeTmpDir(factory);
 });
 
-test("a GitHub remote is pushed to over HTTPS, with the token beside the URL rather than in it", async () => {
-  vi.mocked(pushCommit).mockResolvedValueOnce({ created: true });
-  await pushApprovedChange(worktree, "approved");
-  expect(githubAuthFor).toHaveBeenLastCalledWith("github-acme");
-  const target = { remote: "https://github.com/acme/api.git", token: "ghs_installation" };
-  expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", target);
-  await pushBranch(worktree);
-  expect(gitPushBranch).toHaveBeenCalledWith("/work", "feature", target);
-  expect(branches()).toEqual([
-    ["branch", "acme/api:feature", "https://github.com/acme/api/tree/feature"],
-  ]);
-});
-
-test("a remote outside GitHub is pushed to as it is, as the operator", async () => {
-  remote("git@gitlab.com:acme/api.git");
-  await pushApprovedChange(worktree, "approved");
-  expect(pushCommit).toHaveBeenCalledWith("/work", "feature", "approved", { remote: "origin" });
-});
-
 test("a push that creates the branch records it, with the clone to ask about it", async () => {
-  vi.mocked(git).mockImplementation(async (args) =>
-    args[0] === "rev-parse" ? "/data/clones/api/repo.git" : "",
-  );
   vi.mocked(gitPushBranch).mockResolvedValueOnce({ created: true });
   await pushBranch(worktree);
   await pushApprovedChange(worktree, "approved");

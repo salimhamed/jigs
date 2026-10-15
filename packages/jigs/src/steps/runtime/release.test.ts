@@ -6,6 +6,10 @@ import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
 import { memoryRows } from "./test-fixtures.ts";
 
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
+
 // The registry is the one stand-in: release runs the real kind handlers
 // against real directories and records their outcomes in these rows.
 const policy = vi.hoisted(() => ({ resolveReleasePolicy: vi.fn() }));

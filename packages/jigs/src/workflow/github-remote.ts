@@ -14,3 +14,10 @@ export function parseGithubRemote(url: string): { owner: string; repo: string } 
   }
   return null;
 }
+
+/** The repository a binding's remote names, which the factory config schema holds to GitHub. */
+export function bindingRepository(remote: string): { owner: string; repo: string } {
+  const repository = parseGithubRemote(remote);
+  if (repository === null) throw new Error(`${remote} is not a GitHub repository URL`);
+  return repository;
+}

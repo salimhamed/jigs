@@ -99,6 +99,13 @@ test.each([
     },
     "must be an installation name from the hub",
   ],
+  [
+    {
+      hub: { url: "https://hub.example.test" },
+      bindings: { api: { remote: "git@gitlab.com:acme/api.git", installationName: "gh" } },
+    },
+    "bindings.api.remote: must be a GitHub repository URL",
+  ],
   [{ hub: { url: "hub.example.test" } }, "url"],
   [
     {
@@ -227,15 +234,18 @@ test("a binding without an installation name gains one beside its remote", () =>
   bindings: {
     // Main API.
     api: {
-      remote: "a",
+      remote: "git@github.com:acme/api.git",
     },
   },
 };
 `;
-  const edited = upsertBinding(input, "api", { remote: "a", installationName: "gh" });
+  const edited = upsertBinding(input, "api", {
+    remote: "git@github.com:acme/api.git",
+    installationName: "gh",
+  });
   expect(edited).toContain("// Main API.");
   expect(readFactoryConfig(factory(edited)).bindings.api).toMatchObject({
-    remote: "a",
+    remote: "git@github.com:acme/api.git",
     installationName: "gh",
   });
 });
@@ -402,9 +412,11 @@ test("missing bindings object is inserted", () => {
   const edited = upsertBinding(
     "export default { hub: { url: 'https://hub.example.test' } };",
     "api",
-    { remote: "url", installationName: "gh" },
+    { remote: "git@github.com:acme/api.git", installationName: "gh" },
   );
-  expect(readFactoryConfig(factory(edited)).bindings.api?.remote).toBe("url");
+  expect(readFactoryConfig(factory(edited)).bindings.api?.remote).toBe(
+    "git@github.com:acme/api.git",
+  );
 });
 
 test.each([
@@ -446,11 +458,11 @@ test("an already registered workflow leaves the config alone", () => {
 
 test("config loading supports computed settings without invoking workflow loaders", () => {
   const root = factory(
-    `const github = { operator: "octo" }; export default { hub: { url: "https://hub.example.test" }, github, bindings: { api: { remote: "url", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
+    `const github = { operator: "octo" }; export default { hub: { url: "https://hub.example.test" }, github, bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "gh" } }, workflows: { ship: () => import("./missing-workflow.ts") } };`,
   );
   const ctx = resolveFactoryContext(root);
   expect(ctx.config.github.operator).toBe("octo");
-  expect(resolveBinding(ctx.config, "api").remote).toBe("url");
+  expect(resolveBinding(ctx.config, "api").remote).toBe("git@github.com:acme/api.git");
 });
 
 test("native TypeScript config is one snapshot per process and a new process sees edits", () => {

@@ -1,16 +1,26 @@
 import { writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { pushCommit } from "../../providers/git.ts";
 import {
+  GITHUB_URL,
   git,
   inTestFactory,
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
+  serveAsGithub,
 } from "../../test-fixtures.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { pushApprovedChange, readBranchState, readWorktreeDiff } from "./branch.ts";
+
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
+vi.mock("workflow", () => ({ getWorkflowMetadata: () => ({ workflowRunId: "wrun_push" }) }));
+vi.mock("../runtime/registry.ts", async () =>
+  (await import("../runtime/test-fixtures.ts")).memoryRegistry(),
+);
 
 let tmp: string;
 let checkout: string;
@@ -20,6 +30,7 @@ let worktree: Worktree;
 beforeEach(() => {
   tmp = makeTmpDir();
   ({ checkout, remoteDir } = makeRemoteBackedRepo(tmp));
+  git(checkout, "remote", "set-url", "origin", serveAsGithub(remoteDir));
   git(checkout, "checkout", "-qb", "feature");
   git(checkout, "commit", "--allow-empty", "-qm", "approved work");
   approved = git(checkout, "rev-parse", "HEAD");
@@ -32,7 +43,10 @@ beforeEach(() => {
     baseSha: git(checkout, "rev-parse", "HEAD~1"),
   };
 });
-afterEach(() => removeTmpDir(tmp));
+afterEach(() => {
+  vi.unstubAllEnvs();
+  removeTmpDir(tmp);
+});
 inTestFactory();
 
 test("publishes the approved commit and accepts a retry after a successful push", async () => {
@@ -46,7 +60,7 @@ test("publishes the approved commit and accepts a retry after a successful push"
 test("rechecks approval after a failed push instead of publishing a later commit", async () => {
   git(checkout, "remote", "set-url", "origin", path.join(tmp, "missing.git"));
   await expect(pushApprovedChange(worktree, approved)).rejects.toThrow();
-  git(checkout, "remote", "set-url", "origin", remoteDir);
+  git(checkout, "remote", "set-url", "origin", GITHUB_URL);
   git(checkout, "commit", "--allow-empty", "-qm", "unreviewed work");
   await expect(pushApprovedChange(worktree, approved)).rejects.toThrow(
     "is not the approved commit",

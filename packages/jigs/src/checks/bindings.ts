@@ -1,20 +1,17 @@
 import path from "node:path";
 import type { FactoryContext } from "../config/factory-context.ts";
 import { JigsError } from "../errors.ts";
-import { RESTART_SERVICE } from "../providers/credentials.ts";
 import { probeRemoteAuth } from "../providers/git.ts";
-import { githubGet } from "../providers/github-api.ts";
-import { GitHubApiError } from "../providers/github-http.ts";
-import { parseGithubRemote } from "../providers/github-remote.ts";
+import { githubAuthFor } from "../providers/github-auth.ts";
 import { HubResponseError, hubConnection, hubRefused } from "../providers/hub.ts";
-import { hasBindingClone } from "../steps/workspaces/clone.ts";
-import { bindingFilesDir, cloneRepoDir } from "../steps/workspaces/layout.ts";
+import { bindingFilesDir } from "../steps/workspaces/layout.ts";
 import { CopySourceMissingError, copySourceMatches } from "../steps/workspaces/provision.ts";
 import {
   type BindingEntry,
   FACTORY_CONFIG_FILE,
   type FactoryConfig,
 } from "../workflow/factory-schema.ts";
+import { bindingRepository } from "../workflow/github-remote.ts";
 import { PROBE_TIMEOUT_MS } from "./catalog.ts";
 import { type Check, type CheckResult, failedCheck } from "./check.ts";
 
@@ -78,55 +75,35 @@ async function checkBinding(
   const copyFailure = checkCopySources(factoryRoot, name, binding.copy);
   if (copyFailure !== null) return copyFailure;
 
-  // A binding declared while the service was running has no clone, and the
-  // worktree request would be the first thing to say so — mid-run.
-  if (!hasBindingClone(cloneRepoDir({ factoryRoot, bindingName: name }))) {
-    return {
-      ok: false,
-      reason: `binding ${name} has no clone yet`,
-      repair: `the service clones every binding when it starts, so restart it: \`${RESTART_SERVICE}\``,
-    };
-  }
-
-  // Cheap next to the clone, and the one thing that reports a dead ssh agent
-  // before a run burns an agent on it.
-  const stderr = await probeRemoteAuth(binding.remote, PROBE_TIMEOUT_MS);
-  if (stderr !== null) {
-    return {
-      ok: false,
-      reason: `git could not reach ${binding.remote}: ${stderr}`,
-      repair: `give the service credentials for ${binding.remote} (an ssh key it can read, or a git credential helper for an https remote), then: \`${RESTART_SERVICE}\``,
-    };
-  }
   if (hubConnection(ctx) === undefined) return { ok: true };
   return checkInstallationReach(ctx, name, binding);
 }
 
-// Pushes go over git, but pull requests, labels and wakes go through the
-// binding's GitHub installation, which may not include the repository.
+// Every clone, fetch, push, pull request and wake goes through the binding's
+// GitHub installation, which may not include the repository.
 async function checkInstallationReach(
   ctx: FactoryContext,
   name: string,
   { remote, installationName }: BindingEntry,
 ): Promise<CheckResult> {
-  const repository = parseGithubRemote(remote);
-  if (repository === null) return { ok: true };
-  const slug = `${repository.owner}/${repository.repo}`;
+  const { owner, repo } = bindingRepository(remote);
+  const slug = `${owner}/${repo}`;
   try {
-    await githubGet(installationName, `/repos/${slug}`, ctx);
-    return { ok: true };
+    const token = await githubAuthFor(installationName, ctx).bearer();
+    const stderr = await probeRemoteAuth(`https://github.com/${slug}.git`, token, PROBE_TIMEOUT_MS);
+    if (stderr === null) return { ok: true };
+    return {
+      ok: false,
+      reason: `git could not reach ${slug} through GitHub installation ${installationName}: ${stderr}`,
+      repair: `in GitHub, give installation ${installationName} read access to ${slug}'s contents, or set bindings.${name}.installationName in ${FACTORY_CONFIG_FILE} to an installation that has it, then: \`pnpm exec jigs up\``,
+    };
   } catch (err) {
     if (err instanceof HubResponseError)
       return hubRefused(`the hub gave no token for GitHub installation ${installationName}`, err);
-    const missing = err instanceof GitHubApiError && err.status === 404;
     return {
       ok: false,
-      reason: missing
-        ? `GitHub installation ${installationName} cannot reach ${slug}`
-        : `could not read ${slug} through GitHub installation ${installationName}: ${err instanceof Error ? err.message : String(err)}`,
-      repair: missing
-        ? `in GitHub, give installation ${installationName} access to ${slug}, or set bindings.${name}.installationName in ${FACTORY_CONFIG_FILE} to an installation that has it, then: \`pnpm exec jigs up\``
-        : "retry: `pnpm exec jigs doctor`, and check GitHub's status page if it repeats",
+      reason: `could not reach ${slug} through GitHub installation ${installationName}: ${err instanceof Error ? err.message : String(err)}`,
+      repair: "retry: `pnpm exec jigs doctor`, and check GitHub's status page if it repeats",
     };
   }
 }

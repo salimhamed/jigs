@@ -4,6 +4,7 @@
 import { z } from "zod";
 import { JigsError } from "./errors.ts";
 import type { EventTrigger, Schedule, WorkflowDefinition } from "./factory.ts";
+import { parseGithubRemote } from "./github-remote.ts";
 import { releaseSchema } from "./runtime/release.ts";
 
 export const FACTORY_CONFIG_FILE = "jigs.config.ts";
@@ -57,13 +58,18 @@ export const installationNameSchema = z
     "must be an installation name from the hub: lowercase letters, digits and hyphens, starting with a letter",
   );
 
-// A binding is a name, a remote URL, and how a worktree cut from that remote
-// is provisioned — the single place that story is told. Where the clone lives
-// is jigs' business, and every other fact is derived from git at each activation.
+// A binding is a name, a GitHub remote URL, and how a worktree cut from that
+// remote is provisioned — the single place that story is told. Where the clone
+// lives is jigs' business, and every other fact is derived from git at each activation.
 export const bindingSchema = z.strictObject({
-  remote: z.string().min(1),
+  remote: z
+    .string()
+    .refine(
+      (remote) => parseGithubRemote(remote) !== null,
+      "must be a GitHub repository URL, such as git@github.com:owner/repo.git",
+    ),
   // The GitHub App installation, as named on the hub, that reaches the
-  // remote's repository: pushes, pull requests and their wakes go through it.
+  // remote's repository: every clone, fetch and push, pull requests and their wakes go through it.
   installationName: installationNameSchema,
   // Paths, or globs, relative to this binding's own `bindings/<name>/`
   // directory in the factory repo; each lands at that same relative path in

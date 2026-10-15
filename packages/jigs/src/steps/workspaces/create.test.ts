@@ -1,6 +1,6 @@
 import { rmSync, symlinkSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { afterEach, beforeEach, expect, test } from "vitest";
+import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { createWorktree, findWorktree } from "./create.ts";
 import {
   commitToRemote,
@@ -9,6 +9,10 @@ import {
   makeTmpDir,
   removeTmpDir,
 } from "./test-fixtures.ts";
+
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
 
 let tmp: string;
 let repoDir: string;

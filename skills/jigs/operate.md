@@ -30,12 +30,11 @@ jigs doctor           # the check catalog, in the service's own environment
 `jigs doctor` is an HTTP call into the service, not a local check — if the
 service is down it cannot answer, and starting the service is the first repair.
 Every failing check prints its own repair line; follow that rather than
-improvising. `jigs up` returns once the World is up and every binding is
-cloned — a minute the first time, each phase printed as it goes — so "could not
-reach the jigs service" after an `up` that succeeded is a real failure; read
-`jigs service logs`. A `FAIL ready` because the process exited is what a
-binding whose clone fails does, and the error names the log. One that gives up
-after five minutes leaves the process running, so check `jigs service status`
+improvising. `jigs up` returns once the World is up, each phase printed as it
+goes, so "could not reach the jigs service" after an `up` that succeeded is a
+real failure; read `jigs service logs`. A `FAIL ready` because the process
+exited is a startup gate refusing, and the error names the log. One that gives
+up after a minute leaves the process running, so check `jigs service status`
 before repairing anything.
 
 `jigs service status` is also where the dashboard URL comes from. Do not guess
@@ -260,5 +259,5 @@ Confirm these actions when the current request has not already authorized them:
   loses nothing. `up` asks before such a restart and without a terminal
   refuses until those steps finish; `--force` is the human's call.
 - Editing the `bindings` section in `jigs.config.ts` — changing a `remote:` repoints
-  that binding's clone, and a new binding is not cloned until the next
-  `jigs up`.
+  that binding's clone at its next worktree, and a new binding is not usable
+  until the next `jigs up`.
