@@ -127,7 +127,9 @@ async function leftBranches(
     (row) => row.repoDir ?? "",
   )) {
     const heads =
-      repoDir === "" ? null : await m.tryGit(["ls-remote", "--heads", "origin"], repoDir);
+      repoDir === ""
+        ? null
+        : await m.remoteGit(["ls-remote", "--heads", "origin"], repoDir).catch(() => null);
     const existing =
       heads === null ? null : new Set(heads.split("\n").map((line) => line.split("\t")[1]));
     // Never offer the default branch for deletion, whatever the records say.

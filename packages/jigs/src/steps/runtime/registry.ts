@@ -205,3 +205,20 @@ export async function withRunResourceLock<T>(
     );
   }
 }
+
+/**
+ * Serialize first clones of one binding across processes, on the connection
+ * {@link withRunResourceLock} holds. Taken there, not on a connection of its own, so
+ * provisioning never waits on the pool while it holds one; on a throw, that lock's
+ * unlock of everything releases this one too.
+ */
+export async function withCloneLock<T>(
+  locked: RegistrySql,
+  repoDir: string,
+  action: () => Promise<T>,
+): Promise<T> {
+  await locked.execute(sql`select pg_advisory_lock(hashtextextended(${repoDir}, 465))`);
+  const result = await action();
+  await locked.execute(sql`select pg_advisory_unlock(hashtextextended(${repoDir}, 465))`);
+  return result;
+}

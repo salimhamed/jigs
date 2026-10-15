@@ -2,8 +2,6 @@ import { chmodSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from "vitest";
 import { z } from "zod";
-import { ensureBindingClone } from "../steps/workspaces/clone.ts";
-import { cloneRepoDir } from "../steps/workspaces/layout.ts";
 // Real git fixtures, reached by path: they are test-only, so they stay out
 // of the package's export map.
 import {
@@ -11,6 +9,7 @@ import {
   makeRemoteBackedRepo,
   makeTmpDir,
   removeTmpDir,
+  serveAsGithub,
 } from "../test-fixtures.ts";
 import { harnesses } from "../workflow/agents/harness-config.ts";
 import { appClient } from "./test-fixtures.ts";
@@ -196,18 +195,31 @@ test("an input-driven workflow preflights the binding named by the run", async (
   expect(start).not.toHaveBeenCalled();
 });
 
-test("an input-driven workflow ignores an unrelated static binding", async () => {
+// The GitHub half of a green binding check: a local bare repo stands in for
+// the repository git reaches, and the hub and GitHub answer for the installation.
+function reachableGithub(workspace: string): (url: string) => Response | undefined {
+  serveAsGithub(makeRemoteBackedRepo(workspace).remoteDir);
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
+  return (url) => {
+    if (url === "https://api.github.com/repos/acme/api") return Response.json({});
+    if (url !== "https://hub.example.test/api/factory/tokens/github") return undefined;
+    return Response.json({
+      token: "ghs_test",
+      expiresAt: "2999-01-01T00:00:00Z",
+      account: "acme",
+      app: { slug: "jigs-dev", botUserId: 1 },
+    });
+  };
+}
+
+test("an input-driven workflow ignores an unrelated static binding", async () => {
   const workspace = makeTmpDir();
-  const { remoteDir } = makeRemoteBackedRepo(workspace);
+  const github = reachableGithub(workspace);
+  vi.stubGlobal("fetch", async (input: unknown) => github(String(input)));
   const factory = makeFactoryRepo(workspace, {
-    bindings: { playground: { remote: remoteDir, installationName: "acme" } },
+    bindings: { playground: { remote: "git@github.com:acme/api.git", installationName: "acme" } },
   });
   vi.spyOn(process, "cwd").mockReturnValue(factory);
-  await ensureBindingClone({
-    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "playground" }),
-    remote: remoteDir,
-  });
 
   const res = await triggerInputBinding("playground");
   expect(res.status).toBe(201);
@@ -240,35 +252,20 @@ test("GET /api/doctor reports rejected configured credentials without creating a
 
 test("a green preflight lets the trigger call start()", async () => {
   const workspace = makeTmpDir();
-  // A local bare repo stands in for GitHub: the binding check is a git
-  // ls-remote against the URL, and this one answers offline.
-  const { remoteDir } = makeRemoteBackedRepo(workspace);
+  const github = reachableGithub(workspace);
   const factory = makeFactoryRepo(workspace, {
-    bindings: { api: { remote: remoteDir, installationName: "acme" } },
+    bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "acme" } },
   });
   vi.spyOn(process, "cwd").mockReturnValue(factory);
-  vi.stubEnv("XDG_DATA_HOME", path.join(workspace, "data"));
-  // What the service does at start: preflight refuses a binding with no clone.
-  await ensureBindingClone({
-    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
-    remote: remoteDir,
-  });
-  vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
   vi.stubGlobal("fetch", async (input: unknown) => {
     const url = String(input);
+    const answer = github(url);
+    if (answer !== undefined) return answer;
     if (url === "https://hub.example.test/api/factory/tokens/linear") {
       return Response.json({
         token: "lin_oauth",
         expiresAt: "2999-01-01T00:00:00Z",
         app: { name: "jigs", userId: "app-user" },
-      });
-    }
-    if (url === "https://hub.example.test/api/factory/tokens/github") {
-      return Response.json({
-        token: "ghs_test",
-        expiresAt: "2999-01-01T00:00:00Z",
-        account: "acme",
-        app: { slug: "jigs-dev", botUserId: 1 },
       });
     }
     if (url === "https://hub.example.test/api/factory/status") {

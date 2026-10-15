@@ -10,6 +10,7 @@ import {
   type RegistrySql,
   recordResource,
   setResourceState,
+  withCloneLock,
   withRunResourceLock,
 } from "./registry.ts";
 import { readRunState } from "./run-state.ts";
@@ -217,6 +218,31 @@ dbTest("the run lock serializes holders of the same run", async () => {
   });
   await new Promise((resolve) => setTimeout(resolve, 50));
   const second = withRunResourceLock(db, "run_lock", async () => {
+    order.push("second");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  release();
+  await Promise.all([first, second]);
+  expect(order).toEqual(["first", "first done", "second"]);
+});
+
+dbTest("the clone lock serializes two runs' first clones of one binding", async () => {
+  const order: string[] = [];
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  const clone = (runId: string, during: () => Promise<void>) =>
+    withRunResourceLock(db, runId, (locked) =>
+      withCloneLock(locked, "/clones/api/repo.git", during),
+    );
+  const first = clone("run_a", async () => {
+    order.push("first");
+    await gate;
+    order.push("first done");
+  });
+  await new Promise((resolve) => setTimeout(resolve, 50));
+  const second = clone("run_b", async () => {
     order.push("second");
   });
   await new Promise((resolve) => setTimeout(resolve, 50));

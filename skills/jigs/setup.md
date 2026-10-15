@@ -78,8 +78,8 @@ pnpm exec jigs up
 
 `jigs up` prints one line per step: `locate`, `install`, `compose` (Postgres, its output streamed),
 `bootstrap` (migrations), `build`, `service` (start, or restart only when the
-built bundle or `jigs.config.ts` changed), `ready` (waits until every binding
-is cloned and the World is up) and `doctor`. Doctor checks only what the
+built bundle or `jigs.config.ts` changed), `ready` (waits until the World is
+up) and `doctor`. Doctor checks only what the
 workflows require and what `jigs.config.ts` turns on. The closing lines name
 what runs and the one command that stops it all:
 
@@ -107,7 +107,7 @@ the lines below, each command on a line of its own, and `up` stops there. Show
 the whole block, follow the repair, then run `jigs up` again; an unchanged
 factory installs, migrates and restarts nothing. A `FAIL ready` after the
 service exited during boot prints the end of its log and points at
-`jigs service logs` and the log file; one after five minutes leaves the process
+`jigs service logs` and the log file; one after a minute leaves the process
 running, so run `jigs service status` before repairing anything. `jigs doctor` reruns the checks any time the service
 is up.
 
@@ -144,9 +144,11 @@ jigs up
 `jigs bind` adds the binding, with the GitHub installation that reaches the
 repository as its `installationName`, to `jigs.config.ts`, creates the factory's
 `bindings/<name>/` folder with a README when it is missing, and, with the
-factory's GitHub App, creates the `jigs:approved` label. The service clones each binding into
-`~/.local/share/jigs/clones/<factory>/<name>/` when it starts, so the `jigs up`
-above is what makes a new binding usable. That data folder is jigs's own and is
+factory's GitHub App, creates the `jigs:approved` label. The `jigs up` above
+is what makes a new binding usable. The first run that needs a worktree clones
+the binding into `~/.local/share/jigs/clones/<factory>/<name>/` through its
+GitHub App installation; the machine needs no SSH key or Git credentials of its
+own. That data folder is jigs's own and is
 separate from the factory's `bindings/<name>/`, whose files `copy` lists for
 each new worktree. Worktree provisioning (`copy`, `postCreate`) is a hand edit
 described in the configuration guide.

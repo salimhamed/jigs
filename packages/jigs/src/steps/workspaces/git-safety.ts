@@ -1,4 +1,4 @@
-import { deriveDefaultBranch, tryGit } from "../../providers/git.ts";
+import { deriveDefaultBranch, remoteGit, tryGit } from "../../providers/git.ts";
 
 // Commits the branch holds that origin's default branch does not: zero is the
 // merged answer, and null is no answer at all — an unresolvable default branch
@@ -12,7 +12,9 @@ export async function countUnmergedCommits(
   if (defaultBranch === null) return null;
   const trackingRef = `refs/remotes/origin/${defaultBranch}`;
   const localDefault = await tryGit(["rev-parse", "--verify", trackingRef], repoDir);
-  const remoteHead = await tryGit(["ls-remote", "--symref", "origin", "HEAD"], repoDir);
+  const remoteHead = await remoteGit(["ls-remote", "--symref", "origin", "HEAD"], repoDir).catch(
+    () => null,
+  );
   if (localDefault === null || remoteHead === null) return null;
   const remoteLines = remoteHead.split("\n").filter(Boolean);
   if (remoteLines.length !== 2) return null;

@@ -8,6 +8,10 @@ import { git, makeClonedBinding } from "../workspaces/test-fixtures.ts";
 import type { ResourceRow } from "./registry.ts";
 import { decideRelease } from "./resource-kinds.ts";
 
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
+
 type Run = Parameters<typeof decideRelease>[1];
 
 // What release would do, and then does: the decision, run when it is a removal.

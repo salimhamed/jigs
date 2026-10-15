@@ -20,7 +20,7 @@ import {
   replyToReviewThread,
 } from "../../providers/github.ts";
 import { GitHubApiError } from "../../providers/github-http.ts";
-import { parseGithubRemote } from "../../providers/github-remote.ts";
+import { bindingRepository } from "../../workflow/github-remote.ts";
 import { type MergeRefusal, mergeRefusal } from "../../workflow/pull-requests/merge-ready.ts";
 import type { MergeOptions } from "../../workflow/pull-requests/pull-request.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
@@ -39,13 +39,7 @@ export type OpenedPullRequest = PullRequestRef & {
 // The installation is the worktree's, the one its pushes went through.
 function repositoryOf({ binding, installationName }: Worktree): RepositoryRef {
   const { remote } = resolveBinding(currentFactoryContext().config, binding);
-  const ref = parseGithubRemote(remote);
-  if (ref === null) {
-    throw new Error(
-      `binding ${binding} points at ${remote}, which is not a github.com remote — the review loop opens its pull requests on GitHub`,
-    );
-  }
-  return { installationName, ...ref };
+  return { installationName, ...bindingRepository(remote) };
 }
 
 /**

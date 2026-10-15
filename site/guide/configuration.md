@@ -97,9 +97,11 @@ workflows: {
 
 ## `bindings` {#bindings}
 
-A binding names a GitHub repository that workflows may operate on. jigs keeps
-its own clone and provisions a separate working copy, called a worktree, for
-each run.
+A binding names a GitHub repository that workflows may operate on. jigs clones
+it the first time a run needs a worktree there, and provisions a separate
+working copy, called a worktree, for each run. Every clone, fetch and push goes
+through the binding's GitHub App installation, so the service needs no SSH key
+or other Git credentials of its own.
 
 The clone and its worktrees live in
 `~/.local/share/jigs/clones/<factory>/<name>/` (`$XDG_DATA_HOME/jigs/clones/`
@@ -121,7 +123,7 @@ bindings: {
 
 | Key | Default | Meaning |
 | --- | --- | --- |
-| `remote` | required | The GitHub repository's Git remote URL. |
+| `remote` | required | The GitHub repository's URL, such as `git@github.com:owner/app.git` or `https://github.com/owner/app`. |
 | `installationName` | required | The [installation name](/guide/hub#installation-names) of the GitHub App installation that reaches the repository. jigs acts on the repository through it. |
 | `copy` | `[]` | Files to copy into each new worktree. |
 | `postCreate` | `[]` | Commands to run in each new worktree, in order. The first failure stops provisioning. |
@@ -144,9 +146,8 @@ literal. If `bindings` is computed, they explain why and leave the file alone.
 
 Workflow code cannot read `jigs.config.ts`. To find which repositories the
 factory can work in, call `listBindings()` from `#jigs/steps`. It returns each
-binding's `name`, `installationName`, `owner` and `repo`; bindings whose
-`remote` is not on github.com are left out. A run that resumes gets the same
-list it read before.
+binding's `name`, `installationName`, `owner` and `repo`. A run that resumes
+gets the same list it read before.
 
 ## `schedules` {#schedules}
 

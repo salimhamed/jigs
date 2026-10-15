@@ -11,7 +11,7 @@ The agent needs a repository to work in. Binding one needs the factory's GitHub
 App installed on the repository's owner, with an
 [installation name](/guide/hub#installation-names) such as `github-acme`: see
 [The factory's App](/guide/configuration#github-app). Then bind the repository
-through that installation and bring the factory up so the service clones it:
+through that installation and bring the factory up:
 
 ```sh
 pnpm exec jigs bind git@github.com:owner/app.git --installation github-acme

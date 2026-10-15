@@ -25,6 +25,7 @@ export function memoryRegistry() {
       memoryLock.taken?.(runId);
       return action(db);
     },
+    withCloneLock: <T>(_db: unknown, _repoDir: string, action: () => Promise<T>) => action(),
     listResources: async (_db: unknown, filter: ResourceFilter) =>
       memoryRows
         .filter(

@@ -1,10 +1,13 @@
 import { existsSync, readdirSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
-import { resolveFactoryContext } from "../../config/factory-context.ts";
-import { git, makeFactoryRepo, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
-import { bindingClones, ensureBindingClone, hasBindingClone } from "./clone.ts";
-import { cloneRepoDir } from "./layout.ts";
+import { githubAuthFor } from "../../providers/github-auth.ts";
+import { git, makeTmpDir, removeTmpDir } from "../../test-fixtures.ts";
+import { ensureBindingClone, hasBindingClone } from "./clone.ts";
+
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: vi.fn(() => ({ bearer: async () => "ghs_test" })),
+}));
 
 let tmp: string;
 let remoteDir: string;
@@ -46,8 +49,11 @@ const objects = () => {
     .sort();
 };
 
+const clone = (url = remoteDir, installationName = "github-acme") =>
+  ensureBindingClone({ repoDir, url, installationName });
+
 test("the clone mirrors origin's branches and claims none of refs/heads", async () => {
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
 
   expect(git(repoDir, "config", "remote.origin.fetch")).toBe("+refs/heads/*:refs/remotes/origin/*");
   expect(git(repoDir, "rev-parse", "refs/remotes/origin/main")).toBe(
@@ -57,13 +63,13 @@ test("the clone mirrors origin's branches and claims none of refs/heads", async 
 });
 
 test("the clone records origin's default branch as the finished marker", async () => {
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   expect(git(repoDir, "symbolic-ref", "refs/remotes/origin/HEAD")).toBe("refs/remotes/origin/main");
   expect(hasBindingClone(repoDir)).toBe(true);
 });
 
 test("a second call fetches nothing and keeps jigs' own branches", async () => {
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   const head = git(repoDir, "rev-parse", "refs/remotes/origin/main");
   // A branch of jigs' own: a re-clone or a mirror fetch would wipe it.
   git(repoDir, "branch", "agent/keep", "refs/remotes/origin/main");
@@ -71,12 +77,12 @@ test("a second call fetches nothing and keeps jigs' own branches", async () => {
   // second fetch would fail rather than quietly no-op.
   rmSync(remoteDir, { recursive: true, force: true });
 
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   expect(git(repoDir, "rev-parse", "refs/heads/agent/keep")).toBe(head);
 });
 
 test("a clone interrupted before its marker resumes over the objects it has", async () => {
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   const before = objects();
   const counted = git(repoDir, "count-objects", "-v");
   // Guards the two assertions below against passing on an empty listing.
@@ -84,26 +90,28 @@ test("a clone interrupted before its marker resumes over the objects it has", as
   rmSync(marker());
   expect(hasBindingClone(repoDir)).toBe(false);
 
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   expect(hasBindingClone(repoDir)).toBe(true);
   expect(objects()).toEqual(before);
   expect(git(repoDir, "count-objects", "-v")).toBe(counted);
 });
 
-test("a drifted remote url is repointed in place", async () => {
-  await ensureBindingClone({ remote: remoteDir, repoDir });
-  git(repoDir, "remote", "set-url", "origin", "git@github.com:acme/moved.git");
+test("the clone fetches as the binding's installation, and follows a change of either", async () => {
+  await clone();
+  expect(githubAuthFor).toHaveBeenLastCalledWith("github-acme");
+  git(repoDir, "remote", "set-url", "origin", "https://github.com/acme/moved.git");
 
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone(remoteDir, "github-other");
   expect(git(repoDir, "remote", "get-url", "origin")).toBe(remoteDir);
+  expect(git(repoDir, "config", "jigs.installation")).toBe("github-other");
 });
 
 test("a failing fetch leaves no marker, and the next call finishes the clone", async () => {
   const unreachable = path.join(tmp, "nonexistent.git");
-  await expect(ensureBindingClone({ remote: unreachable, repoDir })).rejects.toThrow(unreachable);
+  await expect(clone(unreachable)).rejects.toThrow(unreachable);
   expect(hasBindingClone(repoDir)).toBe(false);
 
-  await ensureBindingClone({ remote: remoteDir, repoDir });
+  await clone();
   expect(git(repoDir, "rev-parse", "refs/remotes/origin/main")).toBe(
     git(remoteDir, "rev-parse", "refs/heads/main"),
   );
@@ -112,17 +120,4 @@ test("a failing fetch leaves no marker, and the next call finishes the clone", a
 test("a binding with no clone directory at all is not mistaken for one", () => {
   expect(existsSync(repoDir)).toBe(false);
   expect(hasBindingClone(repoDir)).toBe(false);
-});
-
-test("every declared binding is listed with the directory its clone belongs in", () => {
-  const root = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: remoteDir, installationName: "github-acme" } },
-  });
-  expect(bindingClones(resolveFactoryContext(root))).toEqual([
-    {
-      name: "api",
-      remote: remoteDir,
-      repoDir: cloneRepoDir({ factoryRoot: root, bindingName: "api" }),
-    },
-  ]);
 });

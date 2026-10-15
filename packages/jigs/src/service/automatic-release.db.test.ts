@@ -18,8 +18,13 @@ import { createRunDirectory } from "../steps/runtime/run-directory/index.ts";
 import { provisionWorktree } from "../steps/workspaces/index.ts";
 import { cloneDir } from "../steps/workspaces/layout.ts";
 import { makeClonedBinding, makeTmpDir, removeTmpDir } from "../steps/workspaces/test-fixtures.ts";
+import { serveAsGithub } from "../test-fixtures.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { automaticReleaseDeps, startAutomaticRelease } from "./automatic-release.ts";
+
+vi.mock("../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
+}));
 
 const database = `jigs_cleanup_${crypto.randomUUID().replaceAll("-", "")}`;
 const testUrl = databaseUrl(database);
@@ -34,7 +39,6 @@ const factory = { workflows: {} } as Factory;
 
 let registry: RegistrySql;
 let world: ReturnType<typeof createWorld>;
-let remoteDir: string;
 let target: string;
 let oldBaseUrl: string | undefined;
 let oldPostgresUrl: string | undefined;
@@ -59,11 +63,11 @@ beforeAll(async () => {
   vi.spyOn(process, "cwd").mockReturnValue(factoryRoot);
   process.env.XDG_DATA_HOME = dataRoot;
 
-  remoteDir = makeClonedBinding(tmp, cloneDir(dirs)).remoteDir;
+  serveAsGithub(makeClonedBinding(tmp, cloneDir(dirs)).remoteDir);
   mkdirSync(factoryRoot, { recursive: true });
   writeFileSync(
     path.join(factoryRoot, "jigs.config.ts"),
-    `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-test" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
+    `export default ${JSON.stringify({ bindings: { api: { remote: "git@github.com:acme/api.git", installationName: "github-test" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
   );
   registry = registrySql();
   await ensureRegistry(registry);

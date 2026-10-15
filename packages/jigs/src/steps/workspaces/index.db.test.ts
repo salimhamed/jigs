@@ -9,6 +9,7 @@ import {
   type AutomaticReleaseDeps,
   reconcileAutomaticRelease,
 } from "../../service/automatic-release.ts";
+import { serveAsGithub } from "../../test-fixtures.ts";
 import type { Factory } from "../../workflow/factory.ts";
 import {
   ensureRegistry,
@@ -24,9 +25,8 @@ import { cloneDir } from "./layout.ts";
 import { git, makeClonedBinding, makeTmpDir, removeTmpDir } from "./test-fixtures.ts";
 
 vi.mock("../../providers/github.ts", () => ({ isForkPullRequest: vi.fn(async () => false) }));
-// The fixture's remote is a local path; the pull request is read as if it were on GitHub.
-vi.mock("../../providers/github-remote.ts", () => ({
-  parseGithubRemote: () => ({ owner: "acme", repo: "api" }),
+vi.mock("../../providers/github-auth.ts", () => ({
+  githubAuthFor: () => ({ bearer: async () => "ghs_test" }),
 }));
 
 // Real Postgres, a real clone and real cuts: provisioning, explicit release and
@@ -44,9 +44,12 @@ vi.stubEnv("WORKFLOW_POSTGRES_URL", testUrl.toString());
 
 const dirs = { factoryRoot, bindingName: "api" };
 const { remoteDir } = makeClonedBinding(tmp, cloneDir(dirs));
+serveAsGithub(remoteDir);
+// `web` names the same repository, with no clone yet.
+const remote = { remote: "git@github.com:acme/api.git", installationName: "github-acme" };
 writeFileSync(
   path.join(factoryRoot, "jigs.config.ts"),
-  `export default ${JSON.stringify({ bindings: { api: { remote: remoteDir, installationName: "github-acme" } }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
+  `export default ${JSON.stringify({ bindings: { api: remote, web: remote }, hub: { url: "https://hub.example.test" }, workflows: {} })};`,
 );
 
 const sql = () => registrySql();
@@ -79,6 +82,16 @@ dbTest("a second run asking for the same branch works on its own branch and work
   expect(second.path).not.toBe(first.path);
   expect(await states("wrun_first1")).toEqual([["worktree", "live", null]]);
   expect(await states("wrun_second")).toEqual([["worktree", "live", null]]);
+});
+
+dbTest("runs that need a binding's first clone at once share one", async () => {
+  const [first, second] = await Promise.all([
+    provisionWorktree({ binding: "web", branch: "a" }, { workflowRunId: "wrun_cloneA" }),
+    provisionWorktree({ binding: "web", branch: "b" }, { workflowRunId: "wrun_cloneB" }),
+  ]);
+
+  expect(first.baseSha).toBe(git(remoteDir, "rev-parse", "refs/heads/main"));
+  expect(second.baseSha).toBe(first.baseSha);
 });
 
 dbTest("explicit release keeps, then removes, through the real registry", async () => {

@@ -1,7 +1,7 @@
 import { existsSync, mkdirSync, realpathSync } from "node:fs";
 import path from "node:path";
 import { JigsError } from "../../errors.ts";
-import { deriveDefaultBranch, git, tryGit } from "../../providers/git.ts";
+import { deriveDefaultBranch, git, remoteGit, tryGit } from "../../providers/git.ts";
 import type { Worktree } from "../../workflow/workspaces/worktree.ts";
 import { isWorktreeDirty } from "./git-safety.ts";
 
@@ -10,27 +10,18 @@ import { isWorktreeDirty } from "./git-safety.ts";
 // existing worktree — because removing a worktree deletes the CWD of whoever
 // orchestrates.
 
-async function resolveDefaultBranch(repoDir: string): Promise<string> {
-  let branch = await deriveDefaultBranch(repoDir);
-  if (branch === null) {
-    await tryGit(["remote", "set-head", "origin", "--auto"], repoDir);
-    branch = await deriveDefaultBranch(repoDir);
-  }
-  if (branch === null) {
+// Fetch, never pull: refs/heads/* holds jigs' own run branches only, and each
+// forks from origin/<default>. Release and prune read that ref too, and
+// nothing else in those passes refreshes it.
+export async function fetchOriginDefault(repoDir: string): Promise<string> {
+  const defaultBranch = await deriveDefaultBranch(repoDir);
+  if (defaultBranch === null) {
     throw new JigsError(
       `cannot determine the default branch of ${repoDir}`,
       "set it: `git remote set-head origin --auto`",
     );
   }
-  return branch;
-}
-
-// Fetch, never pull: refs/heads/* holds jigs' own run branches only, and each
-// forks from origin/<default>. Release and prune read that ref too, and
-// nothing else in those passes refreshes it.
-export async function fetchOriginDefault(repoDir: string): Promise<string> {
-  const defaultBranch = await resolveDefaultBranch(repoDir);
-  await git(["fetch", "origin", defaultBranch], repoDir);
+  await remoteGit(["fetch", "origin", defaultBranch], repoDir);
   return defaultBranch;
 }
 
@@ -88,7 +79,7 @@ export async function fetchPullRequestHead(
   runId: string,
 ): Promise<string> {
   const ref = `refs/jigs/${runId}/pull/${number}`;
-  await git(
+  await remoteGit(
     ["fetch", "--no-write-fetch-head", "origin", `+refs/pull/${number}/head:${ref}`],
     repoDir,
   );

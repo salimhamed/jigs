@@ -8,7 +8,6 @@ import { TERMINAL_RUN_STATUSES } from "../run-status.ts";
 import type { HarnessRuntime } from "../steps/agents/shared/harness-runtime.ts";
 import { stopProcessGroups } from "../steps/agents/shared/process-group.ts";
 import type { RegistrySql } from "../steps/runtime/registry.ts";
-import type { BindingClone } from "../steps/workspaces/clone.ts";
 import type { HarnessKind } from "../workflow/agents/harness-config.ts";
 import type { Factory, WorkflowDefinition } from "../workflow/factory.ts";
 import { READY_PHASE, setBootPhase } from "./readiness.ts";
@@ -156,60 +155,12 @@ export async function gateOnRegistry(deps: RegistryGateDeps = {}): Promise<boole
   return true;
 }
 
-/** Injectable binding operations and output used by the clone startup gate. */
-export interface BindingCloneGateDeps {
-  bindings?: () => BindingClone[];
-  ensure?: (options: { repoDir: string; remote: string }) => Promise<void>;
-  exit?: (code: number) => void;
-  log?: (line: string) => void;
-  error?: (line: string) => void;
-}
-
 function describe(err: unknown): string {
   if (err instanceof Error) {
     const hint = (err as { hint?: string }).hint;
     return hint === undefined ? err.message : `${err.message}\n${plainHint(hint)}`;
   }
   return String(err);
-}
-
-// Cloning at start rather than when a run asks for a worktree is what keeps a
-// minute of `git fetch` out of that run, and puts a remote jigs cannot reach
-// in front of the operator at start instead of mid-agent.
-/** Ensure every configured repository binding has a usable local clone. */
-export async function gateOnBindingClones(deps: BindingCloneGateDeps = {}): Promise<boolean> {
-  const log = deps.log ?? ((line: string) => console.log(line));
-  const error = deps.error ?? ((line: string) => console.error(line));
-  const exit = deps.exit ?? process.exit;
-
-  let declared: BindingClone[];
-  let ensure: (options: { repoDir: string; remote: string }) => Promise<void>;
-  try {
-    // Inside the try: reading the factory config is itself fallible, and a
-    // service that cannot tell what is bound must not start.
-    const jigs = await import("../steps/workspaces/clone.ts");
-    ensure = deps.ensure ?? jigs.ensureBindingClone;
-    declared = deps.bindings?.() ?? jigs.bindingClones(await serviceContext());
-  } catch (err) {
-    error(`[service] bindings unreadable: ${describe(err)}`);
-    exit(1);
-    return false;
-  }
-
-  for (const binding of declared) {
-    // Before, not after: a first fetch of a large repo holds the boot for
-    // minutes, and this line is the only thing that says which one.
-    setBootPhase(`cloning ${binding.name}`);
-    log(`[service] binding ${binding.name}: ensuring clone at ${binding.repoDir}`);
-    try {
-      await ensure({ repoDir: binding.repoDir, remote: binding.remote });
-    } catch (err) {
-      error(`[service] binding ${binding.name}: ${describe(err)}`);
-      exit(1);
-      return false;
-    }
-  }
-  return true;
 }
 
 interface ServiceWorld {
@@ -310,9 +261,7 @@ export async function gateOnWorldStart(deps: WorldStartGateDeps): Promise<boolea
  */
 export async function startWorld(live: Factory) {
   // First of all, ahead of any gate that can hold the boot: a `jigs service
-  // stop` during a first clone or against a hanging Postgres has to end in an
-  // exit, not the CLI's SIGKILL. A clone child mid-gate is orphaned to
-  // completion; acceptable.
+  // stop` against a hanging Postgres has to end in an exit, not the CLI's SIGKILL.
   installShutdown();
   // Agent harnesses run in their own process groups, which a signal to the
   // service never reaches. Stopping them lets their steps settle while the
@@ -321,8 +270,7 @@ export async function startWorld(live: Factory) {
     await stopProcessGroups();
   });
 
-  // First, because it is local and fast: no point cloning for a service that
-  // cannot run an agent.
+  // First, because it is local and fast.
   setBootPhase("harnesses");
   if (!(await gateOnHarnessRuntimes())) return;
 
@@ -333,11 +281,6 @@ export async function startWorld(live: Factory) {
   // unusable registry has already burned an agent.
   setBootPhase("registry");
   if (!(await gateOnRegistry())) return;
-
-  // And before it too: a binding whose clone does not exist yet fails every
-  // run that names it, so the fetch happens once, here, where it is a startup
-  // cost rather than an agent's.
-  if (!(await gateOnBindingClones())) return;
 
   // The service owns its exit: on SIGTERM `world.close()` drains the queue
   // and ends the pool, and the process leaves once that is done. Tell the

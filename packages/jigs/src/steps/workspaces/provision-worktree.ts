@@ -11,17 +11,18 @@ import { resolveBinding } from "../../config/factory-config.ts";
 import { currentFactoryContext } from "../../config/factory-context.ts";
 import { JigsError } from "../../errors.ts";
 import { isForkPullRequest } from "../../providers/github.ts";
-import { parseGithubRemote } from "../../providers/github-remote.ts";
 import type { Binding } from "../../workflow/factory-schema.ts";
+import { bindingRepository } from "../../workflow/github-remote.ts";
 import type { PullRequestWorktree, Worktree } from "../../workflow/workspaces/worktree.ts";
 import {
   recordResource,
   registrySql,
   setResourceState,
+  withCloneLock,
   withRunResourceLock,
 } from "../runtime/registry.ts";
 import type { RunMetadata } from "../runtime/run-context.ts";
-import { hasBindingClone } from "./clone.ts";
+import { ensureBindingClone } from "./clone.ts";
 import { createWorktree, detachedWorktree, fetchPullRequestHead, findWorktree } from "./create.ts";
 import { type CloneDirOptions, cloneRepoDir, worktreePath } from "./layout.ts";
 import { provisionWorktree as provisionWorktreeFiles } from "./provision.ts";
@@ -102,12 +103,9 @@ export async function provisionPullRequestWorktree(
   return provisionRecorded(request.binding, runId, async (binding, repoDir, dirs) => {
     // Setup runs the checked-out code with the service's whole environment, so
     // a stranger's fork must never reach it.
-    const repository = parseGithubRemote(binding.remote);
+    const repository = bindingRepository(binding.remote);
     const { installationName } = binding;
-    if (
-      repository === null ||
-      (await isForkPullRequest({ installationName, ...repository, number: request.number }))
-    ) {
+    if (await isForkPullRequest({ installationName, ...repository, number: request.number })) {
       throw new JigsError(
         `pull request #${request.number} on binding ${binding.name} is not a branch of ${binding.remote}`,
         "only a pull request from a branch of the binding's own GitHub repository can be checked out, because setup runs its code",
@@ -127,7 +125,6 @@ export async function provisionPullRequestWorktree(
   });
 }
 
-// The clone is the service's to make at start, so this path only asserts it.
 async function provisionRecorded<T extends { path: string }>(
   bindingName: string,
   runId: string,
@@ -144,14 +141,14 @@ async function provisionRecorded<T extends { path: string }>(
     const binding = resolveBinding(ctx.config, bindingName);
     const dirs = { factoryRoot: ctx.root, bindingName: binding.name };
     const repoDir = cloneRepoDir(dirs);
-
-    // Only reachable when the binding was declared after this service booted.
-    if (!hasBindingClone(repoDir)) {
-      throw new JigsError(
-        `binding ${binding.name} has no clone at ${repoDir}`,
-        "the service clones every binding when it starts, so restart it: `pnpm exec jigs up --restart-service`",
-      );
-    }
+    const { owner, repo } = bindingRepository(binding.remote);
+    await withCloneLock(lockedSql, repoDir, () =>
+      ensureBindingClone({
+        repoDir,
+        url: `https://github.com/${owner}/${repo}.git`,
+        installationName: binding.installationName,
+      }),
+    );
 
     // The run-scoped lock also belongs to release. It stays held through
     // recording and provisioning so release cannot remove a tree between its

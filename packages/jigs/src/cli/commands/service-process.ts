@@ -36,8 +36,7 @@ export const SERVICE_ENTRY = ".output/server/index.mjs";
 
 const STOP_TIMEOUT_MS = 10_000;
 const KILL_WAIT_MS = 2_000;
-// A boot clones every binding, and a first clone of a large repo is a minute.
-const START_TIMEOUT_MS = 300_000;
+const START_TIMEOUT_MS = 60_000;
 const POLL_MS = 100;
 const START_POLL_MS = 200;
 export const LOG_LINES = 50;
@@ -219,9 +218,9 @@ export function spawnService(
   return pid;
 }
 
-// "started" means the World is up and every binding cloned, not that the port
-// answers: nitro serves /health before its plugins run, so a 200 says nothing
-// about a boot that a failed clone can still end a minute later.
+// "started" means the World is up, not that the port answers: nitro serves
+// /health before its plugins run, so a 200 says nothing about a boot that a
+// failed gate can still end.
 export async function awaitReady(
   deps: ServiceLifecycleDeps,
   slug: string,
@@ -259,14 +258,14 @@ export async function awaitReady(
     if (Date.now() >= deadline) {
       throw new JigsError(
         `the ${slug} service is still booting after ${startTimeoutMs / 1000}s (pid ${pid}${phase === undefined ? "" : `, ${phase}`})`,
-        `it clones every binding before the World starts\nwatch its log: \`pnpm exec jigs service logs\` (log at ${displayPath(serviceLogPath(slug))})\nstop it: \`pnpm exec jigs service stop\``,
+        `watch its log: \`pnpm exec jigs service logs\` (log at ${displayPath(serviceLogPath(slug))})\nstop it: \`pnpm exec jigs service stop\``,
       );
     }
     await sleep(startPollMs);
   }
 }
 
-// The gates exit the process when a clone or the registry fails, so a pid
+// The gates exit the process when a harness or the registry fails, so a pid
 // gone mid-boot is the failed boot itself; its log is the explanation, and
 // the last lines of it are worth more here than a path.
 export function failedBoot(slug: string, pid: number, out: (line: string) => void): JigsError {

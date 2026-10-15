@@ -4,17 +4,11 @@ import { afterEach, beforeEach, expect, test, vi } from "vitest";
 import { resolveFactoryContext } from "../config/factory-context.ts";
 import * as git from "../providers/git.ts";
 import * as githubApi from "../providers/github-api.ts";
+import * as githubAuth from "../providers/github-auth.ts";
 import { GitHubApiError } from "../providers/github-http.ts";
-import { ensureBindingClone } from "../steps/workspaces/clone.ts";
-import { cloneRepoDir } from "../steps/workspaces/layout.ts";
-import {
-  makeFactoryRepo,
-  makeRemoteBackedRepo,
-  makeTmpDir,
-  removeTmpDir,
-} from "../test-fixtures.ts";
+import { makeFactoryRepo, makeTmpDir, removeTmpDir } from "../test-fixtures.ts";
 import { bindingChecks } from "./bindings.ts";
-import { runChecks } from "./catalog.ts";
+import { PROBE_TIMEOUT_MS, runChecks } from "./catalog.ts";
 
 let tmp: string;
 
@@ -30,14 +24,6 @@ afterEach(() => {
 const yml = (name: string, remote: string) => ({
   bindings: { [name]: { remote, installationName: "acme" } },
 });
-
-// Stands in for the clone the service makes at start, for the cases whose
-// remote is deliberately unreachable.
-function markClone(factoryRoot: string, name: string): void {
-  const dir = path.join(cloneRepoDir({ factoryRoot, bindingName: name }), "refs/remotes/origin");
-  mkdirSync(dir, { recursive: true });
-  writeFileSync(path.join(dir, "HEAD"), "ref: refs/remotes/origin/main\n");
-}
 
 async function check(factoryRoot: string, name: string) {
   const report = await runChecks(
@@ -61,63 +47,44 @@ test("an undeclared binding fails with the exact jigs bind invocation", async ()
   expect(outcome.ok === false && outcome.repair).toContain("remote-url");
 });
 
-test("a declared binding with no clone yet names the restart that makes one", async () => {
-  const { remoteDir } = makeRemoteBackedRepo(tmp);
-  const factory = makeFactoryRepo(tmp, yml("api", remoteDir));
-  expect(await check(factory, "api")).toMatchObject({
-    ok: false,
-    reason: "binding api has no clone yet",
-    repair:
-      "the service clones every binding when it starts, so restart it: `pnpm exec jigs up --restart-service`",
-  });
-});
-
-test("a binding whose remote cannot be reached fails the auth probe", async () => {
-  const unreachable = path.join(tmp, "nonexistent.git");
-  const factory = makeFactoryRepo(tmp, yml("api", unreachable));
-  markClone(factory, "api");
-  const outcome = await check(factory, "api");
-  expect(outcome).toMatchObject({
-    ok: false,
-    reason: expect.stringContaining("git could not reach"),
-  });
-});
-
-test("a declared, cloned binding whose remote answers passes", async () => {
-  const { remoteDir } = makeRemoteBackedRepo(tmp);
-  const factory = makeFactoryRepo(tmp, yml("api", remoteDir));
-  await ensureBindingClone({
-    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
-    remote: remoteDir,
-  });
-  expect(await check(factory, "api")).toEqual({
-    id: "binding.api",
-    label: "binding api",
-    ok: true,
-  });
-});
-
-function githubBinding(reach: () => Promise<unknown>) {
+function githubBinding(reach: () => Promise<unknown>, probe: string | null = null) {
   const factory = makeFactoryRepo(tmp, yml("api", "git@github.com:acme/api.git"));
-  markClone(factory, "api");
   vi.stubEnv("JIGS_HUB_TOKEN", "hub-token");
-  vi.spyOn(git, "probeRemoteAuth").mockResolvedValue(null);
+  vi.spyOn(githubAuth, "githubAuthFor").mockReturnValue({
+    bearer: async () => "ghs_token",
+  } as unknown as githubAuth.GithubAuth);
+  const probed = vi.spyOn(git, "probeRemoteAuth").mockResolvedValue(probe);
   const asked: string[] = [];
   vi.spyOn(githubApi, "githubGet").mockImplementation(async (installationName, apiPath) => {
     asked.push(`${installationName} ${apiPath}`);
     return reach();
   });
-  return { factory, asked };
+  return { factory, asked, probed };
 }
 
-test("a GitHub binding's installation that reaches its repository passes", async () => {
-  const { factory, asked } = githubBinding(async () => ({}));
+test("a binding with no clone passes when its installation reaches the repository over git", async () => {
+  const { factory, asked, probed } = githubBinding(async () => ({}));
   expect(await check(factory, "api")).toEqual({
     id: "binding.api",
     label: "binding api",
     ok: true,
   });
   expect(asked).toEqual(["acme /repos/acme/api"]);
+  expect(probed).toHaveBeenCalledWith(
+    "https://github.com/acme/api.git",
+    "ghs_token",
+    PROBE_TIMEOUT_MS,
+  );
+});
+
+test("an installation that cannot fetch the repository's code fails the check", async () => {
+  const { factory } = githubBinding(async () => ({}), "fatal: repository not found");
+  expect(await check(factory, "api")).toMatchObject({
+    ok: false,
+    reason:
+      "git could not reach acme/api through GitHub installation acme: fatal: repository not found",
+    repair: expect.stringContaining("give installation acme read access to acme/api's contents"),
+  });
 });
 
 test("a GitHub binding's installation that cannot see its repository names the setting", async () => {
@@ -135,7 +102,7 @@ test("a copy entry with no file under the binding's folder fails before the clon
   const factory = makeFactoryRepo(tmp, {
     bindings: {
       api: {
-        remote: path.join(tmp, "nonexistent.git"),
+        remote: "git@github.com:acme/api.git",
         installationName: "acme",
         copy: [".env", "certs/*.pem"],
       },
@@ -156,7 +123,7 @@ test("a copy entry pointing outside the binding's folder fails the check", async
   const factory = makeFactoryRepo(tmp, {
     bindings: {
       api: {
-        remote: path.join(tmp, "nonexistent.git"),
+        remote: "git@github.com:acme/api.git",
         installationName: "acme",
         copy: ["../elsewhere/.env"],
       },
@@ -172,17 +139,14 @@ test("a copy entry pointing outside the binding's folder fails the check", async
   });
 });
 
-test("a cloned binding whose copy entries all match passes", async () => {
-  const { remoteDir } = makeRemoteBackedRepo(tmp);
+test("a binding whose copy entries all match passes", async () => {
   const factory = makeFactoryRepo(tmp, {
-    bindings: { api: { remote: remoteDir, installationName: "acme", copy: [".env"] } },
+    bindings: {
+      api: { remote: "git@github.com:acme/api.git", installationName: "acme", copy: [".env"] },
+    },
   });
   mkdirSync(path.join(factory, "bindings/api"), { recursive: true });
   writeFileSync(path.join(factory, "bindings/api/.env"), "A=1\n");
-  await ensureBindingClone({
-    repoDir: cloneRepoDir({ factoryRoot: factory, bindingName: "api" }),
-    remote: remoteDir,
-  });
   expect(await check(factory, "api")).toMatchObject({ ok: true });
 });
 
