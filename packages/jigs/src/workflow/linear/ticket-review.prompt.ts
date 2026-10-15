@@ -80,8 +80,9 @@ Emit the verdict object.
   next round starts from what you were able to normalize. It is never posted
   to the ticket.
 - \`about\`: what this ticket is about, restated for the reader described above.
-- \`questions\`: what only a human can decide. Empty when the verdict is
-  \`"proceed"\`.
+- \`questions\`: what only a human can decide. At least one when the verdict is
+  \`"needs-human"\`, empty when it is \`"proceed"\`. With nothing to ask, the
+  verdict is \`"proceed"\`.
 - \`assumptions\`: what you decided for yourself rather than asking about.
   Empty when there is nothing to report.
 

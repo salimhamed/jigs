@@ -23,6 +23,20 @@ test("a malformed verdict object fails the schema", () => {
   ).toThrow();
 });
 
+test("a needs-human verdict without a question fails the schema", () => {
+  const needsHuman = {
+    verdict: "needs-human",
+    brief: "x",
+    about: "a",
+    questions: [{ question: "which?" }],
+    assumptions: [],
+  };
+  expect(() => ticketReviewVerdictSchema.parse(needsHuman)).not.toThrow();
+  expect(() => ticketReviewVerdictSchema.parse({ ...needsHuman, questions: [] })).toThrow(
+    "at least one question",
+  );
+});
+
 test("a note is posted in the claim's session", async () => {
   const claim = { installationName: "linear-acme", issueId: "i1", sessionId: "s1" } as TicketClaim;
   const postTicketNote = vi.fn(async () => {});
