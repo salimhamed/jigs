@@ -45,6 +45,7 @@ import { createServer } from "node:net";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parseArgs } from "node:util";
 import { Pool } from "pg";
 import { parse as parseYaml } from "yaml";
 import {
@@ -84,7 +85,7 @@ const factories = new Map();
 // records a file: tarball by its integrity, which changes with any source
 // change, so the scaffold installs without a lockfile rather than against a
 // committed one.
-function pack() {
+function pack({ bumped = true } = {}) {
   const dir = path.join(scratch, "tarballs");
   mkdirSync(dir);
   const into = (name) => path.join(dir, `${name}.tgz`);
@@ -94,7 +95,7 @@ function pack() {
       stdio: "inherit",
     });
   packInto(into("jigs"));
-  withFakeVersion(() => packInto(into(`jigs-${FAKE_VERSION}`)));
+  if (bumped) withFakeVersion(() => packInto(into(`jigs-${FAKE_VERSION}`)));
   return { jigs: into("jigs"), bumped: into(`jigs-${FAKE_VERSION}`) };
 }
 
@@ -1052,7 +1053,7 @@ async function checkScaffold(name) {
     );
   }
 
-  if (process.argv.includes("--record")) {
+  if (args.record) {
     writeFileSync(expectedFile, `${HEADER}${ids.join("\n")}\n`);
     console.log(`recorded ${ids.length} id(s) in ${expectedFile}`);
   } else {
@@ -1119,9 +1120,10 @@ async function checkScaffold(name) {
 // `--only ids` runs everything but the cancellation matrix and `--only
 // cancellation` runs only the matrix, on a bare scaffold built once, so CI can
 // run the two halves side by side.
-const only = process.argv.includes("--only")
-  ? process.argv[process.argv.indexOf("--only") + 1]
-  : undefined;
+const { values: args } = parseArgs({
+  options: { only: { type: "string" }, record: { type: "boolean" } },
+});
+const only = args.only;
 if (only !== undefined && only !== "ids" && only !== "cancellation") {
   fail(`unknown --only ${only}`, "use --only ids or --only cancellation, or neither for both");
 }
@@ -1130,12 +1132,11 @@ scratch = mkdtempSync(path.join(tmpdir(), "jigs-e2e-"));
 const postgresUrl = process.env.WORKFLOW_POSTGRES_URL;
 // Before the scaffolds, so each is built pointing at it.
 const hub = postgresUrl && only !== "cancellation" ? await startHub(postgresUrl) : undefined;
-tarballs = pack();
 if (only === "cancellation") {
   scaffold("bare");
-  factories.set("bare", factory);
-  installFromTarball(tarballs.jigs);
+  installFromTarball(pack({ bumped: false }).jigs);
 } else {
+  tarballs = pack();
   checkCliBundle();
   checkDlxInit();
   for (const name of ["bare", "linear-ticket-to-pr"]) await checkScaffold(name);
@@ -1229,9 +1230,7 @@ if (postgresUrl === undefined) {
     console.log(
       "\n=== cancellation: generated v5 handler, Postgres queue states, restart drain, and offline resource prune",
     );
-    factory = factories.get("bare");
-    if (factory === undefined)
-      throw new Error("bare scaffold was not retained for cancellation e2e");
+    if (only !== "cancellation") factory = factories.get("bare");
     installCompiledCancellationFixture(factory);
     await runCompiledCancellationMatrix({
       adminPostgresUrl: postgresUrl,

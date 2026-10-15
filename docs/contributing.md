@@ -22,12 +22,12 @@ pnpm docs:examples # type-check displayed TypeScript examples in isolation
 ```
 
 With `WORKFLOW_POSTGRES_URL` set, `pnpm e2e` also boots the linear-ticket-to-pr
-factory's service, waits for readiness and requires a clean exit on SIGTERM, then
-runs the compiled cancellation matrix on the bare factory. `pnpm e2e --only ids`
-skips the matrix and `pnpm e2e --only cancellation` runs only it; CI runs the two
-as parallel jobs. Put local values in `.env.e2e.local` (copy `.env.e2e.example`; it is gitignored).
-Shell and CI values win over the file. Point it at a dedicated database and port,
-never a live factory World.
+factory's service, waits for readiness and requires a clean exit on SIGTERM,
+then runs the compiled cancellation matrix on the bare factory. `pnpm e2e --only
+ids` skips the matrix and `pnpm e2e --only cancellation` runs only it; CI runs
+the two as parallel jobs. Put local values in `.env.e2e.local` (copy
+`.env.e2e.example`; it is gitignored). Shell and CI values win over the file.
+Point it at a dedicated database and port, never a live factory World.
 
 Before a Workflow SDK or Postgres World upgrade, or a change to service startup
 or step transport, run the long-step regression once with the real value:
@@ -155,10 +155,8 @@ Repository settings the release depends on:
 - A `RELEASE_PLEASE_TOKEN` secret: a fine-grained PAT on this repo with
   Contents, Pull requests and Issues read and write. `GITHUB_TOKEN` would not
   trigger checks on the release PR.
-- `DOCKERHUB_USERNAME` and `DOCKERHUB_TOKEN` secrets: a Docker Hub account and
-  a read-only access token. The `step-ids` and long-step regression jobs pull
-  `postgres` with them, since anonymous pulls from shared runners hit Docker
-  Hub's rate limit.
+- No Docker Hub secrets: the CI jobs that need Postgres, and the long-step
+  regression, start the runner's own server.
 - An npm trusted publisher for each of `@jigs-ai/jigs` and `@jigs-ai/hub`:
   repository `salimhamed/jigs`, workflow `release.yml`, no environment.
   Publishing uses OIDC, no npm token. A new package's first publish is by hand

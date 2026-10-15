@@ -637,8 +637,8 @@ export async function runCompiledCancellationMatrix({
   }
 
   function reconcile() {
-    // The registry's shared pool would hold the process open for pg's 10s
-    // idle timeout; the service exits explicitly too.
+    // The registry's pg pool keeps the process alive for its 10s idle timeout,
+    // so exit once the report is out.
     return JSON.parse(
       runNode(
         `import { reconcileAutomaticRelease } from "@jigs-ai/jigs/service";
