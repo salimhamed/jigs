@@ -22,7 +22,7 @@ The rest of this page shows the same process manually.
 
 ## 1. Prerequisites
 
-- **Node.js 24 or newer**
+- **Node.js 24.22.1 or newer**
 - **pnpm**
 - **Docker**, with Docker running
 

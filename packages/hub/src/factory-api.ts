@@ -25,6 +25,8 @@ import { issuePagerDutyToken } from "./pagerduty.ts";
 import { issueSlackToken } from "./slack.ts";
 
 const MAX_POSITION = 2n ** 63n - 1n;
+// Factories never compress their bodies, so the parser never runs a decompressor before authentication.
+const jsonBody = express.json({ inflate: false });
 
 const answerToken = (
   response: Response,
@@ -74,7 +76,7 @@ export function createFactoryApi(options: {
     response.json({ messages } satisfies MessagesResponse);
   });
 
-  router.post(cursorPath, express.json(), async (request, response) => {
+  router.post(cursorPath, jsonBody, async (request, response) => {
     const factory = await authenticate(request, response);
     if (!factory) return;
     const { position } = (request.body ?? {}) as Partial<CursorRequest>;
@@ -108,7 +110,7 @@ export function createFactoryApi(options: {
     return { factoryId: factory.id, installationName };
   };
 
-  router.post(githubTokenPath, express.json(), async (request, response) => {
+  router.post(githubTokenPath, jsonBody, async (request, response) => {
     const named = await tokenRequest(request, response);
     if (!named) return;
     answerToken(
@@ -119,13 +121,13 @@ export function createFactoryApi(options: {
     );
   });
 
-  router.post(linearTokenPath, express.json(), async (request, response) => {
+  router.post(linearTokenPath, jsonBody, async (request, response) => {
     const named = await tokenRequest(request, response);
     if (!named) return;
     answerToken(response, await linearTokens.issue(named.factoryId, named.installationName));
   });
 
-  router.post(slackTokenPath, express.json(), async (request, response) => {
+  router.post(slackTokenPath, jsonBody, async (request, response) => {
     const named = await tokenRequest(request, response);
     if (!named) return;
     answerToken(
@@ -134,7 +136,7 @@ export function createFactoryApi(options: {
     );
   });
 
-  router.post(pagerDutyTokenPath, express.json(), async (request, response) => {
+  router.post(pagerDutyTokenPath, jsonBody, async (request, response) => {
     const named = await tokenRequest(request, response);
     if (!named) return;
     answerToken(

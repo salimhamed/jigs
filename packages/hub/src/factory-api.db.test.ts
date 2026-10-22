@@ -1,3 +1,4 @@
+import { brotliCompressSync } from "node:zlib";
 import {
   cursorPath,
   type FactoryStatus,
@@ -113,6 +114,15 @@ dbTest("refuses unknown tokens and records who called", async () => {
 
   await removeFactory(db, waiters, organizationId, factory.id);
   expect((await poll(reissued)).status).toBe(401);
+});
+
+dbTest("refuses a compressed body before authenticating", async () => {
+  const response = await fetch(`${url}${cursorPath}`, {
+    method: "POST",
+    headers: { ...headers("nope"), "content-type": "application/json", "content-encoding": "br" },
+    body: brotliCompressSync(JSON.stringify({ position: "1" })),
+  });
+  expect(response.status).toBe(415);
 });
 
 dbTest("reports the factory, its Organization and only its assigned apps", async () => {
