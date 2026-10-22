@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.109.0](https://github.com/salimhamed/jigs/compare/jigs-v0.108.2...jigs-v0.109.0) (2026-10-22)
+
+
+### ⚠ BREAKING CHANGES
+
+* refuse compressed request bodies and require Node 24.22.1 ([#714](https://github.com/salimhamed/jigs/issues/714))
+
+### Bug Fixes
+
+* refuse compressed request bodies and require Node 24.22.1 ([#714](https://github.com/salimhamed/jigs/issues/714)) ([21526e5](https://github.com/salimhamed/jigs/commit/21526e553419be311b0457e1883d028a26404505))
+
 ## [0.108.2](https://github.com/salimhamed/jigs/compare/jigs-v0.108.1...jigs-v0.108.2) (2026-10-15)
 
 
