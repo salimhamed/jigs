@@ -1,7 +1,8 @@
 import express, { type RequestHandler, type Response } from "express";
 
-// GitHub sends at most 25 MB.
-const raw = express.raw({ type: () => true, limit: "25mb" });
+// GitHub sends at most 25 MB. No provider compresses its webhooks, and refusing
+// compressed bodies keeps a decompressor from running before the signature check.
+const raw = express.raw({ type: () => true, limit: "25mb", inflate: false });
 
 /** Keeps a webhook's body as the bytes its provider signed, an empty buffer when there are none. */
 export const webhookBody: RequestHandler = (request, response, next) =>

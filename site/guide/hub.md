@@ -27,7 +27,7 @@ upgrade them together.
 
 ## What you need
 
-- **Node.js 24 or newer**, or Docker to run the hub in a container.
+- **Node.js 24.22.1 or newer**, or Docker to run the hub in a container.
 - **A Postgres database** for the hub alone, never a factory's.
 - **One public HTTPS address**, such as `https://hub.example.com`, that
   GitHub, Linear, Slack and PagerDuty can reach, and that you and your
