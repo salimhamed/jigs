@@ -134,23 +134,45 @@ export interface RawIssueSnapshot {
   inverseRelations: { nodes: Array<{ type: string; issue: RawIssueRef }> };
 }
 
-interface RawProject {
+interface RawTeam {
   id: string;
-  teams: { nodes: Array<{ id: string }> };
+  states: { nodes: Array<{ id: string; name: string }> };
 }
 
-const PROJECT_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+interface RawProject {
+  id: string;
+  teams: { nodes: RawTeam[] };
+}
+
+const LINEAR_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Fields used to create a Linear ticket in a project's first team.
+ * Where a Linear ticket lives: a team (key such as `ENG`, name or id), a project (id or the slug
+ * its URL ends in), or both. Without a team, the project's first team.
  *
  * @group Create and update
  */
-export interface CreateIssueInProjectInput {
-  project: string;
+export type IssuePlace = { team: string; project?: string } | { team?: string; project: string };
+
+/**
+ * A new Linear ticket. `status` is a workflow status name such as `Triage`; without one, Linear
+ * picks the team's default. `labels` are names from the team or the whole workspace.
+ *
+ * @group Create and update
+ */
+export type CreateIssueInput = IssuePlace & {
+  status?: string;
+  labels?: string[];
   title: string;
   description: string;
-}
+};
+
+/**
+ * A search for the newest ticket whose title starts with `titlePrefix`.
+ *
+ * @group Resolve and read
+ */
+export type FindIssueInput = IssuePlace & { titlePrefix: string };
 
 interface RawIssueMatch {
   id: string;
@@ -338,43 +360,75 @@ export function createLinearClient(deps: LinearClientDeps) {
     return data.commentCreate.comment;
   }
 
-  // A Linear project URL ends in its slugId, so accept that as well as the UUID.
+  const TEAM_FIELDS = "id states { nodes { id name } }";
+
   async function resolveProject(ref: string): Promise<RawProject> {
-    if (PROJECT_UUID.test(ref)) {
-      const data = await linearGraphql<{ project: RawProject | null }>(
-        `query Project($ref: String!) {
-          project(id: $ref) { id teams { nodes { id } } }
-        }`,
+    const data = await linearGraphql<{ project: RawProject }>(
+      `query Project($ref: String!) {
+        project(id: $ref) { id teams(first: 1) { nodes { ${TEAM_FIELDS} } } }
+      }`,
+      { ref },
+    );
+    return data.project;
+  }
+
+  async function resolveTeam(ref: string): Promise<RawTeam> {
+    if (LINEAR_UUID.test(ref)) {
+      const data = await linearGraphql<{ team: RawTeam }>(
+        `query Team($ref: String!) { team(id: $ref) { ${TEAM_FIELDS} } }`,
         { ref },
       );
-      if (data.project === null) {
-        throw new JigsError(`Linear project not found: ${ref}`);
-      }
-      return data.project;
+      return data.team;
     }
-    const data = await linearGraphql<{ projects: { nodes: RawProject[] } }>(
-      `query ProjectBySlugId($ref: String!) {
-        projects(filter: { slugId: { eq: $ref } }, first: 1) {
-          nodes { id teams { nodes { id } } }
+    const data = await linearGraphql<{ teams: { nodes: RawTeam[] } }>(
+      `query TeamByKeyOrName($ref: String!) {
+        teams(filter: { or: [{ key: { eqIgnoreCase: $ref } }, { name: { eqIgnoreCase: $ref } }] }, first: 1) {
+          nodes { ${TEAM_FIELDS} }
         }
       }`,
       { ref },
     );
-    const project = data.projects.nodes[0];
-    if (project === undefined) {
-      throw new JigsError(`Linear project not found: ${ref}`);
-    }
-    return project;
+    const team = data.teams.nodes[0];
+    if (team === undefined) throw new JigsError(`Linear team not found: ${ref}`);
+    return team;
   }
 
-  async function createIssueInProject(
-    input: CreateIssueInProjectInput,
-  ): Promise<{ id: string; identifier: string; url: string }> {
-    const project = await resolveProject(input.project);
-    const team = project.teams.nodes[0];
-    if (team === undefined) {
-      throw new JigsError(`Linear project has no team: ${input.project}`);
+  async function resolveLabels(teamId: string, names: string[]): Promise<string[]> {
+    const data = await linearGraphql<{
+      issueLabels: { nodes: Array<{ id: string; name: string }> };
+    }>(
+      `query IssueLabels($teamId: ID!, $names: [String!]!) {
+        issueLabels(filter: { name: { in: $names }, or: [{ team: { id: { eq: $teamId } } }, { team: { null: true } }] }) {
+          nodes { id name }
+        }
+      }`,
+      { teamId, names },
+    );
+    const ids = new Map(data.issueLabels.nodes.map((label) => [label.name, label.id]));
+    const missing = names.filter((name) => !ids.has(name));
+    if (missing.length > 0) {
+      throw new JigsError(`Linear labels not found: ${missing.join(", ")}`);
     }
+    return names.map((name) => ids.get(name) as string);
+  }
+
+  async function createIssue(
+    input: CreateIssueInput,
+  ): Promise<{ id: string; identifier: string; url: string }> {
+    const project = input.project === undefined ? undefined : await resolveProject(input.project);
+    const team =
+      input.team === undefined
+        ? (project?.teams.nodes[0] as RawTeam)
+        : await resolveTeam(input.team);
+    const stateId =
+      input.status === undefined
+        ? undefined
+        : team.states.nodes.find((state) => state.name === input.status)?.id;
+    if (input.status !== undefined && stateId === undefined) {
+      const names = team.states.nodes.map((state) => state.name).join(", ");
+      throw new JigsError(`Linear status not found: ${input.status} (team has ${names})`);
+    }
+    const labelIds = input.labels?.length ? await resolveLabels(team.id, input.labels) : undefined;
     const data = await linearGraphql<{
       issueCreate: {
         success: boolean;
@@ -387,32 +441,38 @@ export function createLinearClient(deps: LinearClientDeps) {
       {
         input: {
           teamId: team.id,
-          projectId: project.id,
+          projectId: project?.id,
+          stateId,
+          labelIds,
           title: input.title,
           description: input.description,
         },
       },
     );
     if (!data.issueCreate.success) {
-      throw new JigsError(`Linear issueCreate failed for project ${input.project}`);
+      throw new JigsError(`Linear issueCreate failed for ticket: ${input.title}`);
     }
     return data.issueCreate.issue;
   }
 
-  async function findIssueInProject(input: {
-    project: string;
-    titlePrefix: string;
-  }): Promise<LinearIssueMatch | null> {
-    const project = await resolveProject(input.project);
+  async function findIssue(input: FindIssueInput): Promise<LinearIssueMatch | null> {
+    const team = input.team === undefined ? undefined : await resolveTeam(input.team);
+    const project = input.project === undefined ? undefined : await resolveProject(input.project);
     const data = await linearGraphql<{ issues: { nodes: RawIssueMatch[] } }>(
       // Unpaginated `first: 5` is an accepted cap: enough unless humans trash
       // five same-prefix issues in one bucket.
-      `query FindIssue($projectId: ID!, $prefix: String!) {
-        issues(filter: { project: { id: { eq: $projectId } }, title: { startsWith: $prefix } }, orderBy: createdAt, first: 5) {
+      `query FindIssue($filter: IssueFilter!) {
+        issues(filter: $filter, orderBy: createdAt, first: 5) {
           nodes { id identifier url title description state { name } trashed }
         }
       }`,
-      { projectId: project.id, prefix: input.titlePrefix },
+      {
+        filter: {
+          title: { startsWith: input.titlePrefix },
+          team: team && { id: { eq: team.id } },
+          project: project && { id: { eq: project.id } },
+        },
+      },
     );
     // `orderBy: createdAt` sorts newest first, so the first live node is the
     // newest match. Live issues carry `trashed: null` rather than false.
@@ -460,8 +520,8 @@ export function createLinearClient(deps: LinearClientDeps) {
     getIssueParticipants,
     fetchIssueSnapshot,
     createComment,
-    createIssueInProject,
-    findIssueInProject,
+    createIssue,
+    findIssue,
   };
 }
 

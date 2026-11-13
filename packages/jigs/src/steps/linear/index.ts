@@ -21,10 +21,12 @@ export {
 export { executeLinearAgentTurn, type LinearAgentTurnRequest } from "./agent-turn.ts";
 export { fetchTicketSnapshot } from "./fetch-snapshot.ts";
 export {
-  type CreateIssueInProjectInput,
+  type CreateIssueInput,
   createComment,
-  createIssueInProject,
-  findIssueInProject,
+  createIssue,
+  type FindIssueInput,
+  findIssue,
+  type IssuePlace,
   type LinearIssueMatch,
 } from "./issues.ts";
 export {
