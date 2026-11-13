@@ -4,11 +4,12 @@
 import {
   type CreateIssueInput,
   type FindIssueInput,
+  type IssuePlace,
   type LinearIssueMatch,
   linearFor,
 } from "../../providers/linear.ts";
 
-export type { CreateIssueInput, FindIssueInput, LinearIssueMatch };
+export type { CreateIssueInput, FindIssueInput, IssuePlace, LinearIssueMatch };
 
 /**
  * Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
@@ -35,22 +36,11 @@ export function createComment({
  *
  * @example
  * ```ts
- * // workflows/session-quality/steps.ts
- * import { createIssue, findIssue } from "@jigs-ai/jigs/steps/linear";
+ * import { createIssue } from "@jigs-ai/jigs/steps/linear";
  *
  * export async function fileFinding(title: string, description: string) {
  *   "use step";
- *   const installationName = "linear-acme";
- *   const existing = await findIssue({ installationName, team: "ENG", titlePrefix: title });
- *   if (existing !== null) return existing;
- *   return createIssue({
- *     installationName,
- *     team: "ENG",
- *     status: "Triage",
- *     labels: ["Bug"],
- *     title,
- *     description,
- *   });
+ *   return createIssue({ installationName: "linear-acme", team: "ENG", status: "Triage", title, description });
  * }
  * ```
  *

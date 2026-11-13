@@ -134,49 +134,45 @@ export interface RawIssueSnapshot {
   inverseRelations: { nodes: Array<{ type: string; issue: RawIssueRef }> };
 }
 
+interface RawTeam {
+  id: string;
+  states: { nodes: Array<{ id: string; name: string }> };
+}
+
 interface RawProject {
   id: string;
-  teams: { nodes: Array<{ id: string }> };
+  teams: { nodes: RawTeam[] };
 }
 
 const LINEAR_UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 /**
- * Where to file a new Linear ticket and what to set on it. Give a team, a project or both; without
- * a team the ticket goes to the project's first team.
+ * Where a Linear ticket lives: a team (key such as `ENG`, name or id), a project (id or the slug
+ * its URL ends in), or both. Without a team, the project's first team.
  *
  * @group Create and update
  */
-export interface CreateIssueInput {
-  /** Team key (such as `ENG`), name or id. */
-  team?: string;
-  /** Project id, or the slug its URL ends in. */
-  project?: string;
-  /** Workflow status name, such as `Triage`. Without one, Linear picks the team's default. */
+export type IssuePlace = { team: string; project?: string } | { team?: string; project: string };
+
+/**
+ * A new Linear ticket. `status` is a workflow status name such as `Triage`; without one, Linear
+ * picks the team's default. `labels` are names from the team or the whole workspace.
+ *
+ * @group Create and update
+ */
+export type CreateIssueInput = IssuePlace & {
   status?: string;
-  /** Label names, from the team or the whole workspace. */
   labels?: string[];
   title: string;
   description: string;
-}
+};
 
 /**
- * Where to search for a ticket by title. Give a team, a project or both.
+ * A search for the newest ticket whose title starts with `titlePrefix`.
  *
  * @group Resolve and read
  */
-export interface FindIssueInput {
-  /** Team key (such as `ENG`), name or id. */
-  team?: string;
-  /** Project id, or the slug its URL ends in. */
-  project?: string;
-  titlePrefix: string;
-}
-
-interface RawTeam {
-  id: string;
-  states: { nodes: Array<{ id: string; name: string }> };
-}
+export type FindIssueInput = IssuePlace & { titlePrefix: string };
 
 interface RawIssueMatch {
   id: string;
@@ -364,48 +360,26 @@ export function createLinearClient(deps: LinearClientDeps) {
     return data.commentCreate.comment;
   }
 
-  // A Linear project URL ends in its slugId, so accept that as well as the UUID.
+  const TEAM_FIELDS = "id states { nodes { id name } }";
+
   async function resolveProject(ref: string): Promise<RawProject> {
-    if (LINEAR_UUID.test(ref)) {
-      const data = await linearGraphql<{ project: RawProject | null }>(
-        `query Project($ref: String!) {
-          project(id: $ref) { id teams { nodes { id } } }
-        }`,
-        { ref },
-      );
-      if (data.project === null) {
-        throw new JigsError(`Linear project not found: ${ref}`);
-      }
-      return data.project;
-    }
-    const data = await linearGraphql<{ projects: { nodes: RawProject[] } }>(
-      `query ProjectBySlugId($ref: String!) {
-        projects(filter: { slugId: { eq: $ref } }, first: 1) {
-          nodes { id teams { nodes { id } } }
-        }
+    const data = await linearGraphql<{ project: RawProject }>(
+      `query Project($ref: String!) {
+        project(id: $ref) { id teams(first: 1) { nodes { ${TEAM_FIELDS} } } }
       }`,
       { ref },
     );
-    const project = data.projects.nodes[0];
-    if (project === undefined) {
-      throw new JigsError(`Linear project not found: ${ref}`);
-    }
-    return project;
-  }
-
-  const TEAM_FIELDS = "id states { nodes { id name } }";
-
-  async function teamById(id: string): Promise<RawTeam> {
-    const data = await linearGraphql<{ team: RawTeam | null }>(
-      `query Team($id: String!) { team(id: $id) { ${TEAM_FIELDS} } }`,
-      { id },
-    );
-    if (data.team === null) throw new JigsError(`Linear team not found: ${id}`);
-    return data.team;
+    return data.project;
   }
 
   async function resolveTeam(ref: string): Promise<RawTeam> {
-    if (LINEAR_UUID.test(ref)) return teamById(ref);
+    if (LINEAR_UUID.test(ref)) {
+      const data = await linearGraphql<{ team: RawTeam }>(
+        `query Team($ref: String!) { team(id: $ref) { ${TEAM_FIELDS} } }`,
+        { ref },
+      );
+      return data.team;
+    }
     const data = await linearGraphql<{ teams: { nodes: RawTeam[] } }>(
       `query TeamByKeyOrName($ref: String!) {
         teams(filter: { or: [{ key: { eqIgnoreCase: $ref } }, { name: { eqIgnoreCase: $ref } }] }, first: 1) {
@@ -424,47 +398,37 @@ export function createLinearClient(deps: LinearClientDeps) {
       issueLabels: { nodes: Array<{ id: string; name: string }> };
     }>(
       `query IssueLabels($teamId: ID!, $names: [String!]!) {
-        issueLabels(filter: { name: { in: $names }, or: [{ team: { id: { eq: $teamId } } }, { team: { null: true } }] }, first: 250) {
+        issueLabels(filter: { name: { in: $names }, or: [{ team: { id: { eq: $teamId } } }, { team: { null: true } }] }) {
           nodes { id name }
         }
       }`,
       { teamId, names },
     );
-    const missing = names.filter((name) => !data.issueLabels.nodes.some((l) => l.name === name));
+    const ids = new Map(data.issueLabels.nodes.map((label) => [label.name, label.id]));
+    const missing = names.filter((name) => !ids.has(name));
     if (missing.length > 0) {
       throw new JigsError(`Linear labels not found: ${missing.join(", ")}`);
     }
-    return names.map((name) => data.issueLabels.nodes.find((l) => l.name === name)?.id as string);
+    return names.map((name) => ids.get(name) as string);
   }
 
   async function createIssue(
     input: CreateIssueInput,
   ): Promise<{ id: string; identifier: string; url: string }> {
-    if (input.team === undefined && input.project === undefined) {
-      throw new JigsError("A new Linear ticket needs a team or a project");
-    }
     const project = input.project === undefined ? undefined : await resolveProject(input.project);
     const team =
       input.team === undefined
-        ? { id: project?.teams.nodes[0]?.id, states: undefined }
+        ? (project?.teams.nodes[0] as RawTeam)
         : await resolveTeam(input.team);
-    if (team.id === undefined) {
-      throw new JigsError(`Linear project has no team: ${input.project}`);
-    }
-    let stateId: string | undefined;
-    if (input.status !== undefined) {
-      const { states } = team.states === undefined ? await teamById(team.id) : team;
-      const wanted = input.status.toLowerCase();
-      stateId = states.nodes.find((state) => state.name.toLowerCase() === wanted)?.id;
-      if (stateId === undefined) {
-        const names = states.nodes.map((state) => state.name).join(", ");
-        throw new JigsError(`Linear status not found: ${input.status} (team has ${names})`);
-      }
-    }
-    const labelIds =
-      input.labels === undefined || input.labels.length === 0
+    const stateId =
+      input.status === undefined
         ? undefined
-        : await resolveLabels(team.id, input.labels);
+        : team.states.nodes.find((state) => state.name === input.status)?.id;
+    if (input.status !== undefined && stateId === undefined) {
+      const names = team.states.nodes.map((state) => state.name).join(", ");
+      throw new JigsError(`Linear status not found: ${input.status} (team has ${names})`);
+    }
+    const labelIds = input.labels?.length ? await resolveLabels(team.id, input.labels) : undefined;
     const data = await linearGraphql<{
       issueCreate: {
         success: boolean;
@@ -477,9 +441,9 @@ export function createLinearClient(deps: LinearClientDeps) {
       {
         input: {
           teamId: team.id,
-          ...(project === undefined ? {} : { projectId: project.id }),
-          ...(stateId === undefined ? {} : { stateId }),
-          ...(labelIds === undefined ? {} : { labelIds }),
+          projectId: project?.id,
+          stateId,
+          labelIds,
           title: input.title,
           description: input.description,
         },
@@ -492,16 +456,8 @@ export function createLinearClient(deps: LinearClientDeps) {
   }
 
   async function findIssue(input: FindIssueInput): Promise<LinearIssueMatch | null> {
-    if (input.team === undefined && input.project === undefined) {
-      throw new JigsError("A Linear ticket search needs a team or a project");
-    }
-    const filter: Record<string, unknown> = { title: { startsWith: input.titlePrefix } };
-    if (input.team !== undefined) {
-      filter.team = { id: { eq: (await resolveTeam(input.team)).id } };
-    }
-    if (input.project !== undefined) {
-      filter.project = { id: { eq: (await resolveProject(input.project)).id } };
-    }
+    const team = input.team === undefined ? undefined : await resolveTeam(input.team);
+    const project = input.project === undefined ? undefined : await resolveProject(input.project);
     const data = await linearGraphql<{ issues: { nodes: RawIssueMatch[] } }>(
       // Unpaginated `first: 5` is an accepted cap: enough unless humans trash
       // five same-prefix issues in one bucket.
@@ -510,7 +466,13 @@ export function createLinearClient(deps: LinearClientDeps) {
           nodes { id identifier url title description state { name } trashed }
         }
       }`,
-      { filter },
+      {
+        filter: {
+          title: { startsWith: input.titlePrefix },
+          team: team && { id: { eq: team.id } },
+          project: project && { id: { eq: project.id } },
+        },
+      },
     );
     // `orderBy: createdAt` sorts newest first, so the first live node is the
     // newest match. Live issues carry `trashed: null` rather than false.

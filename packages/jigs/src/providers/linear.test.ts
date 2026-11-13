@@ -131,17 +131,6 @@ test("createComment names the comment when given an id", async () => {
   });
 });
 
-const projectQuery = {
-  id: "project-uuid",
-  teams: { nodes: [{ id: "team-uuid" }] },
-};
-
-const createdIssue = {
-  id: "issue-uuid",
-  identifier: "CAI-7",
-  url: "https://linear.app/acme/issue/CAI-7",
-};
-
 const teamQuery = {
   id: "team-uuid",
   states: {
@@ -152,8 +141,16 @@ const teamQuery = {
   },
 };
 
-test("createIssue resolves a project slugId then creates in its first team", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+const projectQuery = { id: "project-uuid", teams: { nodes: [teamQuery] } };
+
+const createdIssue = {
+  id: "issue-uuid",
+  identifier: "CAI-7",
+  url: "https://linear.app/acme/issue/CAI-7",
+};
+
+test("createIssue files into the project's first team", async () => {
+  respond({ project: projectQuery });
   respond({ issueCreate: { success: true, issue: createdIssue } });
   await expect(
     linear.createIssue({
@@ -163,7 +160,7 @@ test("createIssue resolves a project slugId then creates in its first team", asy
     }),
   ).resolves.toEqual(createdIssue);
   const [lookup, create] = requestBodies();
-  expect(lookup.query).toContain("slugId: { eq: $ref } }, first: 1");
+  expect(lookup.query).toContain("project(id: $ref)");
   expect(lookup.variables).toEqual({ ref: "04889d3e87bb" });
   expect(create.query).toContain("issueCreate");
   expect(create.variables.input).toEqual({
@@ -171,21 +168,6 @@ test("createIssue resolves a project slugId then creates in its first team", asy
     projectId: "project-uuid",
     title: "a ticket",
     description: "# body",
-  });
-});
-
-test("createIssue looks a UUID up as the project id", async () => {
-  respond({ project: projectQuery });
-  respond({ issueCreate: { success: true, issue: createdIssue } });
-  await linear.createIssue({
-    project: "68bc9696-35d5-442d-ab56-214c8cfefbec",
-    title: "a ticket",
-    description: "body",
-  });
-  const [lookup] = requestBodies();
-  expect(lookup.query).toContain("project(id: $ref)");
-  expect(lookup.variables).toEqual({
-    ref: "68bc9696-35d5-442d-ab56-214c8cfefbec",
   });
 });
 
@@ -203,7 +185,7 @@ test("createIssue files into a team with no project, a status and labels", async
   await expect(
     linear.createIssue({
       team: "eng",
-      status: "triage",
+      status: "Triage",
       labels: ["Session quality", "Bug"],
       title: "a ticket",
       description: "body",
@@ -232,7 +214,7 @@ test("createIssue looks a UUID up as the team id", async () => {
     description: "body",
   });
   const [lookup, create] = requestBodies();
-  expect(lookup.query).toContain("team(id: $id)");
+  expect(lookup.query).toContain("team(id: $ref)");
   expect(create.variables.input).toEqual({
     teamId: "team-uuid",
     title: "a ticket",
@@ -240,9 +222,8 @@ test("createIssue looks a UUID up as the team id", async () => {
   });
 });
 
-test("createIssue reads the project's team states to set a status", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
-  respond({ team: teamQuery });
+test("createIssue sets a status from the project's team without another lookup", async () => {
+  respond({ project: projectQuery });
   respond({ issueCreate: { success: true, issue: createdIssue } });
   await linear.createIssue({
     project: "04889d3e87bb",
@@ -250,24 +231,8 @@ test("createIssue reads the project's team states to set a status", async () => 
     title: "a ticket",
     description: "body",
   });
-  const [, team, create] = requestBodies();
-  expect(team.variables).toEqual({ id: "team-uuid" });
-  expect(create.variables.input.stateId).toBe("todo-uuid");
-});
-
-test("createIssue needs a team or a project", async () => {
-  await expect(linear.createIssue({ title: "t", description: "d" })).rejects.toThrow(
-    "A new Linear ticket needs a team or a project",
-  );
-  expect(server.calls).toHaveLength(0);
-});
-
-test("createIssue throws naming the unresolvable project", async () => {
-  respond({ projects: { nodes: [] } });
-  await expect(
-    linear.createIssue({ project: "nope", title: "t", description: "d" }),
-  ).rejects.toThrow("Linear project not found: nope");
-  expect(server.calls).toHaveLength(1);
+  expect(server.calls).toHaveLength(2);
+  expect(requestBodies()[1].variables.input.stateId).toBe("todo-uuid");
 });
 
 test("createIssue throws naming the unresolvable team", async () => {
@@ -294,22 +259,8 @@ test("createIssue throws naming the labels it cannot find", async () => {
   expect(server.calls).toHaveLength(2);
 });
 
-test("createIssue throws when the project carries no team", async () => {
-  respond({
-    projects: { nodes: [{ id: "project-uuid", teams: { nodes: [] } }] },
-  });
-  await expect(
-    linear.createIssue({
-      project: "04889d3e87bb",
-      title: "t",
-      description: "d",
-    }),
-  ).rejects.toThrow("Linear project has no team: 04889d3e87bb");
-  expect(server.calls).toHaveLength(1);
-});
-
 test("createIssue throws when issueCreate reports failure", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({ issueCreate: { success: false, issue: null } });
   await expect(
     linear.createIssue({
@@ -331,7 +282,7 @@ const foundIssue = {
 };
 
 test("findIssue filters by project and title prefix", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({ issues: { nodes: [foundIssue] } });
   await expect(
     linear.findIssue({
@@ -364,14 +315,8 @@ test("findIssue filters by team without a project", async () => {
   });
 });
 
-test("findIssue needs a team or a project", async () => {
-  await expect(linear.findIssue({ titlePrefix: "x" })).rejects.toThrow(
-    "A Linear ticket search needs a team or a project",
-  );
-});
-
 test("findIssue returns null when nothing matches", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({ issues: { nodes: [] } });
   await expect(
     linear.findIssue({ project: "04889d3e87bb", titlePrefix: "S3: gone — " }),
@@ -379,7 +324,7 @@ test("findIssue returns null when nothing matches", async () => {
 });
 
 test("findIssue skips trashed matches", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({
     issues: {
       nodes: [
@@ -401,7 +346,7 @@ test("findIssue skips trashed matches", async () => {
 });
 
 test("findIssue returns null when every match is trashed", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({ issues: { nodes: [{ ...foundIssue, trashed: true }] } });
   await expect(
     linear.findIssue({
@@ -412,7 +357,7 @@ test("findIssue returns null when every match is trashed", async () => {
 });
 
 test("findIssue returns the first non-trashed node, which Linear orders newest first", async () => {
-  respond({ projects: { nodes: [projectQuery] } });
+  respond({ project: projectQuery });
   respond({
     issues: {
       nodes: [
