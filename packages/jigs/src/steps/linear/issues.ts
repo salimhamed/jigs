@@ -2,12 +2,13 @@
 // Linear installation it names.
 
 import {
-  type CreateIssueInProjectInput,
+  type CreateIssueInput,
+  type FindIssueInput,
   type LinearIssueMatch,
   linearFor,
 } from "../../providers/linear.ts";
 
-export type { CreateIssueInProjectInput, LinearIssueMatch };
+export type { CreateIssueInput, FindIssueInput, LinearIssueMatch };
 
 /**
  * Post a comment on a ticket. An `id` (UUID v4) names the comment in advance, so a caller can
@@ -30,33 +31,50 @@ export function createComment({
 }
 
 /**
- * Create a ticket in the project’s first team.
+ * Create a ticket in a team, a project or both, optionally with a status and labels.
+ *
+ * @example
+ * ```ts
+ * // workflows/session-quality/steps.ts
+ * import { createIssue, findIssue } from "@jigs-ai/jigs/steps/linear";
+ *
+ * export async function fileFinding(title: string, description: string) {
+ *   "use step";
+ *   const installationName = "linear-acme";
+ *   const existing = await findIssue({ installationName, team: "ENG", titlePrefix: title });
+ *   if (existing !== null) return existing;
+ *   return createIssue({
+ *     installationName,
+ *     team: "ENG",
+ *     status: "Triage",
+ *     labels: ["Bug"],
+ *     title,
+ *     description,
+ *   });
+ * }
+ * ```
  *
  * @group Create and update
  */
-export function createIssueInProject({
+export function createIssue({
   installationName,
   ...input
-}: CreateIssueInProjectInput & { installationName: string }): Promise<{
+}: CreateIssueInput & { installationName: string }): Promise<{
   id: string;
   identifier: string;
   url: string;
 }> {
-  return linearFor(installationName).createIssueInProject(input);
+  return linearFor(installationName).createIssue(input);
 }
 
 /**
- * Find the newest ticket in a project whose title starts with the given text.
+ * Find the newest ticket in a team or project whose title starts with the given text.
  *
  * @group Resolve and read
  */
-export function findIssueInProject({
+export function findIssue({
   installationName,
   ...input
-}: {
-  installationName: string;
-  project: string;
-  titlePrefix: string;
-}): Promise<LinearIssueMatch | null> {
-  return linearFor(installationName).findIssueInProject(input);
+}: FindIssueInput & { installationName: string }): Promise<LinearIssueMatch | null> {
+  return linearFor(installationName).findIssue(input);
 }

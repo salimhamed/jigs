@@ -142,11 +142,21 @@ const createdIssue = {
   url: "https://linear.app/acme/issue/CAI-7",
 };
 
-test("createIssueInProject resolves a slugId then creates in its first team", async () => {
+const teamQuery = {
+  id: "team-uuid",
+  states: {
+    nodes: [
+      { id: "triage-uuid", name: "Triage" },
+      { id: "todo-uuid", name: "Todo" },
+    ],
+  },
+};
+
+test("createIssue resolves a project slugId then creates in its first team", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({ issueCreate: { success: true, issue: createdIssue } });
   await expect(
-    linear.createIssueInProject({
+    linear.createIssue({
       project: "04889d3e87bb",
       title: "a ticket",
       description: "# body",
@@ -164,10 +174,10 @@ test("createIssueInProject resolves a slugId then creates in its first team", as
   });
 });
 
-test("createIssueInProject looks a UUID up as the project id", async () => {
+test("createIssue looks a UUID up as the project id", async () => {
   respond({ project: projectQuery });
   respond({ issueCreate: { success: true, issue: createdIssue } });
-  await linear.createIssueInProject({
+  await linear.createIssue({
     project: "68bc9696-35d5-442d-ab56-214c8cfefbec",
     title: "a ticket",
     description: "body",
@@ -179,20 +189,117 @@ test("createIssueInProject looks a UUID up as the project id", async () => {
   });
 });
 
-test("createIssueInProject throws naming the unresolvable project", async () => {
+test("createIssue files into a team with no project, a status and labels", async () => {
+  respond({ teams: { nodes: [teamQuery] } });
+  respond({
+    issueLabels: {
+      nodes: [
+        { id: "bug-uuid", name: "Bug" },
+        { id: "qa-uuid", name: "Session quality" },
+      ],
+    },
+  });
+  respond({ issueCreate: { success: true, issue: createdIssue } });
+  await expect(
+    linear.createIssue({
+      team: "eng",
+      status: "triage",
+      labels: ["Session quality", "Bug"],
+      title: "a ticket",
+      description: "body",
+    }),
+  ).resolves.toEqual(createdIssue);
+  const [team, labels, create] = requestBodies();
+  expect(team.query).toContain("key: { eqIgnoreCase: $ref }");
+  expect(team.variables).toEqual({ ref: "eng" });
+  expect(labels.query).toContain("team: { null: true }");
+  expect(labels.variables).toEqual({ teamId: "team-uuid", names: ["Session quality", "Bug"] });
+  expect(create.variables.input).toEqual({
+    teamId: "team-uuid",
+    stateId: "triage-uuid",
+    labelIds: ["qa-uuid", "bug-uuid"],
+    title: "a ticket",
+    description: "body",
+  });
+});
+
+test("createIssue looks a UUID up as the team id", async () => {
+  respond({ team: teamQuery });
+  respond({ issueCreate: { success: true, issue: createdIssue } });
+  await linear.createIssue({
+    team: "68bc9696-35d5-442d-ab56-214c8cfefbec",
+    title: "a ticket",
+    description: "body",
+  });
+  const [lookup, create] = requestBodies();
+  expect(lookup.query).toContain("team(id: $id)");
+  expect(create.variables.input).toEqual({
+    teamId: "team-uuid",
+    title: "a ticket",
+    description: "body",
+  });
+});
+
+test("createIssue reads the project's team states to set a status", async () => {
+  respond({ projects: { nodes: [projectQuery] } });
+  respond({ team: teamQuery });
+  respond({ issueCreate: { success: true, issue: createdIssue } });
+  await linear.createIssue({
+    project: "04889d3e87bb",
+    status: "Todo",
+    title: "a ticket",
+    description: "body",
+  });
+  const [, team, create] = requestBodies();
+  expect(team.variables).toEqual({ id: "team-uuid" });
+  expect(create.variables.input.stateId).toBe("todo-uuid");
+});
+
+test("createIssue needs a team or a project", async () => {
+  await expect(linear.createIssue({ title: "t", description: "d" })).rejects.toThrow(
+    "A new Linear ticket needs a team or a project",
+  );
+  expect(server.calls).toHaveLength(0);
+});
+
+test("createIssue throws naming the unresolvable project", async () => {
   respond({ projects: { nodes: [] } });
   await expect(
-    linear.createIssueInProject({ project: "nope", title: "t", description: "d" }),
+    linear.createIssue({ project: "nope", title: "t", description: "d" }),
   ).rejects.toThrow("Linear project not found: nope");
   expect(server.calls).toHaveLength(1);
 });
 
-test("createIssueInProject throws when the project carries no team", async () => {
+test("createIssue throws naming the unresolvable team", async () => {
+  respond({ teams: { nodes: [] } });
+  await expect(linear.createIssue({ team: "NOPE", title: "t", description: "d" })).rejects.toThrow(
+    "Linear team not found: NOPE",
+  );
+});
+
+test("createIssue throws naming the team's statuses when the status is unknown", async () => {
+  respond({ teams: { nodes: [teamQuery] } });
+  await expect(
+    linear.createIssue({ team: "ENG", status: "Inbox", title: "t", description: "d" }),
+  ).rejects.toThrow("Linear status not found: Inbox (team has Triage, Todo)");
+  expect(server.calls).toHaveLength(1);
+});
+
+test("createIssue throws naming the labels it cannot find", async () => {
+  respond({ teams: { nodes: [teamQuery] } });
+  respond({ issueLabels: { nodes: [{ id: "bug-uuid", name: "Bug" }] } });
+  await expect(
+    linear.createIssue({ team: "ENG", labels: ["Bug", "Nope"], title: "t", description: "d" }),
+  ).rejects.toThrow("Linear labels not found: Nope");
+  expect(server.calls).toHaveLength(2);
+});
+
+test("createIssue throws when the project carries no team", async () => {
   respond({
     projects: { nodes: [{ id: "project-uuid", teams: { nodes: [] } }] },
   });
   await expect(
-    linear.createIssueInProject({
+    linear.createIssue({
       project: "04889d3e87bb",
       title: "t",
       description: "d",
@@ -201,16 +308,16 @@ test("createIssueInProject throws when the project carries no team", async () =>
   expect(server.calls).toHaveLength(1);
 });
 
-test("createIssueInProject throws when issueCreate reports failure", async () => {
+test("createIssue throws when issueCreate reports failure", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({ issueCreate: { success: false, issue: null } });
   await expect(
-    linear.createIssueInProject({
+    linear.createIssue({
       project: "04889d3e87bb",
       title: "t",
       description: "d",
     }),
-  ).rejects.toThrow("Linear issueCreate failed for project 04889d3e87bb");
+  ).rejects.toThrow("Linear issueCreate failed for ticket: t");
 });
 
 const foundIssue = {
@@ -223,11 +330,11 @@ const foundIssue = {
   trashed: null,
 };
 
-test("findIssueInProject filters by project and title prefix", async () => {
+test("findIssue filters by project and title prefix", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({ issues: { nodes: [foundIssue] } });
   await expect(
-    linear.findIssueInProject({
+    linear.findIssue({
       project: "04889d3e87bb",
       titlePrefix: "S3: salim-dev — ",
     }),
@@ -241,23 +348,37 @@ test("findIssueInProject filters by project and title prefix", async () => {
   });
   const [lookup, find] = requestBodies();
   expect(lookup.variables).toEqual({ ref: "04889d3e87bb" });
-  expect(find.query).toContain("title: { startsWith: $prefix }");
   expect(find.query).toContain("orderBy: createdAt");
   expect(find.variables).toEqual({
-    projectId: "project-uuid",
-    prefix: "S3: salim-dev — ",
+    filter: { title: { startsWith: "S3: salim-dev — " }, project: { id: { eq: "project-uuid" } } },
   });
 });
 
-test("findIssueInProject returns null when nothing matches", async () => {
+test("findIssue filters by team without a project", async () => {
+  respond({ teams: { nodes: [teamQuery] } });
+  respond({ issues: { nodes: [foundIssue] } });
+  const issue = await linear.findIssue({ team: "ENG", titlePrefix: "S3: salim-dev — " });
+  expect(issue?.identifier).toBe("CAI-450");
+  expect(requestBodies()[1].variables).toEqual({
+    filter: { title: { startsWith: "S3: salim-dev — " }, team: { id: { eq: "team-uuid" } } },
+  });
+});
+
+test("findIssue needs a team or a project", async () => {
+  await expect(linear.findIssue({ titlePrefix: "x" })).rejects.toThrow(
+    "A Linear ticket search needs a team or a project",
+  );
+});
+
+test("findIssue returns null when nothing matches", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({ issues: { nodes: [] } });
   await expect(
-    linear.findIssueInProject({ project: "04889d3e87bb", titlePrefix: "S3: gone — " }),
+    linear.findIssue({ project: "04889d3e87bb", titlePrefix: "S3: gone — " }),
   ).resolves.toBeNull();
 });
 
-test("findIssueInProject skips trashed matches", async () => {
+test("findIssue skips trashed matches", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({
     issues: {
@@ -272,25 +393,25 @@ test("findIssueInProject skips trashed matches", async () => {
       ],
     },
   });
-  const issue = await linear.findIssueInProject({
+  const issue = await linear.findIssue({
     project: "04889d3e87bb",
     titlePrefix: "S3: salim-dev — ",
   });
   expect(issue?.identifier).toBe("CAI-450");
 });
 
-test("findIssueInProject returns null when every match is trashed", async () => {
+test("findIssue returns null when every match is trashed", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({ issues: { nodes: [{ ...foundIssue, trashed: true }] } });
   await expect(
-    linear.findIssueInProject({
+    linear.findIssue({
       project: "04889d3e87bb",
       titlePrefix: "S3: salim-dev — ",
     }),
   ).resolves.toBeNull();
 });
 
-test("findIssueInProject returns the first non-trashed node, which Linear orders newest first", async () => {
+test("findIssue returns the first non-trashed node, which Linear orders newest first", async () => {
   respond({ projects: { nodes: [projectQuery] } });
   respond({
     issues: {
@@ -305,7 +426,7 @@ test("findIssueInProject returns the first non-trashed node, which Linear orders
       ],
     },
   });
-  const issue = await linear.findIssueInProject({
+  const issue = await linear.findIssue({
     project: "04889d3e87bb",
     titlePrefix: "S3: salim-dev — ",
   });
