@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.110.0](https://github.com/salimhamed/jigs/compare/jigs-v0.109.0...jigs-v0.110.0) (2026-11-13)
+
+
+### ⚠ BREAKING CHANGES
+
+* create Linear tickets in a team with a status and labels ([#716](https://github.com/salimhamed/jigs/issues/716))
+
+### Features
+
+* create Linear tickets in a team with a status and labels ([#716](https://github.com/salimhamed/jigs/issues/716)) ([783add2](https://github.com/salimhamed/jigs/commit/783add2c299f69f8dc813b57795b87874dc24e43))
+
 ## [0.109.0](https://github.com/salimhamed/jigs/compare/jigs-v0.108.2...jigs-v0.109.0) (2026-10-22)
 
 
