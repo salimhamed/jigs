@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.2](https://github.com/salimhamed/jigs/compare/jigs-v0.110.1...jigs-v0.110.2) (2026-11-19)
+
+
+### Features
+
+* **claude:** factory-wide default for the Claude credential ([#723](https://github.com/salimhamed/jigs/issues/723)) ([e569d75](https://github.com/salimhamed/jigs/commit/e569d75312fb01f75bf5e85db136ae6ae5340f10))
+
 ## [0.110.1](https://github.com/salimhamed/jigs/compare/jigs-v0.110.0...jigs-v0.110.1) (2026-11-19)
 
 
