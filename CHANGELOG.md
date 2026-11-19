@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.1](https://github.com/salimhamed/jigs/compare/jigs-v0.110.0...jigs-v0.110.1) (2026-11-19)
+
+
+### Features
+
+* **claude:** credential option for an API key or Bedrock ([#719](https://github.com/salimhamed/jigs/issues/719)) ([574f24d](https://github.com/salimhamed/jigs/commit/574f24de517912f91cbb89617fb1cf787f3aba86))
+
 ## [0.110.0](https://github.com/salimhamed/jigs/compare/jigs-v0.109.0...jigs-v0.110.0) (2026-11-13)
 
 
