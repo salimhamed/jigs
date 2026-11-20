@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.4](https://github.com/salimhamed/jigs/compare/jigs-v0.110.3...jigs-v0.110.4) (2026-11-20)
+
+
+### Bug Fixes
+
+* **deployments:** a version that shut down no longer counts as running ([#726](https://github.com/salimhamed/jigs/issues/726)) ([c7afb76](https://github.com/salimhamed/jigs/commit/c7afb76b015db326dea28aaa8b83708723adf8e8))
+
 ## [0.110.3](https://github.com/salimhamed/jigs/compare/jigs-v0.110.2...jigs-v0.110.3) (2026-11-20)
 
 
