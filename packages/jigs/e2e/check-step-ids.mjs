@@ -1099,11 +1099,17 @@ async function drainScenario(postgresUrl) {
       );
     }
     await expectDrainedExit(first, firstExit, [`version ${v1.version} drained, exiting`]);
-    if ((await deploymentRuns(v2.ports.service)).get(v1.version)?.runs !== 0) {
+    const exitedVersion = (await deploymentRuns(v2.ports.service)).get(v1.version);
+    if (exitedVersion?.runs !== 0) {
       throw new Error(`${v1.version} exited while still listed with runs`);
     }
+    if (exitedVersion.running || exitedVersion.role !== "gone") {
+      throw new Error(
+        `${v1.version} exited but is still listed as running: ${JSON.stringify(exitedVersion)}`,
+      );
+    }
     console.log(
-      `run ${runId} parked on ${v1.version}, stayed there once ${v2.version} was made current, was resumed from ${v2.version}'s side, completed, and ${v1.version} then exited 0 on its own`,
+      `run ${runId} parked on ${v1.version}, stayed there once ${v2.version} was made current, was resumed from ${v2.version}'s side, completed, and ${v1.version} then exited 0 on its own and was listed gone`,
     );
   } finally {
     if (second !== undefined) await stopRuntimeService(second);

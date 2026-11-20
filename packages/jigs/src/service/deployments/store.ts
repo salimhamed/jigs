@@ -16,6 +16,7 @@ export const deployments = pgTable(
     startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
     // Refreshed by the running copy's heartbeat; null while no copy of the version has run.
     lastSeenAt: timestamp("last_seen_at", { withTimezone: true }),
+    // The running copy's process; null once it has shut down.
     pid: integer("pid"),
     host: text("host"),
     current: boolean("current").notNull().default(false),
@@ -65,16 +66,40 @@ export async function recordDeploymentBoot(
     });
 }
 
-/** Refresh a running copy's heartbeat. */
+/** Refresh a running copy's heartbeat, and claim the row for its process. */
 export async function touchDeployment(
   db: RegistrySql,
   factory: string,
   version: string,
+  process: DeploymentProcess,
 ): Promise<void> {
   await db
     .update(deployments)
-    .set({ lastSeenAt: sql`now()`, updatedAt: sql`now()` })
+    .set({ lastSeenAt: sql`now()`, pid: process.pid, host: process.host, updatedAt: sql`now()` })
     .where(and(eq(deployments.factory, factory), eq(deployments.version, version)));
+}
+
+/**
+ * A copy of `version` has shut down: it no longer counts as running. A row another copy of the
+ * same version has claimed since is left alone.
+ */
+export async function recordDeploymentStop(
+  db: RegistrySql,
+  factory: string,
+  version: string,
+  process: DeploymentProcess,
+): Promise<void> {
+  await db
+    .update(deployments)
+    .set({ pid: null, host: null, updatedAt: sql`now()` })
+    .where(
+      and(
+        eq(deployments.factory, factory),
+        eq(deployments.version, version),
+        eq(deployments.pid, process.pid),
+        eq(deployments.host, process.host),
+      ),
+    );
 }
 
 /** The factory's current version, or null while none has been made current. */
@@ -133,7 +158,7 @@ export async function wasEverCurrent(
   return rows[0]?.madeCurrentAt != null;
 }
 
-/** Whether a process of `version` has reported recently enough to count as running. */
+/** Whether a process of `version` is up and has reported recently enough to count as running. */
 export async function deploymentRunning(
   db: RegistrySql,
   factory: string,
@@ -141,10 +166,11 @@ export async function deploymentRunning(
   now: Date = new Date(),
 ): Promise<boolean> {
   const rows = await db
-    .select({ lastSeenAt: deployments.lastSeenAt })
+    .select({ lastSeenAt: deployments.lastSeenAt, pid: deployments.pid })
     .from(deployments)
     .where(and(eq(deployments.factory, factory), eq(deployments.version, version)));
-  return seenRecently(rows[0]?.lastSeenAt ?? null, now);
+  const row = rows[0];
+  return row !== undefined && processRunning(row, now);
 }
 
 /** When `version` stopped being current, or null while it is current or never was. */
@@ -172,7 +198,7 @@ export interface DeploymentView {
   supersededAt: string | null;
   pid: number | null;
   host: string | null;
-  /** Whether a process of this version has reported within the last five minutes. */
+  /** Whether a process of this version is up and has reported within the last five minutes. */
   running: boolean;
   /** The live runs this version started; they finish on it. */
   runs: number;
@@ -183,12 +209,17 @@ export function seenRecently(lastSeenAt: Date | null, now: Date): boolean {
   return lastSeenAt !== null && now.getTime() - lastSeenAt.getTime() < LIVE_WINDOW_MS;
 }
 
+/** Whether the row's process has not shut down and its heartbeat still counts. */
+export function processRunning(row: Pick<DeploymentRow, "lastSeenAt" | "pid">, now: Date): boolean {
+  return row.pid !== null && seenRecently(row.lastSeenAt, now);
+}
+
 export function roleOf(
-  row: Pick<DeploymentRow, "current" | "lastSeenAt">,
+  row: Pick<DeploymentRow, "current" | "lastSeenAt" | "pid">,
   now: Date,
 ): DeploymentRole {
   if (row.current) return "current";
-  return seenRecently(row.lastSeenAt, now) ? "draining" : "gone";
+  return processRunning(row, now) ? "draining" : "gone";
 }
 
 /** Every version the factory has run, newest start first, with the runs each still owns. */
@@ -213,7 +244,7 @@ export async function listDeployments(
     supersededAt: row.supersededAt?.toISOString() ?? null,
     pid: row.pid,
     host: row.host,
-    running: seenRecently(row.lastSeenAt, now),
+    running: processRunning(row, now),
     runs: owned.get(deploymentJobPrefix(jobPrefix, row.version)) ?? 0,
   }));
 }

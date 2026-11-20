@@ -20,6 +20,7 @@ import {
   makeDeploymentCurrent,
   pruneDeployments,
   recordDeploymentBoot,
+  recordDeploymentStop,
   touchDeployment,
   wasEverCurrent,
 } from "./store.ts";
@@ -81,8 +82,30 @@ dbTest(
     expect(await deploymentRunning(db, FACTORY, "v1")).toBe(true);
     expect(await deploymentRunning(db, FACTORY, "v1", later)).toBe(false);
     expect(await deploymentRunning(db, FACTORY, "never-booted")).toBe(false);
-    await touchDeployment(db, FACTORY, "v1");
+    await touchDeployment(db, FACTORY, "v1", process_);
     expect((await listDeployments(db, FACTORY))[0]?.role).toBe("draining");
+  },
+);
+
+// Its own factory, so the listing and prune tests below see only their versions.
+const STOP_FACTORY = "factory-stop";
+
+dbTest(
+  "a version whose copy shut down is gone at once, and a later copy claims it again",
+  async () => {
+    await recordDeploymentBoot(db, STOP_FACTORY, "v-stop", process_);
+    await recordDeploymentStop(db, STOP_FACTORY, "v-stop", { pid: 1, host: "other-box" });
+    expect(await deploymentRunning(db, STOP_FACTORY, "v-stop")).toBe(true);
+
+    await recordDeploymentStop(db, STOP_FACTORY, "v-stop", process_);
+    expect(await deploymentRunning(db, STOP_FACTORY, "v-stop")).toBe(false);
+    const stopped = (await listDeployments(db, STOP_FACTORY)).find(
+      (view) => view.version === "v-stop",
+    );
+    expect(stopped).toMatchObject({ role: "gone", running: false, pid: null, host: null });
+
+    await touchDeployment(db, STOP_FACTORY, "v-stop", { pid: 7, host: "new-box" });
+    expect(await deploymentRunning(db, STOP_FACTORY, "v-stop")).toBe(true);
   },
 );
 

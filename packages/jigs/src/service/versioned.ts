@@ -6,7 +6,7 @@
 import { hostname } from "node:os";
 import { currentFactoryContext, type FactoryContext } from "../config/factory-context.ts";
 import { hubConnection } from "../providers/hub.ts";
-import { registrySql } from "../steps/runtime/registry.ts";
+import { type RegistrySql, registrySql } from "../steps/runtime/registry.ts";
 import type { Factory } from "../workflow/factory.ts";
 import { inactiveTriggerNames } from "./active.ts";
 import { startAutomaticRelease } from "./automatic-release.ts";
@@ -17,6 +17,7 @@ import {
   DEPLOYMENTS_CHANNEL,
   HEARTBEAT_MS,
   recordDeploymentBoot,
+  recordDeploymentStop,
   touchDeployment,
   wasEverCurrent,
 } from "./deployments/store.ts";
@@ -70,14 +71,8 @@ export async function runAsVersion(factory: Factory, live: Factory): Promise<voi
     throw new Error("the deployment version was not pinned before boot");
   const db = registrySql();
   const { slug } = ctx;
-  await recordDeploymentBoot(db, slug, version, { pid: process.pid, host: hostname() });
-  const heartbeat = setInterval(() => {
-    touchDeployment(db, slug, version).catch((error: unknown) => {
-      console.error(`[service] heartbeat failed: ${String(error)}`);
-    });
-  }, HEARTBEAT_MS);
-  heartbeat.unref();
-  onShutdown(() => clearInterval(heartbeat), { phase: "quiesce" });
+  const heartbeat = await startHeartbeat(db, slug, version);
+  onShutdown(() => heartbeat.stop(), { phase: "quiesce" });
 
   const listener = registryListener();
   onShutdown(() => listener.close());
@@ -108,6 +103,32 @@ export async function runAsVersion(factory: Factory, live: Factory): Promise<voi
     log: console.log,
   });
   onShutdown(() => controller.stop(), { phase: "quiesce" });
+}
+
+// Records this copy's boot and refreshes its heartbeat until it stops, when it records that the
+// copy no longer runs: a version that drained and exited is not offered as a rollback target.
+async function startHeartbeat(
+  db: RegistrySql,
+  factory: string,
+  version: string,
+): Promise<{ stop(): Promise<void> }> {
+  const thisProcess = { pid: process.pid, host: hostname() };
+  await recordDeploymentBoot(db, factory, version, thisProcess);
+  let lastTouch: Promise<void> = Promise.resolve();
+  const timer = setInterval(() => {
+    lastTouch = touchDeployment(db, factory, version, thisProcess).catch((error: unknown) => {
+      console.error(`[service] heartbeat failed: ${String(error)}`);
+    });
+  }, HEARTBEAT_MS);
+  timer.unref();
+  return {
+    async stop() {
+      clearInterval(timer);
+      // A touch still in flight would claim the row again after the stop.
+      await lastTouch;
+      await recordDeploymentStop(db, factory, version, thisProcess);
+    },
+  };
 }
 
 // Everything only the factory does: hearing the hub, firing triggers and

@@ -241,8 +241,8 @@ its queue worker, finishes the runs it started, and exits once it owns none, if
 it was ever current.
 _Avoid_: retiring, standby
 
-**Gone**: A version that is not current and whose process has not reported for
-five minutes. Its runs wait for it to run again.
+**Gone**: A version that is not current and whose process has shut down or has
+not reported for five minutes. Its runs wait for it to run again.
 _Avoid_: dead, stale
 
 **Drain cap**: `deployments.maxDrainDays`, how long after it stopped being
