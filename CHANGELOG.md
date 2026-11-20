@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.110.3](https://github.com/salimhamed/jigs/compare/jigs-v0.110.2...jigs-v0.110.3) (2026-11-20)
+
+
+### Features
+
+* a factory can run as versions, and a version drains before it exits ([#722](https://github.com/salimhamed/jigs/issues/722)) ([ce9a4f4](https://github.com/salimhamed/jigs/commit/ce9a4f4663c45af0fe098b95457007e0eab3087c))
+
 ## [0.110.2](https://github.com/salimhamed/jigs/compare/jigs-v0.110.1...jigs-v0.110.2) (2026-11-19)
 
 
